@@ -15,6 +15,7 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectionVersion, setSelectionVersion] = useState(0);
 
   // Filters
   const [sources, setSources] = useState<string[]>(['rss']);
@@ -89,6 +90,7 @@ export default function Home() {
 
   const handleSelectItem = (id: string) => {
     setSelectedItemId(id);
+    setSelectionVersion(v => v + 1);
   };
 
   const filterBarSlot = (
@@ -118,6 +120,7 @@ export default function Home() {
       <EventSidebar
         items={news}
         selectedItemId={selectedItemId}
+        selectionVersion={selectionVersion}
         onSelectItem={handleSelectItem}
         isLoading={isLoading}
         filterBar={filterBarSlot}
@@ -129,6 +132,7 @@ export default function Home() {
       <NewsMap
         items={news}
         selectedItemId={selectedItemId}
+        selectionVersion={selectionVersion}
         onSelectItem={handleSelectItem}
         isDarkMode={isDarkMode}
       />

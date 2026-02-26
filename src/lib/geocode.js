@@ -1,13 +1,62 @@
-import { NewsItem } from './types';
-import nlp from 'compromise';
+"use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractLocation = extractLocation;
+exports.geocodeLocation = geocodeLocation;
+exports.enrichItemsWithLocation = enrichItemsWithLocation;
+var compromise_1 = require("compromise");
 // @ts-ignore - no types available
-import citiesData from 'cities.json';
-
+var cities_json_1 = require("cities.json");
 // cache geocode promises to dedupe concurrent requests for the same place
-const geoCache = new Map<string, Promise<{ lat: number; lon: number; displayName: string } | null>>();
-
+var geoCache = new Map();
 // dictionary of countries, capitals, and major cities for instant coordinate lookup
-const KNOWN_LOCATIONS: Record<string, { lat: number; lon: number }> = {
+var KNOWN_LOCATIONS = {
     // countries
     'ukraine': { lat: 48.38, lon: 31.17 }, 'russia': { lat: 61.52, lon: 105.32 },
     'china': { lat: 35.86, lon: 104.20 }, 'india': { lat: 20.59, lon: 78.96 },
@@ -121,9 +170,8 @@ const KNOWN_LOCATIONS: Record<string, { lat: number; lon: number }> = {
     'kathmandu': { lat: 27.72, lon: 85.32 }, 'colombo': { lat: 6.93, lon: 79.85 },
     'phnom penh': { lat: 11.56, lon: 104.92 }, 'yangon': { lat: 16.87, lon: 96.20 },
 };
-
 // set of all known country names for disambiguation
-const COUNTRY_NAMES = new Set([
+var COUNTRY_NAMES = new Set([
     'ukraine', 'russia', 'china', 'india', 'japan', 'germany', 'france',
     'united kingdom', 'uk', 'britain', 'united states', 'us', 'usa',
     'canada', 'brazil', 'australia', 'mexico', 'italy', 'spain',
@@ -143,304 +191,214 @@ const COUNTRY_NAMES = new Set([
     'cambodia', 'laos', 'mongolia', 'uzbekistan', 'kazakhstan',
     'georgia', 'armenia', 'azerbaijan', 'gaza',
 ]);
-
-// Merge cities.json into KNOWN_LOCATIONS (skip very short names to avoid false positives)
-(citiesData as any[]).forEach((city: any) => {
-    if (city.name && city.name.length > 3) {
-        const key = city.name.toLowerCase();
+// Merge cities.json into KNOWN_LOCATIONS
+cities_json_1.default.forEach(function (city) {
+    if (city.name) {
+        var key = city.name.toLowerCase();
         if (!KNOWN_LOCATIONS[key]) {
             KNOWN_LOCATIONS[key] = { lat: parseFloat(city.lat), lon: parseFloat(city.lng) };
         }
     }
 });
-
-// Map demonyms/adjectives to their country names
-const DEMONYM_MAP: Record<string, string> = {
-    'american': 'united states', 'chinese': 'china', 'russian': 'russia',
-    'indian': 'india', 'japanese': 'japan', 'german': 'germany',
-    'french': 'france', 'british': 'united kingdom', 'canadian': 'canada',
-    'brazilian': 'brazil', 'australian': 'australia', 'mexican': 'mexico',
-    'italian': 'italy', 'spanish': 'spain', 'korean': 'south korea',
-    'iranian': 'iran', 'iraqi': 'iraq', 'syrian': 'syria',
-    'turkish': 'turkey', 'israeli': 'israel', 'palestinian': 'palestine',
-    'egyptian': 'egypt', 'saudi': 'saudi arabia', 'pakistani': 'pakistan',
-    'afghan': 'afghanistan', 'nigerian': 'nigeria', 'kenyan': 'kenya',
-    'ethiopian': 'ethiopia', 'sudanese': 'sudan', 'somali': 'somalia',
-    'libyan': 'libya', 'yemeni': 'yemen', 'lebanese': 'lebanon',
-    'jordanian': 'jordan', 'polish': 'poland', 'dutch': 'netherlands',
-    'belgian': 'belgium', 'swedish': 'sweden', 'norwegian': 'norway',
-    'danish': 'denmark', 'finnish': 'finland', 'greek': 'greece',
-    'portuguese': 'portugal', 'swiss': 'switzerland', 'austrian': 'austria',
-    'romanian': 'romania', 'hungarian': 'hungary', 'czech': 'czech republic',
-    'indonesian': 'indonesia', 'filipino': 'philippines', 'vietnamese': 'vietnam',
-    'thai': 'thailand', 'taiwanese': 'taiwan', 'malaysian': 'malaysia',
-    'singaporean': 'singapore', 'argentinian': 'argentina', 'colombian': 'colombia',
-    'chilean': 'chile', 'venezuelan': 'venezuela', 'peruvian': 'peru',
-    'cuban': 'cuba', 'irish': 'ireland', 'scottish': 'scotland',
-    'welsh': 'wales', 'moroccan': 'morocco', 'tunisian': 'tunisia',
-    'algerian': 'algeria', 'ecuadorian': 'ecuador', 'bolivian': 'bolivia',
-    'ukrainian': 'ukraine', 'georgian': 'georgia', 'armenian': 'armenia',
-};
-
 // regex to extract standard journalistic datelines (e.g. "WASHINGTON (Reuters) - ")
-const DATELINE_PATTERN = /^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–)\s+/;
-
+var DATELINE_PATTERN = /^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–)\s+/;
 // regex patterns to pull "in Place", "from Place", etc. from headlines
-const LOCATION_PATTERNS = [
+var LOCATION_PATTERNS = [
     /\bin\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bfrom\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bnear\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bacross\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bhits?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bstrikes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\battacks?\s+(?:on\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bfighting\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bwar\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bcrisis\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\binvades?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\boccupied\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
 ];
-
 // words that regex might catch but aren't locations
-const STOP_WORDS = new Set([
-    // months & days
+var STOP_WORDS = new Set([
     'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
     'september', 'october', 'november', 'december', 'monday', 'tuesday',
-    'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
-    // determiners & pronouns
-    'the', 'this', 'that', 'these', 'those', 'what', 'which', 'who', 'how',
-    'just', 'new', 'more', 'most', 'some', 'many', 'much', 'its', 'his', 'her',
+    'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'the', 'this',
+    'that', 'these', 'those', 'what', 'which', 'who', 'how', 'just',
+    'new', 'more', 'most', 'some', 'many', 'much', 'its', 'his', 'her',
     'their', 'our', 'all', 'one', 'two', 'three', 'four', 'five',
-    // news & media terms
     'congress', 'senate', 'parliament', 'reuters', 'associated',
     'press', 'exclusive', 'breaking', 'update', 'live', 'latest',
-    'report', 'reports', 'analysis', 'opinion', 'editorial',
-    // common false-positive capitalized words
-    'trump', 'biden', 'putin', 'modi', 'macron', 'scholz', 'zelenskyy',
-    'zelensky', 'netanyahu', 'xi', 'obama', 'pope', 'elon', 'musk',
-    'democrats', 'republicans', 'nato', 'opec', 'who', 'fbi', 'cia',
-    'deal', 'record', 'back', 'first', 'second', 'third', 'over',
-    'after', 'before', 'major', 'global', 'world', 'international',
-    'north', 'south', 'east', 'west', 'says', 'say', 'said',
-    'each', 'every', 'both', 'other', 'another', 'such',
-    'high', 'higher', 'low', 'lower', 'big', 'small', 'long',
-    'war', 'peace', 'crisis', 'today', 'yesterday', 'tomorrow',
-    'government', 'president', 'minister', 'prime', 'general',
-    'military', 'army', 'force', 'forces', 'troops', 'police',
-    'court', 'supreme', 'justice', 'law', 'bill', 'act',
-    'company', 'companies', 'stocks', 'market', 'markets',
-    'people', 'officials', 'sources', 'leaders', 'workers',
 ]);
-
 // given a multi-word candidate like "British Columbia", check if any suffix
 // (e.g. "Columbia" or "Colombia") is a known country/city in the dictionary.
 // prefer the full match if it's in the dictionary, otherwise try shorter suffixes.
-function disambiguate(candidate: string): string {
-    const key = candidate.toLowerCase().trim();
-
+function disambiguate(candidate) {
+    var key = candidate.toLowerCase().trim();
     // full phrase is in dictionary — use it as-is
-    if (KNOWN_LOCATIONS[key]) return candidate;
-
+    if (KNOWN_LOCATIONS[key])
+        return candidate;
     // check if a single word in the phrase is a known country (e.g. "Colombia" from "British Colombia")
-    const words = candidate.split(/\s+/);
-    for (let i = 1; i < words.length; i++) {
-        const suffix = words.slice(i).join(' ');
-        const suffixKey = suffix.toLowerCase();
-        if (KNOWN_LOCATIONS[suffixKey]) return suffix;
+    var words = candidate.split(/\s+/);
+    for (var i = 1; i < words.length; i++) {
+        var suffix = words.slice(i).join(' ');
+        var suffixKey = suffix.toLowerCase();
+        if (KNOWN_LOCATIONS[suffixKey])
+            return suffix;
     }
-
     // no disambiguation needed
     return candidate;
 }
-
-// clean a candidate: strip possessives, trailing punctuation, etc.
-function cleanCandidate(raw: string): string {
-    let s = raw.trim();
-    // strip possessives: "Canada's" → "Canada"
-    s = s.replace(/['\u2019]s\b/g, '');
-    // strip trailing punctuation
-    s = s.replace(/[.,;:!?"')]+$/, '');
-    // strip leading punctuation
-    s = s.replace(/^["'(]+/, '');
-    return s.trim();
-}
-
-// try to resolve a demonym ("Chinese" → "China") from the first word of a title
-function extractDemonym(text: string): string | null {
-    // Look for demonym as the first capitalized word, or preceded by a preposition
-    const words = text.split(/\s+/);
-    for (const word of words) {
-        const lower = word.toLowerCase().replace(/[^a-z]/g, '');
-        if (DEMONYM_MAP[lower]) {
-            return DEMONYM_MAP[lower];
-        }
-    }
-    return null;
-}
-
 // try regex patterns first, then fall back to compromise nlp
-export function extractLocation(title: string, description: string): string | null {
-    const candidates: string[] = [];
-
-    // 1. Dateline from description (highest confidence indicator of origin)
-    const datelineMatch = DATELINE_PATTERN.exec(description);
+function extractLocation(title, description) {
+    // 1. try extracting dateline from description (highest confidence indicator of origin)
+    var datelineMatch = DATELINE_PATTERN.exec(description);
     if (datelineMatch) {
-        candidates.push(datelineMatch[1].trim());
-    }
-
-    // 2. Regex passes on title (strong contextual indicators)
-    for (const pattern of LOCATION_PATTERNS) {
-        pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(title)) !== null) {
-            candidates.push(match[1].trim());
+        var candidate = datelineMatch[1].trim();
+        if (candidate.length > 2 && !STOP_WORDS.has(candidate.toLowerCase())) {
+            var loc = disambiguate(candidate);
+            if (KNOWN_LOCATIONS[loc.toLowerCase().trim()]) {
+                return loc;
+            }
         }
     }
-
-    // 3. NLP pass on title (prioritizes order of mention in the headline)
-    const titlePlaces = nlp(title).places().out('array');
+    // 2. regex pass on title
+    for (var _i = 0, LOCATION_PATTERNS_1 = LOCATION_PATTERNS; _i < LOCATION_PATTERNS_1.length; _i++) {
+        var pattern = LOCATION_PATTERNS_1[_i];
+        pattern.lastIndex = 0;
+        var match = pattern.exec(title);
+        if (match) {
+            var candidate = match[1].trim();
+            if (!STOP_WORDS.has(candidate.toLowerCase()) && candidate.length > 2) {
+                return disambiguate(candidate);
+            }
+        }
+    }
+    // 3. nlp pass on title (prioritize title places over description places)
+    var titlePlaces = (0, compromise_1.default)(title).places().out('array');
     if (titlePlaces && titlePlaces.length > 0) {
-        candidates.push(...titlePlaces);
+        // filter out stop words just in case
+        var place = titlePlaces[0].trim();
+        if (!STOP_WORDS.has(place.toLowerCase())) {
+            return disambiguate(place);
+        }
     }
-
-    // 4. Regex pass on description
-    for (const pattern of LOCATION_PATTERNS) {
+    // 4. regex pass on description
+    for (var _a = 0, LOCATION_PATTERNS_2 = LOCATION_PATTERNS; _a < LOCATION_PATTERNS_2.length; _a++) {
+        var pattern = LOCATION_PATTERNS_2[_a];
         pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(description)) !== null) {
-            candidates.push(match[1].trim());
+        var match = pattern.exec(description);
+        if (match) {
+            var candidate = match[1].trim();
+            if (!STOP_WORDS.has(candidate.toLowerCase()) && candidate.length > 2) {
+                return disambiguate(candidate);
+            }
         }
     }
-
-    // 5. NLP fallback on description
-    const descPlaces = nlp(description).places().out('array');
+    // 5. nlp fallback on description
+    var descPlaces = (0, compromise_1.default)(description).places().out('array');
     if (descPlaces && descPlaces.length > 0) {
-        candidates.push(...descPlaces);
-    }
-
-    // Clean all candidates and try to match against the dictionary
-    for (const raw of candidates) {
-        const candidate = cleanCandidate(raw);
-        if (!candidate || candidate.length <= 2) continue;
-        if (STOP_WORDS.has(candidate.toLowerCase())) continue;
-
-        const loc = disambiguate(candidate);
-        const key = loc.toLowerCase();
-
-        if (KNOWN_LOCATIONS[key]) {
-            return loc;
+        var place = descPlaces[0].trim();
+        if (!STOP_WORDS.has(place.toLowerCase())) {
+            return disambiguate(place);
         }
     }
-
-    // 6. Demonym fallback — check title for adjective forms like "Chinese", "Russian"
-    const demonymCountry = extractDemonym(title);
-    if (demonymCountry && KNOWN_LOCATIONS[demonymCountry]) {
-        // capitalize the country for display
-        const display = demonymCountry.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-        return display;
-    }
-
-    // 7. Last resort: return the first plausible cleaned candidate for Nominatim
-    for (const raw of candidates) {
-        const candidate = cleanCandidate(raw);
-        if (!candidate || candidate.length <= 2) continue;
-        if (!STOP_WORDS.has(candidate.toLowerCase())) {
-            return disambiguate(candidate);
-        }
-    }
-
     return null;
 }
-
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms) {
+    return new Promise(function (resolve) { return setTimeout(resolve, ms); });
 }
-
 // try the local dictionary first, hit nominatim only if needed
-export async function geocodeLocation(
-    placeName: string
-): Promise<{ lat: number; lon: number; displayName: string } | null> {
-    const key = placeName.toLowerCase().trim();
-
-    // instant dictionary lookup
-    const known = KNOWN_LOCATIONS[key];
-    if (known) {
-        return { lat: known.lat, lon: known.lon, displayName: placeName };
-    }
-
-    if (geoCache.has(key)) {
-        return geoCache.get(key)!;
-    }
-
-    const geocodePromise = (async () => {
-        try {
-            // if the name matches a known country, bias nominatim toward countries
-            const isCountry = COUNTRY_NAMES.has(key);
-            const featureParam = isCountry ? '&featuretype=country' : '';
-            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(placeName)}&format=json&limit=1${featureParam}`;
-
-            const res = await fetch(url, {
-                headers: { 'User-Agent': 'Seraphim/1.0' },
-            });
-
-            if (!res.ok) return null;
-
-            const data = await res.json();
-            if (!data || data.length === 0) return null;
-
-            return {
-                lat: parseFloat(data[0].lat),
-                lon: parseFloat(data[0].lon),
-                displayName: data[0].display_name as string,
-            };
-        } catch (err) {
-            console.error(`geocoding failed for "${placeName}":`, err);
-            return null;
-        }
-    })();
-
-    geoCache.set(key, geocodePromise);
-    return geocodePromise;
+function geocodeLocation(placeName) {
+    return __awaiter(this, void 0, void 0, function () {
+        var key, known, geocodePromise;
+        var _this = this;
+        return __generator(this, function (_a) {
+            key = placeName.toLowerCase().trim();
+            known = KNOWN_LOCATIONS[key];
+            if (known) {
+                return [2 /*return*/, { lat: known.lat, lon: known.lon, displayName: placeName }];
+            }
+            if (geoCache.has(key)) {
+                return [2 /*return*/, geoCache.get(key)];
+            }
+            geocodePromise = (function () { return __awaiter(_this, void 0, void 0, function () {
+                var isCountry, featureParam, url, res, data, err_1;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 3, , 4]);
+                            isCountry = COUNTRY_NAMES.has(key);
+                            featureParam = isCountry ? '&featuretype=country' : '';
+                            url = "https://nominatim.openstreetmap.org/search?q=".concat(encodeURIComponent(placeName), "&format=json&limit=1").concat(featureParam);
+                            return [4 /*yield*/, fetch(url, {
+                                    headers: { 'User-Agent': 'Seraphim/1.0' },
+                                })];
+                        case 1:
+                            res = _a.sent();
+                            if (!res.ok)
+                                return [2 /*return*/, null];
+                            return [4 /*yield*/, res.json()];
+                        case 2:
+                            data = _a.sent();
+                            if (!data || data.length === 0)
+                                return [2 /*return*/, null];
+                            return [2 /*return*/, {
+                                    lat: parseFloat(data[0].lat),
+                                    lon: parseFloat(data[0].lon),
+                                    displayName: data[0].display_name,
+                                }];
+                        case 3:
+                            err_1 = _a.sent();
+                            console.error("geocoding failed for \"".concat(placeName, "\":"), err_1);
+                            return [2 /*return*/, null];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            }); })();
+            geoCache.set(key, geocodePromise);
+            return [2 /*return*/, geocodePromise];
+        });
+    });
 }
-
 // enrich news items with lat/lng, respecting nominatim rate limits
-export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsItem[]> {
-    const enriched: NewsItem[] = [];
-
-    for (const item of items) {
-        if (item.latitude !== undefined && item.longitude !== undefined) {
-            enriched.push(item);
-            continue;
-        }
-
-        const placeName = extractLocation(item.title, item.description);
-        if (!placeName) {
-            enriched.push(item);
-            continue;
-        }
-
-        const key = placeName.toLowerCase().trim();
-        const isDictionaryHit = KNOWN_LOCATIONS[key] !== undefined;
-        const isCached = geoCache.has(key);
-
-        const geo = await geocodeLocation(placeName);
-
-        // only sleep when we actually hit the nominatim api
-        if (!isDictionaryHit && !isCached) {
-            await sleep(250);
-        }
-
-        if (geo) {
-            enriched.push({
-                ...item,
-                latitude: geo.lat,
-                longitude: geo.lon,
-                locationName: placeName,
-            });
-        } else {
-            enriched.push(item);
-        }
-    }
-
-    return enriched;
+function enrichItemsWithLocation(items) {
+    return __awaiter(this, void 0, void 0, function () {
+        var enriched, _i, items_1, item, placeName, key, isDictionaryHit, isCached, geo;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    enriched = [];
+                    _i = 0, items_1 = items;
+                    _a.label = 1;
+                case 1:
+                    if (!(_i < items_1.length)) return [3 /*break*/, 6];
+                    item = items_1[_i];
+                    if (item.latitude !== undefined && item.longitude !== undefined) {
+                        enriched.push(item);
+                        return [3 /*break*/, 5];
+                    }
+                    placeName = extractLocation(item.title, item.description);
+                    if (!placeName) {
+                        enriched.push(item);
+                        return [3 /*break*/, 5];
+                    }
+                    key = placeName.toLowerCase().trim();
+                    isDictionaryHit = KNOWN_LOCATIONS[key] !== undefined;
+                    isCached = geoCache.has(key);
+                    return [4 /*yield*/, geocodeLocation(placeName)];
+                case 2:
+                    geo = _a.sent();
+                    if (!(!isDictionaryHit && !isCached)) return [3 /*break*/, 4];
+                    return [4 /*yield*/, sleep(250)];
+                case 3:
+                    _a.sent();
+                    _a.label = 4;
+                case 4:
+                    if (geo) {
+                        enriched.push(__assign(__assign({}, item), { latitude: geo.lat, longitude: geo.lon, locationName: placeName }));
+                    }
+                    else {
+                        enriched.push(item);
+                    }
+                    _a.label = 5;
+                case 5:
+                    _i++;
+                    return [3 /*break*/, 1];
+                case 6: return [2 /*return*/, enriched];
+            }
+        });
+    });
 }

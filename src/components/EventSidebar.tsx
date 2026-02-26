@@ -2,11 +2,12 @@
 
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 
 interface EventSidebarProps {
     items: NewsItem[];
     selectedItemId: string | null;
+    selectionVersion: number;
     onSelectItem: (id: string) => void;
     isLoading: boolean;
     filterBar: ReactNode;
@@ -18,6 +19,7 @@ interface EventSidebarProps {
 export default function EventSidebar({
     items,
     selectedItemId,
+    selectionVersion,
     onSelectItem,
     isLoading,
     filterBar,
@@ -25,6 +27,16 @@ export default function EventSidebar({
     onToggleTheme,
     lastUpdated,
 }: EventSidebarProps) {
+    const cardRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+    // Auto-scroll the selected card into view when selection changes
+    useEffect(() => {
+        if (!selectedItemId) return;
+        const el = cardRefs.current.get(selectedItemId);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [selectedItemId, selectionVersion]);
     return (
         <aside className="event-sidebar">
             <div className="event-sidebar-header">
@@ -83,6 +95,13 @@ export default function EventSidebar({
                         return (
                             <button
                                 key={item.id}
+                                ref={(el) => {
+                                    if (el) {
+                                        cardRefs.current.set(item.id, el);
+                                    } else {
+                                        cardRefs.current.delete(item.id);
+                                    }
+                                }}
                                 className={`event-card ${isSelected ? 'event-card-active' : ''} ${hasGeo ? 'event-card-geo' : ''}`}
                                 onClick={() => onSelectItem(item.id)}
                                 type="button"

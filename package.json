@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",
+    "cities.json": "^1.1.50",
     "compromise": "^14.15.0",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",

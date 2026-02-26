@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 interface NewsMapProps {
     items: NewsItem[];
     selectedItemId: string | null;
+    selectionVersion: number;
     onSelectItem: (id: string) => void;
     isDarkMode: boolean;
 }
@@ -57,7 +58,7 @@ function formatTimeAgo(dateStr: string): string {
     return `${days}d ago`;
 }
 
-export default function NewsMap({ items, selectedItemId, onSelectItem, isDarkMode }: NewsMapProps) {
+export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode }: NewsMapProps) {
     const mapRef = useRef<L.Map | null>(null);
     const tileLayerRef = useRef<L.TileLayer | null>(null);
     const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
@@ -212,11 +213,17 @@ export default function NewsMap({ items, selectedItemId, onSelectItem, isDarkMod
 
         const marker = markersRef.current.get(selectedItemId);
         if (marker) {
+            const map = mapRef.current;
             const latlng = marker.getLatLng();
-            mapRef.current.setView(latlng, Math.max(mapRef.current.getZoom(), 5), { animate: true });
-            marker.openPopup();
+            const targetZoom = Math.max(map.getZoom(), 5);
+
+            // Fly to the marker and open the popup once the animation completes
+            map.once('moveend', () => {
+                marker.openPopup();
+            });
+            map.flyTo(latlng, targetZoom, { animate: true, duration: 0.8 });
         }
-    }, [selectedItemId]);
+    }, [selectedItemId, selectionVersion]);
 
     // sync dropdown when dark mode toggles
     useEffect(() => {
