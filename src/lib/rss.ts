@@ -1,0 +1,132 @@
+import Parser from 'rss-parser';
+import { NewsItem } from './types';
+
+const parser = new Parser({
+    customFields: {
+        item: ['media:content', 'media:thumbnail', 'enclosure'],
+    },
+});
+
+export interface RSSSource {
+    name: string;
+    url: string;
+    category: string;
+    region?: string;
+}
+
+// curated high-signal feeds — world news, crisis, national, business, tech, science, health
+export const RSS_SOURCES: RSSSource[] = [
+    // world news
+    { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'world', region: 'global' },
+    { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', category: 'world', region: 'global' },
+    { name: 'NYT World', url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', category: 'world', region: 'global' },
+    { name: 'DW News', url: 'https://rss.dw.com/rdf/rss-en-eu', category: 'world', region: 'europe' },
+    { name: 'France 24', url: 'https://www.france24.com/en/europe/rss', category: 'world', region: 'europe' },
+    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed', category: 'world', region: 'asia' },
+    { name: 'BBC Africa', url: 'http://feeds.bbci.co.uk/news/world/africa/rss.xml', category: 'world', region: 'africa' },
+    { name: 'BBC Middle East', url: 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', category: 'world', region: 'middle_east' },
+
+    // crisis and humanitarian
+    { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.atom', category: 'crisis', region: 'global' },
+
+
+
+    // national / domestic
+    { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', region: 'north_america' },
+    { name: 'CBC Canada', url: 'https://www.cbc.ca/cmlink/rss-topstories', category: 'nation', region: 'north_america' },
+
+    // business
+    { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business', region: 'global' },
+    { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/', category: 'business', region: 'global' },
+
+    // technology
+    { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'technology', region: 'global' },
+    { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'technology', region: 'global' },
+
+    // science
+    { name: 'NASA', url: 'https://www.nasa.gov/news-release/feed/', category: 'science', region: 'global' },
+    { name: 'Nature', url: 'https://www.nature.com/nature.rss', category: 'science', region: 'global' },
+
+    // health
+    { name: 'WHO News', url: 'https://www.who.int/rss-feeds/news-english.xml', category: 'health', region: 'global' },
+];
+
+function extractImageUrl(item: Record<string, unknown>): string | undefined {
+    if (item['media:content'] && typeof item['media:content'] === 'object') {
+        const media = item['media:content'] as Record<string, unknown>;
+        if (media.$ && typeof media.$ === 'object' && 'url' in (media.$ as object)) {
+            return (media.$ as { url: string }).url;
+        }
+    }
+
+    if (item['media:thumbnail'] && typeof item['media:thumbnail'] === 'object') {
+        const thumb = item['media:thumbnail'] as Record<string, unknown>;
+        if (thumb.$ && typeof thumb.$ === 'object' && 'url' in (thumb.$ as object)) {
+            return (thumb.$ as { url: string }).url;
+        }
+    }
+
+    if (item.enclosure && typeof item.enclosure === 'object') {
+        const enc = item.enclosure as Record<string, unknown>;
+        if (enc.url && typeof enc.url === 'string') return enc.url;
+    }
+
+    return undefined;
+}
+
+async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
+    try {
+        const feed = await parser.parseURL(source.url);
+
+        return (feed.items || []).slice(0, 5).map((item, index) => ({
+            id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
+            title: item.title || 'No title',
+            description: item.contentSnippet || item.content || '',
+            url: item.link || '',
+            source: source.name,
+            sourceType: 'rss' as const,
+            category: source.category,
+            publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
+            imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
+        }));
+    } catch (error) {
+        console.error(`rss fetch failed for ${source.name}:`, error);
+        return [];
+    }
+}
+
+export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
+    const results = await Promise.allSettled(
+        RSS_SOURCES.map(source => fetchSingleFeed(source))
+    );
+
+    const allItems: NewsItem[] = [];
+    for (const result of results) {
+        if (result.status === 'fulfilled') {
+            allItems.push(...result.value);
+        }
+    }
+
+    return allItems.sort((a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+}
+
+export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
+    const sources = RSS_SOURCES.filter(s => s.category === category);
+
+    const results = await Promise.allSettled(
+        sources.map(source => fetchSingleFeed(source))
+    );
+
+    const allItems: NewsItem[] = [];
+    for (const result of results) {
+        if (result.status === 'fulfilled') {
+            allItems.push(...result.value);
+        }
+    }
+
+    return allItems.sort((a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+}

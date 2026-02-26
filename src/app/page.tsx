@@ -1,66 +1,137 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import FilterBar from '@/components/FilterBar';
+import EventSidebar from '@/components/EventSidebar';
+import { NewsItem, NewsResponse } from '@/lib/types';
+
+const NewsMap = dynamic(() => import('@/components/NewsMap'), { ssr: false });
 
 export default function Home() {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Filters
+  const [sources, setSources] = useState<string[]>(['rss']);
+  const [categories, setCategories] = useState<string[]>(['general']);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      setIsDarkMode(savedTheme === 'dark');
+    } else {
+      setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+  }, []);
+
+  const fetchNews = useCallback(async (forceRefresh = false) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        sources: sources.join(','),
+        categories: categories.join(','),
+        ...(debouncedSearch && { search: debouncedSearch }),
+        ...(forceRefresh && { refresh: 'true' }),
+      });
+
+      const response = await fetch(`/api/news?${params}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch news');
+      }
+
+      const data: NewsResponse = await response.json();
+      setNews(data.items);
+      setLastUpdated(data.lastUpdated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sources, categories, debouncedSearch]);
+
+  useEffect(() => {
+    fetchNews();
+  }, [fetchNews]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNews(true);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchNews]);
+
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+  };
+
+  const handleSelectItem = (id: string) => {
+    setSelectedItemId(id);
+  };
+
+  const filterBarSlot = (
+    <>
+      <FilterBar
+        sources={sources}
+        onSourcesChange={setSources}
+        categories={categories}
+        onCategoriesChange={setCategories}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onRefresh={() => fetchNews(true)}
+        isLoading={isLoading}
+      />
+      {error && (
+        <div className="error-banner">
+          <span className="error-icon">⚠️</span>
+          {error}
+          <button onClick={() => fetchNews()}>Retry</button>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="app-layout">
+      <EventSidebar
+        items={news}
+        selectedItemId={selectedItemId}
+        onSelectItem={handleSelectItem}
+        isLoading={isLoading}
+        filterBar={filterBarSlot}
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleTheme}
+        lastUpdated={lastUpdated}
+      />
+
+      <NewsMap
+        items={news}
+        selectedItemId={selectedItemId}
+        onSelectItem={handleSelectItem}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }
