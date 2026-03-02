@@ -4,6 +4,27 @@ import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ReactNode, useEffect, useRef } from 'react';
 
+// Source platform colors for badge styling
+function getSourceStyle(sourceName: string): { bg: string; color: string } {
+    const s = sourceName.toLowerCase();
+    if (s.includes('(x)') || s.includes('twitter'))
+        return { bg: '#000000', color: '#ffffff' };
+    if (s.includes('reddit'))
+        return { bg: '#ff4500', color: '#ffffff' };
+    if (s.includes('telegram'))
+        return { bg: '#0088cc', color: '#ffffff' };
+    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
+        return { bg: '#7c3aed', color: '#ffffff' };
+    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
+        return { bg: '#0891b2', color: '#ffffff' };
+    if (s.includes('nasa') || s.includes('nature'))
+        return { bg: '#059669', color: '#ffffff' };
+    if (s.includes('who '))
+        return { bg: '#7c3aed', color: '#ffffff' };
+    // mainstream media default
+    return { bg: '#dc2626', color: '#ffffff' };
+}
+
 interface EventSidebarProps {
     items: NewsItem[];
     selectedItemId: string | null;
@@ -123,7 +144,10 @@ export default function EventSidebar({
                                     <div className="event-card-meta">
                                         <span
                                             className="event-card-source"
-                                            data-type={item.sourceType}
+                                            style={{
+                                                background: getSourceStyle(item.source).bg,
+                                                color: getSourceStyle(item.source).color,
+                                            }}
                                         >
                                             {item.source}
                                         </span>

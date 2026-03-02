@@ -118,6 +118,19 @@ function formatTimeAgo(dateStr: string): string {
     return `${days}d ago`;
 }
 
+// Source platform badge colors (same logic as EventSidebar)
+function getSourceBadgeColor(sourceName: string): string {
+    const s = sourceName.toLowerCase();
+    if (s.includes('(x)') || s.includes('twitter')) return '#000000';
+    if (s.includes('reddit')) return '#ff4500';
+    if (s.includes('telegram')) return '#0088cc';
+    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#7c3aed';
+    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#0891b2';
+    if (s.includes('nasa') || s.includes('nature')) return '#059669';
+    if (s.includes('who ')) return '#7c3aed';
+    return '#dc2626';
+}
+
 export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode }: NewsMapProps) {
     const mapRef = useRef<L.Map | null>(null);
     const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -295,7 +308,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
               <h3 class="news-popup-title">${item.title}</h3>
               <p class="news-popup-summary">${(item.description || '').slice(0, 180)}${(item.description || '').length > 180 ? '…' : ''}</p>
               <div class="news-popup-meta">
-                <span class="news-popup-source">${item.source}</span>
+                <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
                 ${categoryLabel}
                 <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
               </div>
