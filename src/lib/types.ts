@@ -4,13 +4,14 @@ export interface NewsItem {
   description: string;
   url: string;
   source: string;
-  sourceType: 'gnews' | 'rss';
+  sourceType: 'gnews' | 'rss' | 'social';
   category?: string;
   publishedAt: string;
   imageUrl?: string;
   latitude?: number;
   longitude?: number;
   locationName?: string;
+  tags?: string[];
 }
 
 export interface NewsResponse {
@@ -19,6 +20,7 @@ export interface NewsResponse {
   sources: {
     gnews: boolean;
     rss: boolean;
+    social: boolean;
   };
 }
 

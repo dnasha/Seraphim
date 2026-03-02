@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { fetchGNews } from '@/lib/gnews';
+import { fetchGNews, fetchOSINTGNews } from '@/lib/gnews';
 import { fetchAllRSSFeeds } from '@/lib/rss';
+import { fetchSocialFeeds } from '@/lib/social-feeds';
 import { enrichItemsWithLocation } from '@/lib/geocode';
 import { NewsItem, NewsResponse } from '@/lib/types';
 
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
                 sources: {
                     gnews: sources.includes('gnews'),
                     rss: sources.includes('rss'),
+                    social: sources.includes('social'),
                 },
             };
 
@@ -56,12 +58,14 @@ export async function GET(request: Request) {
         }
 
         // fetch fresh data from all sources
-        const [gnewsItems, rssItems] = await Promise.all([
+        const [gnewsItems, rssItems, osintItems, socialItems] = await Promise.all([
             fetchGNews(categoriesArray.includes('general') ? 'general' : categoriesArray[0], 20),
             fetchAllRSSFeeds(),
+            fetchOSINTGNews(),
+            fetchSocialFeeds(),
         ]);
 
-        const allItems = [...gnewsItems, ...rssItems];
+        const allItems = [...gnewsItems, ...rssItems, ...osintItems, ...socialItems];
 
         allItems.sort((a, b) =>
             new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
@@ -99,6 +103,7 @@ export async function GET(request: Request) {
             sources: {
                 gnews: sources.includes('gnews'),
                 rss: sources.includes('rss'),
+                social: sources.includes('social'),
             },
         };
 

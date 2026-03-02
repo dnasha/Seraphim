@@ -26,10 +26,24 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'BBC Africa', url: 'http://feeds.bbci.co.uk/news/world/africa/rss.xml', category: 'world', region: 'africa' },
     { name: 'BBC Middle East', url: 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', category: 'world', region: 'middle_east' },
 
+    // regional gap-fillers (Indo-Pacific, Middle East, Latin America)
+    { name: 'CNA Asia', url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511', category: 'world', region: 'asia' },
+    { name: 'Times of Israel', url: 'https://www.timesofisrael.com/feed/', category: 'world', region: 'middle_east' },
+    { name: 'Al Arabiya English', url: 'https://news.google.com/rss/search?q=site:english.alarabiya.net&hl=en', category: 'world', region: 'middle_east' },
+    { name: 'MercoPress LatAm', url: 'https://en.mercopress.com/rss/', category: 'world', region: 'latin_america' },
+
     // crisis and humanitarian
     { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.atom', category: 'crisis', region: 'global' },
+    { name: 'ReliefWeb', url: 'https://reliefweb.int/updates/rss.xml', category: 'crisis', region: 'global' },
+    { name: 'Reddit CombatFootage', url: 'https://www.reddit.com/r/CombatFootage/new/.rss', category: 'crisis', region: 'global' },
+    { name: 'Reddit CredibleDefense', url: 'https://www.reddit.com/r/CredibleDefense/new/.rss', category: 'crisis', region: 'global' },
 
+    // geopolitical think tanks
+    { name: 'War on the Rocks', url: 'https://warontherocks.com/feed/', category: 'world', region: 'global' },
+    { name: 'ISW Daily Updates', url: 'https://news.google.com/rss/search?q=site:understandingwar.org&hl=en', category: 'crisis', region: 'global' },
 
+    // OSINT / investigative
+    { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', category: 'world', region: 'global' },
 
     // national / domestic
     { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', region: 'north_america' },
@@ -39,9 +53,11 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business', region: 'global' },
     { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/', category: 'business', region: 'global' },
 
-    // technology
+    // technology + cyber intelligence
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'technology', region: 'global' },
     { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'technology', region: 'global' },
+    { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', category: 'technology', region: 'global' },
+    { name: 'The Hacker News', url: 'https://feeds.feedburner.com/TheHackersNews', category: 'technology', region: 'global' },
 
     // science
     { name: 'NASA', url: 'https://www.nasa.gov/news-release/feed/', category: 'science', region: 'global' },

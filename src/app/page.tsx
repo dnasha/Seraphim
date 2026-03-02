@@ -18,7 +18,7 @@ export default function Home() {
   const [selectionVersion, setSelectionVersion] = useState(0);
 
   // Filters
-  const [sources, setSources] = useState<string[]>(['rss']);
+  const [sources, setSources] = useState<string[]>(['rss', 'social']);
   const [categories, setCategories] = useState<string[]>(['general']);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

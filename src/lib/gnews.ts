@@ -36,6 +36,10 @@ export async function fetchGNews(
         });
 
         const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`);
+        if (res.status === 429) {
+            console.warn('gnews: rate-limited (429), skipping headlines');
+            return [];
+        }
         if (!res.ok) throw new Error(`gnews responded ${res.status}`);
 
         const data: GNewsResponse = await res.json();
@@ -72,6 +76,10 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
         });
 
         const res = await fetch(`${GNEWS_BASE_URL}/search?${params}`);
+        if (res.status === 429) {
+            console.warn('gnews: rate-limited (429), skipping search');
+            return [];
+        }
         if (!res.ok) throw new Error(`gnews search responded ${res.status}`);
 
         const data: GNewsResponse = await res.json();
@@ -90,4 +98,42 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
         console.error('gnews search error:', error);
         return [];
     }
+}
+
+// ── OSINT keyword-driven search ─────────────────────────────────────────────
+const OSINT_QUERIES: { query: string; tags: string[] }[] = [
+    { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
+    { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
+    { query: '"troop deployment" OR "military convoy"', tags: ['OSINT', 'military'] },
+    { query: '"cyber attack" OR "critical infrastructure"', tags: ['OSINT', 'cyber'] },
+];
+
+export async function fetchOSINTGNews(maxPerQuery: number = 5): Promise<NewsItem[]> {
+    if (!GNEWS_API_KEY) return [];
+
+    const seen = new Set<string>();
+    const allItems: NewsItem[] = [];
+
+    for (const { query, tags } of OSINT_QUERIES) {
+        try {
+            const items = await searchGNews(query, maxPerQuery);
+            if (items.length === 0 && allItems.length === 0) {
+                // likely rate-limited — no point trying more queries
+                break;
+            }
+            for (const item of items) {
+                if (seen.has(item.url)) continue;
+                seen.add(item.url);
+                allItems.push({
+                    ...item,
+                    category: 'crisis',
+                    tags,
+                });
+            }
+        } catch (error) {
+            console.error(`osint gnews query failed for "${query}":`, error);
+        }
+    }
+
+    return allItems;
 }

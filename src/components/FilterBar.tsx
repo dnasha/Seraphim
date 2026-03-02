@@ -37,6 +37,7 @@ const categoryOptions = [
 const sourceOptions = [
     { value: 'gnews', label: 'GNews' },
     { value: 'rss', label: 'RSS Feeds' },
+    { value: 'social', label: 'Social' },
 ];
 
 export default function FilterBar({

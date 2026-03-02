@@ -162,6 +162,25 @@ const STOP_WORDS = new Set([
     'coast', 'mountain', 'river', 'lake', 'ocean', 'sea', 'bay',
 ]);
 
+// ── False positives ─────────────────────────────────────────────────────────
+// Names, brands, and sports teams that NLP/regex detect as geographic places.
+// These get checked against BOTH the raw candidate AND the disambiguated key.
+const FALSE_POSITIVES = new Set([
+    // Multi-word names where the first word is also a real place
+    'paris hilton', 'jackson hole', 'georgia tech',
+    'chelsea clinton', 'chelsea handler', 'virginia woolf',
+    // Sports teams (these match city names but are rarely used as location references)
+    'arsenal', 'chelsea fc', 'manchester united', 'manchester city',
+    'real madrid', 'bayern munich', 'juventus', 'napoli',
+    'tottenham', 'everton', 'wolverhampton', 'newcastle united',
+    // Brands / companies that are also place names
+    'amazon', 'apple', 'oracle', 'adobe', 'cisco',
+    // Common compound false positives from news headlines
+    'research roundup', 'audio long read', 'author correction',
+    'weekend of war', 'morning edition', 'evening update',
+    'daily briefing', 'weekly roundup', 'year in review',
+]);
+
 // ── News source default locations ───────────────────────────────────────────
 // Fallback locations for well-known news providers whose articles often lack
 // extractable geographic context (e.g. "NASA discovers new exoplanet").
@@ -309,6 +328,7 @@ export function extractLocation(title: string, description: string): string | nu
         const candidate = cleanCandidate(raw);
         if (!candidate || candidate.length <= 2) continue;
         if (STOP_WORDS.has(candidate.toLowerCase())) continue;
+        if (FALSE_POSITIVES.has(candidate.toLowerCase())) continue;
 
         const loc = disambiguate(candidate);
         const key = loc.toLowerCase();
@@ -416,7 +436,6 @@ export async function geocodeLocation(
             // Reject buildings, streets, highways, tourism spots, etc.
             const allowedOsmKeys = new Set(['place', 'boundary']);
             if (!allowedOsmKeys.has(props.osm_key)) {
-                console.log(`[geocode] Rejected Photon result for "${placeName}": osm_key="${props.osm_key}", osm_value="${props.osm_value}"`);
                 return null;
             }
 

@@ -42,7 +42,8 @@ newsscraper/
 │   ├── lib/
 │   │   ├── geocode.ts          # Location extraction + dictionary lookup + Photon API fallback
 │   │   ├── rss.ts              # RSS feed fetcher (curated source list)
-│   │   ├── gnews.ts            # GNews API wrapper
+│   │   ├── gnews.ts            # GNews API wrapper + OSINT keyword search
+│   │   ├── social-feeds.ts     # Telegram + X feeds via RSSHub bridge
 │   │   └── types.ts            # NewsItem, NewsResponse, NewsCategory interfaces
 │   └── types/
 │       └── css.d.ts            # CSS module ambient declarations
@@ -54,7 +55,7 @@ newsscraper/
 ## Data Pipeline
 
 ```
-RSS Feeds / GNews API
+RSS Feeds / GNews API / Social Feeds (RSSHub)
         │
         ▼
   /api/news/route.ts ──── 5-min in-memory cache
@@ -97,6 +98,10 @@ Candidates are scored and sorted by two axes:
 
 This means countries beat obscure same-named cities (e.g., Albania the country beats "Albania" the municipality in Colombia), but mega-cities like Singapore still resolve to their city coordinates.
 
+### False Positive Filter
+
+A `FALSE_POSITIVES` set blocks compound phrases and brand/team names that NLP incorrectly detects as locations (e.g. "Arsenal", "Amazon", "Research roundup"). Standalone city names (Paris, Chelsea) are intentionally NOT blocked — only clear non-geographic uses.
+
 ### Dateline Regex
 
 Captures journalistic-style location prefixes from both titles and descriptions:
@@ -125,27 +130,44 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 
 - **Layout**: Sidebar (360px) + full-bleed Leaflet map, responsive (stacks at <860px)
 - **Theme**: Dark mode default, toggleable. CSS variables on `[data-theme]`
-- **Map styles**: Standard, humanitarian, and dark tile layers
-- **Pins**: SVG markers colored by category (world=red, crisis=dark-red, nation=blue, business=yellow, tech=cyan, science=green, health=purple)
+- **Map styles**: Standard, dark, light, satellite, humanitarian, and topographic tile layers — selectable via gear (⚙️) settings panel (top-right of map)
+- **Settings panel**: Floating card opened by gear icon; contains map style grid + clustering toggle
+- **Markers**: Circle icons with category-specific SVG glyphs + category color. Active markers pulse.
+- **Clustering**: `leaflet.markercluster` groups nearby pins into numbered circles; **off by default**, toggleable in settings panel
 - **Interaction**: Clicking a map pin selects the sidebar card (auto-scrolls), clicking a sidebar card flies the map to that pin's location
 
 ## News Sources
 
 ### RSS Feeds (curated in `rss.ts`)
 
-| Category   | Sources                                                                                 |
-| ---------- | --------------------------------------------------------------------------------------- |
-| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East |
-| Crisis     | USGS Earthquakes                                                                        |
-| Nation     | NPR US, CBC Canada                                                                      |
-| Business   | CNBC, MarketWatch                                                                       |
-| Technology | Ars Technica, The Verge                                                                 |
-| Science    | NASA, Nature                                                                            |
-| Health     | WHO News                                                                                |
+| Category   | Sources                                                                                                                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, **CNA Asia**, **Times of Israel**, **Al Arabiya English**, **MercoPress LatAm**, **War on the Rocks**, **Bellingcat** |
+| Crisis     | USGS Earthquakes, **ReliefWeb**, **Reddit CombatFootage**, **Reddit CredibleDefense**, **ISW Daily Updates**                                                                                                   |
+| Nation     | NPR US, CBC Canada                                                                                                                                                                                             |
+| Business   | CNBC, MarketWatch                                                                                                                                                                                              |
+| Technology | Ars Technica, The Verge, **BleepingComputer**, **The Hacker News**                                                                                                                                             |
+| Science    | NASA, Nature                                                                                                                                                                                                   |
+| Health     | WHO News                                                                                                                                                                                                       |
 
 ### GNews API
 
 Requires `GNEWS_API_KEY` in `.env.local`. Optional — app works without it using RSS only.
+`fetchOSINTGNews()` runs keyword-driven searches ("geolocated", "satellite imagery", "confirmed strike", etc.) and auto-tags results.
+
+### Social Feeds (`social-feeds.ts`)
+
+Two strategies, no API keys required:
+
+- **Telegram**: HTML scraping of `t.me/s/<channel>` parsed with **Cheerio** (server-side jQuery). Preserves OSINT source links.
+- **X / Twitter**: RSS via **RSSHub** instances with **fallback loop** — tries `rsshub.app`, `rsshub.rssforever.com`, `rsshub.moeyy.cn` in sequence. URL pattern: `{instance}/twitter/user/{username}`.
+
+| Platform | Accounts / Channels                                                          |
+| -------- | ---------------------------------------------------------------------------- |
+| Telegram | Faytuks, LiveUkraine, Astra Press                                            |
+| X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, **@IntelCrab**, **@AuroraIntel** |
+
+Items arrive with `sourceType: 'social'` and are tagged `['OSINT', '<platform>']`.
 
 ## Environment Variables
 
