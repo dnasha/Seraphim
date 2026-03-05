@@ -9,7 +9,11 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
   background: #fafafa;
   color: #111;
   line-height: 1.5;
@@ -82,7 +86,7 @@ a {
 }
 
 .event-sidebar-logo h1 {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: "Playfair Display", Georgia, serif;
   font-style: italic;
   font-size: 1.5rem;
   font-weight: 700;
@@ -200,13 +204,11 @@ a {
   color: #fff;
 }
 
-/* colored dot inside category buttons */
-.category-dot {
+/* category icon SVG inside filter buttons */
+.category-icon-svg {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
   flex-shrink: 0;
+  transition: fill 0.15s;
 }
 
 .refresh-button {
@@ -333,14 +335,13 @@ a {
 
 /* event card */
 .event-card {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   background: var(--surface);
   text-align: left;
   width: 100%;
@@ -364,6 +365,25 @@ a {
   background: rgba(96, 165, 250, 0.08);
 }
 
+/* Category accent bar on left edge */
+.event-card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 4px 0 0 4px;
+}
+
+/* Main row: thumbnail + body side by side */
+.event-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  width: 100%;
+}
+
 .event-card-thumb {
   width: 64px;
   height: 50px;
@@ -371,12 +391,14 @@ a {
   border-radius: 3px;
   overflow: hidden;
   background: var(--surface-alt);
+  flex-shrink: 0;
 }
 
 .event-card-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .event-card-body {
@@ -394,6 +416,11 @@ a {
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin: 0;
+}
+
+.event-card-expanded .event-card-title {
+  -webkit-line-clamp: unset;
+  overflow: visible;
 }
 
 .event-card-meta {
@@ -424,6 +451,63 @@ a {
   color: var(--green);
   margin-top: 3px;
   display: block;
+}
+
+/* Expand hint for unmapped cards */
+.event-card-expand-hint {
+  display: block;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-style: italic;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.event-card-unmapped:hover .event-card-expand-hint {
+  opacity: 1;
+}
+
+/* Expanded detail panel */
+.event-card-detail {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: default;
+}
+
+.event-card-detail-img {
+  width: 100%;
+  max-height: 160px;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: var(--surface-alt);
+}
+
+.event-card-detail-img img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.event-card-detail-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+
+.event-card-detail-link {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.event-card-detail-link:hover {
+  text-decoration: underline;
 }
 
 /* theme toggle + last updated */
@@ -478,7 +562,9 @@ a {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  transition: background 0.15s, transform 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.15s;
 }
 
 .map-settings-btn:hover {
@@ -503,8 +589,14 @@ a {
 }
 
 @keyframes settings-fade-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .settings-section {
@@ -650,7 +742,7 @@ a {
 }
 
 .cluster-icon.cluster-large {
-  background: rgba(139, 16, 16, 0.90);
+  background: rgba(139, 16, 16, 0.9);
   width: 50px;
   height: 50px;
   font-size: 0.9375rem;
@@ -663,7 +755,9 @@ a {
 }
 
 .marker-icon {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .marker-icon:hover {
@@ -677,8 +771,13 @@ a {
 }
 
 @keyframes marker-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.12); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
 }
 
 /* override default markercluster styles for dark mode */

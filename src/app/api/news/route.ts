@@ -57,12 +57,18 @@ export async function GET(request: Request) {
             return NextResponse.json(response);
         }
 
-        // fetch fresh data from all sources
+        // fetch only the sources the client actually requested
+        const wantGNews = sources.includes('gnews');
+        const wantRSS = sources.includes('rss');
+        const wantSocial = sources.includes('social');
+
         const [gnewsItems, rssItems, osintItems, socialItems] = await Promise.all([
-            fetchGNews(categoriesArray.includes('general') ? 'general' : categoriesArray[0], 20),
-            fetchAllRSSFeeds(),
-            fetchOSINTGNews(),
-            fetchSocialFeeds(),
+            wantGNews
+                ? fetchGNews(categoriesArray.includes('general') ? 'general' : categoriesArray[0], 20)
+                : Promise.resolve([]),
+            wantRSS ? fetchAllRSSFeeds() : Promise.resolve([]),
+            wantGNews ? fetchOSINTGNews() : Promise.resolve([]),
+            wantSocial ? fetchSocialFeeds() : Promise.resolve([]),
         ]);
 
         const allItems = [...gnewsItems, ...rssItems, ...osintItems, ...socialItems];

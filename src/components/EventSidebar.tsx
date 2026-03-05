@@ -2,7 +2,19 @@
 
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+
+// Category colors (same as FilterBar / NewsMap)
+const CATEGORY_COLORS: Record<string, string> = {
+    general: '#6b7280',
+    world: '#dc2626',
+    crisis: '#b91c1c',
+    nation: '#2563eb',
+    business: '#d97706',
+    technology: '#0891b2',
+    science: '#059669',
+    health: '#7c3aed',
+};
 
 // Source platform colors for badge styling
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
@@ -48,7 +60,9 @@ export default function EventSidebar({
     onToggleTheme,
     lastUpdated,
 }: EventSidebarProps) {
-    const cardRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    // Track which card is expanded (for unmapped articles)
+    const [expandedId, setExpandedId] = useState<string | null>(null);
 
     // Auto-scroll the selected card into view when selection changes
     useEffect(() => {
@@ -58,6 +72,20 @@ export default function EventSidebar({
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }, [selectedItemId, selectionVersion]);
+
+    const handleCardClick = (item: NewsItem) => {
+        const hasGeo = item.latitude !== undefined;
+
+        if (hasGeo) {
+            // Mapped article → select it (flies map to pin)
+            onSelectItem(item.id);
+            setExpandedId(null);
+        } else {
+            // Unmapped article → toggle expanded detail inline
+            setExpandedId(prev => prev === item.id ? null : item.id);
+        }
+    };
+
     return (
         <aside className="event-sidebar">
             <div className="event-sidebar-header">
@@ -106,6 +134,8 @@ export default function EventSidebar({
                     items.map(item => {
                         const isSelected = item.id === selectedItemId;
                         const hasGeo = item.latitude !== undefined;
+                        const isExpanded = expandedId === item.id;
+                        const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
                         let timeAgo = '';
                         try {
                             timeAgo = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
@@ -114,7 +144,7 @@ export default function EventSidebar({
                         }
 
                         return (
-                            <button
+                            <div
                                 key={item.id}
                                 ref={(el) => {
                                     if (el) {
@@ -123,41 +153,90 @@ export default function EventSidebar({
                                         cardRefs.current.delete(item.id);
                                     }
                                 }}
-                                className={`event-card ${isSelected ? 'event-card-active' : ''} ${hasGeo ? 'event-card-geo' : ''}`}
-                                onClick={() => onSelectItem(item.id)}
-                                type="button"
+                                className={`event-card${isSelected ? ' event-card-active' : ''}${hasGeo ? ' event-card-geo' : ' event-card-unmapped'}${isExpanded ? ' event-card-expanded' : ''}`}
+                                onClick={() => handleCardClick(item)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
                             >
-                                {item.imageUrl && (
-                                    <div className="event-card-thumb">
-                                        <img
-                                            src={item.imageUrl}
-                                            alt=""
-                                            loading="lazy"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).style.display = 'none';
-                                            }}
-                                        />
+                                {/* Category accent bar on left edge */}
+                                <div className="event-card-accent" style={{ backgroundColor: catColor }} />
+
+                                {/* Main row: thumbnail + text */}
+                                <div className="event-card-row">
+                                    {item.imageUrl && (
+                                        <div className="event-card-thumb">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={item.imageUrl}
+                                                alt=""
+                                                loading="lazy"
+                                                referrerPolicy="no-referrer"
+                                                onError={(e) => {
+                                                    const img = e.target as HTMLImageElement;
+                                                    if (img.parentElement) img.parentElement.style.display = 'none';
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                    <div className="event-card-body">
+                                        <h3 className="event-card-title">{item.title}</h3>
+                                        <div className="event-card-meta">
+                                            <span
+                                                className="event-card-source"
+                                                style={{
+                                                    background: getSourceStyle(item.source).bg,
+                                                    color: getSourceStyle(item.source).color,
+                                                }}
+                                            >
+                                                {item.source}
+                                            </span>
+                                            <span className="event-card-time">{timeAgo}</span>
+                                        </div>
+                                        {item.locationName && (
+                                            <span className="event-card-location">{item.locationName}</span>
+                                        )}
+                                        {!hasGeo && !isExpanded && (
+                                            <span className="event-card-expand-hint">Click to expand</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Expanded detail panel for unmapped articles */}
+                                {isExpanded && (
+                                    <div className="event-card-detail" onClick={(e) => e.stopPropagation()}>
+                                        {item.imageUrl && (
+                                            <div className="event-card-detail-img">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={item.imageUrl}
+                                                    alt=""
+                                                    referrerPolicy="no-referrer"
+                                                    onError={(e) => {
+                                                        const img = e.target as HTMLImageElement;
+                                                        if (img.parentElement) img.parentElement.style.display = 'none';
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        {item.description && (
+                                            <p className="event-card-detail-desc">
+                                                {item.description.length > 300
+                                                    ? item.description.slice(0, 300) + '…'
+                                                    : item.description}
+                                            </p>
+                                        )}
+                                        <a
+                                            className="event-card-detail-link"
+                                            href={item.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            Read full article →
+                                        </a>
                                     </div>
                                 )}
-                                <div className="event-card-body">
-                                    <h3 className="event-card-title">{item.title}</h3>
-                                    <div className="event-card-meta">
-                                        <span
-                                            className="event-card-source"
-                                            style={{
-                                                background: getSourceStyle(item.source).bg,
-                                                color: getSourceStyle(item.source).color,
-                                            }}
-                                        >
-                                            {item.source}
-                                        </span>
-                                        <span className="event-card-time">{timeAgo}</span>
-                                    </div>
-                                    {item.locationName && (
-                                        <span className="event-card-location">{item.locationName}</span>
-                                    )}
-                                </div>
-                            </button>
+                            </div>
                         );
                     })
                 )}

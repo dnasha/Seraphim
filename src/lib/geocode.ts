@@ -331,9 +331,23 @@ export function extractLocation(title: string, description: string): string | nu
         if (FALSE_POSITIVES.has(candidate.toLowerCase())) continue;
 
         const loc = disambiguate(candidate);
-        const key = loc.toLowerCase();
+        let key = loc.toLowerCase();
 
-        if (!KNOWN_LOCATIONS[key]) continue;
+        // Try progressively shorter sub-phrases if the full candidate isn't found
+        // e.g. "Iowa county" → "Iowa", "New York City Council" → "New York City" → "New York"
+        if (!KNOWN_LOCATIONS[key]) {
+            const words = key.split(/\s+/);
+            let found = false;
+            for (let len = words.length - 1; len >= 1; len--) {
+                const sub = words.slice(0, len).join(' ');
+                if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
+                    key = sub;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) continue;
+        }
 
         const sourcePriority =
             source === 'dateline' ? 0 :
@@ -368,9 +382,10 @@ export function extractLocation(title: string, description: string): string | nu
     }
 
     // 7. Demonym fallback — ONLY if zero physical locations were found
-    const demonymCountry = extractDemonym(title);
-    if (demonymCountry && KNOWN_LOCATIONS[demonymCountry]) {
-        const display = demonymCountry.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+    // Check both title and description for demonyms (e.g. "South Korean police..." in desc)
+    const demonym = extractDemonym(title) || extractDemonym(description);
+    if (demonym && KNOWN_LOCATIONS[demonym]) {
+        const display = demonym.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
         return display;
     }
 

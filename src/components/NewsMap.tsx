@@ -303,7 +303,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
                 const popupHtml = `
           <div class="news-popup">
-            ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" onerror="this.style.display='none'" />` : ''}
+            ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
             <div class="news-popup-body">
               <h3 class="news-popup-title">${item.title}</h3>
               <p class="news-popup-summary">${(item.description || '').slice(0, 180)}${(item.description || '').length > 180 ? '…' : ''}</p>
