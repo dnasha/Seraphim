@@ -6,9 +6,9 @@ const parser = new Parser({
     customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
     },
-    timeout: 10000,
+    timeout: 3000,
     headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Seraphim/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
 });
 
@@ -131,50 +131,59 @@ async function scrapeTelegramChannel(source: SocialSource): Promise<NewsItem[]> 
 
 // ── X/Twitter RSS — multi-strategy fallback ─────────────────────────────────
 
-// Strategy 1: Nitter RSS (try each instance with browser-like UA)
-async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
-    for (const instance of NITTER_INSTANCES) {
-        try {
-            const url = `${instance}/${username}/rss`;
-            const feed = await parser.parseURL(url);
-            if (feed.items && feed.items.length > 0) return feed;
-        } catch {
-            continue;
-        }
+// Fetch wrapper that races a parser call against a strict timeout
+async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
+    const feed = await new Promise<ReturnType<typeof parser.parseURL>>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+        parser.parseURL(url)
+            .then(res => { clearTimeout(timer); resolve(res as any); })
+            .catch(err => { clearTimeout(timer); reject(err); });
+    });
+
+    if (!feed.items || feed.items.length === 0) {
+        throw new Error('Empty feed');
     }
-    return null;
+    return feed;
 }
 
-// Strategy 2: RSSHub RSS
-async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
-    for (const instance of RSSHUB_INSTANCES) {
-        try {
-            const url = `${instance}/twitter/user/${username}`;
-            const feed = await parser.parseURL(url);
-            if (feed.items && feed.items.length > 0) return feed;
-        } catch {
-            continue;
-        }
+// Strategy 1: Nitter RSS (Query all known healthy instances at once and take the first success)
+async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
+    try {
+        const promises = NITTER_INSTANCES.map(instance =>
+            fetchInstanceTimeout(`${instance}/${username}/rss`)
+        );
+        return await Promise.any(promises);
+    } catch {
+        return null; // All promises rejected
     }
-    return null;
+}
+
+// Strategy 2: RSSHub RSS (Concurrent query across all instances)
+async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
+    try {
+        const promises = RSSHUB_INSTANCES.map(instance =>
+            fetchInstanceTimeout(`${instance}/twitter/user/${username}`)
+        );
+        return await Promise.any(promises);
+    } catch {
+        return null; 
+    }
 }
 
 // Strategy 3: Google News RSS as last resort
 async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`@${username} OR from:${username}`)}&hl=en`;
-        const feed = await parser.parseURL(url);
-        if (feed.items && feed.items.length > 0) return feed;
+        return await fetchInstanceTimeout(url);
     } catch {
-        // ignore
+        return null;
     }
-    return null;
 }
 
 async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const username = source.url; // just the username
 
-    // try strategies in order
+    // try strategies in order, but each strategy races its internal mirrors concurrently
     const feed = await tryNitterFeed(username)
         || await tryRSSHubFeed(username)
         || await tryGoogleNewsFeed(username);

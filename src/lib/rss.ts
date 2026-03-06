@@ -2,6 +2,7 @@ import Parser from 'rss-parser';
 import { NewsItem } from './types';
 
 const parser = new Parser({
+    timeout: 5000,
     headers: {
         'User-Agent': 'Seraphim/1.0 (news aggregator)',
         'Accept': 'application/rss+xml, application/xml, text/xml',
@@ -88,6 +89,7 @@ async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
         const url = `https://www.reddit.com/r/${source.subreddit}/new.json?limit=5`;
         const res = await fetch(url, {
             headers: { 'User-Agent': 'Seraphim/1.0 (news aggregator)' },
+            signal: AbortSignal.timeout(5000),
         });
         if (!res.ok) throw new Error(`Status code ${res.status}`);
         const data = await res.json();
@@ -148,19 +150,30 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 15_000; // 15-second per-feed timeout
+const FEED_TIMEOUT_MS = 5000; // Reduced to 5 seconds to prevent bottlenecks
 
 async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
-        // Race the parse against a timeout so one slow feed can't stall the whole response
-        const feed = await Promise.race([
-            parser.parseURL(source.url),
-            new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error(`Feed timeout after ${FEED_TIMEOUT_MS}ms`)), FEED_TIMEOUT_MS)
-            ),
-        ]);
+        // Race the parse against a timeout and ensure we clear the timer to prevent memory leaks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const feed = await new Promise<any>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Feed timeout after ${FEED_TIMEOUT_MS}ms`));
+            }, FEED_TIMEOUT_MS);
 
-        return (feed.items || []).slice(0, 5).map((item, index) => ({
+            parser.parseURL(source.url)
+                .then((res) => {
+                    clearTimeout(timer);
+                    resolve(res);
+                })
+                .catch((err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (feed.items || []).slice(0, 5).map((item: any, index: number) => ({
             id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',

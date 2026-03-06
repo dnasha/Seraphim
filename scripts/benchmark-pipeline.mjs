@@ -128,6 +128,7 @@ async function benchmarkRSS(timer) {
 
   const Parser = (await import('rss-parser')).default;
   const parser = new Parser({
+    timeout: 5000,
     headers: { 'User-Agent': 'Seraphim/1.0 (news aggregator)', 'Accept': 'application/rss+xml, application/xml, text/xml' },
     customFields: { item: ['media:content', 'media:thumbnail', 'enclosure'] },
   });
@@ -168,7 +169,7 @@ async function benchmarkRSS(timer) {
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis' },
   ];
 
-  const FEED_TIMEOUT = 15000;
+  const FEED_TIMEOUT = 5000;
   const sources = QUICK_MODE ? RSS_SOURCES.slice(0, 3) : RSS_SOURCES;
   const feedResults = [];
   const allItems = [];
@@ -178,10 +179,12 @@ async function benchmarkRSS(timer) {
   const feedPromises = sources.map(async (source) => {
     const t0 = performance.now();
     try {
-      const feed = await Promise.race([
-        parser.parseURL(source.url),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), FEED_TIMEOUT)),
-      ]);
+      const feed = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), FEED_TIMEOUT);
+        parser.parseURL(source.url)
+          .then(res => { clearTimeout(timer); resolve(res); })
+          .catch(err => { clearTimeout(timer); reject(err); });
+      });
       const elapsed = performance.now() - t0;
       const items = (feed.items || []).slice(0, 5).map((item, i) => ({
         id: `rss-${source.name}-${i}`, title: item.title || '', description: item.contentSnippet || item.content || '',
@@ -365,24 +368,31 @@ async function benchmarkSocial(timer) {
   timer.start('social_x');
   for (const username of (QUICK_MODE ? X_ACCOUNTS.slice(0, 1) : X_ACCOUNTS)) {
     const t0 = performance.now();
-    let found = false;
-    for (const instance of RSSHUB) {
-      try {
-        const feed = await parser.parseURL(`${instance}/twitter/user/${username}`);
-        if (feed.items && feed.items.length > 0) {
-          const items = feed.items.slice(0, 5).map((item, i) => ({
-            id: `x-${username}-${i}`, title: (item.title || '').slice(0, 200), description: item.contentSnippet || '',
-            url: item.link || '', source: `${username} (X)`, sourceType: 'social', category: 'crisis',
-            publishedAt: item.pubDate || new Date().toISOString(),
-          }));
-          results.push({ name: `X: @${username}`, status: 'ok', elapsed: performance.now() - t0, items: items.length });
-          allItems.push(...items);
-          found = true;
-          break;
-        }
-      } catch { continue; }
+    try {
+      const promises = RSSHUB.map(instance => {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('timeout')), 3000);
+          parser.parseURL(`${instance}/twitter/user/${username}`)
+            .then(res => {
+              clearTimeout(timer);
+              if (res.items && res.items.length > 0) resolve(res);
+              else reject(new Error('empty'));
+            })
+            .catch(err => { clearTimeout(timer); reject(err); });
+        });
+      });
+      
+      const feed = await Promise.any(promises);
+      const items = feed.items.slice(0, 5).map((item, i) => ({
+        id: `x-${username}-${i}`, title: (item.title || '').slice(0, 200), description: item.contentSnippet || '',
+        url: item.link || '', source: `${username} (X)`, sourceType: 'social', category: 'crisis',
+        publishedAt: item.pubDate || new Date().toISOString(),
+      }));
+      results.push({ name: `X: @${username}`, status: 'ok', elapsed: performance.now() - t0, items: items.length });
+      allItems.push(...items);
+    } catch {
+      results.push({ name: `X: @${username}`, status: 'error', elapsed: performance.now() - t0, items: 0 });
     }
-    if (!found) results.push({ name: `X: @${username}`, status: 'error', elapsed: performance.now() - t0, items: 0 });
   }
   timer.stop('social_x');
 
