@@ -152,7 +152,6 @@ async function benchmarkRSS(timer) {
     { name: 'ISW Daily Updates', url: 'https://news.google.com/rss/search?q=site:understandingwar.org&hl=en', category: 'crisis' },
     { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', category: 'world' },
     { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation' },
-    { name: 'CBC Canada', url: 'https://rss.cbc.ca/lineup/topstories.xml', category: 'nation' },
     { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business' },
     { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/', category: 'business' },
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'technology' },
@@ -162,11 +161,22 @@ async function benchmarkRSS(timer) {
     { name: 'NASA', url: 'https://www.nasa.gov/news-release/feed/', category: 'science' },
     { name: 'Nature', url: 'https://www.nature.com/nature.rss', category: 'science' },
     { name: 'WHO News', url: 'https://www.who.int/rss-feeds/news-english.xml', category: 'health' },
+    { name: 'RNZ World', url: 'https://www.rnz.co.nz/rss/world.xml', category: 'world' },
+    { name: 'The Hindu', url: 'https://www.thehindu.com/news/international/feeder/default.rss', category: 'world' },
+    { name: 'Politico Europe', url: 'https://www.politico.eu/feed/', category: 'world' },
+    { name: 'Middle East Eye', url: 'https://www.middleeasteye.net/rss', category: 'world' },
+    { name: 'The Rio Times', url: 'https://www.riotimesonline.com/feed/', category: 'world' },
+    { name: 'AllAfrica News', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', category: 'world' },
   ];
 
   const REDDIT_SOURCES = [
     { name: 'Reddit CombatFootage', subreddit: 'CombatFootage', category: 'crisis' },
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis' },
+    { name: 'Reddit WorldNews', subreddit: 'worldnews', category: 'world' },
+    { name: 'Reddit News', subreddit: 'news', category: 'world' },
+    { name: 'Reddit Geopolitics', subreddit: 'geopolitics', category: 'world' },
+    { name: 'Reddit Europe', subreddit: 'europe', category: 'world' },
+    { name: 'Reddit MiddleEastNews', subreddit: 'MiddleEastNews', category: 'world' },
   ];
 
   const FEED_TIMEOUT = 3000;
@@ -328,9 +338,8 @@ async function benchmarkSocial(timer) {
 
   // Telegram channels
   const TG_CHANNELS = [
-    { name: 'Faytuks', url: 'https://t.me/s/Faytuks' },
     { name: 'LiveUkraine', url: 'https://t.me/s/liveukraine_media' },
-    { name: 'Astra Press', url: 'https://t.me/s/astrapress' },
+    { name: 'bloomberg', url: 'https://t.me/s/bloomberg' },
   ];
 
   timer.start('social_telegram');
@@ -365,7 +374,8 @@ async function benchmarkSocial(timer) {
   // X/Twitter via Syndication API
   const X_ACCOUNTS = [
     'GeoConfirmed', 'OSINTtechnical', 'Liveuamap', 'IntelCrab', 'AuroraIntel',
-    'ELINTNews', 'DefMon3', 'RALee85', 'clashreport'
+    'ELINTNews', 'DefMon3', 'RALee85', 'clashreport', 'OAlexanderDK',
+    'KofmanMichael', 'Cen4infoRes', 'Rebel44CZ'
   ];
 
   timer.start('social_x');

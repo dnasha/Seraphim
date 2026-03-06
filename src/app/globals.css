@@ -8,17 +8,26 @@
   padding: 0;
 }
 
+html {
+  height: 100vh; /* Fallback */
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   font-family:
-    "Inter",
+    var(--font-inter),
     system-ui,
     -apple-system,
     sans-serif;
   background: #fafafa;
   color: #111;
   line-height: 1.5;
-  height: 100vh;
+  height: 100vh; /* Fallback */
+  height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
 
   --source-gnews: #e65100;
   --source-rss: #0066cc;
@@ -33,7 +42,7 @@ body {
   --text-muted: #374151;
   --red: #ef4444;
   --green: #22c55e;
-  --sidebar-width: 400px; /* Widened slightly */
+  --sidebar-width: 400px;
 }
 
 [data-theme="dark"] body {
@@ -57,7 +66,8 @@ a {
 /* app layout */
 .app-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh; /* Fallback */
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   position: relative;
@@ -108,7 +118,7 @@ a {
 }
 
 .event-sidebar-logo h1 {
-  font-family: "Cinzel Decorative", cursive;
+  font-family: var(--font-cinzel-decorative), cursive;
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -408,10 +418,10 @@ a {
 }
 
 [data-theme="dark"] .event-card-active {
-  background: rgba(96, 165, 250, 0.08); /* This is now overridden by inline styles */
+  background: rgba(96, 165, 250, 0.08); 
 }
 
-/* Category accent bar on left edge */
+/* category accent bar on left edge */
 .event-card-accent {
   position: absolute;
   left: 0;
@@ -421,7 +431,7 @@ a {
   border-radius: 8px 0 0 8px;
 }
 
-/* Main row: thumbnail + body side by side */
+/* main row: thumbnail + body side by side */
 .event-card-row {
   display: flex;
   align-items: flex-start;
@@ -640,8 +650,8 @@ a {
 
 .sidebar-expand-btn {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
   z-index: 1000;
   width: 38px;
   height: 38px;
@@ -693,8 +703,8 @@ a {
 
 .map-settings-area {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
   z-index: 1000;
 }
 
@@ -779,7 +789,8 @@ a {
 }
 
 .leaflet-top.leaflet-right .leaflet-control-zoom {
-  margin-top: 56px !important;
+  margin-top: calc(44px + max(12px, env(safe-area-inset-top))) !important;
+  margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
 .map-settings-panel {

@@ -78,7 +78,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'AllAfrica News', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', category: 'world', region: 'africa' },
 ];
 
-// ── Reddit JSON API (RSS endpoints return 403) ─────────────────────────────
+// ── Reddit RSS API ──────────────────────────────────────────────────────────
 
 interface RedditSource {
     name: string;
@@ -99,32 +99,30 @@ const REDDIT_SOURCES: RedditSource[] = [
 
 async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
-        const url = `https://www.reddit.com/r/${source.subreddit}/hot.json?limit=10`;
+        const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
-            headers: { 'User-Agent': 'Seraphim/1.0 (news aggregator)' },
+            headers: {
+                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'Accept': 'application/rss+xml, application/xml, text/xml',
+            },
             signal: AbortSignal.timeout(5000),
         });
         if (!res.ok) throw new Error(`Status code ${res.status}`);
-        const data = await res.json();
-        const posts = data?.data?.children || [];
+        const text = await res.text();
+        const feed = await parser.parseString(text);
 
-        return posts
-            .filter((child: { data: Record<string, unknown> }) => child.data.stickied !== true)
-            .map((child: { data: Record<string, string> }, index: number) => {
-            const post = child.data;
-            return {
-                id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
-                title: post.title || 'No title',
-                description: post.selftext || '',
-                url: `https://www.reddit.com${post.permalink}`,
-                source: source.name,
-                sourceType: 'social' as const,
-                category: source.category,
-                publishedAt: new Date((Number(post.created_utc) || 0) * 1000).toISOString(),
-                imageUrl: post.thumbnail && post.thumbnail !== 'self' && post.thumbnail !== 'default'
-                    ? post.thumbnail : undefined,
-            };
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (feed.items || []).slice(0, 10).map((item: any, index: number) => ({
+            id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
+            title: item.title || 'No title',
+            description: item.contentSnippet || item.content || '',
+            url: item.link || `https://www.reddit.com/r/${source.subreddit}`,
+            source: source.name,
+            sourceType: 'social' as const,
+            category: source.category,
+            publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
+            imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
+        }));
     } catch (error) {
         console.error(`reddit fetch failed for ${source.name}:`, error);
         return [];

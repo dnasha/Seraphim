@@ -38,14 +38,8 @@ const RSSHUB_INSTANCES = [
 ];
 
 const TELEGRAM_CHANNELS: SocialSource[] = [
-    { name: 'Faytuks (Telegram)', url: 'https://t.me/s/Faytuks', platform: 'telegram', category: 'world' },
     { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis' },
-    //{ name: 'Astra Press (Telegram)', url: 'https://t.me/s/astrapress', platform: 'telegram', category: 'world' },
-    { name: 'Geopolitics Live (Telegram)', url: 'https://t.me/s/geopolitics_live', platform: 'telegram', category: 'world' },
-    { name: 'ISW (Telegram)', url: 'https://t.me/s/TheStudyofWar', platform: 'telegram', category: 'crisis' },
-    { name: 'DDGeopolitics (Telegram)', url: 'https://t.me/s/DDGeopolitics', platform: 'telegram', category: 'world' },
-    { name: 'Bellingcat (Telegram)', url: 'https://t.me/s/bellingcat', platform: 'telegram', category: 'world' },
-    { name: 'Cyberknow (Telegram)', url: 'https://t.me/s/Cyberknow20', platform: 'telegram', category: 'technology' },
+    { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business' },
 ];
 
 const X_ACCOUNTS: SocialSource[] = [
@@ -60,6 +54,8 @@ const X_ACCOUNTS: SocialSource[] = [
     { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
     { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
     { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis' },
+    { name: 'Centre for Information Resilience (X)', url: 'Cen4infoRes', platform: 'x', category: 'world' },
+    { name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
 ];
 
 // ── Telegram scraper (Cheerio-based) ────────────────────────────────────────
