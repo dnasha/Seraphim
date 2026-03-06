@@ -35,7 +35,9 @@ export async function fetchGNews(
             apikey: GNEWS_API_KEY,
         });
 
-        const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`);
+        const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`, {
+            signal: AbortSignal.timeout(5000),
+        });
         if (res.status === 429) {
             console.warn('gnews: rate-limited (429), skipping headlines');
             return [];
@@ -75,7 +77,9 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
             apikey: GNEWS_API_KEY,
         });
 
-        const res = await fetch(`${GNEWS_BASE_URL}/search?${params}`);
+        const res = await fetch(`${GNEWS_BASE_URL}/search?${params}`, {
+            signal: AbortSignal.timeout(5000),
+        });
         if (res.status === 429) {
             console.warn('gnews: rate-limited (429), skipping search');
             return [];

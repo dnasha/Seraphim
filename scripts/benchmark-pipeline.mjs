@@ -169,7 +169,7 @@ async function benchmarkRSS(timer) {
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis' },
   ];
 
-  const FEED_TIMEOUT = 5000;
+  const FEED_TIMEOUT = 3000;
   const sources = QUICK_MODE ? RSS_SOURCES.slice(0, 3) : RSS_SOURCES;
   const feedResults = [];
   const allItems = [];
@@ -179,12 +179,13 @@ async function benchmarkRSS(timer) {
   const feedPromises = sources.map(async (source) => {
     const t0 = performance.now();
     try {
-      const feed = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('timeout')), FEED_TIMEOUT);
-        parser.parseURL(source.url)
-          .then(res => { clearTimeout(timer); resolve(res); })
-          .catch(err => { clearTimeout(timer); reject(err); });
+      const res = await fetch(source.url, {
+        headers: { 'User-Agent': 'Seraphim/1.0', 'Accept': 'application/xml' },
+        signal: AbortSignal.timeout(FEED_TIMEOUT)
       });
+      if (!res.ok) throw new Error('error');
+      const text = await res.text();
+      const feed = await parser.parseString(text);
       const elapsed = performance.now() - t0;
       const items = (feed.items || []).slice(0, 5).map((item, i) => ({
         id: `rss-${source.name}-${i}`, title: item.title || '', description: item.contentSnippet || item.content || '',
@@ -369,17 +370,16 @@ async function benchmarkSocial(timer) {
   for (const username of (QUICK_MODE ? X_ACCOUNTS.slice(0, 1) : X_ACCOUNTS)) {
     const t0 = performance.now();
     try {
-      const promises = RSSHUB.map(instance => {
-        return new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('timeout')), 3000);
-          parser.parseURL(`${instance}/twitter/user/${username}`)
-            .then(res => {
-              clearTimeout(timer);
-              if (res.items && res.items.length > 0) resolve(res);
-              else reject(new Error('empty'));
-            })
-            .catch(err => { clearTimeout(timer); reject(err); });
+      const promises = RSSHUB.map(async instance => {
+        const res = await fetch(`${instance}/twitter/user/${username}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(3000)
         });
+        if (!res.ok) throw new Error('error');
+        const text = await res.text();
+        const feed = await parser.parseString(text);
+        if (feed.items && feed.items.length > 0) return feed;
+        throw new Error('empty');
       });
       
       const feed = await Promise.any(promises);

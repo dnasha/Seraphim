@@ -133,12 +133,16 @@ async function scrapeTelegramChannel(source: SocialSource): Promise<NewsItem[]> 
 
 // Fetch wrapper that races a parser call against a strict timeout
 async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
-    const feed = await new Promise<ReturnType<typeof parser.parseURL>>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
-        parser.parseURL(url)
-            .then(res => { clearTimeout(timer); resolve(res as any); })
-            .catch(err => { clearTimeout(timer); reject(err); });
+    const res = await fetch(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        signal: AbortSignal.timeout(timeoutMs)
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const feed = await parser.parseString(text) as any;
 
     if (!feed.items || feed.items.length === 0) {
         throw new Error('Empty feed');

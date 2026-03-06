@@ -150,27 +150,20 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 5000; // Reduced to 5 seconds to prevent bottlenecks
+const FEED_TIMEOUT_MS = 3000; // Reduced to 3 seconds to prevent bottlenecks
 
 async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
-        // Race the parse against a timeout and ensure we clear the timer to prevent memory leaks
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const feed = await new Promise<any>((resolve, reject) => {
-            const timer = setTimeout(() => {
-                reject(new Error(`Feed timeout after ${FEED_TIMEOUT_MS}ms`));
-            }, FEED_TIMEOUT_MS);
-
-            parser.parseURL(source.url)
-                .then((res) => {
-                    clearTimeout(timer);
-                    resolve(res);
-                })
-                .catch((err) => {
-                    clearTimeout(timer);
-                    reject(err);
-                });
+        const res = await fetch(source.url, {
+            headers: {
+                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'Accept': 'application/rss+xml, application/xml, text/xml',
+            },
+            signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const feed = await parser.parseString(text);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (feed.items || []).slice(0, 5).map((item: any, index: number) => ({

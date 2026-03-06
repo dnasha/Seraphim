@@ -385,35 +385,7 @@ export function extractLocation(title: string, description: string): string | nu
         }
     }
 
-    // 4. NLP pass on title
-    const titlePlaces = nlp(title).places().out('array');
-    if (titlePlaces && titlePlaces.length > 0) {
-        for (const place of titlePlaces) {
-            candidates.push({ name: place, source: 'nlp' });
-        }
-    }
-
-    // 5. Regex pass on description
-    for (const pattern of LOCATION_PATTERNS) {
-        pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(description)) !== null) {
-            candidates.push({ name: match[1].trim(), source: 'regex' });
-        }
-    }
-
-    // 6. NLP fallback on description
-    const descPlaces = nlp(description).places().out('array');
-    if (descPlaces && descPlaces.length > 0) {
-        for (const place of descPlaces) {
-            candidates.push({ name: place, source: 'nlp' });
-        }
-    }
-
     // ── Score and sort candidates ────────────────────────────────────────────
-    // Prefer: dateline > comma_pair > regex > nlp
-    // Within the same source: mega-cities > countries > smaller cities > admin1
-
     interface ScoredCandidate {
         name: string;
         key: string;
@@ -422,71 +394,91 @@ export function extractLocation(title: string, description: string): string | nu
         sourcePriority: number;
     }
 
-    const scored: ScoredCandidate[] = [];
+    function computeScored(candidateList: Candidate[]): ScoredCandidate[] {
+        const scored: ScoredCandidate[] = [];
 
-    for (const { name: raw, source } of candidates) {
-        const candidate = cleanCandidate(raw);
-        if (!candidate || candidate.length <= 2) continue;
-        if (STOP_WORDS.has(candidate.toLowerCase())) continue;
-        if (FALSE_POSITIVES.has(candidate.toLowerCase())) continue;
+        for (const { name: raw, source } of candidateList) {
+            const candidate = cleanCandidate(raw);
+            if (!candidate || candidate.length <= 2) continue;
+            if (STOP_WORDS.has(candidate.toLowerCase())) continue;
+            if (FALSE_POSITIVES.has(candidate.toLowerCase())) continue;
 
-        const loc = disambiguate(candidate);
-        let key = loc.toLowerCase();
+            const loc = disambiguate(candidate);
+            let key = loc.toLowerCase();
 
-        // Try progressively shorter sub-phrases if the full candidate isn't found
-        // e.g. "Iowa county" → "Iowa", "New York City Council" → "New York City" → "New York"
-        if (!KNOWN_LOCATIONS[key]) {
-            const words = key.split(/\s+/);
-            let found = false;
-            for (let len = words.length - 1; len >= 1; len--) {
-                const sub = words.slice(0, len).join(' ');
-                if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
-                    key = sub;
-                    found = true;
-                    break;
+            // Try progressively shorter sub-phrases if the full candidate isn't found
+            // e.g. "Iowa county" → "Iowa", "New York City Council" → "New York City" → "New York"
+            if (!KNOWN_LOCATIONS[key]) {
+                const words = key.split(/\s+/);
+                let found = false;
+                for (let len = words.length - 1; len >= 1; len--) {
+                    const sub = words.slice(0, len).join(' ');
+                    if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
+                        key = sub;
+                        found = true;
+                        break;
+                    }
                 }
+                if (!found) continue;
             }
-            if (!found) continue;
+
+            let displayName = loc;
+            if (key !== loc.toLowerCase()) {
+                displayName = key.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+            }
+
+            const sourcePriority =
+                source === 'dateline' ? 0 :
+                source === 'comma_pair' ? 1 :
+                source === 'regex' ? 2 :
+                source === 'nlp' ? 3 : 4;
+
+            scored.push({
+                name: displayName,
+                key,
+                source,
+                typePriority: locationPriority(key),
+                sourcePriority,
+            });
         }
 
-        // When sub-phrase resolution changed the key (e.g. "fiji region" → "fiji"),
-        // store a title-cased version of the resolved key as the display name.
-        // This ensures geocodeLocation receives a name that matches the dictionary.
-        let displayName = loc;
-        if (key !== loc.toLowerCase()) {
-            displayName = key.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-        }
-
-        const sourcePriority =
-            source === 'dateline' ? 0 :
-            source === 'comma_pair' ? 1 :
-            source === 'regex' ? 2 :
-            source === 'nlp' ? 3 : 4;
-
-        scored.push({
-            name: displayName,
-            key,
-            source,
-            typePriority: locationPriority(key),
-            sourcePriority,
+        scored.sort((a, b) => {
+            if (a.sourcePriority !== b.sourcePriority) return a.sourcePriority - b.sourcePriority;
+            if (a.typePriority !== b.typePriority) return a.typePriority - b.typePriority;
+            const popA = KNOWN_LOCATIONS[a.key]?.pop || 0;
+            const popB = KNOWN_LOCATIONS[b.key]?.pop || 0;
+            return popB - popA;
         });
+
+        return scored;
     }
 
-    // Sort: dateline first, then comma-pair, then within same source prefer
-    // mega-cities > countries > smaller cities > admin1 regions
-    scored.sort((a, b) => {
-        // First by source priority
-        if (a.sourcePriority !== b.sourcePriority) return a.sourcePriority - b.sourcePriority;
-        // Then by type priority (handles country vs city disambiguation)
-        if (a.typePriority !== b.typePriority) return a.typePriority - b.typePriority;
-        // Tie-break by population (larger = more likely the intended match)
-        const popA = KNOWN_LOCATIONS[a.key]?.pop || 0;
-        const popB = KNOWN_LOCATIONS[b.key]?.pop || 0;
-        return popB - popA;
-    });
+    // Try finding a match with dateline, comma, or regex first
+    let bestCandidates = computeScored(candidates);
 
-    if (scored.length > 0) {
-        return scored[0].name;
+    // If no robust candidate was found, fall back to NLP parsing (which is ~2-5ms per string)
+    if (bestCandidates.length === 0) {
+        // 4. NLP pass on title
+        const titlePlaces = nlp(title).places().out('array');
+        if (titlePlaces && titlePlaces.length > 0) {
+            for (const place of titlePlaces) {
+                candidates.push({ name: place, source: 'nlp' });
+            }
+        }
+
+        // 6. NLP fallback on description
+        const descPlaces = nlp(description).places().out('array');
+        if (descPlaces && descPlaces.length > 0) {
+            for (const place of descPlaces) {
+                candidates.push({ name: place, source: 'nlp' });
+            }
+        }
+
+        bestCandidates = computeScored(candidates);
+    }
+
+    if (bestCandidates.length > 0) {
+        return bestCandidates[0].name;
     }
 
     // 7a. Country abbreviation fallback — "U.S. casualties" → United States
@@ -552,6 +544,7 @@ export async function geocodeLocation(
                     'User-Agent': 'Seraphim/1.0',
                     'Accept-Language': 'en',
                 },
+                signal: AbortSignal.timeout(3000),
             });
 
             if (!res.ok) return null;

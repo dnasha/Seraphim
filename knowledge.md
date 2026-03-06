@@ -28,6 +28,7 @@ newsscraper/
 │   ├── admin1CodesASCII.txt    # GeoNames admin1 regions
 │   └── geonames.json           # Compiled geodata (~4.7 MB) — cities, admin1, countries
 ├── scripts/
+│   ├── benchmark-pipeline.mjs  # Pipeline performance testing script
 │   └── build-geodata.mjs       # Parses GeoNames files → geonames.json
 ├── src/
 │   ├── app/
@@ -68,7 +69,7 @@ RSS Feeds / GNews API / Social Feeds (RSSHub)
         │       ├── Comma-pair      (e.g. "Austin, Texas")
         │       ├── Preposition regex (e.g. "fighting in Aleppo")
         │       ├── compromise NLP   (place entity extraction)
-        │       └── Demonym fallback  ("Iranian" → Iran)
+        │       └── Country Abbrev & Demonym fallback  ("U.S.", "Iranian" → Iran)
         │
         ├── 2. geocodeLocation(placeName)
         │       ├── KNOWN_LOCATIONS dictionary lookup (instant, ~75K cities + 4K admin1 + 209 countries)
@@ -101,6 +102,8 @@ This means countries beat obscure same-named cities (e.g., Albania the country b
 ### False Positive Filter
 
 A `FALSE_POSITIVES` set blocks compound phrases and brand/team names that NLP incorrectly detects as locations (e.g. "Arsenal", "Amazon", "Research roundup"). Standalone city names (Paris, Chelsea) are intentionally NOT blocked — only clear non-geographic uses.
+
+**News Source Defaults**: A `NEWS_SOURCE_DEFAULTS` mapping provides fallback locations (e.g., "Washington DC" for NASA) when no geographic context can be extracted from an article.
 
 ### Dateline Regex
 
@@ -143,7 +146,7 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 | Category   | Sources                                                                                                                                                                                                        |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, **CNA Asia**, **Times of Israel**, **Al Arabiya English**, **MercoPress LatAm**, **War on the Rocks**, **Bellingcat** |
-| Crisis     | USGS Earthquakes, **ReliefWeb**, **Reddit CombatFootage**, **Reddit CredibleDefense**, **ISW Daily Updates**                                                                                                   |
+| Crisis     | USGS Earthquakes, **ReliefWeb**, **Reddit CombatFootage** (JSON API), **Reddit CredibleDefense** (JSON API), **ISW Daily Updates**                                                                             |
 | Nation     | NPR US, CBC Canada                                                                                                                                                                                             |
 | Business   | CNBC, MarketWatch                                                                                                                                                                                              |
 | Technology | Ars Technica, The Verge, **BleepingComputer**, **The Hacker News**                                                                                                                                             |
@@ -160,7 +163,10 @@ Requires `GNEWS_API_KEY` in `.env.local`. Optional — app works without it usin
 Two strategies, no API keys required:
 
 - **Telegram**: HTML scraping of `t.me/s/<channel>` parsed with **Cheerio** (server-side jQuery). Preserves OSINT source links.
-- **X / Twitter**: RSS via **RSSHub** instances with **fallback loop** — tries `rsshub.app`, `rsshub.rssforever.com`, `rsshub.moeyy.cn` in sequence. URL pattern: `{instance}/twitter/user/{username}`.
+- **X / Twitter**: Multi-strategy fallback loop resolving concurrently:
+  1. **Nitter RSS** (e.g. `nitter.net`, `xcancel.com`)
+  2. **RSSHub** instances
+  3. **Google News RSS** as a last resort
 
 | Platform | Accounts / Channels                                                          |
 | -------- | ---------------------------------------------------------------------------- |
@@ -184,16 +190,17 @@ npm run dev        # Starts Next.js dev server
 
 ## Common Tasks
 
-| Task                  | Command / Location                                                 |
-| --------------------- | ------------------------------------------------------------------ |
-| Add a new RSS feed    | Append to `RSS_SOURCES` array in `src/lib/rss.ts`                  |
-| Add a new landmark    | Add to `LANDMARKS` object in `src/lib/geocode.ts`                  |
-| Add a stop word       | Add to `STOP_WORDS` set in `src/lib/geocode.ts`                    |
-| Add a demonym         | Add to `DEMONYM_MAP` in `src/lib/geocode.ts`                       |
-| Rebuild geodata       | `node scripts/build-geodata.mjs`                                   |
-| Add a country         | Add to `COUNTRY_DATA` in `scripts/build-geodata.mjs`, then rebuild |
-| Change map tile style | Edit `MAP_STYLES` in `src/components/NewsMap.tsx`                  |
-| Adjust cache TTL      | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 5 min) |
+| Task                   | Command / Location                                                 |
+| ---------------------- | ------------------------------------------------------------------ |
+| Run pipeline benchmark | `node scripts/benchmark-pipeline.mjs`                              |
+| Add a new RSS feed     | Append to `RSS_SOURCES` array in `src/lib/rss.ts`                  |
+| Add a new landmark     | Add to `LANDMARKS` object in `src/lib/geocode.ts`                  |
+| Add a stop word        | Add to `STOP_WORDS` set in `src/lib/geocode.ts`                    |
+| Add a demonym          | Add to `DEMONYM_MAP` in `src/lib/geocode.ts`                       |
+| Rebuild geodata        | `node scripts/build-geodata.mjs`                                   |
+| Add a country          | Add to `COUNTRY_DATA` in `scripts/build-geodata.mjs`, then rebuild |
+| Change map tile style  | Edit `MAP_STYLES` in `src/components/NewsMap.tsx`                  |
+| Adjust cache TTL       | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 5 min) |
 
 ## Known Gotchas
 
