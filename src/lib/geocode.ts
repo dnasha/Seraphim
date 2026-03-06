@@ -61,6 +61,19 @@ const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'rafah': { lat: 31.30, lon: 34.25 }, 'khan younis': { lat: 31.35, lon: 34.30 },
     'kyiv': { lat: 50.45, lon: 30.52 }, 'kiev': { lat: 50.45, lon: 30.52 },
     'washington dc': { lat: 38.91, lon: -77.04 },
+    // Capital cities with ambiguous short names (override small-city collisions)
+    'sanaa': { lat: 15.35, lon: 44.21 }, "sana'a": { lat: 15.35, lon: 44.21 },
+    'sana': { lat: 15.35, lon: 44.21 },  // Overrides Sana, Peru (pop 39k) — Sana'a is almost always the intent in OSINT context
+    // Strategic waterways & maritime chokepoints (common in OSINT/conflict news)
+    'strait of hormuz': { lat: 26.57, lon: 56.25 },
+    'suez canal': { lat: 30.46, lon: 32.35 },
+    'bab el-mandeb': { lat: 12.58, lon: 43.33 },
+    'taiwan strait': { lat: 24.00, lon: 119.00 },
+    'strait of malacca': { lat: 2.50, lon: 101.50 },
+    'south china sea': { lat: 12.00, lon: 113.00 },
+    'black sea': { lat: 43.00, lon: 35.00 },
+    'red sea': { lat: 20.00, lon: 38.50 },
+    'golan heights': { lat: 33.00, lon: 35.75 },
 };
 
 for (const [name, coords] of Object.entries(LANDMARKS)) {
@@ -95,28 +108,70 @@ const DEMONYM_MAP: Record<string, string> = {
     'ukrainian': 'ukraine', 'georgian': 'georgia', 'armenian': 'armenia',
 };
 
+// ── Country abbreviation map ────────────────────────────────────────────────
+// Common abbreviated country references found in news text ("U.S. casualties" → United States)
+const COUNTRY_ABBREV_MAP: Record<string, string> = {
+    'u.s.': 'united states', 'u.s.a.': 'united states', 'u.s': 'united states',
+    'us': 'united states',
+    'u.k.': 'united kingdom', 'u.k': 'united kingdom',
+    'u.a.e.': 'united arab emirates', 'uae': 'united arab emirates',
+    'u.n.': '__skip__',  // Not a country
+    'e.u.': '__skip__',  // Not a country
+    'd.c.': 'washington dc',
+};
+
 // ── Patterns ────────────────────────────────────────────────────────────────
 
 // regex for standard journalistic datelines (e.g. "WASHINGTON (Reuters) - ")
 const DATELINE_PATTERN = /^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
 
+// Words that indicate a section/topic label rather than a geographic dateline.
+// When a dateline candidate contains any of these, it's treated as a section header
+// (e.g. "Iran Live Updates:" is a topic label, not a dateline like "TEHRAN:").
+const DATELINE_NOISE_WORDS = new Set([
+    'live', 'updates', 'update', 'breaking', 'latest', 'analysis',
+    'opinion', 'editorial', 'exclusive', 'recap', 'roundup', 'review',
+    'briefing', 'explainer', 'report', 'summary', 'watch', 'alert',
+    'blog', 'tracker', 'results', 'polls', 'podcast', 'newsletter',
+    // Military commands that can appear as dateline-like prefix (\"CENTCOM: ...\")
+    'centcom', 'eucom', 'africom', 'indopacom', 'southcom', 'northcom',
+]);
+
 // "City, State" or "City, Country" comma-pair pattern
 const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g;
 
-// regex patterns to pull "in Place", "from Place", etc.
+// regex patterns to pull "in Place", "from Place", "bombards Place", etc.
+// Verbs use explicit [Aa] style casing so headline capitals match without /i flag,
+// which would break the [A-Z] location-capture group.
 const LOCATION_PATTERNS = [
+    // Prepositions — "in Cairo", "from Beirut", etc.
     /\bin\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\bin\s+the\s+([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,  // "in the Strait of Hormuz"
     /\bfrom\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bnear\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bacross\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bhits?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bstrikes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\battacks?\s+(?:on\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bfighting\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bwar\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\bcrisis\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\binvades?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\boccupied\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\boff\s+(?:the\s+coast\s+of\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g, // "off Yemen", "off the coast of Oman"
+    // Present-tense action verbs
+    /\b[Hh]its?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]trikes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Aa]ttacks?\s+(?:[Oo]n\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ff]ighting\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ww]ar\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Cc]risis\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ii]nvades?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Oo]ccupied\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]ombards?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]hells?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Tt]argets?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]eizes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Cc]aptures?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Rr]aids?\s+(?:[Oo]n\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]esieges?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    // Past-tense variants (common in news descriptions: "was attacked in", "was targeted")
+    /\b[Aa]ttacked\s+in\s+(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Tt]argeted\s+(?:in\s+)?(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]helled\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]ombed\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
 ];
 
 // words regex might catch but aren't locations
@@ -153,13 +208,23 @@ const STOP_WORDS = new Set([
     // space agencies & organizations (false positives from "from NASA", etc.)
     'nasa', 'esa', 'spacex', 'jaxa', 'isro', 'roscosmos',
     'un', 'united nations', 'imf', 'interpol',
+    // military commands & coalitions (organizational names, not locations)
+    'centcom', 'eucom', 'africom', 'indopacom', 'southcom', 'northcom',
+    'socom', 'transcom', 'stratcom', 'cybercom', 'spacecom',
     // celestial bodies (NLP/regex catches "Venus", "Mars", etc.)
     'moon', 'sun', 'venus', 'mars', 'jupiter', 'saturn', 'mercury',
     'neptune', 'uranus', 'pluto', 'earth', 'lunar', 'solar',
     'asteroid', 'comet', 'nebula', 'galaxy', 'orbit', 'spacecraft',
     // generic geographic words that aren't specific locations
     'island', 'islands', 'peninsula', 'continent', 'region', 'area',
-    'coast', 'mountain', 'river', 'lake', 'ocean', 'sea', 'bay',
+    'coast', 'mountain', 'river', 'lake', 'ocean', 'sea', 'bay', 'gulf',
+    // continent names — too broad for map pins, and some collide with small cities
+    // (e.g. "Asia" → small town in Indonesia, "Europe" → unincorporated community in US)
+    'asia', 'europe', 'africa', 'antarctica', 'oceania', 'americas',
+    // structured metadata labels (ReliefWeb: "Country: Yemen Source: WFP")
+    'country', 'source', 'category', 'theme', 'format', 'topic',
+    // timezone abbreviations that get caught by comma-pair ("ET, March")
+    'et', 'pt', 'ct', 'mt', 'est', 'pst', 'cst', 'mst', 'gmt', 'utc',
 ]);
 
 // ── False positives ─────────────────────────────────────────────────────────
@@ -175,6 +240,9 @@ const FALSE_POSITIVES = new Set([
     'tottenham', 'everton', 'wolverhampton', 'newcastle united',
     // Brands / companies that are also place names
     'amazon', 'apple', 'oracle', 'adobe', 'cisco',
+    // Social media source names & handles that regex/NLP might pick up
+    'liveuamap', 'middleeast', 'middle east', 'nitter', 'osint',
+    'geoconfirmed', 'intelcrab', 'auroraintel', 'osinttechnical',
     // Common compound false positives from news headlines
     'research roundup', 'audio long read', 'author correction',
     'weekend of war', 'morning edition', 'evening update',
@@ -225,6 +293,22 @@ function extractDemonym(text: string): string | null {
     return null;
 }
 
+// Try to resolve country abbreviations in text ("U.S." → "united states")
+// Keeps periods so we can match "U.S." properly, unlike demonyms which strip punctuation
+function extractCountryAbbrev(text: string): string | null {
+    // Split on whitespace but preserve punctuation (periods) within tokens
+    const tokens = text.split(/\s+/);
+    for (const token of tokens) {
+        // Normalize: lowercase, strip trailing commas/colons/semicolons but keep periods
+        const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
+        const mapped = COUNTRY_ABBREV_MAP[cleaned];
+        if (mapped && mapped !== '__skip__') {
+            return mapped;
+        }
+    }
+    return null;
+}
+
 // Determine the priority type of a location (lower = more specific = better)
 // For country/city name collisions (e.g. "Albania" the country vs "Albania" the city
 // in Colombia), the country wins unless the city has >1M population.
@@ -250,14 +334,30 @@ interface Candidate {
 export function extractLocation(title: string, description: string): string | null {
     const candidates: Candidate[] = [];
 
-    // 1. Dateline from title or description (highest confidence)
+    // Helper: check if a dateline candidate is a genuine geographic dateline
+    // vs a section label like "Iran Live Updates:" or "Breaking News:"
+    function isGenuineDateline(raw: string): boolean {
+        const words = raw.toLowerCase().split(/\s+/);
+        return !words.some(w => DATELINE_NOISE_WORDS.has(w));
+    }
+
+    // 1a. Structured metadata pattern (ReliefWeb, humanitarian feeds)
+    // Matches: "Country: Yemen Source: WFP" → extracts "Yemen" as dateline-priority
+    const METADATA_COUNTRY = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/;
+    const metaMatch = METADATA_COUNTRY.exec(description) || METADATA_COUNTRY.exec(title);
+    if (metaMatch) {
+        candidates.push({ name: metaMatch[1].trim(), source: 'dateline' });
+    }
+
+    // 1b. Dateline from title or description (highest confidence)
     // Catches patterns like "WASHINGTON (Reuters) - ..." or "Albania: Femicide cases..."
+    // Rejects section labels like "Iran Live Updates:" or "Breaking News:"
     const titleDateline = DATELINE_PATTERN.exec(title);
-    if (titleDateline) {
+    if (titleDateline && isGenuineDateline(titleDateline[1])) {
         candidates.push({ name: titleDateline[1].trim(), source: 'dateline' });
     }
     const descDateline = DATELINE_PATTERN.exec(description);
-    if (descDateline) {
+    if (descDateline && isGenuineDateline(descDateline[1])) {
         candidates.push({ name: descDateline[1].trim(), source: 'dateline' });
     }
 
@@ -349,6 +449,14 @@ export function extractLocation(title: string, description: string): string | nu
             if (!found) continue;
         }
 
+        // When sub-phrase resolution changed the key (e.g. "fiji region" → "fiji"),
+        // store a title-cased version of the resolved key as the display name.
+        // This ensures geocodeLocation receives a name that matches the dictionary.
+        let displayName = loc;
+        if (key !== loc.toLowerCase()) {
+            displayName = key.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+        }
+
         const sourcePriority =
             source === 'dateline' ? 0 :
             source === 'comma_pair' ? 1 :
@@ -356,7 +464,7 @@ export function extractLocation(title: string, description: string): string | nu
             source === 'nlp' ? 3 : 4;
 
         scored.push({
-            name: loc,
+            name: displayName,
             key,
             source,
             typePriority: locationPriority(key),
@@ -381,7 +489,14 @@ export function extractLocation(title: string, description: string): string | nu
         return scored[0].name;
     }
 
-    // 7. Demonym fallback — ONLY if zero physical locations were found
+    // 7a. Country abbreviation fallback — "U.S. casualties" → United States
+    const abbrev = extractCountryAbbrev(title) || extractCountryAbbrev(description);
+    if (abbrev && KNOWN_LOCATIONS[abbrev]) {
+        const display = abbrev.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+        return display;
+    }
+
+    // 7b. Demonym fallback — ONLY if zero physical locations were found
     // Check both title and description for demonyms (e.g. "South Korean police..." in desc)
     const demonym = extractDemonym(title) || extractDemonym(description);
     if (demonym && KNOWN_LOCATIONS[demonym]) {
