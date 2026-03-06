@@ -148,22 +148,34 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 
 ## UI Architecture
 
-- **Layout**: Collapsible Sidebar (400px) + full-bleed Leaflet map. Sidebar starts open and becomes a floating drawer overlay on mobile (<860px).
-- **Theme**: Dark mode default, toggleable. Theme switch uses clean SVG icons (Sun/Moon). CSS variables on `[data-theme]`.
-- **Aesthetics**: Modern rounded corners (8px for cards/popups, 6px for UI elements) and subtle shadows for a premium feel.
-- **Map styles**: Standard, dark, light, satellite, humanitarian, and topographic tile layers — selectable via gear (⚙️) settings panel (top-right of map).
-- **Settings panel**: Floating card opened by gear icon; contains map style grid + clustering toggle.
-- **Markers**: Circle icons with category-specific SVG glyphs + category color. Active markers pulse and bring their popup to focus.
-- **Clustering**: `leaflet.markercluster` groups nearby pins into numbered circles; **off by default**, toggleable in settings panel.
-- **Interaction**: Clicking a map pin selects the sidebar card (auto-scrolls), clicking a sidebar card flies the map to that pin's location. If an unmapped card is selected, any open map popups are closed.
+- **Layout**: Fixed Sidebar (400px) + full-bleed Leaflet map. Sidebar features a premium logo ("Seraphim") and quick actions (Theme toggle, Collapse).
+- **Theme**: Dark mode default, with a custom toggle button. Fonts: Cinezel Decorative for the logo, Inter for the UI.
+- **Aesthetics**: High-contrast dark theme (#0f1117) with vibrant accent colors for categories:
+  - **World**: Red
+  - **Crisis**: Dark Red / Warning
+  - **Nation**: Blue
+  - **Business**: Amber
+  - **Tech**: Cyan
+- **Cards**: Sidebar cards feature enlarged thumbnails (**88x66px**), right-justified "Read full article" links, and a location pin SVG for mapped items.
+- **Map styles**: Standard (Voyager), Dark, Light, Satellite, and Terrain layers — selectable via a floating settings panel (top-right).
+- **Settings panel**: Floating card opened by gear icon; includes map style grid + clustering toggle.
+- **Markers**: Large circle icons (**27px** normal / **37px** active) with category-specific white SVG glyphs. Active markers pulse and bring their popup to focus.
+- **Clustering**: `leaflet.markercluster` groups nearby pins; uses custom-styled circles based on count (Small: Blue, Medium: Red, Large: Dark Red). **Off by default**.
+- **Interaction**:
+  - **Sidebar Click**: Flies map to pin, zooms in (min zoom 7), and offsets center downward (140px bias) to ensure the popup is fully visible.
+  - **Pin Click**: Selects sidebar card, auto-scrolls it to the **top** of the list, and expands the card detail.
+  - **Toggles**: Clicking an already active pin or expanded card collapses/deselects it.
+  - **Map Click**: Clicking the map background deselects any active item.
 
 ## Filtering & Controls
 
-- **Source Filtering**: UI explicitly splits sources into **News** (RSS), **Reddit**, **X**, **Telegram**, and **Extra** (GNews fallback). Each toggle uses brand-specific primary colors.
-- **Time Filter**: Limits results to **1 Day** (default), 3 Days, 1 Week, 1 Month, or All. Handled efficiently via `/api/news` query params.
-- **Mapped Only**: A persistent toggle (default: **ON**) that hides articles without geographic coordinates to focus the map experience.
-- **Search**: Real-time debounced title/description keyword search.
-- **Refresh**: Manual cache override button to fetch fresh data across all concurrent pipelines.
+- **Source Filtering**: UI explicitly splits sources into **News** (RSS), **Reddit**, **X**, **Telegram**, and **Bonus** (GNews). Each has a distinct brand color (e.g., Orange for Reddit).
+- **Time & Location**:
+  - **Time**: Limits results (1D, 3D, 1W, 1M, All).
+  - **Mapped Only**: High-visibility green toggle (default: **ON**) to isolate geolocated news.
+- **Categories**: Multi-select pill filters with category icons (Globe, Triangle, Flag, etc.) matching the map pins.
+- **Search**: Debounced keyword search input at the bottom of the filter stack.
+- **Refresh**: Manual cache override button with a spinning animation during load.
 
 ### RSS Feeds (curated in `rss.ts`)
 

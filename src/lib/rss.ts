@@ -118,7 +118,7 @@ async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
                 description: post.selftext || '',
                 url: `https://www.reddit.com${post.permalink}`,
                 source: source.name,
-                sourceType: 'rss' as const,
+                sourceType: 'social' as const,
                 category: source.category,
                 publishedAt: new Date((Number(post.created_utc) || 0) * 1000).toISOString(),
                 imageUrl: post.thumbnail && post.thumbnail !== 'self' && post.thumbnail !== 'default'
@@ -131,7 +131,7 @@ async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     }
 }
 
-async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
+export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     const results = await Promise.allSettled(
         REDDIT_SOURCES.map(source => fetchRedditFeed(source))
     );
@@ -203,12 +203,9 @@ async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
 }
 
 export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
-    const [rssResults, redditItems] = await Promise.all([
-        Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source))),
-        fetchAllRedditFeeds(),
-    ]);
+    const rssResults = await Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source)));
 
-    const allItems: NewsItem[] = [...redditItems];
+    const allItems: NewsItem[] = [];
     for (const result of rssResults) {
         if (result.status === 'fulfilled') {
             allItems.push(...result.value);

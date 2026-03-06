@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchGNews, fetchOSINTGNews } from '@/lib/gnews';
-import { fetchAllRSSFeeds } from '@/lib/rss';
+import { fetchAllRSSFeeds, fetchAllRedditFeeds } from '@/lib/rss';
 import { fetchSocialFeeds } from '@/lib/social-feeds';
 import { enrichItemsWithLocation } from '@/lib/geocode';
 import { NewsItem, NewsResponse } from '@/lib/types';
@@ -92,18 +92,20 @@ export async function GET(request: Request) {
         // fetch only the sources the client actually requested
         const wantGNews = sources.includes('extra');
         const wantRSS = sources.includes('news');
-        const wantSocial = sources.includes('reddit') || sources.includes('x') || sources.includes('telegram');
+        const wantSocial = sources.includes('x') || sources.includes('telegram');
+        const wantReddit = sources.includes('reddit');
 
-        const [gnewsItems, rssItems, osintItems, socialItems] = await Promise.all([
+        const [gnewsItems, rssItems, osintItems, socialItems, redditItems] = await Promise.all([
             wantGNews
                 ? fetchGNews(categoriesArray.includes('general') ? 'general' : categoriesArray[0], 20)
                 : Promise.resolve([]),
             wantRSS ? fetchAllRSSFeeds() : Promise.resolve([]),
             wantGNews ? fetchOSINTGNews() : Promise.resolve([]),
             wantSocial ? fetchSocialFeeds() : Promise.resolve([]),
+            wantReddit ? fetchAllRedditFeeds() : Promise.resolve([]),
         ]);
 
-        const allItems = [...gnewsItems, ...rssItems, ...osintItems, ...socialItems];
+        const allItems = [...gnewsItems, ...rssItems, ...osintItems, ...socialItems, ...redditItems];
 
         allItems.sort((a, b) =>
             new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()

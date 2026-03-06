@@ -552,7 +552,8 @@ a {
   margin: 0 0 8px;
 }
 
-.event-card-detail-link {
+.event-card-detail-link,
+.news-popup-link {
   display: block;
   font-size: 0.75rem;
   font-weight: 600;
@@ -560,10 +561,18 @@ a {
   text-decoration: none;
   text-align: right;
   margin-top: 4px;
+  transition: opacity 0.15s, color 0.15s;
 }
 
-.event-card-detail-link:hover {
+.event-card-detail-link:visited,
+.news-popup-link:visited {
+  color: var(--accent);
+}
+
+.event-card-detail-link:hover,
+.news-popup-link:hover {
   text-decoration: underline;
+  opacity: 0.8;
 }
 
 /* theme toggle + last updated */
@@ -1061,8 +1070,8 @@ a {
 .news-popup-summary {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
+  line-height: 1.55;
+  margin: 0 0 8px;
   max-height: 200px;
   overflow-y: auto;
   padding-right: 4px;
@@ -1111,15 +1120,7 @@ a {
   margin-bottom: 8px;
 }
 
-.news-popup-link {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-  text-align: right;
-  margin-top: 4px;
-}
+/* news-popup-link styles are now unified with event-card-detail-link above */
 
 .location-icon-svg {
   display: inline-block;

@@ -77,7 +77,7 @@ function getCategoryColor(category?: string): string {
 function createCategoryIcon(L: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
-    const size = isActive ? 46 : 34;
+    const size = isActive ? 37 : 27;
     const activeClass = isActive ? ' marker-icon-active' : '';
     const shadowStyle = isActive
         ? `box-shadow: 0 0 0 4px ${color}44, 0 0 12px ${color}66;`
