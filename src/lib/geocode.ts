@@ -61,6 +61,9 @@ const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'rafah': { lat: 31.30, lon: 34.25 }, 'khan younis': { lat: 31.35, lon: 34.30 },
     'kyiv': { lat: 50.45, lon: 30.52 }, 'kiev': { lat: 50.45, lon: 30.52 },
     'washington dc': { lat: 38.91, lon: -77.04 },
+    'washington': { lat: 38.91, lon: -77.04 },
+    'middle east': { lat: 29.29, lon: 41.05 },
+    'west asia': { lat: 29.29, lon: 41.05 },
     // Capital cities with ambiguous short names (override small-city collisions)
     'sanaa': { lat: 15.35, lon: 44.21 }, "sana'a": { lat: 15.35, lon: 44.21 },
     'sana': { lat: 15.35, lon: 44.21 },  // Overrides Sana, Peru (pop 39k) — Sana'a is almost always the intent in OSINT context
@@ -247,7 +250,7 @@ const FALSE_POSITIVES = new Set([
     // Brands / companies that are also place names
     'amazon', 'apple', 'oracle', 'adobe', 'cisco',
     // Social media source names & handles that regex/NLP might pick up
-    'liveuamap', 'middleeast', 'middle east', 'nitter', 'osint',
+    'liveuamap', 'nitter', 'osint',
     'geoconfirmed', 'intelcrab', 'auroraintel', 'osinttechnical',
     // Common compound false positives from news headlines
     'research roundup', 'audio long read', 'author correction',
@@ -289,11 +292,14 @@ function disambiguate(candidate: string): string {
 
 // Try to resolve a demonym ("Chinese" → "China")
 function extractDemonym(text: string): string | null {
-    const words = text.split(/\s+/);
+    const words = text.split(/[\s\-]+/);
     for (const word of words) {
         const lower = word.toLowerCase().replace(/[^a-z]/g, '');
         if (DEMONYM_MAP[lower]) {
             return DEMONYM_MAP[lower];
+        }
+        if (lower.endsWith('s') && DEMONYM_MAP[lower.slice(0, -1)]) {
+            return DEMONYM_MAP[lower.slice(0, -1)];
         }
     }
     return null;
@@ -302,8 +308,8 @@ function extractDemonym(text: string): string | null {
 // Try to resolve country abbreviations in text ("U.S." → "united states")
 // Keeps periods so we can match "U.S." properly, unlike demonyms which strip punctuation
 function extractCountryAbbrev(text: string): string | null {
-    // Split on whitespace but preserve punctuation (periods) within tokens
-    const tokens = text.split(/\s+/);
+    // Split on whitespace and hyphens
+    const tokens = text.split(/[\s\-]+/);
     for (const token of tokens) {
         // Normalize: lowercase, strip trailing commas/colons/semicolons but keep periods
         const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
@@ -502,6 +508,19 @@ export function extractLocation(title: string, description: string): string | nu
     if (demonym && KNOWN_LOCATIONS[demonym]) {
         const display = demonym.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
         return display;
+    }
+
+    // 7c. Direct Country Name fallback
+    // NLP sometimes misses hyphenated countries (e.g., "Iran-Israel war").
+    // A quick scan for any known country name serves as a robust last resort.
+    for (const country of Object.keys(geoCountries)) {
+        if (country.length > 3) {
+            // Re-use boundaries to match the whole country name
+            const pattern = new RegExp(`\\b${country}\\b`, 'i');
+            if (pattern.test(title) || pattern.test(description)) {
+                return country.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+            }
+        }
     }
 
     // 8. Disabled last-resort API fallback

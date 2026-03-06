@@ -56,7 +56,7 @@ newsscraper/
 ## Data Pipeline
 
 ```
-RSS Feeds / GNews API / Social Feeds (RSSHub)
+RSS Feeds / GNews API / Social Feeds (Concurrent Fetching)
         │
         ▼
   /api/news/route.ts ──── 5-min in-memory cache
@@ -67,13 +67,13 @@ RSS Feeds / GNews API / Social Feeds (RSSHub)
         ├── 1. extractLocation(title, description)
         │       ├── Dateline regex  (e.g. "KYIV (Reuters) — " or "Albania: ...")
         │       ├── Comma-pair      (e.g. "Austin, Texas")
-        │       ├── Preposition regex (e.g. "fighting in Aleppo")
-        │       ├── compromise NLP   (place entity extraction)
+        │       ├── Preposition/Verb regex (e.g. "fighting in Aleppo", "fled to Poland")
+        │       ├── compromise NLP   (skipped if location found in title)
         │       └── Country Abbrev & Demonym fallback  ("U.S.", "Iranian" → Iran)
         │
         ├── 2. geocodeLocation(placeName)
-        │       ├── KNOWN_LOCATIONS dictionary lookup (instant, ~75K cities + 4K admin1 + 209 countries)
-        │       └── Photon/Komoot API fallback (200ms throttled)
+        │       └── KNOWN_LOCATIONS dictionary lookup (instant, ~78K cities + 4K admin1 + 209 countries)
+        │           Note: The external Photon API fallback was disabled for unverified regex hits to completely eliminate rate-limit bottlenecks.
         │
         └── 3. Jitter applied to overlapping coordinates
 ```
@@ -87,7 +87,7 @@ The `KNOWN_LOCATIONS` dictionary is loaded in a specific priority order where la
 1. **Cities** from `geonames.json` (population-weighted — largest city wins on name collision)
 2. **Admin1 regions** (states/provinces) — won't overwrite a city with >500K pop
 3. **Countries** from `geonames.json` (209 entries) — always overwrite to ensure country names resolve correctly
-4. **Landmarks** (hardcoded — Pentagon, Kremlin, Gaza City, Crimea, etc.) — highest priority
+4. **Landmarks** (hardcoded — Pentagon, Kremlin, Gaza City, Crimea, Strait of Hormuz, etc.) — highest priority
 
 ### Candidate Scoring
 
@@ -143,15 +143,17 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 
 ### RSS Feeds (curated in `rss.ts`)
 
-| Category   | Sources                                                                                                                                                                                                        |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, **CNA Asia**, **Times of Israel**, **Al Arabiya English**, **MercoPress LatAm**, **War on the Rocks**, **Bellingcat** |
-| Crisis     | USGS Earthquakes, **ReliefWeb**, **Reddit CombatFootage** (JSON API), **Reddit CredibleDefense** (JSON API), **ISW Daily Updates**                                                                             |
-| Nation     | NPR US, CBC Canada                                                                                                                                                                                             |
-| Business   | CNBC, MarketWatch                                                                                                                                                                                              |
-| Technology | Ars Technica, The Verge, **BleepingComputer**, **The Hacker News**                                                                                                                                             |
-| Science    | NASA, Nature                                                                                                                                                                                                   |
-| Health     | WHO News                                                                                                                                                                                                       |
+Includes robust region metadata and categorized curation.
+
+| Category   | Sources                                                                                                                                                                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, CNA Asia, Times of Israel, Al Arabiya English, MercoPress LatAm, War on the Rocks, Bellingcat, RNZ World, Politico Europe, The Hindu, Middle East Eye, AllAfrica News |
+| Crisis     | USGS Earthquakes, ReliefWeb, ISW Daily Updates, Reddit CombatFootage (JSON), Reddit CredibleDefense (JSON)                                                                                                                                                     |
+| Nation     | NPR US                                                                                                                                                                                                                                                         |
+| Business   | CNBC, MarketWatch                                                                                                                                                                                                                                              |
+| Technology | Ars Technica, The Verge, BleepingComputer, The Hacker News                                                                                                                                                                                                     |
+| Science    | NASA, Nature                                                                                                                                                                                                                                                   |
+| Health     | WHO News                                                                                                                                                                                                                                                       |
 
 ### GNews API
 
@@ -162,16 +164,17 @@ Requires `GNEWS_API_KEY` in `.env.local`. Optional — app works without it usin
 
 Two strategies, no API keys required:
 
-- **Telegram**: HTML scraping of `t.me/s/<channel>` parsed with **Cheerio** (server-side jQuery). Preserves OSINT source links.
-- **X / Twitter**: Multi-strategy fallback loop resolving concurrently:
-  1. **Nitter RSS** (e.g. `nitter.net`, `xcancel.com`)
-  2. **RSSHub** instances
-  3. **Google News RSS** as a last resort
+- **Telegram**: HTML scraping of `t.me/s/<channel>` parsed with **Cheerio** (server-side jQuery). Preserves OSINT source links. Runs concurrently across channels.
+- **X / Twitter**: Multi-strategy loop resolving completely concurrently (via `Promise.any`):
+  1. **Native Syndication API** (Fastest)
+  2. **Nitter RSS Mirrors**
+  3. **RSSHub Instances**
+  4. **Google News RSS**
 
-| Platform | Accounts / Channels                                                          |
-| -------- | ---------------------------------------------------------------------------- |
-| Telegram | Faytuks, LiveUkraine, Astra Press                                            |
-| X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, **@IntelCrab**, **@AuroraIntel** |
+| Platform | Accounts / Channels                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Telegram | LiveUkraine, Geopolitics Live, ISW, DDGeopolitics, Bellingcat, Cyberknow, Faytuks                                                                 |
+| X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, @IntelCrab, @AuroraIntel, @ELINTNews, @DefMon3, @RALee85, @clashreport, @OAlexanderDK, @KofmanMichael |
 
 Items arrive with `sourceType: 'social'` and are tagged `['OSINT', '<platform>']`.
 
@@ -207,5 +210,5 @@ npm run dev        # Starts Next.js dev server
 - **JSON import size**: `geonames.json` is ~4.7 MB. It's loaded at module init in `geocode.ts`. This is fine for server-side but would be heavy on the client.
 - **Geocode is server-only**: `geocode.ts` runs exclusively on the server (API route). Never import it client-side.
 - **NewsMap is client-only**: Loaded via `next/dynamic` with `{ ssr: false }` because Leaflet requires the DOM.
-- **Rate limiting**: The Photon API fallback has a 200ms sleep between uncached requests. Dictionary hits are instant.
+- **Rate limiting / Pipeline speed**: We strictly avoid relying on the external Photon API fallback for unknown locations specifically because unresolvable Regex hits (e.g. "Netflix, Hulu" or "MS exec") cause massive cascading rate-limit timeouts that block the pipeline.
 - **Coordinate jitter**: When multiple articles map to the same location (e.g., 3 articles about "Ukraine"), golden-angle spiral jitter is applied so pins don't stack.
