@@ -10,7 +10,7 @@ interface NewsMapProps {
     items: NewsItem[];
     selectedItemId: string | null;
     selectionVersion: number;
-    onSelectItem: (id: string) => void;
+    onSelectItem: (id: string | null) => void;
     isDarkMode: boolean;
 }
 
@@ -77,7 +77,7 @@ function getCategoryColor(category?: string): string {
 function createCategoryIcon(L: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
-    const size = isActive ? 36 : 28;
+    const size = isActive ? 46 : 34;
     const activeClass = isActive ? ' marker-icon-active' : '';
     const shadowStyle = isActive
         ? `box-shadow: 0 0 0 4px ${color}44, 0 0 12px ${color}66;`
@@ -89,10 +89,11 @@ function createCategoryIcon(L: typeof import('leaflet'), category?: string, isAc
         border-radius:50%;
         border:2px solid #fff;
         display:flex;align-items:center;justify-content:center;
+        line-height:0;
         ${shadowStyle}
         transition: all 0.2s ease;
     ">
-        <svg viewBox="0 0 24 24" width="${size * 0.55}" height="${size * 0.55}" fill="#fff">
+        <svg viewBox="0 0 24 24" width="${size * 0.55}" height="${size * 0.55}" fill="#fff" style="display:block;flex-shrink:0;">
             <path d="${iconPath}"/>
         </svg>
     </div>`;
@@ -146,6 +147,11 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [clusteringEnabled, setClusteringEnabled] = useState(false);
     const settingsPanelRef = useRef<HTMLDivElement>(null);
+    const selectedIdRef = useRef(selectedItemId);
+
+    useEffect(() => {
+        selectedIdRef.current = selectedItemId;
+    }, [selectedItemId]);
 
     const geoItems = items.filter(i => i.latitude !== undefined && i.longitude !== undefined);
 
@@ -190,7 +196,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             const map = L.map(container, {
                 center: [40, 10],
                 zoom: 2.6,
-                zoomControl: true,
+                zoomControl: false,
                 attributionControl: true,
                 minZoom: 2.4,
                 zoomSnap: 0.25,
@@ -209,6 +215,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 attribution: style.attribution,
                 noWrap: false,
             }).addTo(map);
+
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // Deselect when clicking the map background
+            map.on('click', (e: L.LeafletMouseEvent) => {
+                if ((e.originalEvent as unknown as { _stopped?: boolean })._stopped) return;
+                onSelectItem(null);
+            });
 
             mapRef.current = map;
             tileLayerRef.current = tileLayer;
@@ -234,6 +248,16 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // handle container resizing when sidebar toggles
+    useEffect(() => {
+        if (!mapReady || !mapRef.current || !containerRef.current) return;
+        const resizeObserver = new ResizeObserver(() => {
+            mapRef.current?.invalidateSize();
+        });
+        resizeObserver.observe(containerRef.current);
+        return () => resizeObserver.disconnect();
+    }, [mapReady]);
 
     // sync markers with news items + clustering toggle
     useEffect(() => {
@@ -272,7 +296,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         const count = cluster.getChildCount();
                         let size = 36;
                         let className = 'cluster-small';
-                        if (count >= 50) { size = 50; className = 'cluster-large'; }
+                        if (count >= 35) { size = 50; className = 'cluster-large'; }
                         else if (count >= 10) { size = 42; className = 'cluster-medium'; }
 
                         return L.divIcon({
@@ -305,28 +329,35 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
           <div class="news-popup">
             ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
             <div class="news-popup-body">
-              <h3 class="news-popup-title">${item.title}</h3>
-              <p class="news-popup-summary">${(item.description || '').slice(0, 180)}${(item.description || '').length > 180 ? '…' : ''}</p>
               <div class="news-popup-meta">
                 <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
                 ${categoryLabel}
                 <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
               </div>
-              ${item.locationName ? `<div class="news-popup-location">${item.locationName}</div>` : ''}
+              <h3 class="news-popup-title">${item.title}</h3>
+              ${item.locationName ? `
+                <div class="news-popup-location">
+                  <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  ${item.locationName}
+                </div>` : ''}
+              <div class="news-popup-summary">${item.description || ''}</div>
               <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
             </div>
           </div>
         `;
 
                 marker.bindPopup(popupHtml, {
-                    maxWidth: 320,
-                    minWidth: 240,
+                    maxWidth: 400,
+                    minWidth: 320,
                     className: 'news-popup-container',
                 });
 
-                marker.on('click', () => {
-                    marker.openPopup();
-                    onSelectItem(item.id);
+                marker.on('click', (e: L.LeafletMouseEvent) => {
+                    L.DomEvent.stopPropagation(e);
+                    const isSelected = selectedIdRef.current === item.id;
+                    onSelectItem(isSelected ? null : item.id);
                 });
 
                 markersRef.current.set(item.id, marker);
@@ -369,13 +400,42 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             const marker = markersRef.current.get(selectedItemId);
             if (marker) {
                 const map = mapRef.current!;
-                const latlng = marker.getLatLng();
-                const targetZoom = Math.max(map.getZoom(), 5);
-
-                map.once('moveend', () => {
+                
+                const showPopup = () => {
+                    // Update icon again to be sure it's correct after potentially moving
+                    const item = geoItems.find(i => i.id === selectedItemId);
+                    marker.setIcon(createCategoryIcon(L, item?.category, true));
                     marker.openPopup();
-                });
-                map.flyTo(latlng, targetZoom, { animate: true, duration: 0.8 });
+                };
+
+                if (clusteringEnabled && clusterGroupRef.current) {
+                    // When using clustering, it can be tricky to focus precisely.
+                    // We'll zoom to show the layer, then manually adjust the center.
+                    clusterGroupRef.current.zoomToShowLayer(marker, () => {
+                        const latlng = marker.getLatLng();
+                        const targetZoom = Math.max(map.getZoom(), 7);
+                        const p = map.project(latlng, targetZoom).subtract([0, 140]);
+                        const target = map.unproject(p, targetZoom);
+                        
+                        map.once('moveend', showPopup);
+                        map.setView(target, targetZoom, { animate: true });
+                    });
+                } else {
+                    const latlng = marker.getLatLng();
+                    const currentZoom = map.getZoom();
+                    const targetZoom = Math.max(currentZoom, 7);
+
+                    // Calculate offset: move center ~140px above the pin so pin is in the lower half
+                    const p = map.project(latlng, targetZoom).subtract([0, 140]);
+                    const target = map.unproject(p, targetZoom);
+
+                    if (currentZoom === targetZoom && map.getCenter().distanceTo(target) < 10) {
+                        showPopup();
+                    } else {
+                        map.once('moveend', showPopup);
+                        map.flyTo(target, targetZoom, { animate: true, duration: 0.8 });
+                    }
+                }
             } else {
                 mapRef.current!.closePopup();
             }
@@ -425,6 +485,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/>
                     </svg>
+                    <div className="btn-red-dot" />
                 </button>
 
                 {/* Settings panel */}

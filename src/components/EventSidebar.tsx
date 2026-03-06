@@ -16,20 +16,6 @@ const CATEGORY_COLORS: Record<string, string> = {
     health: '#7c3aed',
 };
 
-/*
-function getSourceBadgeColor(sourceName: string): string {
-    const s = sourceName.toLowerCase();
-    if (s.includes('(x)') || s.includes('twitter')) return '#000000';
-    if (s.includes('reddit')) return '#ff4500';
-    if (s.includes('telegram')) return '#006effff';
-    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#6d3100ff';
-    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#008fb3ff';
-    if (s.includes('nasa') || s.includes('nature')) return '#059669';
-    if (s.includes('who ')) return '#7c3aed';
-    return '#818181ff';
-}
-*/
-
 // Source platform colors for badge styling
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
     const s = sourceName.toLowerCase();
@@ -55,7 +41,7 @@ interface EventSidebarProps {
     items: NewsItem[];
     selectedItemId: string | null;
     selectionVersion: number;
-    onSelectItem: (id: string) => void;
+    onSelectItem: (id: string | null) => void;
     isLoading: boolean;
     filterBar: ReactNode;
     isDarkMode: boolean;
@@ -63,6 +49,7 @@ interface EventSidebarProps {
     lastUpdated: string | null;
     isOpen: boolean;
     onToggleSidebar: () => void;
+    onRefresh: () => void;
 }
 
 export default function EventSidebar({
@@ -77,6 +64,7 @@ export default function EventSidebar({
     lastUpdated,
     isOpen,
     onToggleSidebar,
+    onRefresh,
 }: EventSidebarProps) {
     const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     // Track which card is expanded (for unmapped articles)
@@ -87,7 +75,7 @@ export default function EventSidebar({
         if (!selectedItemId) return;
         const el = cardRefs.current.get(selectedItemId);
         if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [selectedItemId, selectionVersion]);
 
@@ -95,12 +83,23 @@ export default function EventSidebar({
         const hasGeo = item.latitude !== undefined;
 
         if (hasGeo) {
-            // Mapped article → select it (flies map to pin)
-            onSelectItem(item.id);
-            setExpandedId(null);
+            // Mapped article → toggle selection (flies map to pin)
+            const isSelected = selectedItemId === item.id;
+            onSelectItem(isSelected ? null : item.id);
+            
+            // If selecting a mapped item, collapse any unmapped expansion
+            if (!isSelected) {
+                setExpandedId(null);
+            }
         } else {
             // Unmapped article → toggle expanded detail inline
-            setExpandedId(prev => prev === item.id ? null : item.id);
+            const isCurrentlyExpanded = expandedId === item.id;
+            setExpandedId(isCurrentlyExpanded ? null : item.id);
+            
+            // If expanding an unmapped item, deselect any mapped item
+            if (!isCurrentlyExpanded) {
+                onSelectItem(null);
+            }
         }
     };
 
@@ -108,24 +107,10 @@ export default function EventSidebar({
         <aside className={`event-sidebar ${isOpen ? 'mobile-open' : 'collapsed'}`}>
             <div className="event-sidebar-header">
                 <div className="event-sidebar-logo">
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <button
-                            className="sidebar-toggle-btn sidebar-collapse-btn"
-                            onClick={onToggleSidebar}
-                            aria-label="Collapse sidebar"
-                        >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-                            </svg>
-                        </button>
-                        <h1>Seraphim</h1>
-                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/logo.webp" alt="Seraphim Logo" style={{ height: '3.4rem', width: 'auto', borderRadius: '4px' }} />
+                    <h1>Seraphim</h1>
                     <div className="event-sidebar-actions">
-                        {lastUpdated && (
-                            <span className="last-updated">
-                                Updated: {new Date(lastUpdated).toLocaleTimeString()}
-                            </span>
-                        )}
                         <button
                             className="theme-toggle"
                             onClick={onToggleTheme}
@@ -142,19 +127,26 @@ export default function EventSidebar({
                             )}
                         </button>
                         <button
+                            className="sidebar-toggle-btn sidebar-collapse-btn"
+                            onClick={onToggleSidebar}
+                            aria-label="Collapse sidebar"
+                        >
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                            </svg>
+                        </button>
+                        <button
                             className="sidebar-toggle-btn mobile-close-btn"
                             onClick={onToggleSidebar}
                             aria-label="Close sidebar"
                         >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                             </svg>
                         </button>
                     </div>
                 </div>
             </div>
-
-            {filterBar}
 
             <div className="event-sidebar-stats">
                 <span className="stat-pill">
@@ -163,7 +155,25 @@ export default function EventSidebar({
                 <span className="stat-pill stat-pill-geo">
                     {items.filter(i => i.latitude !== undefined).length} mapped
                 </span>
+                {lastUpdated && (
+                    <span className="last-updated">
+                        UPDATED: {new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
+                    </span>
+                )}
+                <button
+                    className={`refresh-button ${isLoading ? 'loading' : ''}`}
+                    onClick={onRefresh}
+                    disabled={isLoading}
+                    title="Refresh news"
+                >
+                    <svg className="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M21 12a9 9 0 1 1-9-9c4.52 0 8.21 3.33 8.88 7.67" />
+                        <path d="M21 3v6h-6" />
+                    </svg>
+                </button>
             </div>
+
+            {filterBar}
 
             <div className="event-list">
                 {isLoading && items.length === 0 ? (
@@ -180,7 +190,7 @@ export default function EventSidebar({
                     items.map(item => {
                         const isSelected = item.id === selectedItemId;
                         const hasGeo = item.latitude !== undefined;
-                        const isExpanded = expandedId === item.id;
+                        const isExpanded = expandedId === item.id || item.id === selectedItemId;
                         const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
                         let timeAgo = '';
                         try {
@@ -201,6 +211,10 @@ export default function EventSidebar({
                                 }}
                                 className={`event-card${isSelected ? ' event-card-active' : ''}${hasGeo ? ' event-card-geo' : ' event-card-unmapped'}${isExpanded ? ' event-card-expanded' : ''}`}
                                 onClick={() => handleCardClick(item)}
+                                style={{
+                                    backgroundColor: isSelected ? `${catColor}15` : undefined,
+                                    borderColor: isSelected ? catColor : undefined,
+                                }}
                                 role="button"
                                 tabIndex={0}
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
@@ -238,11 +252,19 @@ export default function EventSidebar({
                                                 {item.source}
                                             </span>
                                             <span className="event-card-time">{timeAgo}</span>
+                                            {item.locationName && (
+                                                <>
+                                                    <span className="event-card-meta-sep">•</span>
+                                                    <span className="event-card-location">
+                                                        <svg className="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px', marginTop: '-2px' }}>
+                                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                                        </svg>
+                                                        {item.locationName}
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
-                                        {item.locationName && (
-                                            <span className="event-card-location">{item.locationName}</span>
-                                        )}
-                                        {!hasGeo && !isExpanded && (
+                                        {!isExpanded && (
                                             <span className="event-card-expand-hint">Click to expand</span>
                                         )}
                                     </div>
@@ -250,7 +272,7 @@ export default function EventSidebar({
 
                                 {/* Expanded detail panel for unmapped articles */}
                                 {isExpanded && (
-                                    <div className="event-card-detail" onClick={(e) => e.stopPropagation()}>
+                                    <div className="event-card-detail">
                                         {item.imageUrl && (
                                             <div className="event-card-detail-img">
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -267,9 +289,7 @@ export default function EventSidebar({
                                         )}
                                         {item.description && (
                                             <p className="event-card-detail-desc">
-                                                {item.description.length > 300
-                                                    ? item.description.slice(0, 300) + '…'
-                                                    : item.description}
+                                                {item.description}
                                             </p>
                                         )}
                                         <a

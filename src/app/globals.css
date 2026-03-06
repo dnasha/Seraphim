@@ -28,9 +28,9 @@ body {
   --surface: #ffffff;
   --surface-alt: #f3f4f6;
   --border: #e5e7eb;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: #000000;
+  --text-secondary: #111827;
+  --text-muted: #374151;
   --red: #ef4444;
   --green: #22c55e;
   --sidebar-width: 400px; /* Widened slightly */
@@ -45,9 +45,9 @@ body {
   --surface: #1a1d27;
   --surface-alt: #22252f;
   --border: #2e3140;
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-primary: #ffffff;
+  --text-secondary: #f9fafb;
+  --text-muted: #d1d5db;
 }
 
 a {
@@ -108,12 +108,12 @@ a {
 }
 
 .event-sidebar-logo h1 {
-  font-family: "Playfair Display", Georgia, serif;
-  font-style: italic;
-  font-size: 1.5rem;
+  font-family: "Cinzel Decorative", cursive;
+  font-size: 2rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .event-sidebar-actions {
@@ -152,19 +152,19 @@ a {
 
 .search-icon {
   position: absolute;
-  left: 8px;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
 }
 
 .search-input {
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 6px 8px 6px 28px;
-  font-size: 0.8125rem;
+  padding: 8px 10px 8px 30px;
+  font-size: 0.875rem;
   width: 100%;
   border-radius: 6px;
   color: var(--text-primary);
@@ -200,15 +200,18 @@ a {
 .time-toggle {
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 4px 8px;
+  height: 28px;
+  padding: 0 12px;
   font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
 }
 
 .source-toggle:hover,
@@ -229,6 +232,15 @@ a {
   color: #fff;
 }
 
+.filter-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--text-muted);
+  opacity: 0.4;
+  margin: 0 6px;
+  align-self: center;
+}
+
 /* category icon SVG inside filter buttons */
 .category-icon-svg {
   display: inline-block;
@@ -238,17 +250,19 @@ a {
 
 .refresh-button {
   background: var(--green);
-  border: none;
-  padding: 4px 8px;
-  font-size: 0.75rem;
+  border: 1px solid transparent;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   border-radius: 6px;
-  transition: background 0.15s;
-  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .refresh-button:hover {
@@ -261,8 +275,8 @@ a {
 }
 
 .refresh-icon {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 .refresh-button.loading .refresh-icon {
@@ -282,16 +296,20 @@ a {
 /* sidebar stats */
 .event-sidebar-stats {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
 }
 
 .stat-pill {
   font-size: 0.7rem;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 3px;
+  font-weight: 700;
+  height: 26px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
   background: var(--surface-alt);
   color: var(--text-secondary);
   border: 1px solid var(--border);
@@ -390,7 +408,7 @@ a {
 }
 
 [data-theme="dark"] .event-card-active {
-  background: rgba(96, 165, 250, 0.08);
+  background: rgba(96, 165, 250, 0.08); /* This is now overridden by inline styles */
 }
 
 /* Category accent bar on left edge */
@@ -407,15 +425,15 @@ a {
 .event-card-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 10px 10px 12px;
+  gap: 12px;
+  padding: 8px 10px 8px 12px;
   width: 100%;
 }
 
 .event-card-thumb {
-  width: 64px;
-  height: 50px;
-  min-width: 64px;
+  width: 88px;
+  height: 66px;
+  min-width: 88px;
   border-radius: 6px;
   overflow: hidden;
   background: var(--surface-alt);
@@ -456,8 +474,9 @@ a {
 .event-card-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 0.6875rem;
 }
 
@@ -479,8 +498,12 @@ a {
 .event-card-location {
   font-size: 0.6875rem;
   color: var(--green);
-  margin-top: 3px;
-  display: block;
+  display: inline;
+}
+
+.event-card-meta-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
 }
 
 /* Expand hint for unmapped cards */
@@ -488,10 +511,11 @@ a {
   display: block;
   font-size: 0.625rem;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 1px;
   font-style: italic;
   opacity: 0;
   transition: opacity 0.15s;
+  text-align: right;
 }
 
 .event-card-unmapped:hover .event-card-expand-hint {
@@ -529,11 +553,13 @@ a {
 }
 
 .event-card-detail-link {
-  display: inline-block;
+  display: block;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
+  text-align: right;
+  margin-top: 4px;
 }
 
 .event-card-detail-link:hover {
@@ -543,13 +569,23 @@ a {
 /* theme toggle + last updated */
 .last-updated {
   font-size: 0.7rem;
-  color: var(--text-muted);
+  font-weight: 700;
+  color: #fff;
+  background-color: #dc2626; /* red */
+  height: 26px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
 }
 
 .theme-toggle {
   background: var(--surface-alt);
   border: 1px solid var(--border);
-  padding: 4px 6px;
+  width: 38px;
+  height: 38px;
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.15s;
@@ -560,8 +596,8 @@ a {
 }
 
 .theme-toggle svg {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
 }
 
 .theme-toggle:hover {
@@ -574,8 +610,8 @@ a {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -648,6 +684,7 @@ a {
 }
 
 .map-settings-btn {
+  position: relative;
   width: 38px;
   height: 38px;
   border-radius: 6px;
@@ -664,15 +701,76 @@ a {
     transform 0.15s;
 }
 
+.btn-red-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--red);
+  border-radius: 50%;
+  border: 1.5px solid var(--surface);
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+}
+
 .map-settings-btn:hover {
   background: var(--surface-alt);
   transform: scale(1.05);
 }
 
+/* Match zoom buttons to settings button */
+.leaflet-bar {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: none !important;
+  margin-right: 12px !important;
+  background: transparent !important;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  width: 38px !important;
+  height: 38px !important;
+  line-height: 38px !important;
+  background: var(--surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  margin-bottom: 6px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  transition: background 0.15s, transform 0.15s !important;
+}
+
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover {
+  background: var(--surface-alt) !important;
+  transform: scale(1.05);
+}
+
+.leaflet-touch .leaflet-control-zoom-in,
+.leaflet-touch .leaflet-control-zoom-out {
+  width: 38px !important;
+  height: 38px !important;
+}
+
+.leaflet-top.leaflet-right .leaflet-control-zoom {
+  margin-top: 56px !important;
+}
+
 .map-settings-panel {
   position: absolute;
-  top: 46px;
-  right: 0;
+  top: 0;
+  right: 46px;
   width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -688,11 +786,11 @@ a {
 @keyframes settings-fade-in {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateX(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 
@@ -788,12 +886,7 @@ a {
   transform: translateX(18px);
 }
 
-/* leaflet zoom controls dark mode */
-[data-theme="dark"] .leaflet-control-zoom a {
-  background: var(--surface) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border) !important;
-}
+/* leaflet zoom controls dark mode handled by general overrides above */
 
 [data-theme="dark"] .leaflet-control-zoom a:hover {
   background: var(--surface-alt) !important;
@@ -896,12 +989,6 @@ a {
   background: var(--surface-alt) !important;
 }
 
-/* Fix sub-pixel grid lines on map tiles */
-.leaflet-tile-container img {
-  width: 256.5px !important;
-  height: 256.5px !important;
-}
-
 .news-popup-container .leaflet-popup-content-wrapper {
   background: var(--surface);
   color: var(--text-primary);
@@ -922,7 +1009,7 @@ a {
 }
 
 .news-popup-container a.leaflet-popup-close-button {
-  color: var(--text-muted);
+  color: #a70000;
   padding: 8px;
   width: 32px;
   height: 32px;
@@ -944,8 +1031,8 @@ a {
 .news-popup {
   display: flex;
   flex-direction: column;
-  width: 280px;
-  max-width: 320px;
+  width: 340px;
+  max-width: 400px;
 }
 
 .news-popup-img {
@@ -976,11 +1063,18 @@ a {
   color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.news-popup-summary::-webkit-scrollbar {
+  width: 4px;
+}
+
+.news-popup-summary::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 .news-popup-meta {
@@ -1018,15 +1112,20 @@ a {
 }
 
 .news-popup-link {
-  display: inline-block;
+  display: block;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
+  text-align: right;
+  margin-top: 4px;
 }
 
-.news-popup-link:hover {
-  text-decoration: underline;
+.location-icon-svg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  opacity: 0.8;
 }
 
 /* error banner */

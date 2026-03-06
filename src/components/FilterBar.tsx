@@ -35,8 +35,6 @@ interface FilterBarProps {
     onMappedOnlyChange: (mappedOnly: boolean) => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    onRefresh: () => void;
-    isLoading: boolean;
 }
 
 const categoryOptions = [
@@ -51,11 +49,11 @@ const categoryOptions = [
 ];
 
 const sourceOptions = [
-    { value: 'news', label: 'News', bg: '#0066cc', color: '#ffffff' },
+    { value: 'news', label: 'News', bg: '#6b7280', color: '#ffffff' },
     { value: 'reddit', label: 'Reddit', bg: '#ff4500', color: '#ffffff' },
     { value: 'x', label: 'X', bg: '#000000', color: '#ffffff' },
     { value: 'telegram', label: 'Telegram', bg: '#006eff', color: '#ffffff' },
-    { value: 'extra', label: 'Extra', bg: '#e65100', color: '#ffffff' },
+    { value: 'extra', label: 'Bonus', bg: '#c528bdff', color: '#ffffff' },
 ];
 
 const timeOptions = [
@@ -77,8 +75,6 @@ export default function FilterBar({
     onMappedOnlyChange,
     searchQuery,
     onSearchChange,
-    onRefresh,
-    isLoading,
 }: FilterBarProps) {
     const toggleSource = (source: string) => {
         if (sources.includes(source)) {
@@ -109,23 +105,6 @@ export default function FilterBar({
     return (
         <div className="filter-bar">
             <div className="filter-section">
-                <label className="filter-label">Search</label>
-                <div className="search-input-container">
-                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.35-4.35" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Search news..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        className="search-input"
-                    />
-                </div>
-            </div>
-
-            <div className="filter-section">
                 <label className="filter-label">Sources</label>
                 <div className="source-row">
                     <div className="source-toggles">
@@ -152,9 +131,9 @@ export default function FilterBar({
 
             <div className="filter-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="filter-label">Time & Actions</label>
+                    <label className="filter-label">Time & Location</label>
                 </div>
-                <div className="source-row" style={{ justifyContent: 'space-between' }}>
+                <div className="source-row">
                     <div className="source-toggles">
                         {timeOptions.map((option) => (
                             <button
@@ -165,25 +144,15 @@ export default function FilterBar({
                                 {option.label}
                             </button>
                         ))}
+                        <div className="filter-divider" />
                         <button
-                            className={`time-toggle ${mappedOnly ? 'active' : ''}`}
+                            className={`time-toggle mapped-only-toggle ${mappedOnly ? 'active' : ''}`}
                             onClick={() => onMappedOnlyChange(!mappedOnly)}
-                            style={{ marginLeft: '4px', backgroundColor: mappedOnly ? '#22c55e' : undefined, borderColor: mappedOnly ? '#22c55e' : undefined }}
+                            style={{ backgroundColor: mappedOnly ? '#22c55e' : undefined, borderColor: mappedOnly ? '#22c55e' : undefined }}
                         >
                             Mapped Only
                         </button>
                     </div>
-                    <button
-                        className={`refresh-button ${isLoading ? 'loading' : ''}`}
-                        onClick={onRefresh}
-                        disabled={isLoading}
-                    >
-                        <svg className="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 12a9 9 0 1 1-9-9c4.52 0 8.21 3.33 8.88 7.67" />
-                            <path d="M21 3v6h-6" />
-                        </svg>
-                        {isLoading ? 'Loading...' : 'Refresh'}
-                    </button>
                 </div>
             </div>
 
@@ -207,8 +176,8 @@ export default function FilterBar({
                                 <svg
                                     className="category-icon-svg"
                                     viewBox="0 0 24 24"
-                                    width="12"
-                                    height="12"
+                                    width="15"
+                                    height="15"
                                     fill={isActive ? '#fff' : color}
                                     style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
                                 >
@@ -218,6 +187,22 @@ export default function FilterBar({
                             </button>
                         );
                     })}
+                </div>
+            </div>
+
+            <div className="filter-section" style={{ marginTop: '4px' }}>
+                <div className="search-input-container">
+                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search news..."
+                        value={searchQuery}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        className="search-input"
+                    />
                 </div>
             </div>
         </div>

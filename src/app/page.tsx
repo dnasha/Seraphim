@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import FilterBar from '@/components/FilterBar';
 import EventSidebar from '@/components/EventSidebar';
@@ -92,12 +92,15 @@ export default function Home() {
     localStorage.setItem('theme', newTheme ? 'dark' : 'light');
   };
 
-  const handleSelectItem = (id: string) => {
+  const handleSelectItem = useCallback((id: string | null) => {
     setSelectedItemId(id);
     setSelectionVersion(v => v + 1);
-  };
+    setIsSidebarOpen(true);
+  }, []);
 
-  const displayedNews = mappedOnly ? news.filter(n => n.latitude !== undefined) : news;
+  const displayedNews = useMemo(() => {
+    return mappedOnly ? news.filter(n => n.latitude !== undefined) : news;
+  }, [news, mappedOnly]);
 
   const filterBarSlot = (
     <>
@@ -112,8 +115,6 @@ export default function Home() {
         onMappedOnlyChange={setMappedOnly}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onRefresh={() => fetchNews(true)}
-        isLoading={isLoading}
       />
       {error && (
         <div className="error-banner">
@@ -151,6 +152,7 @@ export default function Home() {
         lastUpdated={lastUpdated}
         isOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onRefresh={() => fetchNews(true)}
       />
 
       <NewsMap
