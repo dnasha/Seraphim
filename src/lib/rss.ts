@@ -50,7 +50,7 @@ export const RSS_SOURCES: RSSSource[] = [
 
     // national / domestic
     { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', region: 'north_america' },
-    { name: 'CBC Canada', url: 'https://rss.cbc.ca/lineup/topstories.xml', category: 'nation', region: 'north_america' },
+    //{ name: 'CBC Canada', url: 'https://rss.cbc.ca/lineup/topstories.xml', category: 'nation', region: 'north_america' },
 
     // business
     { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business', region: 'global' },
@@ -68,6 +68,14 @@ export const RSS_SOURCES: RSSSource[] = [
 
     // health
     { name: 'WHO News', url: 'https://www.who.int/rss-feeds/news-english.xml', category: 'health', region: 'global' },
+
+    // new additions to broaden geographic coverage
+    { name: 'RNZ World', url: 'https://www.rnz.co.nz/rss/world.xml', category: 'world', region: 'oceania' },
+    { name: 'The Hindu', url: 'https://www.thehindu.com/news/international/feeder/default.rss', category: 'world', region: 'asia' },
+    { name: 'Politico Europe', url: 'https://www.politico.eu/feed/', category: 'world', region: 'europe' },
+    { name: 'Middle East Eye', url: 'https://www.middleeasteye.net/rss', category: 'world', region: 'middle_east' },
+    { name: 'The Rio Times', url: 'https://www.riotimesonline.com/feed/', category: 'world', region: 'latin_america' },
+    { name: 'AllAfrica News', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', category: 'world', region: 'africa' },
 ];
 
 // ── Reddit JSON API (RSS endpoints return 403) ─────────────────────────────
@@ -82,11 +90,16 @@ interface RedditSource {
 const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit CombatFootage', subreddit: 'CombatFootage', category: 'crisis', region: 'global' },
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis', region: 'global' },
+    { name: 'Reddit WorldNews', subreddit: 'worldnews', category: 'world', region: 'global' },
+    { name: 'Reddit News', subreddit: 'news', category: 'world', region: 'global' },
+    { name: 'Reddit Geopolitics', subreddit: 'geopolitics', category: 'world', region: 'global' },
+    { name: 'Reddit Europe', subreddit: 'europe', category: 'world', region: 'europe' },
+    { name: 'Reddit MiddleEastNews', subreddit: 'MiddleEastNews', category: 'world', region: 'middle_east' },
 ];
 
 async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
-        const url = `https://www.reddit.com/r/${source.subreddit}/new.json?limit=5`;
+        const url = `https://www.reddit.com/r/${source.subreddit}/hot.json?limit=10`;
         const res = await fetch(url, {
             headers: { 'User-Agent': 'Seraphim/1.0 (news aggregator)' },
             signal: AbortSignal.timeout(5000),
@@ -95,7 +108,9 @@ async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
         const data = await res.json();
         const posts = data?.data?.children || [];
 
-        return posts.map((child: { data: Record<string, string> }, index: number) => {
+        return posts
+            .filter((child: { data: Record<string, unknown> }) => child.data.stickied !== true)
+            .map((child: { data: Record<string, string> }, index: number) => {
             const post = child.data;
             return {
                 id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,

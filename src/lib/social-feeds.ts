@@ -40,7 +40,12 @@ const RSSHUB_INSTANCES = [
 const TELEGRAM_CHANNELS: SocialSource[] = [
     { name: 'Faytuks (Telegram)', url: 'https://t.me/s/Faytuks', platform: 'telegram', category: 'world' },
     { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis' },
-    { name: 'Astra Press (Telegram)', url: 'https://t.me/s/astrapress', platform: 'telegram', category: 'world' },
+    //{ name: 'Astra Press (Telegram)', url: 'https://t.me/s/astrapress', platform: 'telegram', category: 'world' },
+    { name: 'Geopolitics Live (Telegram)', url: 'https://t.me/s/geopolitics_live', platform: 'telegram', category: 'world' },
+    { name: 'ISW (Telegram)', url: 'https://t.me/s/TheStudyofWar', platform: 'telegram', category: 'crisis' },
+    { name: 'DDGeopolitics (Telegram)', url: 'https://t.me/s/DDGeopolitics', platform: 'telegram', category: 'world' },
+    { name: 'Bellingcat (Telegram)', url: 'https://t.me/s/bellingcat', platform: 'telegram', category: 'world' },
+    { name: 'Cyberknow (Telegram)', url: 'https://t.me/s/Cyberknow20', platform: 'telegram', category: 'technology' },
 ];
 
 const X_ACCOUNTS: SocialSource[] = [
@@ -49,6 +54,12 @@ const X_ACCOUNTS: SocialSource[] = [
     { name: 'Liveuamap (X)', url: 'Liveuamap', platform: 'x', category: 'crisis' },
     { name: 'The Intel Crab (X)', url: 'IntelCrab', platform: 'x', category: 'crisis' },
     { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis' },
+    { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis' },
+    { name: 'Def Mon (X)', url: 'DefMon3', platform: 'x', category: 'crisis' },
+    { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis' },
+    { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
+    { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
+    { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis' },
 ];
 
 // ── Telegram scraper (Cheerio-based) ────────────────────────────────────────
@@ -147,10 +158,58 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<Retu
     if (!feed.items || feed.items.length === 0) {
         throw new Error('Empty feed');
     }
+
+    // Reject fake successful feeds from xcancel that are actually whitelist errors
+    if (feed.items[0]?.title?.includes('RSS reader not yet whitelist') || feed.items[0]?.contentSnippet?.includes('RSS reader not yet whitelist')) {
+        throw new Error('Nitter instance blocked RSS reader');
+    }
+
     return feed;
 }
 
-// Strategy 1: Nitter RSS (Query all known healthy instances at once and take the first success)
+// Strategy 1: Native Twitter Syndication (Fastest, clearest, no API key needed)
+async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
+    try {
+        const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            signal: AbortSignal.timeout(5000)
+        });
+        if (!res.ok) return null;
+        const html = await res.text();
+        const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+        if (!match) return null;
+        
+        const data = JSON.parse(match[1]);
+        const entries = data?.props?.pageProps?.timeline?.entries || [];
+        
+        const items = [];
+        for (const entry of entries) {
+            if (entry.type === 'tweet') {
+                const t = entry.content.tweet;
+                if (!t) continue;
+                items.push({
+                    title: t.full_text || t.text || 'No title',
+                    link: `https://x.com${t.permalink}`,
+                    pubDate: new Date(t.created_at).toISOString(),
+                    contentSnippet: t.full_text || t.text || '',
+                });
+            }
+        }
+        
+        if (items.length === 0) return null;
+
+        // Sort by newest first, then take top 10
+        items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return { items: items.slice(0, 10) } as any;
+    } catch {
+        return null; // fallback on error
+    }
+}
+
+// Strategy 2: Nitter RSS (Query all known healthy instances at once and take the first success)
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const promises = NITTER_INSTANCES.map(instance =>
@@ -186,11 +245,13 @@ async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof pa
 
 async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const username = source.url; // just the username
-
-    // try strategies in order, but each strategy races its internal mirrors concurrently
-    const feed = await tryNitterFeed(username)
-        || await tryRSSHubFeed(username)
-        || await tryGoogleNewsFeed(username);
+    // try strategies concurrently to avoid massive sequential timeout penalties
+    const feed = await Promise.any([
+        trySyndicationFeed(username).then(res => res ? res : Promise.reject('syndication failed')),
+        tryNitterFeed(username).then(res => res ? res : Promise.reject('nitter failed')),
+        tryRSSHubFeed(username).then(res => res ? res : Promise.reject('rsshub failed')),
+        tryGoogleNewsFeed(username).then(res => res ? res : Promise.reject('gnews failed'))
+    ]).catch(() => null);
 
     if (!feed || !feed.items || feed.items.length === 0) {
         console.warn(`all X feed strategies failed for ${source.name} (@${username})`);

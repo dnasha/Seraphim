@@ -144,13 +144,17 @@ const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z][a-z
 // Verbs use explicit [Aa] style casing so headline capitals match without /i flag,
 // which would break the [A-Z] location-capture group.
 const LOCATION_PATTERNS = [
-    // Prepositions — "in Cairo", "from Beirut", etc.
+    // Prepositions
     /\bin\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bin\s+the\s+([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,  // "in the Strait of Hormuz"
     /\bfrom\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bnear\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bacross\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    /\boff\s+(?:the\s+coast\s+of\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g, // "off Yemen", "off the coast of Oman"
+    /\boff\s+(?:the\s+coast\s+of\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\bto\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\bat\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\btowards?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b(?:city|town|province|state|region|village)\s+of\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     // Present-tense action verbs
     /\b[Hh]its?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Ss]trikes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
@@ -167,7 +171,9 @@ const LOCATION_PATTERNS = [
     /\b[Cc]aptures?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Rr]aids?\s+(?:[Oo]n\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Bb]esieges?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
-    // Past-tense variants (common in news descriptions: "was attacked in", "was targeted")
+    /\b[Ff]lees?\s+to\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Dd]eploys?\s+to\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    // Past-tense variants
     /\b[Aa]ttacked\s+in\s+(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Tt]argeted\s+(?:in\s+)?(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Ss]helled\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
@@ -464,17 +470,19 @@ export function extractLocation(title: string, description: string): string | nu
             for (const place of titlePlaces) {
                 candidates.push({ name: place, source: 'nlp' });
             }
+            bestCandidates = computeScored(candidates);
         }
 
-        // 6. NLP fallback on description
-        const descPlaces = nlp(description).places().out('array');
-        if (descPlaces && descPlaces.length > 0) {
-            for (const place of descPlaces) {
-                candidates.push({ name: place, source: 'nlp' });
+        // 5. NLP fallback on description ONLY if title yielded no robust candidate
+        if (bestCandidates.length === 0) {
+            const descPlaces = nlp(description).places().out('array');
+            if (descPlaces && descPlaces.length > 0) {
+                for (const place of descPlaces) {
+                    candidates.push({ name: place, source: 'nlp' });
+                }
+                bestCandidates = computeScored(candidates);
             }
         }
-
-        bestCandidates = computeScored(candidates);
     }
 
     if (bestCandidates.length > 0) {
@@ -496,19 +504,11 @@ export function extractLocation(title: string, description: string): string | nu
         return display;
     }
 
-    // 8. Last resort: strictly allow ONLY comma-pairs or datelines to hit the API.
-    // Random regex/NLP matches that aren't in the dictionary are too unreliable
-    // to send to the Photon API (e.g. "NASA", "Venus" → random small towns).
-    for (const { name: raw, source } of candidates) {
-        if (source !== 'comma_pair' && source !== 'dateline') continue;
-        const candidate = cleanCandidate(raw);
-        if (!candidate || candidate.length <= 2) continue;
-        if (!STOP_WORDS.has(candidate.toLowerCase())) {
-            return disambiguate(candidate);
-        }
-    }
-
-    // Better to have no map pin than a wildly incorrect one
+    // 8. Disabled last-resort API fallback
+    // Sending unverified regex/comma-pair strings (like "Netflix, Hulu" or "MS exec") 
+    // to the external Komoot API causes heavy rate-limiting and 10+ second pipeline delays.
+    // With 78,000+ KNOWN_LOCATIONS locally, if a place isn't in the dict, it's 
+    // almost certainly false-positive noise from the regex, not a real newsworthy city.
     return null;
 }
 
@@ -615,6 +615,7 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
 
         // Only sleep when we actually hit an external API
         if (!isDictionaryHit && !isCached) {
+            console.log(`Hitting external API for: "${placeName}"`);
             await sleep(200);
         }
 

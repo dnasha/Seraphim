@@ -334,7 +334,7 @@ async function benchmarkSocial(timer) {
   ];
 
   timer.start('social_telegram');
-  for (const ch of TG_CHANNELS) {
+  const tgPromises = TG_CHANNELS.map(async (ch) => {
     const t0 = performance.now();
     try {
       const res = await fetch(ch.url, {
@@ -357,43 +357,63 @@ async function benchmarkSocial(timer) {
     } catch {
       results.push({ name: `TG: ${ch.name}`, status: 'error', elapsed: performance.now() - t0, items: 0 });
     }
-  }
+  });
+
+  await Promise.all(tgPromises);
   timer.stop('social_telegram');
 
-  // X/Twitter via RSSHub (simplified — just test connectivity)
-  const X_ACCOUNTS = ['GeoConfirmed', 'OSINTtechnical', 'Liveuamap', 'IntelCrab', 'AuroraIntel'];
-  const RSSHUB = ['https://rsshub.app', 'https://rsshub.rssforever.com', 'https://rsshub.moeyy.cn'];
-  const Parser = (await import('rss-parser')).default;
-  const parser = new Parser({ timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Seraphim/1.0)' } });
+  // X/Twitter via Syndication API
+  const X_ACCOUNTS = [
+    'GeoConfirmed', 'OSINTtechnical', 'Liveuamap', 'IntelCrab', 'AuroraIntel',
+    'ELINTNews', 'DefMon3', 'RALee85', 'clashreport'
+  ];
 
   timer.start('social_x');
-  for (const username of (QUICK_MODE ? X_ACCOUNTS.slice(0, 1) : X_ACCOUNTS)) {
+  const xPromises = (QUICK_MODE ? X_ACCOUNTS.slice(0, 1) : X_ACCOUNTS).map(async (username) => {
     const t0 = performance.now();
     try {
-      const promises = RSSHUB.map(async instance => {
-        const res = await fetch(`${instance}/twitter/user/${username}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(3000)
-        });
-        if (!res.ok) throw new Error('error');
-        const text = await res.text();
-        const feed = await parser.parseString(text);
-        if (feed.items && feed.items.length > 0) return feed;
-        throw new Error('empty');
+      const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(5000)
       });
+      if (!res.ok) throw new Error('error');
+      const html = await res.text();
+      const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+      if (!match) throw new Error('empty');
       
-      const feed = await Promise.any(promises);
-      const items = feed.items.slice(0, 5).map((item, i) => ({
-        id: `x-${username}-${i}`, title: (item.title || '').slice(0, 200), description: item.contentSnippet || '',
-        url: item.link || '', source: `${username} (X)`, sourceType: 'social', category: 'crisis',
-        publishedAt: item.pubDate || new Date().toISOString(),
-      }));
+      const data = JSON.parse(match[1]);
+      const entries = data?.props?.pageProps?.timeline?.entries || [];
+      const items = [];
+      
+      for (const entry of entries) {
+        if (entry.type === 'tweet') {
+          const t = entry.content.tweet;
+          if (!t) continue;
+          items.push({
+            id: `x-${username}-${items.length}`, 
+            title: (t.full_text || t.text || 'No title').slice(0, 200), 
+            description: t.full_text || t.text || '',
+            url: `https://x.com${t.permalink}`, 
+            source: `${username} (X)`, 
+            sourceType: 'social', 
+            category: 'crisis',
+            publishedAt: new Date(t.created_at).toISOString(),
+          });
+          if (items.length >= 5) break;
+        }
+      }
+      
+      if (items.length === 0) throw new Error('empty');
       results.push({ name: `X: @${username}`, status: 'ok', elapsed: performance.now() - t0, items: items.length });
       allItems.push(...items);
     } catch {
       results.push({ name: `X: @${username}`, status: 'error', elapsed: performance.now() - t0, items: 0 });
     }
-  }
+  });
+
+  await Promise.all(xPromises);
   timer.stop('social_x');
 
   timer.marks['social_total'] = timer.get('social_telegram') + timer.get('social_x');
@@ -429,9 +449,32 @@ async function benchmarkExtraction(timer, items, KNOWN) {
     /\bfrom\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bnear\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\bacross\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\boff\s+(?:the\s+coast\s+of\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\bto\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\bat\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\btowards?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b(?:city|town|province|state|region|village)\s+of\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Hh]its?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Ss]trikes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Aa]ttacks?\s+(?:[Oo]n\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ff]ighting\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ww]ar\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Cc]risis\s+in\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ii]nvades?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Oo]ccupied\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]ombards?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]hells?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Tt]argets?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]eizes?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Cc]aptures?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Rr]aids?\s+(?:[Oo]n\s+)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]esieges?\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ff]lees?\s+to\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Dd]eploys?\s+to\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Aa]ttacked\s+in\s+(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Tt]argeted\s+(?:in\s+)?(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Ss]helled\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b[Bb]ombed\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
   ];
 
   const STOP = new Set([
