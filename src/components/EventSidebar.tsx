@@ -82,14 +82,20 @@ export default function EventSidebar({
     const handleCardClick = (item: NewsItem) => {
         const hasGeo = item.latitude !== undefined;
 
+        const isMobile = () => window.innerWidth < 860;
+
         if (hasGeo) {
             // Mapped article → toggle selection (flies map to pin)
             const isSelected = selectedItemId === item.id;
             onSelectItem(isSelected ? null : item.id);
-            
+
             // If selecting a mapped item, collapse any unmapped expansion
             if (!isSelected) {
                 setExpandedId(null);
+                // On mobile, close the sidebar so the map is fully visible
+                if (isMobile()) {
+                    onToggleSidebar();
+                }
             }
         } else {
             // Unmapped article → toggle expanded detail inline

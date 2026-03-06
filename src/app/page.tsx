@@ -95,7 +95,6 @@ export default function Home() {
   const handleSelectItem = useCallback((id: string | null) => {
     setSelectedItemId(id);
     setSelectionVersion(v => v + 1);
-    setIsSidebarOpen(true);
   }, []);
 
   const displayedNews = useMemo(() => {

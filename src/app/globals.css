@@ -641,7 +641,7 @@ a {
 .sidebar-expand-btn {
   position: absolute;
   top: 12px;
-  left: 60px;
+  left: 12px;
   z-index: 1000;
   width: 38px;
   height: 38px;
@@ -654,6 +654,12 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.sidebar-expand-btn:hover {
+  background: var(--surface-alt);
+  transform: scale(1.05);
 }
 
 @media (max-width: 860px) {
@@ -1203,22 +1209,174 @@ a {
   margin: 0 auto 12px;
 }
 
-/* responsive */
+/* ── Mobile responsive ────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
+  /* Map fills entire viewport; sidebar slides in as overlay */
   .app-layout {
-    flex-direction: column;
+    flex-direction: row; /* keep row so sidebar absolutely positions over map */
+    position: relative;
   }
 
-  .event-sidebar {
-    width: 100%;
-    min-width: unset;
-    max-height: 45vh;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
+  /* Map always fills the full viewport */
   .map-wrapper {
     flex: 1;
+    width: 100%;
+    height: 100%;
     min-height: 0;
+  }
+
+  /* Sidebar: full-height slide-in overlay from the left */
+  .event-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: min(360px, 92vw);
+    min-width: unset;
+    height: 100%;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.18);
+    transform: translateX(-100%);
+    z-index: 1001;
+    /* ensure content inside scrolls, not the whole sidebar */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .event-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* ── Header ── */
+  .event-sidebar-header {
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+
+  .event-sidebar-logo h1 {
+    font-size: 1.4rem;
+  }
+
+  .event-sidebar-logo img {
+    height: 2.4rem !important;
+  }
+
+  .theme-toggle,
+  .sidebar-toggle-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* ── Stats row: allow wrapping so nothing gets cut ── */
+  .event-sidebar-stats {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+
+  .last-updated {
+    font-size: 0.6rem;
+    padding: 0 8px;
+    height: 24px;
+  }
+
+  .stat-pill {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 0.65rem;
+  }
+
+  /* ── Filter bar: compact and scrollable if needed ── */
+  .filter-bar {
+    padding: 8px 10px;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow-x: hidden;
+  }
+
+  .filter-section {
+    gap: 3px;
+  }
+
+  /* Make toggle rows scrollable horizontally on very narrow screens */
+  .source-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+
+  .source-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .source-toggles {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .category-toggles {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .source-toggle,
+  .category-toggle,
+  .time-toggle {
+    height: 26px;
+    padding: 0 9px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Time toggles row: scrollable */
+  .filter-section:has(.time-toggle) > div {
+    display: flex;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px;
+  }
+
+  .filter-section:has(.time-toggle) > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ── Event list fills remaining space ── */
+  .event-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  /* ── Map popups: constrain width on mobile ── */
+  .news-popup {
+    width: calc(100vw - 48px);
+    max-width: 320px;
+  }
+
+  .news-popup-container .leaflet-popup-content-wrapper {
+    max-width: calc(100vw - 32px);
+  }
+
+  /* ── Expand button: avoid overlapping settings gear ── */
+  .sidebar-expand-btn {
+    top: 12px;
+    left: 12px;
+  }
+
+  /* ── Zoom controls: shift down so they don't overlap settings ── */
+  .leaflet-top.leaflet-right .leaflet-control-zoom {
+    margin-top: 56px !important;
+  }
+
+  /* ── Settings panel: open leftward, constrained width ── */
+  .map-settings-panel {
+    right: 46px;
+    width: min(220px, 65vw);
   }
 }
