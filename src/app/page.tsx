@@ -16,10 +16,13 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectionVersion, setSelectionVersion] = useState(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Filters
-  const [sources, setSources] = useState<string[]>(['rss', 'social']);
+  const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram']);
   const [categories, setCategories] = useState<string[]>(['general']);
+  const [timeRange, setTimeRange] = useState<string>('1d');
+  const [mappedOnly, setMappedOnly] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -51,6 +54,7 @@ export default function Home() {
       const params = new URLSearchParams({
         sources: sources.join(','),
         categories: categories.join(','),
+        timeRange,
         ...(debouncedSearch && { search: debouncedSearch }),
         ...(forceRefresh && { refresh: 'true' }),
       });
@@ -69,7 +73,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [sources, categories, debouncedSearch]);
+  }, [sources, categories, timeRange, debouncedSearch]);
 
   useEffect(() => {
     fetchNews();
@@ -93,6 +97,8 @@ export default function Home() {
     setSelectionVersion(v => v + 1);
   };
 
+  const displayedNews = mappedOnly ? news.filter(n => n.latitude !== undefined) : news;
+
   const filterBarSlot = (
     <>
       <FilterBar
@@ -100,6 +106,10 @@ export default function Home() {
         onSourcesChange={setSources}
         categories={categories}
         onCategoriesChange={setCategories}
+        timeRange={timeRange}
+        onTimeRangeChange={setTimeRange}
+        mappedOnly={mappedOnly}
+        onMappedOnlyChange={setMappedOnly}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onRefresh={() => fetchNews(true)}
@@ -117,8 +127,20 @@ export default function Home() {
 
   return (
     <div className="app-layout">
+      {!isSidebarOpen && (
+        <button
+          className="sidebar-expand-btn"
+          onClick={() => setIsSidebarOpen(true)}
+          aria-label="Open sidebar"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+          </svg>
+        </button>
+      )}
+
       <EventSidebar
-        items={news}
+        items={displayedNews}
         selectedItemId={selectedItemId}
         selectionVersion={selectionVersion}
         onSelectItem={handleSelectItem}
@@ -127,10 +149,12 @@ export default function Home() {
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
         lastUpdated={lastUpdated}
+        isOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
 
       <NewsMap
-        items={news}
+        items={displayedNews}
         selectedItemId={selectedItemId}
         selectionVersion={selectionVersion}
         onSelectItem={handleSelectItem}

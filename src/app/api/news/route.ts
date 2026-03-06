@@ -14,21 +14,53 @@ export async function GET(request: Request) {
     const categoriesArray = (searchParams.get('categories') || 'general').split(',');
     const categories = categoriesArray.slice().sort().join(',');
     const search = searchParams.get('search');
-    const sourcesParam = searchParams.get('sources') || 'gnews,rss';
+    const sourcesParam = searchParams.get('sources') || 'news,reddit,x,telegram,extra';
     const sources = sourcesParam.split(',').sort();
+    const timeRange = searchParams.get('timeRange') || 'all';
     const forceRefresh = searchParams.get('refresh') === 'true';
 
-    const cacheKey = `${categories}|${sources.join(',')}`;
+    const cacheKey = `${categories}|${sources.join(',')}`; // Time range parsing happens post-cache to reuse the full data fetch logic
 
     try {
         const cachedEntry = cache.get(cacheKey);
 
-        if (!forceRefresh && cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL) {
-            let filteredItems = cachedEntry.data;
-
-            if (sources.length > 0) {
-                filteredItems = filteredItems.filter(item => sources.includes(item.sourceType));
+        const filterItemsByTime = (items: NewsItem[]) => {
+            if (timeRange === 'all') return items;
+            
+            const now = Date.now();
+            let msCutoff = 0;
+            switch(timeRange) {
+                case '1d': msCutoff = 24 * 60 * 60 * 1000; break;
+                case '3d': msCutoff = 3 * 24 * 60 * 60 * 1000; break;
+                case '1w': msCutoff = 7 * 24 * 60 * 60 * 1000; break;
+                case '1m': msCutoff = 30 * 24 * 60 * 60 * 1000; break;
+                default: return items;
             }
+            
+            return items.filter(item => (now - new Date(item.publishedAt).getTime()) <= msCutoff);
+        };
+
+        const filterItemsBySource = (items: NewsItem[]) => {
+            if (sources.length === 0) return items;
+            
+            return items.filter(item => {
+                if (sources.includes('news') && item.sourceType === 'rss') return true;
+                if (sources.includes('extra') && item.sourceType === 'gnews') return true;
+                
+                if (item.sourceType === 'social') {
+                    const s = item.source.toLowerCase();
+                    if (sources.includes('reddit') && s.includes('reddit')) return true;
+                    if (sources.includes('x') && (s.includes('x') || s.includes('twitter'))) return true;
+                    if (sources.includes('telegram') && s.includes('telegram')) return true;
+                }
+                
+                return false;
+            });
+        };
+
+        if (!forceRefresh && cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL) {
+            let filteredItems = filterItemsBySource(cachedEntry.data);
+            filteredItems = filterItemsByTime(filteredItems);
 
             if (!categories.includes('general')) {
                 filteredItems = filteredItems.filter(item =>
@@ -48,9 +80,9 @@ export async function GET(request: Request) {
                 items: filteredItems,
                 lastUpdated: new Date(cachedEntry.timestamp).toISOString(),
                 sources: {
-                    gnews: sources.includes('gnews'),
-                    rss: sources.includes('rss'),
-                    social: sources.includes('social'),
+                    gnews: sources.includes('extra'),
+                    rss: sources.includes('news'),
+                    social: sources.includes('reddit') || sources.includes('x') || sources.includes('telegram'),
                 },
             };
 
@@ -58,9 +90,9 @@ export async function GET(request: Request) {
         }
 
         // fetch only the sources the client actually requested
-        const wantGNews = sources.includes('gnews');
-        const wantRSS = sources.includes('rss');
-        const wantSocial = sources.includes('social');
+        const wantGNews = sources.includes('extra');
+        const wantRSS = sources.includes('news');
+        const wantSocial = sources.includes('reddit') || sources.includes('x') || sources.includes('telegram');
 
         const [gnewsItems, rssItems, osintItems, socialItems] = await Promise.all([
             wantGNews
@@ -83,11 +115,8 @@ export async function GET(request: Request) {
         cache.set(cacheKey, { data: enrichedItems, timestamp: Date.now() });
 
         // apply filters
-        let filteredItems = enrichedItems;
-
-        if (sources.length > 0) {
-            filteredItems = filteredItems.filter(item => sources.includes(item.sourceType));
-        }
+        let filteredItems = filterItemsBySource(enrichedItems);
+        filteredItems = filterItemsByTime(filteredItems);
 
         if (categoriesArray.length > 0 && !categoriesArray.includes('general')) {
             filteredItems = filteredItems.filter(item =>
@@ -107,9 +136,9 @@ export async function GET(request: Request) {
             items: filteredItems,
             lastUpdated: new Date().toISOString(),
             sources: {
-                gnews: sources.includes('gnews'),
-                rss: sources.includes('rss'),
-                social: sources.includes('social'),
+                    gnews: sources.includes('extra'),
+                    rss: sources.includes('news'),
+                    social: sources.includes('reddit') || sources.includes('x') || sources.includes('telegram'),
             },
         };
 

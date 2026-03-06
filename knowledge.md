@@ -64,18 +64,27 @@ RSS Feeds / GNews API / Social Feeds (Concurrent Fetching)
         ▼
   enrichItemsWithLocation()  (geocode.ts)
         │
+        ▼
+  Filtering (Source / Time / Search / MappedOnly)
+        │
+        └── Returns processed items to client
+```
+
         ├── 1. extractLocation(title, description)
         │       ├── Dateline regex  (e.g. "KYIV (Reuters) — " or "Albania: ...")
         │       ├── Comma-pair      (e.g. "Austin, Texas")
         │       ├── Preposition/Verb regex (e.g. "fighting in Aleppo", "fled to Poland")
-        │       ├── compromise NLP   (skipped if location found in title)
-        │       └── Country Abbrev & Demonym fallback  ("U.S.", "Iranian" → Iran)
+        │       ├── compromise NLP  (title then description)
+        │       ├── Country Abbrev  ("U.S.", "U.K." — handles hyphens)
+        │       ├── Demonym fallback ("Iranians" → Iran — handles plurals)
+        │       └── Direct Country Name scan boundaries (for hyphenated pairs like "Iran-Israel")
         │
         ├── 2. geocodeLocation(placeName)
         │       └── KNOWN_LOCATIONS dictionary lookup (instant, ~78K cities + 4K admin1 + 209 countries)
         │           Note: The external Photon API fallback was disabled for unverified regex hits to completely eliminate rate-limit bottlenecks.
         │
         └── 3. Jitter applied to overlapping coordinates
+
 ```
 
 ## Geocoding System (geocode.ts) — Key Design Decisions
@@ -87,7 +96,7 @@ The `KNOWN_LOCATIONS` dictionary is loaded in a specific priority order where la
 1. **Cities** from `geonames.json` (population-weighted — largest city wins on name collision)
 2. **Admin1 regions** (states/provinces) — won't overwrite a city with >500K pop
 3. **Countries** from `geonames.json` (209 entries) — always overwrite to ensure country names resolve correctly
-4. **Landmarks** (hardcoded — Pentagon, Kremlin, Gaza City, Crimea, Strait of Hormuz, etc.) — highest priority
+4. **Landmarks** (hardcoded — Pentagon, Kremlin, Gaza City, Crimea, Strait of Hormuz, Middle East, etc.) — highest priority override
 
 ### Candidate Scoring
 
@@ -99,9 +108,15 @@ Candidates are scored and sorted by two axes:
 
 This means countries beat obscure same-named cities (e.g., Albania the country beats "Albania" the municipality in Colombia), but mega-cities like Singapore still resolve to their city coordinates.
 
+### Robust Extraction Heuristics
+
+- **Hyphenation Support**: Tokenizers for demonyms and abbreviations now split on both whitespace and hyphens, preventing items like "U.S.-backed" from losing the "U.S." location.
+- **Plural Demonyms**: The system intelligently handles plurals (e.g., "Iranians", "Russians") by attempting to match the stem against the demonym map.
+- **Direct Country Scan**: As a last-resort safety net of the extraction pipeline, the system performs a boundary-aware regex scan for known country names to catch cases like "Iran-Israel war" that NLP often fragments.
+
 ### False Positive Filter
 
-A `FALSE_POSITIVES` set blocks compound phrases and brand/team names that NLP incorrectly detects as locations (e.g. "Arsenal", "Amazon", "Research roundup"). Standalone city names (Paris, Chelsea) are intentionally NOT blocked — only clear non-geographic uses.
+A `FALSE_POSITIVES` set blocks compound phrases and brand/team names (e.g. "Arsenal", "Amazon", "Research roundup"). Generic regions like "Middle East" were previously blocked but are now allowed and mapped to specific coordinates.
 
 **News Source Defaults**: A `NEWS_SOURCE_DEFAULTS` mapping provides fallback locations (e.g., "Washington DC" for NASA) when no geographic context can be extracted from an article.
 
@@ -110,8 +125,10 @@ A `FALSE_POSITIVES` set blocks compound phrases and brand/team names that NLP in
 Captures journalistic-style location prefixes from both titles and descriptions:
 
 ```
+
 /^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/
-```
+
+````
 
 Matches: `KYIV (Reuters) — ...`, `Albania: Femicide cases...`, `WASHINGTON - ...`
 
@@ -121,7 +138,7 @@ Run manually when GeoNames data files are updated:
 
 ```bash
 node scripts/build-geodata.mjs
-```
+````
 
 **Inputs**: `data/cities5000.txt`, `data/admin1CodesASCII.txt`, hardcoded COUNTRY_DATA (209 entries with ISO codes)
 
@@ -131,15 +148,22 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 
 ## UI Architecture
 
-- **Layout**: Sidebar (360px) + full-bleed Leaflet map, responsive (stacks at <860px)
-- **Theme**: Dark mode default, toggleable. CSS variables on `[data-theme]`
-- **Map styles**: Standard, dark, light, satellite, humanitarian, and topographic tile layers — selectable via gear (⚙️) settings panel (top-right of map)
-- **Settings panel**: Floating card opened by gear icon; contains map style grid + clustering toggle
-- **Markers**: Circle icons with category-specific SVG glyphs + category color. Active markers pulse.
-- **Clustering**: `leaflet.markercluster` groups nearby pins into numbered circles; **off by default**, toggleable in settings panel
-- **Interaction**: Clicking a map pin selects the sidebar card (auto-scrolls), clicking a sidebar card flies the map to that pin's location
+- **Layout**: Collapsible Sidebar (400px) + full-bleed Leaflet map. Sidebar starts open and becomes a floating drawer overlay on mobile (<860px).
+- **Theme**: Dark mode default, toggleable. Theme switch uses clean SVG icons (Sun/Moon). CSS variables on `[data-theme]`.
+- **Aesthetics**: Modern rounded corners (8px for cards/popups, 6px for UI elements) and subtle shadows for a premium feel.
+- **Map styles**: Standard, dark, light, satellite, humanitarian, and topographic tile layers — selectable via gear (⚙️) settings panel (top-right of map).
+- **Settings panel**: Floating card opened by gear icon; contains map style grid + clustering toggle.
+- **Markers**: Circle icons with category-specific SVG glyphs + category color. Active markers pulse and bring their popup to focus.
+- **Clustering**: `leaflet.markercluster` groups nearby pins into numbered circles; **off by default**, toggleable in settings panel.
+- **Interaction**: Clicking a map pin selects the sidebar card (auto-scrolls), clicking a sidebar card flies the map to that pin's location. If an unmapped card is selected, any open map popups are closed.
 
-## News Sources
+## Filtering & Controls
+
+- **Source Filtering**: UI explicitly splits sources into **News** (RSS), **Reddit**, **X**, **Telegram**, and **Extra** (GNews fallback). Each toggle uses brand-specific primary colors.
+- **Time Filter**: Limits results to **1 Day** (default), 3 Days, 1 Week, 1 Month, or All. Handled efficiently via `/api/news` query params.
+- **Mapped Only**: A persistent toggle (default: **ON**) that hides articles without geographic coordinates to focus the map experience.
+- **Search**: Real-time debounced title/description keyword search.
+- **Refresh**: Manual cache override button to fetch fresh data across all concurrent pipelines.
 
 ### RSS Feeds (curated in `rss.ts`)
 
@@ -176,7 +200,7 @@ Two strategies, no API keys required:
 | Telegram | LiveUkraine, Geopolitics Live, ISW, DDGeopolitics, Bellingcat, Cyberknow, Faytuks                                                                 |
 | X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, @IntelCrab, @AuroraIntel, @ELINTNews, @DefMon3, @RALee85, @clashreport, @OAlexanderDK, @KofmanMichael |
 
-Items arrive with `sourceType: 'social'` and are tagged `['OSINT', '<platform>']`.
+Items arrive with `sourceType: 'social'`, `sourceType: 'rss'`, or `sourceType: 'gnews'` and are dynamically categorized in the UI by matching the source string or type.
 
 ## Environment Variables
 

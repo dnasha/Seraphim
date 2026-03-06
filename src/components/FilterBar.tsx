@@ -29,6 +29,10 @@ interface FilterBarProps {
     onSourcesChange: (sources: string[]) => void;
     categories: string[];
     onCategoriesChange: (categories: string[]) => void;
+    timeRange: string;
+    onTimeRangeChange: (time: string) => void;
+    mappedOnly: boolean;
+    onMappedOnlyChange: (mappedOnly: boolean) => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
     onRefresh: () => void;
@@ -47,9 +51,19 @@ const categoryOptions = [
 ];
 
 const sourceOptions = [
-    { value: 'gnews', label: 'GNews' },
-    { value: 'rss', label: 'RSS Feeds' },
-    { value: 'social', label: 'Social' },
+    { value: 'news', label: 'News', bg: '#0066cc', color: '#ffffff' },
+    { value: 'reddit', label: 'Reddit', bg: '#ff4500', color: '#ffffff' },
+    { value: 'x', label: 'X', bg: '#000000', color: '#ffffff' },
+    { value: 'telegram', label: 'Telegram', bg: '#006eff', color: '#ffffff' },
+    { value: 'extra', label: 'Extra', bg: '#e65100', color: '#ffffff' },
+];
+
+const timeOptions = [
+    { value: '1d', label: '1D' },
+    { value: '3d', label: '3D' },
+    { value: '1w', label: '1W' },
+    { value: '1m', label: '1M' },
+    { value: 'all', label: 'All' },
 ];
 
 export default function FilterBar({
@@ -57,6 +71,10 @@ export default function FilterBar({
     onSourcesChange,
     categories,
     onCategoriesChange,
+    timeRange,
+    onTimeRangeChange,
+    mappedOnly,
+    onMappedOnlyChange,
     searchQuery,
     onSearchChange,
     onRefresh,
@@ -111,15 +129,49 @@ export default function FilterBar({
                 <label className="filter-label">Sources</label>
                 <div className="source-row">
                     <div className="source-toggles">
-                        {sourceOptions.map((option) => (
+                        {sourceOptions.map((option) => {
+                            const isActive = sources.includes(option.value);
+                            return (
+                                <button
+                                    key={option.value}
+                                    className={`source-toggle ${isActive ? 'active' : ''}`}
+                                    onClick={() => toggleSource(option.value)}
+                                    style={{
+                                        backgroundColor: isActive ? option.bg : undefined,
+                                        borderColor: isActive ? option.bg : undefined,
+                                        color: isActive ? option.color : undefined,
+                                    }}
+                                >
+                                    {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            <div className="filter-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="filter-label">Time & Actions</label>
+                </div>
+                <div className="source-row" style={{ justifyContent: 'space-between' }}>
+                    <div className="source-toggles">
+                        {timeOptions.map((option) => (
                             <button
                                 key={option.value}
-                                className={`source-toggle ${sources.includes(option.value) ? 'active' : ''}`}
-                                onClick={() => toggleSource(option.value)}
+                                className={`time-toggle ${timeRange === option.value ? 'active' : ''}`}
+                                onClick={() => onTimeRangeChange(option.value)}
                             >
                                 {option.label}
                             </button>
                         ))}
+                        <button
+                            className={`time-toggle ${mappedOnly ? 'active' : ''}`}
+                            onClick={() => onMappedOnlyChange(!mappedOnly)}
+                            style={{ marginLeft: '4px', backgroundColor: mappedOnly ? '#22c55e' : undefined, borderColor: mappedOnly ? '#22c55e' : undefined }}
+                        >
+                            Mapped Only
+                        </button>
                     </div>
                     <button
                         className={`refresh-button ${isLoading ? 'loading' : ''}`}

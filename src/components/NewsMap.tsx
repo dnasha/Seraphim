@@ -361,7 +361,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 marker.setIcon(createCategoryIcon(L, item?.category, isActive));
             });
 
-            if (!selectedItemId) return;
+            if (!selectedItemId) {
+                mapRef.current!.closePopup();
+                return;
+            }
 
             const marker = markersRef.current.get(selectedItemId);
             if (marker) {
@@ -373,6 +376,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     marker.openPopup();
                 });
                 map.flyTo(latlng, targetZoom, { animate: true, duration: 0.8 });
+            } else {
+                mapRef.current!.closePopup();
             }
         };
 
