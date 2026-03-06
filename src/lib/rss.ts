@@ -49,7 +49,7 @@ export const RSS_SOURCES: RSSSource[] = [
 
     // national / domestic
     { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', region: 'north_america' },
-    { name: 'CBC Canada', url: 'https://www.cbc.ca/cmlink/rss-topstories', category: 'nation', region: 'north_america' },
+    { name: 'CBC Canada', url: 'https://rss.cbc.ca/lineup/topstories.xml', category: 'nation', region: 'north_america' },
 
     // business
     { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business', region: 'global' },
@@ -172,7 +172,11 @@ async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
     } catch (error) {
-        console.error(`rss fetch failed for ${source.name}:`, error);
+        if (error instanceof Error && error.message.includes('timeout')) {
+            console.warn(`[RSS] Feed timeout for ${source.name} (${FEED_TIMEOUT_MS}ms)`);
+        } else {
+            console.error(`[RSS] fetch failed for ${source.name}:`, error instanceof Error ? error.message : error);
+        }
         return [];
     }
 }

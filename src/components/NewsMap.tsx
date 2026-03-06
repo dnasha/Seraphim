@@ -123,12 +123,12 @@ function getSourceBadgeColor(sourceName: string): string {
     const s = sourceName.toLowerCase();
     if (s.includes('(x)') || s.includes('twitter')) return '#000000';
     if (s.includes('reddit')) return '#ff4500';
-    if (s.includes('telegram')) return '#0088cc';
-    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#7c3aed';
-    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#0891b2';
+    if (s.includes('telegram')) return '#006effff';
+    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#6d3100ff';
+    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#008fb3ff';
     if (s.includes('nasa') || s.includes('nature')) return '#059669';
     if (s.includes('who ')) return '#7c3aed';
-    return '#dc2626';
+    return '#818181ff';
 }
 
 export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode }: NewsMapProps) {

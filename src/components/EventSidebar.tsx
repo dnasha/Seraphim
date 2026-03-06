@@ -16,6 +16,20 @@ const CATEGORY_COLORS: Record<string, string> = {
     health: '#7c3aed',
 };
 
+/*
+function getSourceBadgeColor(sourceName: string): string {
+    const s = sourceName.toLowerCase();
+    if (s.includes('(x)') || s.includes('twitter')) return '#000000';
+    if (s.includes('reddit')) return '#ff4500';
+    if (s.includes('telegram')) return '#006effff';
+    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#6d3100ff';
+    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#008fb3ff';
+    if (s.includes('nasa') || s.includes('nature')) return '#059669';
+    if (s.includes('who ')) return '#7c3aed';
+    return '#818181ff';
+}
+*/
+
 // Source platform colors for badge styling
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
     const s = sourceName.toLowerCase();
@@ -24,17 +38,17 @@ function getSourceStyle(sourceName: string): { bg: string; color: string } {
     if (s.includes('reddit'))
         return { bg: '#ff4500', color: '#ffffff' };
     if (s.includes('telegram'))
-        return { bg: '#0088cc', color: '#ffffff' };
+        return { bg: '#006effff', color: '#ffffff' };
     if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
-        return { bg: '#7c3aed', color: '#ffffff' };
+        return { bg: '#6d3100ff', color: '#ffffff' };
     if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
-        return { bg: '#0891b2', color: '#ffffff' };
+        return { bg: '#008fb3ff', color: '#ffffff' };
     if (s.includes('nasa') || s.includes('nature'))
         return { bg: '#059669', color: '#ffffff' };
     if (s.includes('who '))
         return { bg: '#7c3aed', color: '#ffffff' };
     // mainstream media default
-    return { bg: '#dc2626', color: '#ffffff' };
+    return { bg: '#818181ff', color: '#ffffff' };
 }
 
 interface EventSidebarProps {
