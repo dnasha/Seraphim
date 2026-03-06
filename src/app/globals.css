@@ -979,18 +979,47 @@ a {
   }
 }
 
-/* override default markercluster styles for dark mode */
-[data-theme="dark"] .marker-cluster-small,
-[data-theme="dark"] .marker-cluster-medium,
-[data-theme="dark"] .marker-cluster-large {
-  background: rgba(30, 33, 44, 0.7) !important;
+/* Cluster Icons Styles */
+.cluster-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 2.5px solid #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-[data-theme="dark"] .marker-cluster-small div,
-[data-theme="dark"] .marker-cluster-medium div,
-[data-theme="dark"] .marker-cluster-large div {
-  background: rgba(96, 165, 250, 0.8) !important;
+.cluster-icon:hover {
+  transform: scale(1.1);
+  z-index: 1000;
+}
+
+/* Small - Amber */
+.cluster-icon.cluster-small {
+  background: rgb(255, 187, 0) !important;
+  color: #000 !important;
+}
+
+/* Medium - Orange */
+.cluster-icon.cluster-medium {
+  background: rgba(245, 17, 1, 0.95) !important;
   color: #fff !important;
+}
+
+/* Large - Red */
+.cluster-icon.cluster-large {
+  background: rgba(129, 5, 5, 0.95) !important;
+  color: #fff !important;
+}
+
+[data-theme="dark"] .cluster-icon {
+  border-color: #1e212c;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
 }
 
 /* leaflet popup overrides */
@@ -1018,7 +1047,7 @@ a {
 }
 
 .news-popup-container a.leaflet-popup-close-button {
-  color: #a70000;
+  color: #8b0000 !important; /* Dark Red */
   padding: 8px;
   width: 32px;
   height: 32px;
