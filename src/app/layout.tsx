@@ -1,5 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Playfair_Display, Cinzel, Cinzel_Decorative } from "next/font/google";
+import {
+  Inter,
+  Playfair_Display,
+  Cinzel,
+  Cinzel_Decorative,
+} from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
+
 import "./globals.css";
 
 const inter = Inter({
@@ -43,7 +51,14 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://seraphi.me"),
   title: "Seraphim",
   description: "Real-time OSINT aggregator and mapper - know the world!",
-  keywords: ["OSINT", "news", "aggregator", "intelligence", "world news", "map"],
+  keywords: [
+    "OSINT",
+    "news",
+    "aggregator",
+    "intelligence",
+    "world news",
+    "map",
+  ],
   icons: {
     icon: "/logo.webp",
     apple: "/logo.webp",
@@ -78,10 +93,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html 
-      lang="en" 
-      data-theme="dark" 
-      suppressHydrationWarning 
+    <html
+      lang="en"
+      data-theme="dark"
+      suppressHydrationWarning
       className={`${inter.variable} ${playfair.variable} ${cinzel.variable} ${cinzelDecorative.variable}`}
     >
       <body>{children}</body>
