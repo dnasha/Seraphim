@@ -262,11 +262,13 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // sync markers with news items + clustering toggle
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
+        let cancelled = false;
 
         const loadLeaflet = async () => {
             const L = (await import('leaflet')).default;
             await import('leaflet.markercluster');
-            const map = mapRef.current!;
+            if (cancelled || !mapRef.current) return;
+            const map = mapRef.current;
 
             // remove old layers
             if (clusterGroupRef.current) {
@@ -286,11 +288,16 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             if (clusteringEnabled) {
                 // create cluster group with custom styling
                 const clusterGroup = L.markerClusterGroup({
-                    maxClusterRadius: 45,
+                    maxClusterRadius: 35,
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
                     zoomToBoundsOnClick: true,
-                    disableClusteringAtZoom: 10,
+                    disableClusteringAtZoom: 7,
+                    // Prevent the plugin from removing markers outside the
+                    // expanded visible bounds.  With ~50-200 news pins the
+                    // perf impact is negligible, and it stops lonely pins
+                    // from being culled during fitBounds animations.
+                    removeOutsideVisibleBounds: false,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     iconCreateFunction: (cluster: any) => {
                         const count = cluster.getChildCount();
@@ -315,10 +322,19 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 directGroupRef.current = group;
             }
 
+            // Add the layer group to the map FIRST so the cluster plugin
+            // has a valid map reference with projection data.  Adding
+            // markers before the group is on the map queues them in an
+            // internal _needsClustering array that can silently drop
+            // markers during processing.
+            map.addLayer(targetLayer);
+
+            // Create all markers
+            const allMarkers: L.Marker[] = [];
             geoItems.forEach(item => {
                 const icon = createCategoryIcon(L, item.category, item.id === selectedItemId);
 
-                const marker = L.marker([item.latitude!, item.longitude!], { icon }).addTo(targetLayer);
+                const marker = L.marker([item.latitude!, item.longitude!], { icon });
 
                 const pinColor = getCategoryColor(item.category);
                 const categoryLabel = item.category
@@ -361,9 +377,17 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 });
 
                 markersRef.current.set(item.id, marker);
+                allMarkers.push(marker);
             });
 
-            map.addLayer(targetLayer);
+            // Bulk-add markers to the layer group. For cluster groups,
+            // addLayers (plural) is the recommended bulk method and
+            // bypasses the _needsClustering queue entirely.
+            if (clusteringEnabled && targetLayer.addLayers) {
+                targetLayer.addLayers(allMarkers);
+            } else {
+                allMarkers.forEach(m => targetLayer.addLayer(m));
+            }
 
             // auto-center around plotted markers
             if (geoItems.length > 0) {
@@ -375,6 +399,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         };
 
         loadLeaflet();
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items, mapReady, clusteringEnabled]);
 
@@ -409,17 +434,42 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 };
 
                 if (clusteringEnabled && clusterGroupRef.current) {
-                    // When using clustering, it can be tricky to focus precisely.
-                    // We'll zoom to show the layer, then manually adjust the center.
-                    clusterGroupRef.current.zoomToShowLayer(marker, () => {
+                    // Check if the marker is already unclustered (visible on its own).
+                    // If so, zoomToShowLayer's callback may never fire — skip it entirely.
+                    const visibleParent = clusterGroupRef.current.getVisibleParent(marker);
+
+                    if (visibleParent === marker) {
+                        // Marker is already unclustered — fly directly (same as non-clustered path)
                         const latlng = marker.getLatLng();
-                        const targetZoom = Math.max(map.getZoom(), 7);
+                        const currentZoom = map.getZoom();
+                        const targetZoom = Math.max(currentZoom, 7);
                         const p = map.project(latlng, targetZoom).subtract([0, 140]);
                         const target = map.unproject(p, targetZoom);
-                        
-                        map.once('moveend', showPopup);
-                        map.setView(target, targetZoom, { animate: true });
-                    });
+
+                        if (currentZoom === targetZoom && map.getCenter().distanceTo(target) < 10) {
+                            showPopup();
+                        } else {
+                            map.once('moveend', showPopup);
+                            map.flyTo(target, targetZoom, { animate: true, duration: 0.8 });
+                        }
+                    } else {
+                        // Marker is inside a cluster — uncluster first, then fly to offset
+                        clusterGroupRef.current.zoomToShowLayer(marker, () => {
+                            // Small delay to let zoomToShowLayer's animation fully settle
+                            // before starting our own setView, preventing double-animation
+                            // moveend conflicts
+                            setTimeout(() => {
+                                if (!mapRef.current) return;
+                                const latlng = marker.getLatLng();
+                                const targetZoom = Math.max(mapRef.current.getZoom(), 7);
+                                const p = mapRef.current.project(latlng, targetZoom).subtract([0, 140]);
+                                const target = mapRef.current.unproject(p, targetZoom);
+
+                                mapRef.current.once('moveend', showPopup);
+                                mapRef.current.setView(target, targetZoom, { animate: true });
+                            }, 150);
+                        });
+                    }
                 } else {
                     const latlng = marker.getLatLng();
                     const currentZoom = map.getZoom();

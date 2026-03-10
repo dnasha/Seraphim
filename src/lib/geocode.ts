@@ -12,9 +12,6 @@ const geoCities: Record<string, GeoCity> = (geoData as Record<string, unknown>).
 const geoAdmin1: Record<string, GeoRegion> = (geoData as Record<string, unknown>).admin1 as Record<string, GeoRegion>;
 const geoCountries: Record<string, GeoRegion> = ((geoData as Record<string, unknown>).countries || {}) as Record<string, GeoRegion>;
 
-// cache geocode promises to dedupe concurrent requests for the same place
-const geoCache = new Map<string, Promise<{ lat: number; lon: number; displayName: string } | null>>();
-
 // ── Build location dictionary ───────────────────────────────────────────────
 // Priority: hardcoded overrides > GeoNames cities (population-weighted) > admin1 regions
 
@@ -62,6 +59,20 @@ const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'kyiv': { lat: 50.45, lon: 30.52 }, 'kiev': { lat: 50.45, lon: 30.52 },
     'washington dc': { lat: 38.91, lon: -77.04 },
     'washington': { lat: 38.91, lon: -77.04 },
+    'europe': { lat: 54.5, lon: 15.2 },
+    'africa': { lat: 8.7, lon: 20.9 },
+    'asia': { lat: 34.0, lon: 100.0 },
+    'mediterranean': { lat: 35.0, lon: 18.0 },
+    'mediterranean sea': { lat: 35.0, lon: 18.0 },
+    'caspian sea': { lat: 41.0, lon: 50.0 },
+    'darfur': { lat: 13.5, lon: 24.0 },
+    'north darfur': { lat: 15.5, lon: 25.0 },
+    'kurdistan': { lat: 37.0, lon: 43.0 },
+    'falkland islands': { lat: -51.7, lon: -59.0 },
+    'falklands': { lat: -51.7, lon: -59.0 },
+    'siberia': { lat: 60.0, lon: 105.0 },
+    'isfahan': { lat: 32.65, lon: 51.66 },
+    'esfahan': { lat: 32.65, lon: 51.66 },
     'middle east': { lat: 29.29, lon: 41.05 },
     'west asia': { lat: 29.29, lon: 41.05 },
     // Capital cities with ambiguous short names (override small-city collisions)
@@ -86,7 +97,7 @@ for (const [name, coords] of Object.entries(LANDMARKS)) {
 // ── Demonym map ─────────────────────────────────────────────────────────────
 const DEMONYM_MAP: Record<string, string> = {
     'american': 'united states', 'chinese': 'china', 'russian': 'russia',
-    'indian': 'india', 'japanese': 'japan', 'german': 'germany',
+    'indian': 'india', 'japanese': 'japan', 'german': 'germany', 'deutschland': 'germany',
     'french': 'france', 'british': 'united kingdom', 'canadian': 'canada',
     'brazilian': 'brazil', 'australian': 'australia', 'mexican': 'mexico',
     'italian': 'italy', 'spanish': 'spain', 'korean': 'south korea',
@@ -115,7 +126,7 @@ const DEMONYM_MAP: Record<string, string> = {
 // Common abbreviated country references found in news text ("U.S. casualties" → United States)
 const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'u.s.': 'united states', 'u.s.a.': 'united states', 'u.s': 'united states',
-    'us': 'united states',
+    'us': 'united states', 'america': 'united states',
     'u.k.': 'united kingdom', 'u.k': 'united kingdom',
     'u.a.e.': 'united arab emirates', 'uae': 'united arab emirates',
     'u.n.': '__skip__',  // Not a country
@@ -126,7 +137,7 @@ const COUNTRY_ABBREV_MAP: Record<string, string> = {
 // ── Patterns ────────────────────────────────────────────────────────────────
 
 // regex for standard journalistic datelines (e.g. "WASHINGTON (Reuters) - ")
-const DATELINE_PATTERN = /^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
+const DATELINE_PATTERN = /^(?:\[[^\]]+\]\s*)?([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
 
 // Words that indicate a section/topic label rather than a geographic dateline.
 // When a dateline candidate contains any of these, it's treated as a section header
@@ -179,6 +190,8 @@ const LOCATION_PATTERNS = [
     // Past-tense variants
     /\b[Aa]ttacked\s+in\s+(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Tt]argeted\s+(?:in\s+)?(?:the\s+)?([A-Z][a-zA-Z]+(?:\s+(?:of\s+)?[A-Z][a-zA-Z]+){0,3})/g,
+    /\bagainst\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
+    /\b(?:mayor|governor|leader)\s+of\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Ss]helled\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
     /\b[Bb]ombed\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/g,
 ];
@@ -229,11 +242,15 @@ const STOP_WORDS = new Set([
     'coast', 'mountain', 'river', 'lake', 'ocean', 'sea', 'bay', 'gulf',
     // continent names — too broad for map pins, and some collide with small cities
     // (e.g. "Asia" → small town in Indonesia, "Europe" → unincorporated community in US)
-    'asia', 'europe', 'africa', 'antarctica', 'oceania', 'americas',
+    'antarctica', 'oceania',
     // structured metadata labels (ReliefWeb: "Country: Yemen Source: WFP")
     'country', 'source', 'category', 'theme', 'format', 'topic',
     // timezone abbreviations that get caught by comma-pair ("ET, March")
     'et', 'pt', 'ct', 'mt', 'est', 'pst', 'cst', 'mst', 'gmt', 'utc',
+    // ambiguous partial place fragments (NLP splits "Hong Kong" → "Hong")
+    'hong', 'kong', 'abu', 'san', 'los', 'las', 'das', 'del', 'der',
+    // "America" as standalone is too ambiguous — already handled by COUNTRY_ABBREV_MAP → "united states"
+    'america',
 ]);
 
 // ── False positives ─────────────────────────────────────────────────────────
@@ -256,6 +273,9 @@ const FALSE_POSITIVES = new Set([
     'research roundup', 'audio long read', 'author correction',
     'weekend of war', 'morning edition', 'evening update',
     'daily briefing', 'weekly roundup', 'year in review',
+    // Conflict / event names that NLP detects as places
+    'gulf war', 'cold war', 'world war', 'civil war', 'arab spring',
+    'iron dome', 'iron curtain',
 ]);
 
 // ── News source default locations ───────────────────────────────────────────
@@ -272,21 +292,34 @@ const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
-// Clean a candidate: strip possessives, trailing punctuation, etc.
+// Normalize Unicode diacritics/accents to ASCII equivalents
+// e.g. "Irán" → "Iran", "São Paulo" → "Sao Paulo", "Zürich" → "Zurich"
+function normalizeAccents(s: string): string {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Clean a candidate: strip possessives, trailing punctuation, dashes, etc.
 function cleanCandidate(raw: string): string {
     let s = raw.trim();
     s = s.replace(/['\u2019]s\b/g, '');      // "Canada's" → "Canada"
     s = s.replace(/[.,;:!?"')]+$/, '');       // trailing punctuation
-    s = s.replace(/^["'(]+/, '');             // leading punctuation
+    s = s.replace(/^["'(\u2014\u2013\-]+/, ''); // leading punctuation + em-dash/en-dash/hyphen
+    s = s.replace(/[\u2014\u2013\-]+$/, '');   // trailing em-dash/en-dash/hyphen
     return s.trim();
 }
 
 // Safe disambiguate: check exact match ONLY. No destructive word-chopping.
 // If the full phrase is in the dictionary, return it. Otherwise return as-is.
+// Also tries accent-normalized form.
 function disambiguate(candidate: string): string {
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
-    // Do NOT chop words — let the API handle unknown multi-word names
+    // Try accent-normalized form (e.g. "Irán" → "iran")
+    const normalized = normalizeAccents(key);
+    if (normalized !== key && KNOWN_LOCATIONS[normalized]) {
+        // Return the display name that matches the dictionary key
+        return normalizeAccents(candidate);
+    }
     return candidate;
 }
 
@@ -329,10 +362,10 @@ function locationPriority(key: string): number {
     if (!entry) return 99;
     switch (entry.type) {
         case 'landmark': return 0;
-        case 'city': return entry.pop > 1000000 ? 1 : 1.5;  // Only mega-cities beat countries
-        case 'admin1': return 2;
-        case 'country': return 1.2;  // Countries beat small/medium cities
-        default: return 4;
+        case 'city': return entry.pop > 1000000 ? 2 : 6;
+        case 'country': return 4;
+        case 'admin1': return 8;
+        default: return 99;
     }
 }
 
@@ -340,10 +373,11 @@ function locationPriority(key: string): number {
 
 interface Candidate {
     name: string;
-    source: 'dateline' | 'comma_pair' | 'regex' | 'nlp' | 'demonym';
+    source: 'dateline' | 'comma_pair' | 'regex' | 'direct_scan' | 'nlp' | 'demonym' | 'abbrev';
+    placement: 'title' | 'description';
 }
 
-export function extractLocation(title: string, description: string): string | null {
+export function extractLocation(title: string, description: string): { match: string | null; candidates: string[] } {
     const candidates: Candidate[] = [];
 
     // Helper: check if a dateline candidate is a genuine geographic dateline
@@ -356,45 +390,65 @@ export function extractLocation(title: string, description: string): string | nu
     // 1a. Structured metadata pattern (ReliefWeb, humanitarian feeds)
     // Matches: "Country: Yemen Source: WFP" → extracts "Yemen" as dateline-priority
     const METADATA_COUNTRY = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/;
-    const metaMatch = METADATA_COUNTRY.exec(description) || METADATA_COUNTRY.exec(title);
-    if (metaMatch) {
-        candidates.push({ name: metaMatch[1].trim(), source: 'dateline' });
-    }
+    let metaMatch = METADATA_COUNTRY.exec(title);
+    if (metaMatch) candidates.push({ name: metaMatch[1].trim(), source: 'dateline', placement: 'title' });
+    metaMatch = METADATA_COUNTRY.exec(description);
+    if (metaMatch) candidates.push({ name: metaMatch[1].trim(), source: 'dateline', placement: 'description' });
 
     // 1b. Dateline from title or description (highest confidence)
     // Catches patterns like "WASHINGTON (Reuters) - ..." or "Albania: Femicide cases..."
     // Rejects section labels like "Iran Live Updates:" or "Breaking News:"
     const titleDateline = DATELINE_PATTERN.exec(title);
     if (titleDateline && isGenuineDateline(titleDateline[1])) {
-        candidates.push({ name: titleDateline[1].trim(), source: 'dateline' });
+        candidates.push({ name: titleDateline[1].trim(), source: 'dateline', placement: 'title' });
     }
     const descDateline = DATELINE_PATTERN.exec(description);
     if (descDateline && isGenuineDateline(descDateline[1])) {
-        candidates.push({ name: descDateline[1].trim(), source: 'dateline' });
+        candidates.push({ name: descDateline[1].trim(), source: 'dateline', placement: 'description' });
     }
 
     // 2. Comma-pair extraction ("Austin, Texas", "Springfield, Ill.")
     COMMA_PAIR_PATTERN.lastIndex = 0;
     let commaMatch;
     while ((commaMatch = COMMA_PAIR_PATTERN.exec(title)) !== null) {
-        // Try the combined form first (e.g., "Springfield, Illinois")
-        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair' });
-        // Also add the city part alone
-        candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair' });
+        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair', placement: 'title' });
+        candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'title' });
     }
     COMMA_PAIR_PATTERN.lastIndex = 0;
     while ((commaMatch = COMMA_PAIR_PATTERN.exec(description)) !== null) {
-        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair' });
-        candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair' });
+        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair', placement: 'description' });
+        candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'description' });
     }
 
-    // 3. Regex passes on title
+    // 3. Regex passes on title AND description
     for (const pattern of LOCATION_PATTERNS) {
         pattern.lastIndex = 0;
         let match;
         while ((match = pattern.exec(title)) !== null) {
-            candidates.push({ name: match[1].trim(), source: 'regex' });
+            candidates.push({ name: match[1].trim(), source: 'regex', placement: 'title' });
         }
+        pattern.lastIndex = 0;
+        while ((match = pattern.exec(description)) !== null) {
+            candidates.push({ name: match[1].trim(), source: 'regex', placement: 'description' });
+        }
+    }
+
+    // 4. Early fallback promotions
+    const titleAbbrev = extractCountryAbbrev(title);
+    if (titleAbbrev) candidates.push({ name: titleAbbrev, source: 'abbrev', placement: 'title' });
+    const descAbbrev = extractCountryAbbrev(description);
+    if (descAbbrev) candidates.push({ name: descAbbrev, source: 'abbrev', placement: 'description' });
+
+    const titleDemonym = extractDemonym(title);
+    if (titleDemonym) candidates.push({ name: titleDemonym, source: 'demonym', placement: 'title' });
+    const descDemonym = extractDemonym(description);
+    if (descDemonym) candidates.push({ name: descDemonym, source: 'demonym', placement: 'description' });
+
+    // 5. Direct landmark scan
+    for (const landmark of Object.keys(LANDMARKS)) {
+        const regex = new RegExp('\\b' + landmark + '\\b', 'i');
+        if (regex.test(title)) candidates.push({ name: landmark, source: 'direct_scan', placement: 'title' });
+        if (regex.test(description)) candidates.push({ name: landmark, source: 'direct_scan', placement: 'description' });
     }
 
     // ── Score and sort candidates ────────────────────────────────────────────
@@ -402,21 +456,20 @@ export function extractLocation(title: string, description: string): string | nu
         name: string;
         key: string;
         source: string;
-        typePriority: number;
-        sourcePriority: number;
+        score: number;
     }
 
     function computeScored(candidateList: Candidate[]): ScoredCandidate[] {
         const scored: ScoredCandidate[] = [];
 
-        for (const { name: raw, source } of candidateList) {
+        for (const { name: raw, source, placement } of candidateList) {
             const candidate = cleanCandidate(raw);
             if (!candidate || candidate.length <= 2) continue;
             if (STOP_WORDS.has(candidate.toLowerCase())) continue;
             if (FALSE_POSITIVES.has(candidate.toLowerCase())) continue;
 
             const loc = disambiguate(candidate);
-            let key = loc.toLowerCase();
+            let key = normalizeAccents(loc.toLowerCase());
 
             // Try progressively shorter sub-phrases if the full candidate isn't found
             // e.g. "Iowa county" → "Iowa", "New York City Council" → "New York City" → "New York"
@@ -431,7 +484,11 @@ export function extractLocation(title: string, description: string): string | nu
                         break;
                     }
                 }
-                if (!found) continue;
+                // Candidates not found in KNOWN_LOCATIONS are dropped UNLESS they come
+                // from high-confidence sources that are guaranteed to resolve
+                // (abbrev & demonym always produce dictionary keys like "united states").
+                // NLP and direct_scan candidates that aren't in the dictionary are noise.
+                if (!found && source !== 'abbrev' && source !== 'demonym') continue;
             }
 
             let displayName = loc;
@@ -439,24 +496,28 @@ export function extractLocation(title: string, description: string): string | nu
                 displayName = key.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
             }
 
-            const sourcePriority =
-                source === 'dateline' ? 0 :
-                source === 'comma_pair' ? 1 :
-                source === 'regex' ? 2 :
-                source === 'nlp' ? 3 : 4;
+            const wPlacement = placement === 'title' ? 0 : 4;
+            let wSource = 0;
+            switch(source) {
+                case 'dateline': wSource = 0; break;
+                case 'comma_pair': wSource = 1; break;
+                case 'regex': wSource = 2; break;
+                case 'direct_scan': wSource = 3; break;
+                case 'demonym': case 'abbrev': wSource = 4; break;
+                case 'nlp': wSource = 5; break;
+            }
+            const wType = locationPriority(key);
 
             scored.push({
                 name: displayName,
                 key,
                 source,
-                typePriority: locationPriority(key),
-                sourcePriority,
+                score: wPlacement + wSource + wType
             });
         }
 
         scored.sort((a, b) => {
-            if (a.sourcePriority !== b.sourcePriority) return a.sourcePriority - b.sourcePriority;
-            if (a.typePriority !== b.typePriority) return a.typePriority - b.typePriority;
+            if (a.score !== b.score) return a.score - b.score;
             const popA = KNOWN_LOCATIONS[a.key]?.pop || 0;
             const popB = KNOWN_LOCATIONS[b.key]?.pop || 0;
             return popB - popA;
@@ -474,7 +535,7 @@ export function extractLocation(title: string, description: string): string | nu
         const titlePlaces = nlp(title).places().out('array');
         if (titlePlaces && titlePlaces.length > 0) {
             for (const place of titlePlaces) {
-                candidates.push({ name: place, source: 'nlp' });
+                candidates.push({ name: place, source: 'nlp', placement: 'title' });
             }
             bestCandidates = computeScored(candidates);
         }
@@ -484,7 +545,7 @@ export function extractLocation(title: string, description: string): string | nu
             const descPlaces = nlp(description).places().out('array');
             if (descPlaces && descPlaces.length > 0) {
                 for (const place of descPlaces) {
-                    candidates.push({ name: place, source: 'nlp' });
+                    candidates.push({ name: place, source: 'nlp', placement: 'description' });
                 }
                 bestCandidates = computeScored(candidates);
             }
@@ -492,56 +553,39 @@ export function extractLocation(title: string, description: string): string | nu
     }
 
     if (bestCandidates.length > 0) {
-        return bestCandidates[0].name;
-    }
-
-    // 7a. Country abbreviation fallback — "U.S. casualties" → United States
-    const abbrev = extractCountryAbbrev(title) || extractCountryAbbrev(description);
-    if (abbrev && KNOWN_LOCATIONS[abbrev]) {
-        const display = abbrev.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-        return display;
-    }
-
-    // 7b. Demonym fallback — ONLY if zero physical locations were found
-    // Check both title and description for demonyms (e.g. "South Korean police..." in desc)
-    const demonym = extractDemonym(title) || extractDemonym(description);
-    if (demonym && KNOWN_LOCATIONS[demonym]) {
-        const display = demonym.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
-        return display;
+        return { match: bestCandidates[0].name, candidates: bestCandidates.map(c => c.name) };
     }
 
     // 7c. Direct Country Name fallback
     // NLP sometimes misses hyphenated countries (e.g., "Iran-Israel war").
     // A quick scan for any known country name serves as a robust last resort.
+    // Also normalizes accents so "Irán" matches "iran" in the dictionary.
+    const normalizedTitle = normalizeAccents(title);
+    const normalizedDesc = normalizeAccents(description);
     for (const country of Object.keys(geoCountries)) {
         if (country.length > 3) {
-            // Re-use boundaries to match the whole country name
             const pattern = new RegExp(`\\b${country}\\b`, 'i');
-            if (pattern.test(title) || pattern.test(description)) {
-                return country.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+            if (pattern.test(normalizedTitle) || pattern.test(normalizedDesc)) {
+                const display = country.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+                return { match: display, candidates: [display] };
             }
         }
     }
 
-    // 8. Disabled last-resort API fallback
-    // Sending unverified regex/comma-pair strings (like "Netflix, Hulu" or "MS exec") 
-    // to the external Komoot API causes heavy rate-limiting and 10+ second pipeline delays.
+    // 8. No external API fallback — dictionary-only geocoding.
     // With 78,000+ KNOWN_LOCATIONS locally, if a place isn't in the dict, it's 
     // almost certainly false-positive noise from the regex, not a real newsworthy city.
-    return null;
+    return { match: null, candidates: [] };
 }
 
 // ── Geocoding ───────────────────────────────────────────────────────────────
 
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Try the local dictionary first, fall back to Photon API
+// Dictionary-only geocoding. No external API calls.
+// The extraction pipeline guarantees all returned matches exist in KNOWN_LOCATIONS.
 export async function geocodeLocation(
     placeName: string
 ): Promise<{ lat: number; lon: number; displayName: string } | null> {
-    const key = placeName.toLowerCase().trim();
+    const key = normalizeAccents(placeName.toLowerCase().trim());
 
     // Instant dictionary lookup
     const known = KNOWN_LOCATIONS[key];
@@ -549,56 +593,8 @@ export async function geocodeLocation(
         return { lat: known.lat, lon: known.lon, displayName: placeName };
     }
 
-    if (geoCache.has(key)) {
-        return geoCache.get(key)!;
-    }
-
-    const geocodePromise = (async () => {
-        try {
-            // Use Photon (Komoot) — OSM-based, importance-weighted, typo-tolerant
-            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(placeName)}&limit=1&lang=en`;
-
-            const res = await fetch(url, {
-                headers: {
-                    'User-Agent': 'Seraphim/1.0',
-                    'Accept-Language': 'en',
-                },
-                signal: AbortSignal.timeout(3000),
-            });
-
-            if (!res.ok) return null;
-
-            const data = await res.json();
-            if (!data || !data.features || data.features.length === 0) return null;
-
-            const feature = data.features[0];
-            const props = feature.properties || {};
-
-            // Only accept actual populated places or admin boundaries.
-            // Reject buildings, streets, highways, tourism spots, etc.
-            const allowedOsmKeys = new Set(['place', 'boundary']);
-            if (!allowedOsmKeys.has(props.osm_key)) {
-                return null;
-            }
-
-            const [lon, lat] = feature.geometry.coordinates;
-            const displayName = [props.name, props.state, props.country]
-                .filter(Boolean)
-                .join(', ');
-
-            return {
-                lat: lat as number,
-                lon: lon as number,
-                displayName: displayName || placeName,
-            };
-        } catch (err) {
-            console.error(`geocoding failed for "${placeName}":`, err);
-            return null;
-        }
-    })();
-
-    geoCache.set(key, geocodePromise);
-    return geocodePromise;
+    // Not in dictionary — return null (no external API fallback)
+    return null;
 }
 
 // ── Enrich news items ───────────────────────────────────────────────────────
@@ -613,30 +609,23 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
             continue;
         }
 
-        let placeName = extractLocation(item.title, item.description);
+        const ext = extractLocation(item.title, item.description);
+        let placeName = ext.match;
+        let candidates = ext.candidates;
 
         // If no location was extracted, check if the news source has a default location
         if (!placeName && item.source) {
             const srcKey = item.source.toLowerCase().trim();
             placeName = NEWS_SOURCE_DEFAULTS[srcKey] || null;
+            if (placeName) candidates = [placeName]; // source default
         }
 
         if (!placeName) {
-            enriched.push(item);
+            enriched.push({ ...item, foundLocations: candidates });
             continue;
         }
 
-        const key = placeName.toLowerCase().trim();
-        const isDictionaryHit = KNOWN_LOCATIONS[key] !== undefined;
-        const isCached = geoCache.has(key);
-
         const geo = await geocodeLocation(placeName);
-
-        // Only sleep when we actually hit an external API
-        if (!isDictionaryHit && !isCached) {
-            console.log(`Hitting external API for: "${placeName}"`);
-            await sleep(200);
-        }
 
         if (geo) {
             // Apply jitter if another item already occupies the same coords
@@ -658,9 +647,10 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
                 latitude: lat,
                 longitude: lon,
                 locationName: placeName,
+                foundLocations: candidates,
             });
         } else {
-            enriched.push(item);
+            enriched.push({ ...item, foundLocations: candidates });
         }
     }
 

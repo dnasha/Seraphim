@@ -11,6 +11,7 @@ export interface NewsItem {
   latitude?: number;
   longitude?: number;
   locationName?: string;
+  foundLocations?: string[];
   tags?: string[];
 }
 

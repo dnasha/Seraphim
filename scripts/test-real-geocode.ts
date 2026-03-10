@@ -1,60 +1,54 @@
 import { fetchAllRSSFeeds } from '../src/lib/rss';
 import { fetchSocialFeeds } from '../src/lib/social-feeds';
-import { extractLocation, geocodeLocation } from '../src/lib/geocode';
+import { enrichItemsWithLocation } from '../src/lib/geocode';
+import * as fs from 'fs';
+import * as path from 'path';
 
 async function run() {
+    console.log("Fetching items from RSS and Social sources...");
     const rssItems = await fetchAllRSSFeeds();
     const socialItems = await fetchSocialFeeds();
     const items = [...rssItems, ...socialItems];
 
-    console.log(`Testing ${items.length} items.\n`);
+    console.log(`\nTesting ${items.length} items. Running through enrichItemsWithLocation...`);
 
-    const extracted = [];
-    const nulls = [];
+    // Use the real geocoding pipeline built into the app
+    // This handles extraction, geocoding, and source defaults!
+    const enrichedItems = await enrichItemsWithLocation(items);
 
-    // Tally by matched rule:
-    const ruleTally = {
-        dateline: 0,
-        comma_pair: 0,
-        regex: 0,
-        nlp: 0,
-        country_abbrev: 0,
-        demonym: 0,
-        source_default: 0
-    };
+    const results = enrichedItems.map(item => {
+        let title = item.title;
+        let desc = item.description || '';
+        
+        // found_locations: based on the debug candidates attached by enrichItemsWithLocation
+        const found_locations = item.foundLocations || [];
 
-    // We can't see the internal score rule used easily since extractLocation just returns a string.
-    // However, if we know they fall back in order, we can check. Wait, we modified extractLocation earlier, but maybe not in this session.
-    // Let's just output them.
+        // final_mapped_location: The coordinates and the display name
+        const final_mapped_location = (item.latitude !== undefined && item.longitude !== undefined) 
+            ? {
+                lat: item.latitude,
+                lon: item.longitude,
+                displayName: item.locationName
+            } 
+            : null;
 
-    for (const item of items) {
-        // Strip out control chars that might mangle terminal output
-        let title = item.title.replace(/[^\x20-\x7E]/g, ' ').trim();
-        let desc = (item.description || '').replace(/[^\x20-\x7E]/g, ' ').trim();
-
-        const rawPlaceName = extractLocation(title, desc);
-        if (!rawPlaceName) {
-            nulls.push({ title });
-            continue;
-        }
-
-        const geo = await geocodeLocation(rawPlaceName);
-        extracted.push({
+        return {
             title,
-            rawPlaceName,
-            resolved: geo ? geo.displayName : 'FAILED'
-        });
-    }
+            desc,
+            found_locations,
+            final_mapped_location
+        };
+    });
 
-    console.log(`\n\n=== SUCCESSFULLY EXTRACTED (${extracted.length}) ===\n`);
-    for (const res of extracted.slice(0, 30)) { // look at 30
-        console.log(`=> Loc: [${res.rawPlaceName.padEnd(20)}] ${res.title}`);
-    }
-
-    console.log(`\n\n=== FAILED TO EXTRACT (${nulls.length}) ===\n`);
-    for (const res of nulls.slice(0, 30)) { // look at 30
-        console.log(`   ${res.title}`);
-    }
+    const outputPath = path.join(process.cwd(), 'scripts/results/', 'geocode-results.json');
+    fs.writeFileSync(outputPath, JSON.stringify(results, null, 2), 'utf-8');
+    
+    console.log(`\n=== DONE ===`);
+    console.log(`Wrote ${results.length} results to ${outputPath}`);
+    
+    const mapped = results.filter(r => r.final_mapped_location);
+    console.log(`Mapped: ${mapped.length}`);
+    console.log(`Unmapped: ${results.length - mapped.length}`);
 }
 
 run();
