@@ -163,7 +163,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 3000; // Reduced to 3 seconds to prevent bottlenecks
+const FEED_TIMEOUT_MS = 2500; // Reduced to 2.5 seconds to prevent bottlenecks
 
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {

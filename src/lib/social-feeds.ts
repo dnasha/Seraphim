@@ -74,7 +74,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
                 'Accept': 'text/html',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(5000), // Reduced from 10s
         });
 
         if (!res.ok) {
@@ -205,23 +205,46 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
 }
 
 // Strategy 2: Nitter RSS (Query all known healthy instances at once and take the first success)
+// Using a cached "best instance" once found to speed up subsequent requests in a batch.
+let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
-        const promises = NITTER_INSTANCES.map(instance =>
-            fetchInstanceTimeout(`${instance}/${username}/rss`)
-        );
+        if (bestNitterInstance) {
+            try {
+                return await fetchInstanceTimeout(`${bestNitterInstance}/${username}/rss`);
+            } catch {
+                bestNitterInstance = null; // reset on failure
+            }
+        }
+        
+        const promises = NITTER_INSTANCES.map(async (instance) => {
+            const res = await fetchInstanceTimeout(`${instance}/${username}/rss`);
+            bestNitterInstance = instance; // keep the winner
+            return res;
+        });
         return await Promise.any(promises);
     } catch {
         return null; // All promises rejected
     }
 }
 
-// Strategy 2: RSSHub RSS (Concurrent query across all instances)
+// Strategy 3: RSSHub RSS (Concurrent query across all instances)
+let bestRSSHubInstance: string | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
-        const promises = RSSHUB_INSTANCES.map(instance =>
-            fetchInstanceTimeout(`${instance}/twitter/user/${username}`)
-        );
+        if (bestRSSHubInstance) {
+            try {
+                return await fetchInstanceTimeout(`${bestRSSHubInstance}/twitter/user/${username}`);
+            } catch {
+                bestRSSHubInstance = null;
+            }
+        }
+
+        const promises = RSSHUB_INSTANCES.map(async (instance) => {
+            const res = await fetchInstanceTimeout(`${instance}/twitter/user/${username}`);
+            bestRSSHubInstance = instance;
+            return res;
+        });
         return await Promise.any(promises);
     } catch {
         return null; 

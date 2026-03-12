@@ -51,11 +51,13 @@ export default function Home() {
     setError(null);
 
     try {
+      // By default, fetch all sources to enable instant client-side toggling.
+      // We still pass the requested sources to the API for any server-side logic,
+      // but the API now has a more efficient granular cache.
       const params = new URLSearchParams({
-        sources: sources.join(','),
-        categories: categories.join(','),
-        timeRange,
-        ...(debouncedSearch && { search: debouncedSearch }),
+        sources: 'news,reddit,x,telegram,extra',
+        categories: 'general',
+        timeRange: 'all',
         ...(forceRefresh && { refresh: 'true' }),
       });
 
@@ -73,7 +75,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [sources, categories, timeRange, debouncedSearch]);
+  }, []); // No longer depends on sources for simple toggling
 
   useEffect(() => {
     fetchNews();
@@ -98,8 +100,59 @@ export default function Home() {
   }, []);
 
   const displayedNews = useMemo(() => {
-    return mappedOnly ? news.filter(n => n.latitude !== undefined) : news;
-  }, [news, mappedOnly]);
+    let filtered = news;
+
+    // Source filter
+    filtered = filtered.filter(item => {
+      if (sources.includes('news') && item.sourceType === 'rss') return true;
+      if (sources.includes('extra') && item.sourceType === 'gnews') return true;
+      if (item.sourceType === 'social') {
+        const s = item.source.toLowerCase();
+        if (sources.includes('reddit') && s.includes('reddit')) return true;
+        if (sources.includes('x') && (s.includes('x') || s.includes('twitter'))) return true;
+        if (sources.includes('telegram') && s.includes('telegram')) return true;
+      }
+      return false;
+    });
+
+    // Search filter
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
+      filtered = filtered.filter(n => 
+        n.title.toLowerCase().includes(query) || 
+        (n.description && n.description.toLowerCase().includes(query))
+      );
+    }
+
+    // Category filter
+    if (!categories.includes('general')) {
+      filtered = filtered.filter(n => n.category && categories.includes(n.category));
+    }
+
+    // Time filter
+    if (timeRange !== 'all') {
+      const now = Date.now();
+      let msCutoff = 0;
+      switch(timeRange) {
+        case '1d': msCutoff = 24 * 60 * 60 * 1000; break;
+        case '3d': msCutoff = 3 * 24 * 60 * 60 * 1000; break;
+        case '1w': msCutoff = 7 * 24 * 60 * 60 * 1000; break;
+        case '1m': msCutoff = 30 * 24 * 60 * 60 * 1000; break;
+      }
+      if (msCutoff > 0) {
+        filtered = filtered.filter(item => 
+          (now - new Date(item.publishedAt).getTime()) <= msCutoff
+        );
+      }
+    }
+
+    // Mapped only filter
+    if (mappedOnly) {
+      filtered = filtered.filter(n => n.latitude !== undefined);
+    }
+
+    return filtered;
+  }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly]);
 
   const filterBarSlot = (
     <>

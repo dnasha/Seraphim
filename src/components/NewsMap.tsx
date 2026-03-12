@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { NewsItem } from '@/lib/types';
+import type { Map as LeafletMap, TileLayer, Marker, MarkerClusterGroup, MarkerCluster, LayerGroup } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -133,13 +134,12 @@ function getSourceBadgeColor(sourceName: string): string {
 }
 
 export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode }: NewsMapProps) {
-    const mapRef = useRef<L.Map | null>(null);
-    const tileLayerRef = useRef<L.TileLayer | null>(null);
-    const markersRef = useRef<Map<string, L.Marker>>(new Map());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const clusterGroupRef = useRef<any>(null);
+    const mapRef = useRef<LeafletMap | null>(null);
+    const tileLayerRef = useRef<TileLayer | null>(null);
+    const markersRef = useRef<Map<string, Marker>>(new Map());
+    const clusterGroupRef = useRef<MarkerClusterGroup | null>(null);
     // Direct layer group for non-clustered mode
-    const directGroupRef = useRef<L.LayerGroup | null>(null);
+    const directGroupRef = useRef<LayerGroup | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const initializedRef = useRef(false);
     const [mapReady, setMapReady] = useState(false);
@@ -270,78 +270,82 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             if (cancelled || !mapRef.current) return;
             const map = mapRef.current;
 
-            // remove old layers
-            if (clusterGroupRef.current) {
-                map.removeLayer(clusterGroupRef.current);
+            // Handle clustering toggle — if it changed, we DO need a full teardown
+            const currentIsClustered = !!clusterGroupRef.current;
+            if (currentIsClustered !== clusteringEnabled) {
+                if (clusterGroupRef.current) map.removeLayer(clusterGroupRef.current);
+                if (directGroupRef.current) map.removeLayer(directGroupRef.current);
                 clusterGroupRef.current = null;
-            }
-            if (directGroupRef.current) {
-                map.removeLayer(directGroupRef.current);
                 directGroupRef.current = null;
+                markersRef.current.clear();
             }
-            markersRef.current.clear();
 
-            // choose target layer based on clustering toggle
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let targetLayer: any;
-
+            let targetLayer: LayerGroup | MarkerClusterGroup;
             if (clusteringEnabled) {
-                // create cluster group with custom styling
-                const clusterGroup = L.markerClusterGroup({
-                    maxClusterRadius: 35,
-                    spiderfyOnMaxZoom: true,
-                    showCoverageOnHover: false,
-                    zoomToBoundsOnClick: true,
-                    disableClusteringAtZoom: 7,
-                    // Prevent the plugin from removing markers outside the
-                    // expanded visible bounds.  With ~50-200 news pins the
-                    // perf impact is negligible, and it stops lonely pins
-                    // from being culled during fitBounds animations.
-                    removeOutsideVisibleBounds: false,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    iconCreateFunction: (cluster: any) => {
-                        const count = cluster.getChildCount();
-                        let size = 36;
-                        let className = 'cluster-small';
-                        if (count >= 35) { size = 50; className = 'cluster-large'; }
-                        else if (count >= 10) { size = 42; className = 'cluster-medium'; }
+                if (!clusterGroupRef.current) {
+                    clusterGroupRef.current = L.markerClusterGroup({
+                        maxClusterRadius: 35,
+                        spiderfyOnMaxZoom: true,
+                        showCoverageOnHover: false,
+                        zoomToBoundsOnClick: true,
+                        disableClusteringAtZoom: 7,
+                        removeOutsideVisibleBounds: false,
+                        iconCreateFunction: (cluster: MarkerCluster) => {
+                            const count = cluster.getChildCount();
+                            let size = 36;
+                            let className = 'cluster-small';
+                            if (count >= 35) { size = 50; className = 'cluster-large'; }
+                            else if (count >= 10) { size = 42; className = 'cluster-medium'; }
 
-                        return L.divIcon({
-                            html: `<div class="cluster-icon ${className}"><span>${count}</span></div>`,
-                            className: 'custom-cluster-icon',
-                            iconSize: [size, size],
-                        });
-                    },
-                });
-                targetLayer = clusterGroup;
-                clusterGroupRef.current = clusterGroup;
+                            return L.divIcon({
+                                html: `<div class="cluster-icon ${className}"><span>${count}</span></div>`,
+                                className: 'custom-cluster-icon',
+                                iconSize: [size, size],
+                            });
+                        },
+                    });
+                    map.addLayer(clusterGroupRef.current);
+                }
+                targetLayer = clusterGroupRef.current;
             } else {
-                // simple layer group — no clustering
-                const group = L.layerGroup();
-                targetLayer = group;
-                directGroupRef.current = group;
+                if (!directGroupRef.current) {
+                    directGroupRef.current = L.layerGroup();
+                    map.addLayer(directGroupRef.current);
+                }
+                targetLayer = directGroupRef.current;
             }
 
-            // Add the layer group to the map FIRST so the cluster plugin
-            // has a valid map reference with projection data.  Adding
-            // markers before the group is on the map queues them in an
-            // internal _needsClustering array that can silently drop
-            // markers during processing.
-            map.addLayer(targetLayer);
+            // --- Diffing markers ---
+            const currentMarkerIds = new Set(markersRef.current.keys());
+            const nextItemMap = new Map(geoItems.map(i => [i.id, i]));
+            const nextItemIds = new Set(nextItemMap.keys());
 
-            // Create all markers
-            const allMarkers: L.Marker[] = [];
+            // 1. Remove markers no longer in items
+            const toRemove: string[] = [];
+            currentMarkerIds.forEach(id => {
+                if (!nextItemIds.has(id)) {
+                    const marker = markersRef.current.get(id);
+                    if (marker) {
+                        targetLayer.removeLayer(marker);
+                        markersRef.current.delete(id);
+                        toRemove.push(id);
+                    }
+                }
+            });
+
+            // 2. Identify markers to add
+            const toAdd: L.Marker[] = [];
             geoItems.forEach(item => {
-                const icon = createCategoryIcon(L, item.category, item.id === selectedItemId);
+                if (!currentMarkerIds.has(item.id)) {
+                    const icon = createCategoryIcon(L, item.category, item.id === selectedItemId);
+                    const marker = L.marker([item.latitude!, item.longitude!], { icon });
 
-                const marker = L.marker([item.latitude!, item.longitude!], { icon });
+                    const pinColor = getCategoryColor(item.category);
+                    const categoryLabel = item.category
+                        ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
+                        : '';
 
-                const pinColor = getCategoryColor(item.category);
-                const categoryLabel = item.category
-                    ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
-                    : '';
-
-                const popupHtml = `
+                    const popupHtml = `
           <div class="news-popup">
             ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
             <div class="news-popup-body">
@@ -364,35 +368,43 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
           </div>
         `;
 
-                marker.bindPopup(popupHtml, {
-                    maxWidth: 400,
-                    minWidth: 320,
-                    className: 'news-popup-container',
-                });
+                    marker.bindPopup(popupHtml, {
+                        maxWidth: 400,
+                        minWidth: 320,
+                        className: 'news-popup-container',
+                    });
 
-                marker.on('click', (e: L.LeafletMouseEvent) => {
-                    L.DomEvent.stopPropagation(e);
-                    const isSelected = selectedIdRef.current === item.id;
-                    onSelectItem(isSelected ? null : item.id);
-                });
+                    marker.on('click', (e: L.LeafletMouseEvent) => {
+                        L.DomEvent.stopPropagation(e);
+                        const isSelected = selectedIdRef.current === item.id;
+                        onSelectItem(isSelected ? null : item.id);
+                    });
 
-                markersRef.current.set(item.id, marker);
-                allMarkers.push(marker);
+                    markersRef.current.set(item.id, marker);
+                    toAdd.push(marker);
+                }
             });
 
-            // Bulk-add markers to the layer group. For cluster groups,
-            // addLayers (plural) is the recommended bulk method and
-            // bypasses the _needsClustering queue entirely.
-            if (clusteringEnabled && targetLayer.addLayers) {
-                targetLayer.addLayers(allMarkers);
-            } else {
-                allMarkers.forEach(m => targetLayer.addLayer(m));
+            // Bulk-add new markers
+            if (toAdd.length > 0) {
+                if (clusteringEnabled && 'addLayers' in targetLayer) {
+                    targetLayer.addLayers(toAdd);
+                } else {
+                    toAdd.forEach(m => targetLayer.addLayer(m));
+                }
             }
 
-            // auto-center around plotted markers
-            if (geoItems.length > 0) {
+            // auto-center around plotted markers when results change (filtering)
+            if (geoItems.length > 0 && nextItemIds.size !== currentMarkerIds.size) {
+                // Filter out extreme latitudes for framing (deadzone) 
+                // so Antarctica doesn't zoom the map out to the whole world.
+                let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
+                
+                // Fallback to all items if everything is in a deadzone
+                if (itemsToFrame.length === 0) itemsToFrame = geoItems;
+
                 const bounds = L.latLngBounds(
-                    geoItems.map(i => [i.latitude!, i.longitude!] as [number, number])
+                    itemsToFrame.map(i => [i.latitude!, i.longitude!] as [number, number])
                 );
                 map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
             }
@@ -400,6 +412,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
         loadLeaflet();
         return () => { cancelled = true; };
+        // We intentionally omit selectedItemId and onSelectItem from dependencies to avoid 
+        // full marker re-diffing on every selection change. Selection highlighting 
+        // is handled by a separate, lighter useEffect below.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items, mapReady, clusteringEnabled]);
 

@@ -22,28 +22,48 @@ interface LocationEntry {
     type: 'city' | 'admin1' | 'country' | 'landmark';
 }
 
+let isInitialized = false;
 export const KNOWN_LOCATIONS: Record<string, LocationEntry> = {};
+let MULTI_WORD_LOC_SET: Set<string>;
 
-// 1. Load GeoNames cities (population-weighted — highest pop wins on name collision)
-for (const [key, city] of Object.entries(geoCities)) {
-    if (key.length <= 2) continue;
-    KNOWN_LOCATIONS[key] = { lat: city.lat, lon: city.lon, pop: city.pop, type: 'city' };
-}
+function ensureInitialized() {
+    if (isInitialized) return;
 
-// 2. Load admin1 regions (states/provinces) — only if not already occupied by a large city
-for (const [key, region] of Object.entries(geoAdmin1)) {
-    if (key.length <= 2) continue;
-    const existing = KNOWN_LOCATIONS[key];
-    // Don't overwrite a city with > 500k pop with an admin1 region
-    if (existing && existing.pop > 500000) continue;
-    KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' };
-}
+    // 1. Load GeoNames cities (population-weighted — highest pop wins on name collision)
+    for (const [key, city] of Object.entries(geoCities)) {
+        if (key.length <= 2) continue;
+        KNOWN_LOCATIONS[key] = { lat: city.lat, lon: city.lon, pop: city.pop, type: 'city' };
+    }
 
-// 3. Countries from geonames.json — always override with their canonical centroids
-// This loads 209+ country names (including Albania, Croatia, Senegal, etc.)
-for (const [name, data] of Object.entries(geoCountries)) {
-    if (name.length <= 2) continue;
-    KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country' };
+    // 2. Load admin1 regions (states/provinces) — only if not already occupied by a large city
+    for (const [key, region] of Object.entries(geoAdmin1)) {
+        if (key.length <= 2) continue;
+        const existing = KNOWN_LOCATIONS[key];
+        // Don't overwrite a city with > 500k pop with an admin1 region
+        if (existing && existing.pop > 500000) continue;
+        KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' };
+    }
+
+    // 3. Countries from geonames.json — always override with their canonical centroids
+    for (const [name, data] of Object.entries(geoCountries)) {
+        if (name.length <= 2) continue;
+        KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country' };
+    }
+
+    // 4. Hardcoded landmarks & conflict zones
+    for (const [name, coords] of Object.entries(LANDMARKS)) {
+        KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
+    }
+
+    // Continent-level fallbacks
+    for (const [name, coords] of Object.entries(CONTINENT_FALLBACKS)) {
+        KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
+    }
+
+    // Build dependent sets
+    MULTI_WORD_LOC_SET = new Set(Object.keys(KNOWN_LOCATIONS).filter(k => k.includes(' ')));
+
+    isInitialized = true;
 }
 
 // 4. Hardcoded landmarks & conflict zones — highest priority overrides
@@ -105,15 +125,7 @@ const CONTINENT_FALLBACKS: Record<string, { lat: number; lon: number }> = {
     'south america': { lat: -15.0, lon: -60.0 },
 };
 
-for (const [name, coords] of Object.entries(LANDMARKS)) {
-    KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
-}
-
-// continent fallbacks go into KNOWN_LOCATIONS too so geocodeLocation() can resolve them,
-// but they are typed as 'landmark' and will be suppressed by continent-demotion logic.
-for (const [name, coords] of Object.entries(CONTINENT_FALLBACKS)) {
-    KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
-}
+// LANDMARKS and CONTINENT_FALLBACKS moved inside ensureInitialized()
 
 // demonym map
 const DEMONYM_MAP: Record<string, string> = {
@@ -424,6 +436,7 @@ function cleanCandidate(raw: string): string {
 // if the full phrase is in the dictionary, return it. Otherwise return as-is.
 // also tries accent-normalized form.
 function disambiguate(candidate: string): string {
+    ensureInitialized();
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
     // Try accent-normalized form (e.g. "Irán" → "iran")
@@ -470,6 +483,7 @@ function extractCountryAbbrev(text: string): string | null {
 // for country/city name collisions (e.g. "Albania" the country vs "Albania" the city
 // in Colombia), the country wins unless the city has >1M population.
 function locationPriority(key: string): number {
+    ensureInitialized();
     const entry = KNOWN_LOCATIONS[key];
     if (!entry) return 99;
     switch (entry.type) {
@@ -484,10 +498,7 @@ function locationPriority(key: string): number {
 // Continent name set — used to suppress continent matches when specific locations exist
 const CONTINENT_NAMES = new Set(Object.keys(CONTINENT_FALLBACKS));
 
-// Build a sorted (longest-first) list of multi-word location names for compound scanning.
-// This catches "South Africa", "New Zealand", "Sri Lanka", "West Coast" etc. as whole units.
-// Build a Set of multi-word locations for O(1) sliding-window scanning. 
-const MULTI_WORD_LOC_SET = new Set(Object.keys(KNOWN_LOCATIONS).filter(k => k.includes(' ')));
+// Multi-word set built lazily in ensureInitialized()
 
 // main extraction
 
@@ -498,6 +509,7 @@ interface Candidate {
 }
 
 export function extractLocation(title: string, description: string): { match: string | null; candidates: string[] } {
+    ensureInitialized();
     // Strip emoji and normalize whitespace
     title = title.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
     description = description.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
