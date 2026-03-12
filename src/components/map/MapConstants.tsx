@@ -1,5 +1,12 @@
 import type L from 'leaflet';
 
+/*
+Dan Sharan
+
+map constants file
+
+like links and colors
+*/
 export const MAP_STYLES: Record<string, { url: string; attribution: string; label: string }> = {
     standard: {
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -61,7 +68,7 @@ export function createCategoryIcon(leaflet: typeof import('leaflet'), category?:
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
     
-    // Stable container size prevents anchor jitter
+    // stable container size prevents anchor jitter
     const containerSize = 44;
     const activeClass = isActive ? ' marker-icon-active' : '';
 

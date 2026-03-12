@@ -1,5 +1,15 @@
 'use client';
 
+/*
+Dan Sharan
+
+theme toggle component
+
+shows light/dark mode toggle
+
+long things are svg paths
+*/
+
 import React from 'react';
 
 interface ThemeToggleProps {

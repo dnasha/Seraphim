@@ -1,18 +1,22 @@
-/**
- * Regex patterns for location extraction.
- */
+/*
+Dan Sharan
+
+geocoding patterns
+
+regex patterns for location extraction
+*/
 
 // regex for standard datelines (e.g. "WASHINGTON (Reuters) - ")
 export const DATELINE_PATTERN = /^(?:\[[^\]]+\]\s*)?([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
 
-// Optimized module-level regexes to avoid re-compilation
+// optimized module-level regexes to avoid re-compilation
 export const EMOJI_STRIP = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{FE0E}]/gu;
 export const METADATA_COUNTRY_REGEX = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/;
 
 // "City, State" or "City, Country" comma-pair pattern
 export const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g;
 
-// Unicode-aware letter class for location capture groups
+// unicode-aware letter class for location capture groups
 const L = '[a-zA-Z\u00C0-\u024F]'; // a single letter including accented
 const LOC = `[A-Z\u00C0-\u024F]${L}+(?:\\s+[A-Z\u00C0-\u024F]${L}+){0,3}`; // multi-word location
 
@@ -32,7 +36,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Oo]n\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:[Cc]ity|[Tt]own|[Pp]rovince|[Ss]tate|[Rr]egion|[Vv]illage|[Cc]enter|[Cc]entre)\\s+[Oo]f\\s+(${LOC})`, 'g'),
 
-    // Present-tense action verbs
+    // present-tense action verbs
     new RegExp(`\\b[Hh]its?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ss]trikes?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]ttacks?\\s+(?:[Oo]n\\s+)?(${LOC})`, 'g'),
@@ -51,7 +55,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ff]lees?\\s+to\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Dd]eploys?\\s+to\\s+(${LOC})`, 'g'),
 
-    // Past-tense variants
+    // past-tense variants
     new RegExp(`\\b[Aa]ttacked\\s+in\\s+(?:the\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]argeted\\s+(?:in\\s+)?(?:the\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\bagainst\\s+(${LOC})`, 'g'),
@@ -60,6 +64,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Bb]ombed\\s+(${LOC})`, 'g'),
 ];
 
+// action target patterns
 export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),

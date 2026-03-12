@@ -1,5 +1,11 @@
 import { NewsItem } from './types';
 
+/*
+Dan Sharan
+
+gnews API integration
+*/
+
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
 
@@ -104,7 +110,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
     }
 }
 
-// ── OSINT keyword-driven search ─────────────────────────────────────────────
+// OSINT keyword-driven search
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -122,7 +128,7 @@ export async function fetchOSINTGNews(maxPerQuery: number = 5): Promise<NewsItem
         try {
             const items = await searchGNews(query, maxPerQuery);
             if (items.length === 0 && allItems.length === 0) {
-                // likely rate-limited — no point trying more queries
+                // rate-limited, no point trying more queries
                 break;
             }
             for (const item of items) {

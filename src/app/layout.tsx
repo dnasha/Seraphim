@@ -10,6 +10,13 @@ import { Analytics } from "@vercel/analytics/next";
 
 import "./globals.css";
 
+/*
+Dan Sharan
+
+layout file that handles app fonts, metadata, and viewport settings
+also vercel tracking and stuff
+
+*/
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],

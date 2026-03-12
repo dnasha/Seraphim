@@ -1,5 +1,11 @@
 'use client';
 
+/*
+Dan Sharan
+
+main page file that handles the general layout of the app
+*/
+
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import FilterBar from '@/components/FilterBar';
@@ -26,7 +32,7 @@ export default function Home() {
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     
-    // Initial mount and theme sync
+    // initial mount and theme sync
     useEffect(() => {
         const timer = setTimeout(() => {
             setMounted(true);
@@ -38,7 +44,7 @@ export default function Home() {
         return () => clearTimeout(timer);
     }, []);
 
-    // Sync theme to CSS
+    // sync theme to CSS
     useEffect(() => {
         if (!mounted) return;
         document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
@@ -72,7 +78,7 @@ export default function Home() {
             />
             {error && (
                 <div className="error-banner">
-                    <span className="error-icon">⚠️</span>
+                    <span className="error-icon">!!!</span>
                     {error}
                     <button onClick={() => fetchNews(true)}>Retry</button>
                 </div>

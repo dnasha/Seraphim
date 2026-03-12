@@ -1,31 +1,30 @@
-#!/usr/bin/env node
-/**
- * ============================================================================
- *  Seraphim Pipeline Benchmark (REAL CODE VERSION)
- * ============================================================================
- *  Profiles the actual production code stages to find bottlenecks.
- *
- *  Usage:   npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews]
- * ============================================================================
- */
+/* Dan Sharan
+
+Seraphim Pipeline Benchmark
+
+profiles actual production code stages to find bottlenecks
+
+run: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews]
+*/ 
+ 
 
 import { performance } from 'node:perf_hooks';
 import {  statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// ── Resolve project root ────────────────────────────────────────────────────
+// dynamically resolve project root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 
-// ── CLI flags ───────────────────────────────────────────────────────────────
+// execution flags
 const args = new Set(process.argv.slice(2).map(a => a.toLowerCase()));
 const SKIP_SOCIAL = args.has('--skip-social');
 const SKIP_GNEWS  = args.has('--skip-gnews');
 const QUICK_MODE  = args.has('--quick');
 
-// ── ANSI helpers ────────────────────────────────────────────────────────────
+// text color helpers
 const c = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
   red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m',
@@ -33,6 +32,7 @@ const c = {
   bgRed: '\x1b[41m', bgGreen: '\x1b[42m', bgYellow: '\x1b[43m',
 };
 
+// fancy styling 
 function banner(text) {
   const line = '═'.repeat(70);
   console.log(`\n${c.cyan}${line}${c.reset}`);
@@ -45,15 +45,17 @@ function sectionHeader(text) {
   console.log(`${c.dim}${'─'.repeat(60)}${c.reset}`);
 }
 
+// format milliseconds
 function formatMs(ms) {
   if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+// percentage helper
 function pct(part, total) { return total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '0%'; }
 
-// ── Timer utility ───────────────────────────────────────────────────────────
+// timer utility
 class Timer {
   constructor() { this.marks = {}; this.starts = {}; }
   start(label) { this.starts[label] = performance.now(); }
@@ -65,9 +67,7 @@ class Timer {
   get(label) { return this.marks[label] || 0; }
 }
 
-// ============================================================================
-//  STAGE 1: Geodata Loading (via geocode.ts)
-// ============================================================================
+// stage 1: Geodata Loading (via geocode.ts)
 async function benchmarkGeodataLoad(timer) {
   sectionHeader('Stage 1 · Geodata Loading');
 
@@ -75,8 +75,8 @@ async function benchmarkGeodataLoad(timer) {
   const stats = statSync(jsonPath);
   const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
 
-  // We measure the time it takes to import the module, 
-  // which triggers the top-level loading and processing of KNOWN_LOCATIONS.
+  // measure the time it takes to import the module, 
+  // which triggers the top-level loading and processing of KNOWN_LOCATIONS
   timer.start('geodata_total');
   const { KNOWN_LOCATIONS, ensureInitialized } = await import('../src/lib/geocoding/index.ts');
   ensureInitialized();
@@ -95,9 +95,7 @@ async function benchmarkGeodataLoad(timer) {
   return KNOWN_LOCATIONS;
 }
 
-// ============================================================================
-//  STAGE 2: RSS Sourcing (via rss.ts)
-// ============================================================================
+// stage 2: RSS Sourcing (via rss.ts)
 async function benchmarkRSS(timer) {
   sectionHeader('Stage 2 · RSS Feed Sourcing');
 
@@ -150,9 +148,7 @@ async function benchmarkRSS(timer) {
   return allItems;
 }
 
-// ============================================================================
-//  STAGE 3: GNews Sourcing (via gnews.ts)
-// ============================================================================
+// stage 3: GNews Sourcing (via gnews.ts)
 async function benchmarkGNews(timer) {
   sectionHeader('Stage 3 · GNews API');
 
@@ -185,9 +181,7 @@ async function benchmarkGNews(timer) {
   return items;
 }
 
-// ============================================================================
-//  STAGE 4: Social Feeds (via social-feeds.ts)
-// ============================================================================
+// stage 4: Social Feeds (via social-feeds.ts)
 async function benchmarkSocial(timer) {
   sectionHeader('Stage 4 · Social Feeds (Telegram + X)');
 
@@ -243,9 +237,7 @@ async function benchmarkSocial(timer) {
   return allItems;
 }
 
-// ============================================================================
-//  STAGE 5: Location Extraction (via geocode.ts)
-// ============================================================================
+// stage 5: Location Extraction (via geocode.ts)
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 · Location Extraction');
 
@@ -275,9 +267,7 @@ async function benchmarkExtraction(timer, items) {
   return results;
 }
 
-// ============================================================================
-//  STAGE 6: Geocoding (via geocode.ts)
-// ============================================================================
+// stage 6: Geocoding (via geocode.ts)
 async function benchmarkGeocoding(timer, extractionResults) {
   sectionHeader('Stage 6 · Geocoding');
 
@@ -289,7 +279,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
 
   timer.start('geocoding_total');
 
-  // Deduplicate locations to simulate real-world geocoding cache/bottleneck
+  // deduplicate locations to simulate real-world geocoding cache/bottleneck
   const uniqueLocations = [...new Set(extractionResults.map(r => r.match).filter(Boolean))];
 
   const geocodeFails = [];
@@ -316,9 +306,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
   console.log(`  Avg Time:         ${c.white}${formatMs(totalTime / Math.max(uniqueLocations.length, 1))}${c.reset} / lookup`);
 }
 
-// ============================================================================
-//  SUMMARY TABLE
-// ============================================================================
+// summary table
 function printSummary(timer) {
   banner('BENCHMARK SUMMARY');
 
@@ -354,9 +342,7 @@ function printSummary(timer) {
   console.log();
 }
 
-// ============================================================================
-//  MAIN
-// ============================================================================
+// main
 async function main() {
   banner('SERAPHIM PIPELINE BENCHMARK');
   console.log(`  ${c.dim}Timestamp:  ${new Date().toISOString()}${c.reset}`);
@@ -364,35 +350,36 @@ async function main() {
 
   const timer = new Timer();
 
-  // Stage 1
+  // stage 1
   await benchmarkGeodataLoad(timer);
 
-  // Stage 2
+  // stage 2
   const rssItems = await benchmarkRSS(timer);
 
-  // Stage 3
+  // stage 3
   const gnewsItems = await benchmarkGNews(timer);
 
-  // Stage 4
+  // stage 4
   const socialItems = await benchmarkSocial(timer);
 
-  // Merge items
+  // merge items
   const allItems = [...rssItems, ...gnewsItems, ...socialItems];
   console.log(`\n  ${c.bold}Total articles collected: ${c.cyan}${allItems.length}${c.reset}`);
 
-  // Stage 5
+  // stage 5
   if (allItems.length > 0) {
     const extractionResults = await benchmarkExtraction(timer, allItems);
-    // Stage 6
+    // stage 6
     await benchmarkGeocoding(timer, extractionResults);
   } else {
-    console.log(`\n  ${c.yellow}⚠ No articles collected, skipping extraction and geocoding stages.${c.reset}`);
+    console.log(`\n  ${c.yellow}No articles collected, skipping extraction and geocoding stages${c.reset}`);
   }
 
-  // Summary
+  // summary
   printSummary(timer);
 }
 
+// catch errors
 main().catch(err => {
   console.error(`${c.red}Fatal error:${c.reset}`, err);
   process.exit(1);

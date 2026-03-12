@@ -1,10 +1,17 @@
+/*
+Dan Sharan
+
+runs the real geocoding pipeline against all RSS and social feeds
+to construct a result JSON for evaluation
+
+run: npx tsx scripts/test-real-geocode.ts
+*/
+
 import { fetchAllRSSFeeds } from '../src/lib/rss';
 import { fetchSocialFeeds } from '../src/lib/social-feeds';
 import { enrichItemsWithLocation } from '../src/lib/geocoding';
 import * as fs from 'fs';
 import * as path from 'path';
-
-// npx tsx scripts/test-real-geocode.ts 
 
 async function run() {
     console.log("Fetching items from RSS and Social sources...");
@@ -14,8 +21,8 @@ async function run() {
 
     console.log(`\nTesting ${items.length} items. Running through enrichItemsWithLocation...`);
 
-    // Use the real geocoding pipeline built into the app
-    // This handles extraction, geocoding, and source defaults!
+    // use the real geocoding pipeline built into the app
+    // this handles extraction, geocoding, and source defaults!
     const enrichedItems = await enrichItemsWithLocation(items);
 
     const results = enrichedItems.map(item => {

@@ -1,24 +1,24 @@
-/**
- * Utility functions for string normalization and cleaning.
- */
+/*
+Dan Sharan
 
-/**
- * Normalize unicode diacritics/accents to ascii equivalents.
- * e.g. "Irán" → "Iran", "São Paulo" → "Sao Paulo", "Zürich" → "Zurich"
- */
+geocoding utilities
+
+string normalization and cleaning
+*/
+
+// normalize unicode diacritics/accents to ascii equivalents
+// "Irán" -> "Iran", "São Paulo" -> "Sao Paulo", "Zürich" -> "Zurich"
 export function normalizeAccents(s: string): string {
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-/**
- * Normalizes a location string to Title Case.
- * Handles special cases like "DC" and hyphenated names.
- */
+// normalize a location string to Title Case
+// handles special cases like "DC" and hyphenated names
 export function toTitleCase(s: string): string {
     if (!s) return s;
     return s.toLowerCase().split(' ').map(word => {
         if (word === 'dc') return 'DC';
-        // Handle hyphenated words like "Port-au-Prince" or "Guinea-Bissau"
+        // handle hyphenated words like "Port-au-Prince" or "Guinea-Bissau"
         if (word.includes('-')) {
             return word.split('-')
                 .map(part => part.charAt(0).toUpperCase() + part.slice(1))
@@ -28,9 +28,7 @@ export function toTitleCase(s: string): string {
     }).join(' ');
 }
 
-/**
- * Clean a candidate: strip possessives, trailing punctuation, dashes, etc.
- */
+// clean a candidate: strip possessives, trailing punctuation, dashes, etc
 export function cleanCandidate(raw: string): string {
     let s = raw.trim();
     s = s.replace(/['\u2019]s\b/g, '');      // "Canada's" → "Canada"

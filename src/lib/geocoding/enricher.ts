@@ -2,10 +2,15 @@ import { NewsItem } from '../types';
 import { extractLocation, geocodeLocation } from './engine';
 import { NEWS_SOURCE_DEFAULTS } from './constants';
 
-/**
- * Enriches a list of news items with geographic coordinates.
- * Applies jitter to prevent pins from stacking on the same exact coordinate.
- */
+/*
+Dan Sharan
+
+geocoding enricher
+
+enriches a list of news items with geographic coordinates
+applies jitter to prevent pins from stacking on the same exact coordinate
+*/
+
 export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsItem[]> {
     const enriched: NewsItem[] = [];
     const usedCoords = new Map<string, number>();

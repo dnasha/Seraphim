@@ -1,6 +1,14 @@
 import React from 'react';
 import { MAP_STYLES } from './MapConstants';
 
+/*
+Dan Sharan
+
+map settings component
+
+long things are svg paths
+*/
+
 interface MapSettingsProps {
     mapStyle: string;
     onStyleChange: (style: string) => void;

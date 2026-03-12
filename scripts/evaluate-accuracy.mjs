@@ -1,3 +1,12 @@
+/* Dan Sharan
+
+tests the geocoding accuracy against hand-graded results
+
+run: npx tsx scripts/evaluate-accuracy.mjs
+*/
+
+
+
 import fs from 'fs';
 import { performance } from 'perf_hooks';
 
@@ -10,21 +19,21 @@ function normalize(val) {
   return String(val).toLowerCase().trim();
 }
 
-//npx tsx scripts/evaluate-accuracy.mjs
+// npx tsx scripts/evaluate-accuracy.mjs
 
 async function run() {
   const startTime = performance.now();
   try {
-    // 1. Import the live geocoding logic
-    // We do this inside run() to measure the load time if desired,
-    // and because it's an async import in an ESM-like context if needed.
+    // import the live geocoding logic
     const { extractLocation, geocodeLocation } = await import('../src/lib/geocoding');
 
-    // 2. Load the human-graded ground truth
+    // load the hand-graded results
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
       console.error(`Error: Graded results file not found at ${GRADED_RESULTS_PATH}`);
       return;
     }
+
+    // parse the hand-graded results
     const gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
 
     let passCount = 0;
@@ -34,6 +43,7 @@ async function run() {
 
     console.log(`\nRunning live geocode accuracy test on ${gradedResults.length} cases...\n`);
 
+    // for each item in the graded results
     for (const item of gradedResults) {
       const isApproved = item.graded_status === 'approved';
       const rawExpected = isApproved 
@@ -42,7 +52,7 @@ async function run() {
 
       const normExpected = normalize(rawExpected);
       
-      // Skip items with "ignore" or "default" in the expected notes
+      // skip items with "ignore" or "default" in the expected notes
       if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
         skippedCount++;
         continue;
@@ -50,13 +60,13 @@ async function run() {
 
       totalCount++;
 
-      // --- LIVE RERUN LOGIC ---
-      // Replicate the logic in extractLocation
+      // live rerun logic
+      // replicate the logic in extractLocation
       const ext = extractLocation(item.title, item.desc || '');
       let placeName = ext.match;
       const candidates = ext.candidates;
 
-      // Determine actual location based on current logic
+      // determine actual location based on current logic
       let actualLocationFullName = null;
       if (placeName) {
         const geo = await geocodeLocation(placeName);
@@ -69,14 +79,14 @@ async function run() {
 
       let isCorrect = false;
       if (isApproved) {
-        // "Don't care" about approved entries missing locations (likely defaults)
-        // If it found nothing, we assume it's avoiding a default location correctly.
-        // If it found something, it must match the approval.
+        // "don't care" about approved entries missing locations (likely defaults)
+        // if it found nothing, we assume it's avoiding a default location correctly.
+        // if it found something, it must match the approval.
         if (normActual === null || normActual === normExpected) {
           isCorrect = true;
         }
       } else {
-        // For denied/manual entries, it must match exactly.
+        // for denied/manual entries, it must match exactly.
         if (normActual === normExpected) {
           isCorrect = true;
         }
@@ -107,7 +117,9 @@ async function run() {
     const missCount = failures.filter(f => !f.actual && f.expected).length;
     const wrongCount = failures.filter(f => f.actual && f.expected && f.actual !== f.expected).length;
     const falsePosCount = failures.filter(f => f.actual && !f.expected).length;
+    
 
+    // output results
     console.log(`Accuracy Report:`);
     console.log(`================`);
     console.log(`Pass Count:     ${passCount} / ${totalCount}`);
@@ -136,7 +148,7 @@ async function run() {
         console.log(`... and ${failures.length - 10} more failures.`);
       }
 
-      // Write all failures to a file for complete inspection
+      // write all failures to a file for complete inspection
       const failureOutput = failures.map((f) => {
         const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
         const indentedDesc = f.description ? f.description.replace(/\n/g, '\n                ') : 'null';
@@ -146,7 +158,7 @@ async function run() {
       fs.writeFileSync(FAILURES_PATH, failureOutput);
       console.log(`Full list of ${failures.length} failures written to ${FAILURES_PATH}`);
     } else {
-      console.log(`Perfect! All ${totalCount} tests passed with the current algorithm.`);
+      console.log(`All ${totalCount} tests passed!`);
     }
 
   } catch (error) {

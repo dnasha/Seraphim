@@ -2,6 +2,12 @@ import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { NewsItem } from './types';
 
+/*
+Dan Sharan
+
+social feeds integration
+*/
+
 const parser = new Parser({
     customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
@@ -12,7 +18,7 @@ const parser = new Parser({
     },
 });
 
-// ── Source definitions ──────────────────────────────────────────────────────
+// Source definitions
 
 interface SocialSource {
     name: string;
@@ -21,7 +27,7 @@ interface SocialSource {
     category: string;
 }
 
-// Nitter instances to try — user reports these worked previously
+// nitter instances to try — user reports these worked previously
 const NITTER_INSTANCES = [
     'https://nitter.privacydev.net',
     'https://nitter.poast.org',
@@ -30,7 +36,7 @@ const NITTER_INSTANCES = [
     'https://nitter.cz',
 ];
 
-// RSSHub instances as secondary fallback
+// rSSHub instances as secondary fallback
 const RSSHUB_INSTANCES = [
     'https://rsshub.app',
     'https://rsshub.rssforever.com',
@@ -57,7 +63,7 @@ export const X_ACCOUNTS: SocialSource[] = [
     //{ name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
 ];
 
-// ── Telegram scraper (Cheerio-based) ────────────────────────────────────────
+// Telegram scraper (Cheerio-based)
 
 interface TelegramPost {
     text: string;
@@ -74,7 +80,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
                 'Accept': 'text/html',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            signal: AbortSignal.timeout(5000), // Reduced from 10s
+            signal: AbortSignal.timeout(5000), // reduced from 10s
         });
 
         if (!res.ok) {
@@ -86,27 +92,27 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
         const $ = cheerio.load(html);
         const posts: TelegramPost[] = [];
 
-        // Each message is a .tgme_widget_message element
+        // each message is a .tgme_widget_message element
         $('.tgme_widget_message').each((_i, el) => {
             const $msg = $(el);
             const postId = $msg.attr('data-post') || '';
 
-            // Extract text, preserving links
+            // extract text, preserving links
             const $text = $msg.find('.tgme_widget_message_text');
             if (!$text.length) return;
 
-            // Get plain text for display
+            // get plain text for display
             const plainText = $text.text().trim();
             if (!plainText || plainText.length < 10) return;
 
-            // Extract href links from the message (critical for OSINT sources)
+            // extract href links from the message (critical for OSINT sources)
             const links: string[] = [];
             $text.find('a[href]').each((_j, linkEl) => {
                 const href = $(linkEl).attr('href');
                 if (href && !href.startsWith('tg://')) links.push(href);
             });
 
-            // Get datetime
+            // get datetime
             const $time = $msg.find('time[datetime]');
             const datetime = $time.attr('datetime') || new Date().toISOString();
 
@@ -137,7 +143,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
 
 // ── X/Twitter RSS — multi-strategy fallback ─────────────────────────────────
 
-// Fetch wrapper that races a parser call against a strict timeout
+// fetch wrapper that races a parser call against a strict timeout
 async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
     const res = await fetch(url, {
         headers: {
@@ -154,7 +160,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<Retu
         throw new Error('Empty feed');
     }
 
-    // Reject fake successful feeds from xcancel that are actually whitelist errors
+    // reject fake successful feeds from xcancel that are actually whitelist errors
     if (feed.items[0]?.title?.includes('RSS reader not yet whitelist') || feed.items[0]?.contentSnippet?.includes('RSS reader not yet whitelist')) {
         throw new Error('Nitter instance blocked RSS reader');
     }
@@ -162,7 +168,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<Retu
     return feed;
 }
 
-// Strategy 1: Native Twitter Syndication (Fastest, clearest, no API key needed)
+// strategy 1: Native Twitter Syndication (Fastest, clearest, no API key needed)
 async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
@@ -195,7 +201,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
         
         if (items.length === 0) return null;
 
-        // Sort by newest first, then take top 10
+        // sort by newest first, then take top 10
         items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return { items: items.slice(0, 10) } as any;
@@ -204,8 +210,8 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     }
 }
 
-// Strategy 2: Nitter RSS (Query all known healthy instances at once and take the first success)
-// Using a cached "best instance" once found to speed up subsequent requests in a batch.
+// strategy 2: Nitter RSS (Query all known healthy instances at once and take the first success)
+// using a cached "best instance" once found to speed up subsequent requests in a batch.
 let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -224,11 +230,11 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
         });
         return await Promise.any(promises);
     } catch {
-        return null; // All promises rejected
+        return null; // all promises rejected
     }
 }
 
-// Strategy 3: RSSHub RSS (Concurrent query across all instances)
+// strategy 3: RSSHub RSS (Concurrent query across all instances)
 let bestRSSHubInstance: string | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -251,7 +257,7 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-// Strategy 3: Google News RSS as last resort
+// strategy 3: Google News RSS as last resort
 async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`@${username} OR from:${username}`)}&hl=en`;

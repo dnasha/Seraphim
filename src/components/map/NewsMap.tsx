@@ -1,5 +1,13 @@
 'use client';
 
+/*
+Dan Sharan
+
+news map component
+
+uses leaflet and markercluster libraries
+*/
+
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
 import type { Map as LeafletMap, TileLayer, Marker, MarkerClusterGroup, MarkerCluster, LayerGroup } from 'leaflet';
@@ -101,7 +109,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 maxBoundsViscosity: 1.0,
             });
 
-            // Initial style
+            // initial style
             tileLayerRef.current = L.tileLayer(style.url, {
                 maxZoom: 19,
                 attribution: style.attribution,
@@ -209,7 +217,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             const nextItemMap = new Map(geoItems.map(i => [i.id, i]));
             const nextItemIds = new Set(nextItemMap.keys());
             
-            // Determine if markers actually changed
+            // determine if markers actually changed
             const added = Array.from(nextItemIds).filter(id => !currentMarkerIds.has(id));
             const removed = Array.from(currentMarkerIds).filter(id => !nextItemIds.has(id));
 
@@ -279,7 +287,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 }
             }
 
-            // Fix fitBounds: trigger only if the set of locations changed
+            // fix fitBounds: trigger only if the set of locations changed
             if (geoItems.length > 0 && (added.length > 0 || removed.length > 0)) {
                 let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
                 if (itemsToFrame.length === 0) itemsToFrame = geoItems;
@@ -293,7 +301,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
         loadLeaflet();
         return () => { cancelled = true; };
-    }, [mapReady, clusteringEnabled, onSelectItem, geoItems]); // Remove selectedItemId dependency!
+    }, [mapReady, clusteringEnabled, onSelectItem, geoItems]); // remove selectedItemId dependency!
 
     // highlight active marker
     useEffect(() => {
@@ -316,7 +324,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         const iconInner = el.querySelector('.marker-icon');
                         if (iconInner) iconInner.classList.remove('marker-icon-active');
                     }
-                    // Fallback to setIcon if element not in DOM (e.g. clustered)
+                    // fallback to setIcon if element not in DOM (e.g. clustered)
                     const item = geoItems.find(i => i.id === prevId);
                     prevMarker.setIcon(createCategoryIcon(L, item?.category, false));
                 }
@@ -331,7 +339,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         const iconInner = el.querySelector('.marker-icon');
                         if (iconInner) iconInner.classList.add('marker-icon-active');
                     }
-                    // Sync icon state
+                    // sync icon state
                     const item = geoItems.find(i => i.id === nextId);
                     nextMarker.setIcon(createCategoryIcon(L, item?.category, true));
                     
@@ -342,7 +350,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
                     const showPopup = () => {
                         nextMarker.openPopup();
-                        // Re-check class after popup opens (Lealet sometimes re-renders)
+                        // re-check class after popup opens (Lealet sometimes re-renders)
                         const newEl = nextMarker.getElement();
                         if (newEl) {
                             const iconInner = newEl.querySelector('.marker-icon');
@@ -354,7 +362,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         const p = map.project(targetLatlng, zoom).subtract([0, 140]);
                         const target = map.unproject(p, zoom);
                         
-                        // Check if we are already close enough to skip flyTo
+                        // check if we are already close enough to skip flyTo
                         const currentCenter = map.getCenter();
                         const dist = currentCenter.distanceTo(target);
                         if (zoom === currentZoom && dist < 50) {

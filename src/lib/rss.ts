@@ -1,6 +1,12 @@
 import Parser from 'rss-parser';
 import { NewsItem } from './types';
 
+/*
+Dan Sharan
+
+rss integration
+*/
+
 const parser = new Parser({
     timeout: 5000,
     headers: {
@@ -80,7 +86,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 2500; // Reduced to 2.5 seconds to prevent bottlenecks
+const FEED_TIMEOUT_MS = 2500; // reduced to 2.5 seconds to prevent bottlenecks
 
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {

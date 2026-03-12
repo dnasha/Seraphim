@@ -1,4 +1,7 @@
-/* seraphim — map + sidebar layout */
+/* 
+Dan Sharan
+CRAZY MONOLITH CSS FILE
+*/
 
 *,
 *::before,
@@ -9,7 +12,7 @@
 }
 
 html {
-  height: 100vh; /* Fallback */
+  height: 100vh; /* fallback */
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
@@ -24,7 +27,7 @@ body {
   background: #fafafa;
   color: #111;
   line-height: 1.5;
-  height: 100vh; /* Fallback */
+  height: 100vh; /* fallback */
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
@@ -90,14 +93,14 @@ a {
 
 @media (max-width: 860px) {
   .top-actions {
-    display: none; /* theme toggle moved to sidebar on mobile */
+    display: none; 
   }
 }
 
 /* app layout */
 .app-layout {
   display: flex;
-  height: 100vh; /* Fallback */
+  height: 100vh; /* fallback */
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
@@ -550,7 +553,7 @@ a {
   opacity: 0.5;
 }
 
-/* Expand hint for unmapped cards */
+/* expand hint for unmapped cards */
 .event-card-expand-hint {
   display: block;
   font-size: 0.625rem;
@@ -566,7 +569,7 @@ a {
   opacity: 1;
 }
 
-/* Expanded detail panel */
+/* expanded detail panel */
 .event-card-detail {
   border-top: 1px solid var(--border);
   padding: 10px 12px;
@@ -777,7 +780,7 @@ a {
   transform: scale(1.05);
 }
 
-/* Match zoom buttons to settings button */
+/* match zoom buttons to settings button */
 .leaflet-bar {
   border: none !important;
   box-shadow: none !important;
@@ -1047,6 +1050,7 @@ a {
   height: 20px !important;
 }
 
+/* marker animation */
 @keyframes marker-pulse-active {
   0% {
     box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4), 0 0 0 0 var(--marker-color);
@@ -1059,7 +1063,7 @@ a {
   }
 }
 
-/* Cluster Icons Styles */
+/* cluster icons styles */
 .cluster-icon {
   display: flex;
   align-items: center;
@@ -1081,19 +1085,19 @@ a {
   z-index: 1000;
 }
 
-/* Small - Amber */
+/* small - amber */
 .cluster-icon.cluster-small {
   background: rgb(255, 187, 0) !important;
   color: #000 !important;
 }
 
-/* Medium - Orange */
+/* medium - orange */
 .cluster-icon.cluster-medium {
   background: rgba(245, 17, 1, 0.95) !important;
   color: #fff !important;
 }
 
-/* Large - Red */
+/* large - red */
 .cluster-icon.cluster-large {
   background: rgba(129, 5, 5, 0.95) !important;
   color: #fff !important;
@@ -1129,7 +1133,7 @@ a {
 }
 
 .news-popup-container a.leaflet-popup-close-button {
-  color: #8b0000 !important; /* Dark Red */
+  color: #8b0000 !important; 
   padding: 8px;
   width: 32px;
   height: 32px;
@@ -1231,8 +1235,6 @@ a {
   margin-bottom: 8px;
 }
 
-/* news-popup-link styles are now unified with event-card-detail-link above */
-
 .location-icon-svg {
   display: inline-block;
   vertical-align: middle;
@@ -1285,15 +1287,16 @@ a {
   margin: 0 auto 12px;
 }
 
-/* ── Mobile responsive ────────────────────────────────────────────────────── */
+/* mobile responsive css */
 @media (max-width: 860px) {
-  /* Map fills entire viewport; sidebar slides in as overlay */
+
+  /* map fills entire viewport, sidebar slides in as overlay */
   .app-layout {
-    flex-direction: row; /* keep row so sidebar absolutely positions over map */
+    flex-direction: row;
     position: relative;
   }
 
-  /* Map always fills the full viewport */
+  /* map always fills the full viewport */
   .map-wrapper {
     flex: 1;
     width: 100%;
@@ -1301,7 +1304,7 @@ a {
     min-height: 0;
   }
 
-  /* Sidebar: full-height slide-in overlay from the left */
+  /* sidebar: full-height slide-in overlay from the left */
   .event-sidebar {
     position: absolute;
     top: 0;
@@ -1324,7 +1327,7 @@ a {
     transform: translateX(0);
   }
 
-  /* ── Header ── */
+  /* header */
   .event-sidebar-header {
     padding: 10px 12px;
     flex-shrink: 0;
@@ -1344,7 +1347,7 @@ a {
     height: 34px;
   }
 
-  /* ── Stats row: allow wrapping so nothing gets cut ── */
+  /* stats row: allow wrapping so nothing gets cut */
   .event-sidebar-stats {
     flex-wrap: wrap;
     gap: 6px;
@@ -1364,7 +1367,7 @@ a {
     font-size: 0.65rem;
   }
 
-  /* ── Filter bar: compact and scrollable if needed ── */
+  /* filter bar: scrollable */
   .filter-bar {
     padding: 8px 10px;
     gap: 6px;
@@ -1376,7 +1379,7 @@ a {
     gap: 3px;
   }
 
-  /* Make toggle rows scrollable horizontally on very narrow screens */
+  /* toggle rows scrollable */
   .source-row {
     flex-wrap: wrap;
   }
@@ -1400,21 +1403,21 @@ a {
     flex-shrink: 0;
   }
 
-  /* Time toggles row: wrap instead of scroll */
+  /* time toggles row: wrap instead of scroll */
   .filter-section:has(.time-toggle) > div {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
   }
 
-  /* ── Event list fills remaining space ── */
+  /* event list fills remaining space */
   .event-list {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
   }
 
-  /* ── Map popups: constrain width on mobile ── */
+  /* map popups: constrain width on mobile */
   .news-popup {
     width: calc(100vw - 48px);
     max-width: 320px;
@@ -1424,18 +1427,18 @@ a {
     max-width: calc(100vw - 32px);
   }
 
-  /* ── Expand button: avoid overlapping settings gear ── */
+  /* expand button: avoid overlapping settings gear */
   .sidebar-expand-btn {
     top: 12px;
     left: 12px;
   }
 
-  /* ── Zoom controls: shift down so they don't overlap settings ── */
+  /* zoom controls: shift down so they don't overlap settings */
   .leaflet-top.leaflet-right .leaflet-control-zoom {
     margin-top: 56px !important;
   }
 
-  /* ── Settings panel: open leftward, constrained width ── */
+  /* settings panel: open leftward, constrained width */
   .map-settings-panel {
     right: 46px;
     width: min(220px, 65vw);

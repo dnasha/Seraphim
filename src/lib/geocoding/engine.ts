@@ -1,3 +1,11 @@
+/*
+Dan Sharan
+
+geocoding engine
+
+uses compromise.js for NLP plus custom regex logic
+*/
+
 import nlp from 'compromise';
 import geoData from '../../../data/geonames.json';
 import {
@@ -56,7 +64,7 @@ export function ensureInitialized() {
     for (const [key, region] of Object.entries(geoAdmin1)) {
         if (key.length <= 2) continue;
         const existing = KNOWN_LOCATIONS[key];
-        // Don't overwrite a city with > 500k pop with an admin1 region
+        // don't overwrite a city with > 500k pop with an admin1 region
         if (existing && existing.pop > 500000) continue;
         KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' };
     }
@@ -72,12 +80,12 @@ export function ensureInitialized() {
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
     }
 
-    // Continent-level fallbacks
+    // continent-level fallbacks
     for (const [name, coords] of Object.entries(CONTINENT_FALLBACKS)) {
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
     }
 
-    // Build dependent sets
+    // build dependent sets
     MULTI_WORD_LOC_SET = new Set(Object.keys(KNOWN_LOCATIONS).filter(k => k.includes(' ')));
 
     isInitialized = true;
@@ -92,10 +100,10 @@ function disambiguate(candidate: string): string {
     ensureInitialized();
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
-    // Try accent-normalized form (e.g. "Irán" → "iran")
+    // try accent-normalized form (e.g. "Irán" → "iran")
     const normalized = normalizeAccents(key);
     if (normalized !== key && KNOWN_LOCATIONS[normalized]) {
-        // Return the display name that matches the dictionary key
+        // return the display name that matches the dictionary key
         return normalizeAccents(candidate);
     }
     return candidate;
@@ -126,7 +134,7 @@ function extractCountryAbbrev(text: string): string | null {
     // split on whitespace and hyphens
     const tokens = text.split(/[\s\-]+/);
     for (const token of tokens) {
-        // Normalize: lowercase, strip trailing commas/colons/semicolons but keep periods
+        // normalize: lowercase, strip trailing commas/colons/semicolons but keep periods
         const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
         const mapped = COUNTRY_ABBREV_MAP[cleaned];
         if (mapped && mapped !== '__skip__') {
@@ -160,7 +168,7 @@ interface Candidate {
 
 export function extractLocation(title: string, description: string): { match: string | null; candidates: string[] } {
     ensureInitialized();
-    // Strip emoji and normalize whitespace
+    // strip emoji and normalize whitespace
     title = title.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
     description = description.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
 
@@ -227,7 +235,7 @@ export function extractLocation(title: string, description: string): { match: st
         for (let i = 0; i < words.length; i++) {
             for (let len = Math.min(4, words.length - i); len >= 2; len--) {
                 const slice = words.slice(i, i + len).join(' ');
-                // If the entire slice is lowercase, it's very likely a common noun phrase (e.g. "la paz" = "the peace")
+                // if the entire slice is lowercase, it's very likely a common noun phrase (e.g. "la paz" = "the peace")
                 // except for certain small connecting words, but even then, a location should usually have some capitalization.
                 if (slice === slice.toLowerCase()) continue;
                 
@@ -322,19 +330,19 @@ export function extractLocation(title: string, description: string): { match: st
                 const rawWords = raw.split(/\s+/);
                 let found = false;
                 
-                // If it's a multi-word candidate from regex/nlp, be VERY careful about picking just the first word
+                // if it's a multi-word candidate from regex/nlp, be VERY careful about picking just the first word
                 for (let len = words.length - 1; len >= 1; len--) {
                     const sub = words.slice(0, len).join(' ');
                     if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
-                        // Potential match. Check if the next word looks like a surname.
-                        // If the next word exists, is capitalized in original text, and isn't a known location/noise word
+                        // potential match. Check if the next word looks like a surname.
+                        // if the next word exists, is capitalized in original text, and isn't a known location/noise word
                         const nextWordRaw = rawWords[len];
                         if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
                             const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
-                            // If the next word is NOT a known location and NOT a common location suffix (City, State, etc)
+                            // if the next word is NOT a known location and NOT a common location suffix (City, State, etc)
                             if (!KNOWN_LOCATIONS[nextWordLower] && 
                                 !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
-                                // Probably a name like "Heba Morayef" or "Graham Harris"
+                                // probably a name like "Heba Morayef" or "Graham Harris"
                                 continue; 
                             }
                         }
@@ -347,17 +355,17 @@ export function extractLocation(title: string, description: string): { match: st
                 if (!found && source !== 'abbrev' && source !== 'demonym') continue;
             }
 
-            // Reject topic-like multi-word candidates (e.g., "Iran War", "Gaza Update")
+            // reject topic-like multi-word candidates (e.g., "Iran War", "Gaza Update")
             const lowKey = raw.toLowerCase();
             if (lowKey.endsWith(' war') || lowKey.endsWith(' update') ||
                 lowKey.endsWith(' report') || lowKey.endsWith(' brief') ||
                 lowKey.endsWith(' briefing')) {
-                // If the key we found is exactly the same as the noisy one, skip it
+                // if the key we found is exactly the same as the noisy one, skip it
                 if (key === lowKey.replace(/\s+(war|update|report|brief|briefing)$/, '')) {
                    // actually, we already updated key to the sub-match.
-                   // If we want to keep "Iran" but skip "Iran War", we can.
+                   // if we want to keep "Iran" but skip "Iran War", we can.
                 }
-                // Stricter: ignore if the original raw fragment looks like a topic header
+                // stricter: ignore if the original raw fragment looks like a topic header
                 if (source !== 'dateline') continue;
             }
 

@@ -1,3 +1,11 @@
+/*
+Dan Sharan
+
+data sources file
+
+contains rss and reddit sources
+*/
+
 export interface RSSSource {
     name: string;
     url: string;
@@ -12,7 +20,7 @@ export interface RedditSource {
     region: string;
 }
 
-// curated high-signal feeds — world news, crisis, national, business, tech, science, health
+// curated feeds for world news, crisis, national, business, tech, science, health
 export const RSS_SOURCES: RSSSource[] = [
     // world news
     { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'world', region: 'global' },
@@ -38,7 +46,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'War on the Rocks', url: 'https://warontherocks.com/feed/', category: 'world', region: 'global' },
     { name: 'ISW Daily Updates', url: 'https://news.google.com/rss/search?q=site:understandingwar.org&hl=en', category: 'crisis', region: 'global' },
 
-    // OSINT / investigative
+    // oSINT / investigative
     { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', category: 'world', region: 'global' },
 
     // national / domestic
@@ -61,7 +69,7 @@ export const RSS_SOURCES: RSSSource[] = [
     // health
     { name: 'WHO News', url: 'https://www.who.int/rss-feeds/news-english.xml', category: 'health', region: 'global' },
 
-    // new additions to broaden geographic coverage
+    // broadened geographic coverage
     { name: 'RNZ World', url: 'https://www.rnz.co.nz/rss/world.xml', category: 'world', region: 'oceania' },
     { name: 'The Hindu', url: 'https://www.thehindu.com/news/international/feeder/default.rss', category: 'world', region: 'asia' },
     { name: 'Politico Europe', url: 'https://www.politico.eu/feed/', category: 'world', region: 'europe' },
@@ -70,6 +78,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'AllAfrica News', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', category: 'world', region: 'africa' },
 ];
 
+// reddit feeds
 export const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit CombatFootage', subreddit: 'CombatFootage', category: 'crisis', region: 'global' },
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis', region: 'global' },

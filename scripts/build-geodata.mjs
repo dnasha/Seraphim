@@ -1,13 +1,12 @@
-#!/usr/bin/env node
-/**
- * build-geodata.mjs
- * 
- * Parses GeoNames data files (cities5000.txt, admin1CodesASCII.txt) and
- * produces a compact data/geonames.json with population-weighted cities,
- * admin1 regions, and a comprehensive list of all countries.
- * 
- * Run: node scripts/build-geodata.mjs
- */
+/* Dan Sharan
+
+Parses GeoNames data files (cities5000.txt, admin1CodesASCII.txt) and
+produces a compact data/geonames.json with population-weighted cities,
+admin1 regions, and a comprehensive list of all countries
+
+run: node scripts/build-geodata.mjs
+
+*/
 
 import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -16,9 +15,9 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
 
-// ── Comprehensive ISO 3166-1 alpha-2 → Country name(s) mapping ──────────────
-// Maps every country code to an array of [name, lat, lon] entries.
-// Coordinates are canonical centroids for each country.
+// ISO 3166-1 alpha-2 country name mapping
+// maps every country code to an array of [name, lat, lon] entries
+// coordinates are canonical centroids for each country
 const COUNTRY_DATA = {
     'AD': [['andorra', 42.55, 1.60]],
     'AE': [['united arab emirates', 23.42, 53.85], ['uae', 23.42, 53.85]],
@@ -217,13 +216,13 @@ const COUNTRY_DATA = {
     'ZA': [['south africa', -30.56, 22.94]],
     'ZM': [['zambia', -13.13, 27.85]],
     'ZW': [['zimbabwe', -19.02, 29.15]],
-    // Territories / regions often in news
+    // territories / regions often in news
     'HK': [['hong kong', 22.32, 114.17]],
     'PR': [['puerto rico', 18.22, -66.59]],
     'GZ': [['gaza', 31.35, 34.31]],
 };
 
-// ── Parse cities5000.txt ────────────────────────────────────────────────────
+// parse cities5000.txt
 console.log('Reading cities5000.txt...');
 const citiesRaw = readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8');
 const citiesLines = citiesRaw.split('\n').filter(l => l.trim());
@@ -271,7 +270,7 @@ for (const line of citiesLines) {
 
 console.log(`  Parsed ${cityMap.size} unique city names`);
 
-// ── Parse admin1CodesASCII.txt ──────────────────────────────────────────────
+// parse admin1CodesASCII.txt 
 console.log('Reading admin1CodesASCII.txt...');
 const admin1Raw = readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8');
 const admin1Lines = admin1Raw.split('\n').filter(l => l.trim());
@@ -294,7 +293,7 @@ for (const line of admin1Lines) {
 
     const key = (asciiName || name).toLowerCase();
 
-    // Don't overwrite a very large city with an admin1 region
+    // don't overwrite a very large city with an admin1 region
     const existingCity = cityMap.get(key);
     if (existingCity && existingCity.pop > 500000) continue;
 
@@ -311,7 +310,7 @@ for (const line of admin1Lines) {
 
 console.log(`  Parsed ${admin1Map.size} admin1 regions`);
 
-// ── Build countries from comprehensive mapping ──────────────────────────────
+// build countries from comprehensive mapping
 console.log('Building country data...');
 const countriesOut = {};
 let countryCount = 0;
@@ -326,7 +325,7 @@ for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
 
 console.log(`  ${countryCount} country name entries`);
 
-// ── Build output ────────────────────────────────────────────────────────────
+// build output
 const cities = {};
 for (const [key, val] of cityMap.entries()) {
     if (key.length <= 2) continue;

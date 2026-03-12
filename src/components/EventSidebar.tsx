@@ -1,10 +1,18 @@
 'use client';
 
+/*
+Dan Sharan
+
+event sidebar component
+
+shows list of news items
+*/
+
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ReactNode, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 
-// Category colors (same as FilterBar / NewsMap)
+// category colors (same as FilterBar / NewsMap)
 const CATEGORY_COLORS: Record<string, string> = {
     general: '#6b7280',
     world: '#dc2626',
@@ -16,7 +24,7 @@ const CATEGORY_COLORS: Record<string, string> = {
     health: '#7c3aed',
 };
 
-// Source platform colors for badge styling
+// source platform colors for badge styling
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
     const s = sourceName.toLowerCase();
     if (s.includes('(x)') || s.includes('twitter'))
@@ -69,10 +77,10 @@ export default function EventSidebar({
     mounted,
 }: EventSidebarProps) {
     const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-    // Track which card is expanded (for unmapped articles)
+    // track which card is expanded (for unmapped articles)
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
-    // Auto-scroll the selected card into view when selection changes
+    // auto-scroll the selected card into view when selection changes
     useEffect(() => {
         if (!selectedItemId) return;
         const el = cardRefs.current.get(selectedItemId);
@@ -87,24 +95,24 @@ export default function EventSidebar({
         const isMobile = () => window.innerWidth < 860;
 
         if (hasGeo) {
-            // Mapped article → toggle selection (flies map to pin)
+            // mapped article → toggle selection (flies map to pin)
             const isSelected = selectedItemId === item.id;
             onSelectItem(isSelected ? null : item.id);
 
-            // If selecting a mapped item, collapse any unmapped expansion
+            // if selecting a mapped item, collapse any unmapped expansion
             if (!isSelected) {
                 setExpandedId(null);
-                // On mobile, close the sidebar so the map is fully visible
+                // on mobile, close the sidebar so the map is fully visible
                 if (isMobile()) {
                     onToggleSidebar();
                 }
             }
         } else {
-            // Unmapped article → toggle expanded detail inline
+            // unmapped article → toggle expanded detail inline
             const isCurrentlyExpanded = expandedId === item.id;
             setExpandedId(isCurrentlyExpanded ? null : item.id);
             
-            // If expanding an unmapped item, deselect any mapped item
+            // if expanding an unmapped item, deselect any mapped item
             if (!isCurrentlyExpanded) {
                 onSelectItem(null);
             }

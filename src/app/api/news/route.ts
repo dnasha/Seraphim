@@ -5,6 +5,14 @@ import { fetchSocialFeeds } from '@/lib/social-feeds';
 import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem, NewsResponse } from '@/lib/types';
 
+/*
+Dan Sharan
+
+API route for fetching news items from various sources
+
+*/
+
+
 // simple in-memory cache for individual source groups
 const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -21,7 +29,7 @@ export async function GET(request: Request) {
     try {
         const now = Date.now();
         
-        // Define which sources we need and how to fetch them
+        // define which sources we need and how to fetch them
         const sourceConfigs = [
             { id: 'extra', fetch: () => Promise.all([fetchGNews('general', 20), fetchOSINTGNews()]).then(res => res.flat()) },
             { id: 'news', fetch: () => fetchAllRSSFeeds() },
@@ -29,7 +37,7 @@ export async function GET(request: Request) {
             { id: 'reddit', fetch: () => fetchAllRedditFeeds() },
         ];
 
-        // Filter configs to only what's requested (x/telegram are combined in 'social')
+        // filter configs to only what's requested (x/telegram are combined in 'social')
         const activeConfigs = sourceConfigs.filter(cfg => {
             if (cfg.id === 'extra' && sources.includes('extra')) return true;
             if (cfg.id === 'news' && sources.includes('news')) return true;
@@ -38,7 +46,7 @@ export async function GET(request: Request) {
             return false;
         });
 
-        // 1. Check cache and identify what needs fetching
+        // check cache and identify what needs fetching
         const allItems: NewsItem[] = [];
         const fetchPromises: Promise<void>[] = [];
 
@@ -49,7 +57,7 @@ export async function GET(request: Request) {
             } else {
                 fetchPromises.push(
                     cfg.fetch().then(async (fetchedData) => {
-                        // Enrich new data with location before caching
+                        // enrich new data with location before caching
                         const enriched = await enrichItemsWithLocation(fetchedData);
                         sourceCache.set(cfg.id, { data: enriched, timestamp: Date.now() });
                         allItems.push(...enriched);
@@ -62,10 +70,10 @@ export async function GET(request: Request) {
             await Promise.all(fetchPromises);
         }
 
-        // Apply shared filters (redundant if client does it, but useful for API consistency)
+        // apply shared filters (redundant if client does it, but useful for API consistency)
         let filteredItems = allItems;
 
-        // Source filter (internal sanity check if we over-fetched)
+        // source filter (internal sanity check if we over-fetched)
         filteredItems = filteredItems.filter(item => {
             if (sources.includes('news') && item.sourceType === 'rss') return true;
             if (sources.includes('extra') && item.sourceType === 'gnews') return true;
@@ -78,14 +86,14 @@ export async function GET(request: Request) {
             return false;
         });
 
-        // Category filter
+        // category filter
         if (!categoriesArray.includes('general')) {
             filteredItems = filteredItems.filter(item =>
                 item.category && categoriesArray.includes(item.category)
             );
         }
 
-        // Time range filter
+        // time range filter
         if (timeRange !== 'all') {
             let msCutoff = 0;
             switch(timeRange) {
@@ -99,7 +107,7 @@ export async function GET(request: Request) {
             }
         }
 
-        // Search filter
+        // search filter
         if (search) {
             const searchLower = search.toLowerCase();
             filteredItems = filteredItems.filter(item =>
@@ -108,7 +116,7 @@ export async function GET(request: Request) {
             );
         }
 
-        // Sort by date
+        // sort by date
         filteredItems.sort((a, b) =>
             new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
         );
