@@ -4,6 +4,8 @@ import { enrichItemsWithLocation } from '../src/lib/geocoding';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// npx tsx scripts/test-real-geocode.ts 
+
 async function run() {
     console.log("Fetching items from RSS and Social sources...");
     const rssItems = await fetchAllRSSFeeds();

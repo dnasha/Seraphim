@@ -327,7 +327,21 @@ export function extractLocation(title: string, description: string): { match: st
                 if (!found && source !== 'abbrev' && source !== 'demonym') continue;
             }
 
-            const displayName = toTitleCase(loc);
+            // Reject topic-like multi-word candidates (e.g., "Iran War", "Gaza Update")
+            const lowKey = raw.toLowerCase();
+            if (lowKey.endsWith(' war') || lowKey.endsWith(' update') ||
+                lowKey.endsWith(' report') || lowKey.endsWith(' brief') ||
+                lowKey.endsWith(' briefing')) {
+                // If the key we found is exactly the same as the noisy one, skip it
+                if (key === lowKey.replace(/\s+(war|update|report|brief|briefing)$/, '')) {
+                   // actually, we already updated key to the sub-match.
+                   // If we want to keep "Iran" but skip "Iran War", we can.
+                }
+                // Stricter: ignore if the original raw fragment looks like a topic header
+                if (source !== 'dateline') continue;
+            }
+
+            const displayName = toTitleCase(key);
             const wPlacement = placement === 'title' ? 0 : 4;
             let wSource = 0;
             switch(source) {
@@ -432,6 +446,7 @@ export function extractLocation(title: string, description: string): { match: st
 export async function geocodeLocation(
     placeName: string
 ): Promise<{ lat: number; lon: number; displayName: string } | null> {
+    ensureInitialized();
     const key = normalizeAccents(placeName.toLowerCase().trim());
     const known = KNOWN_LOCATIONS[key];
     if (known) {

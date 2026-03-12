@@ -78,7 +78,8 @@ async function benchmarkGeodataLoad(timer) {
   // We measure the time it takes to import the module, 
   // which triggers the top-level loading and processing of KNOWN_LOCATIONS.
   timer.start('geodata_total');
-  const { KNOWN_LOCATIONS } = await import('../src/lib/geocoding');
+  const { KNOWN_LOCATIONS, ensureInitialized } = await import('../src/lib/geocoding/index.ts');
+  ensureInitialized();
   timer.stop('geodata_total');
 
   const totalEntries = Object.keys(KNOWN_LOCATIONS).length;
@@ -100,7 +101,8 @@ async function benchmarkGeodataLoad(timer) {
 async function benchmarkRSS(timer) {
   sectionHeader('Stage 2 · RSS Feed Sourcing');
 
-  const { RSS_SOURCES, REDDIT_SOURCES, fetchSingleFeed, fetchRedditFeed } = await import('../src/lib/rss.ts');
+  const { fetchSingleFeed, fetchRedditFeed } = await import('../src/lib/rss.ts');
+  const { RSS_SOURCES, REDDIT_SOURCES } = await import('../src/data/sources.ts');
 
   const sources = QUICK_MODE ? RSS_SOURCES.slice(0, 3) : RSS_SOURCES;
   const redditSources = QUICK_MODE ? [] : REDDIT_SOURCES;
@@ -290,12 +292,16 @@ async function benchmarkGeocoding(timer, extractionResults) {
   // Deduplicate locations to simulate real-world geocoding cache/bottleneck
   const uniqueLocations = [...new Set(extractionResults.map(r => r.match).filter(Boolean))];
 
+  const geocodeFails = [];
   for (const loc of uniqueLocations) {
     const t0 = performance.now();
     const result = await geocodeLocation(loc);
     totalTime += performance.now() - t0;
     if (result) hits++;
-    else fails++;
+    else {
+      fails++;
+      geocodeFails.push(loc);
+    }
   }
 
   timer.stop('geocoding_total');
@@ -303,6 +309,9 @@ async function benchmarkGeocoding(timer, extractionResults) {
   console.log(`  Unique locations: ${c.white}${uniqueLocations.length}${c.reset}`);
   console.log(`  Dict Hits:        ${c.green}${hits}${c.reset} (${pct(hits, uniqueLocations.length)})`);
   console.log(`  Fails:            ${c.red}${fails}${c.reset}`);
+  if (geocodeFails.length > 0) {
+    console.log(`  ${c.dim}Missed: ${geocodeFails.join(', ')}${c.reset}`);
+  }
   console.log(`  Total Time:       ${c.white}${formatMs(timer.get('geocoding_total'))}${c.reset}`);
   console.log(`  Avg Time:         ${c.white}${formatMs(totalTime / Math.max(uniqueLocations.length, 1))}${c.reset} / lookup`);
 }

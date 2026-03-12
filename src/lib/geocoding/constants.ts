@@ -44,6 +44,11 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'southeast asia': { lat: 5.0, lon: 110.0 },
     'west coast': { lat: 37.77, lon: -122.42 },
     'east coast': { lat: 40.71, lon: -74.01 },
+    'northern israel': { lat: 32.95, lon: 35.53 },
+    'southern israel': { lat: 30.85, lon: 34.75 },
+    'central israel': { lat: 31.95, lon: 34.90 },
+    'northern gaza': { lat: 31.55, lon: 34.50 },
+    'southern gaza': { lat: 31.30, lon: 34.30 },
 };
 
 export const CONTINENT_FALLBACKS: Record<string, { lat: number; lon: number }> = {
@@ -113,6 +118,7 @@ export const DATELINE_NOISE_WORDS = new Set([
     'briefing', 'explainer', 'report', 'summary', 'watch', 'alert',
     'blog', 'tracker', 'results', 'polls', 'podcast', 'newsletter',
     'centcom', 'eucom', 'africom', 'indopacom', 'southcom', 'northcom',
+    'brief', 'briefing', 'coverage', 'thread', 'timeline',
 ]);
 
 export const STOP_WORDS = new Set([
@@ -152,7 +158,7 @@ export const STOP_WORDS = new Set([
     'man', 'humble', 'bowen', 'country', 'source', 'category', 'theme', 'format', 'topic',
     'et', 'pt', 'ct', 'mt', 'est', 'pst', 'cst', 'mst', 'gmt', 'utc',
     'hong', 'kong', 'abu', 'san', 'los', 'las', 'das', 'del', 'der',
-    'jos', 'america',
+    'jos', 'america', 'intel', 'defence', 'intelligence',
 ]);
 
 export const FALSE_POSITIVES = new Set([
@@ -168,7 +174,9 @@ export const FALSE_POSITIVES = new Set([
     'weekend of war', 'morning edition', 'evening update',
     'daily briefing', 'weekly roundup', 'year in review',
     'gulf war', 'cold war', 'world war', 'civil war', 'arab spring',
-    'iron dome', 'iron curtain',
+    'iron dome', 'iron curtain', 'enterprise software', 'morning report',
+    'evening report', 'special report', 'market update', 'daily dispatch',
+    'breaking news', 'live coverage', 'press release', 'intelligence brief',
 ]);
 
 export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
