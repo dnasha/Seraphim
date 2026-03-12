@@ -87,7 +87,7 @@ interface RedditSource {
     region: string;
 }
 
-const REDDIT_SOURCES: RedditSource[] = [
+export const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit CombatFootage', subreddit: 'CombatFootage', category: 'crisis', region: 'global' },
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis', region: 'global' },
     { name: 'Reddit WorldNews', subreddit: 'worldnews', category: 'world', region: 'global' },
@@ -97,7 +97,7 @@ const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit MiddleEastNews', subreddit: 'MiddleEastNews', category: 'world', region: 'middle_east' },
 ];
 
-async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
+export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
@@ -165,7 +165,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
 
 const FEED_TIMEOUT_MS = 3000; // Reduced to 3 seconds to prevent bottlenecks
 
-async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
+export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
             headers: {

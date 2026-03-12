@@ -37,12 +37,12 @@ const RSSHUB_INSTANCES = [
     'https://rsshub.moeyy.cn',
 ];
 
-const TELEGRAM_CHANNELS: SocialSource[] = [
+export const TELEGRAM_CHANNELS: SocialSource[] = [
     { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis' },
     { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business' },
 ];
 
-const X_ACCOUNTS: SocialSource[] = [
+export const X_ACCOUNTS: SocialSource[] = [
     { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis' },
     { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis' },
     { name: 'Liveuamap (X)', url: 'Liveuamap', platform: 'x', category: 'crisis' },
@@ -54,8 +54,7 @@ const X_ACCOUNTS: SocialSource[] = [
     { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
     { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
     { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis' },
-    { name: 'Centre for Information Resilience (X)', url: 'Cen4infoRes', platform: 'x', category: 'world' },
-    { name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
+    //{ name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
 ];
 
 // ── Telegram scraper (Cheerio-based) ────────────────────────────────────────
@@ -67,7 +66,7 @@ interface TelegramPost {
     links: string[];
 }
 
-async function scrapeTelegramChannel(source: SocialSource): Promise<NewsItem[]> {
+export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
             headers: {
@@ -239,7 +238,7 @@ async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof pa
     }
 }
 
-async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
+export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const username = source.url; // just the username
     // try strategies concurrently to avoid massive sequential timeout penalties
     const feed = await Promise.any([
