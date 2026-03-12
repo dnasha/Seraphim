@@ -44,8 +44,9 @@ export async function fetchGNews(
         const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`, {
             signal: AbortSignal.timeout(5000),
         });
-        if (res.status === 429) {
-            console.warn('gnews: rate-limited (429), skipping headlines');
+        if (res.status === 403 || res.status === 429) {
+            const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
+            console.warn(`gnews: ${reason} (${res.status}), skipping headlines`);
             return [];
         }
         if (!res.ok) throw new Error(`gnews responded ${res.status}`);
@@ -86,8 +87,9 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
         const res = await fetch(`${GNEWS_BASE_URL}/search?${params}`, {
             signal: AbortSignal.timeout(5000),
         });
-        if (res.status === 429) {
-            console.warn('gnews: rate-limited (429), skipping search');
+        if (res.status === 403 || res.status === 429) {
+            const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
+            console.warn(`gnews: ${reason} (${res.status}), skipping search`);
             return [];
         }
         if (!res.ok) throw new Error(`gnews search responded ${res.status}`);
@@ -118,32 +120,35 @@ const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"cyber attack" OR "critical infrastructure"', tags: ['OSINT', 'cyber'] },
 ];
 
-export async function fetchOSINTGNews(maxPerQuery: number = 5): Promise<NewsItem[]> {
+export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) return [];
 
-    const seen = new Set<string>();
-    const allItems: NewsItem[] = [];
-
-    for (const { query, tags } of OSINT_QUERIES) {
-        try {
-            const items = await searchGNews(query, maxPerQuery);
-            if (items.length === 0 && allItems.length === 0) {
-                // rate-limited, no point trying more queries
-                break;
+    // combine queries into one call to save quota (100 req/day limit)
+    const combinedQuery = OSINT_QUERIES.map(q => q.query).join(' OR ');
+    
+    try {
+        const items = await searchGNews(combinedQuery, maxResults);
+        
+        return items.map(item => {
+            const matchedTags = new Set<string>(['OSINT']);
+            const text = (item.title + ' ' + item.description).toLowerCase();
+            
+            for (const { query, tags } of OSINT_QUERIES) {
+                // simple check for keywords (removing quotes and OR for basic matching)
+                const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
+                if (keywords.some(k => text.includes(k.trim()))) {
+                    tags.forEach(t => matchedTags.add(t));
+                }
             }
-            for (const item of items) {
-                if (seen.has(item.url)) continue;
-                seen.add(item.url);
-                allItems.push({
-                    ...item,
-                    category: 'crisis',
-                    tags,
-                });
-            }
-        } catch (error) {
-            console.error(`osint gnews query failed for "${query}":`, error);
-        }
+            
+            return {
+                ...item,
+                category: 'crisis',
+                tags: Array.from(matchedTags),
+            };
+        });
+    } catch (error) {
+        console.error('osint gnews combined query failed:', error);
+        return [];
     }
-
-    return allItems;
 }
