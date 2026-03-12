@@ -18,8 +18,7 @@ const parser = new Parser({
     },
 });
 
-// Source definitions
-
+// source definition
 interface SocialSource {
     name: string;
     url: string;
@@ -36,7 +35,7 @@ const NITTER_INSTANCES = [
     'https://nitter.cz',
 ];
 
-// rSSHub instances as secondary fallback
+// RSSHub instances as secondary fallback
 const RSSHUB_INSTANCES = [
     'https://rsshub.app',
     'https://rsshub.rssforever.com',
@@ -63,8 +62,7 @@ export const X_ACCOUNTS: SocialSource[] = [
     //{ name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
 ];
 
-// Telegram scraper (Cheerio-based)
-
+// telegram scraper (Cheerio-based)
 interface TelegramPost {
     text: string;
     date: string;
@@ -80,7 +78,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
                 'Accept': 'text/html',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            signal: AbortSignal.timeout(5000), // reduced from 10s
+            signal: AbortSignal.timeout(5000),
         });
 
         if (!res.ok) {
@@ -141,7 +139,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
     }
 }
 
-// ── X/Twitter RSS — multi-strategy fallback ─────────────────────────────────
+// x/twitter rss - multi-strategy fallback
 
 // fetch wrapper that races a parser call against a strict timeout
 async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
@@ -168,7 +166,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<Retu
     return feed;
 }
 
-// strategy 1: Native Twitter Syndication (Fastest, clearest, no API key needed)
+// strategy 1: Native Twitter Syndication (fastest, clearest, no API key needed)
 async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
@@ -210,8 +208,8 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     }
 }
 
-// strategy 2: Nitter RSS (Query all known healthy instances at once and take the first success)
-// using a cached "best instance" once found to speed up subsequent requests in a batch.
+// strategy 2: Nitter RSS (query all known healthy instances at once and take the first success)
+// using a cached "best instance" once found to speed up subsequent requests in a batch
 let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -295,8 +293,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     }));
 }
 
-// ── Main entry point ────────────────────────────────────────────────────────
-
+// main entry point
 export async function fetchSocialFeeds(): Promise<NewsItem[]> {
     const telegramPromises = TELEGRAM_CHANNELS.map(source => scrapeTelegramChannel(source));
     const xPromises = X_ACCOUNTS.map(source => fetchXFeed(source));

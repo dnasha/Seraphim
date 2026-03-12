@@ -52,7 +52,7 @@ async function run() {
     const outputPath = path.join(process.cwd(), 'scripts/results/', 'geocode-results.json');
     fs.writeFileSync(outputPath, JSON.stringify(results, null, 2), 'utf-8');
     
-    console.log(`\n=== DONE ===`);
+    console.log(`\nDONE`);
     console.log(`Wrote ${results.length} results to ${outputPath}`);
     
     const mapped = results.filter(r => r.final_mapped_location);

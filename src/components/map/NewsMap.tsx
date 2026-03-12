@@ -301,7 +301,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
         loadLeaflet();
         return () => { cancelled = true; };
-    }, [mapReady, clusteringEnabled, onSelectItem, geoItems]); // remove selectedItemId dependency!
+    }, [mapReady, clusteringEnabled, onSelectItem, geoItems]);
 
     // highlight active marker
     useEffect(() => {
@@ -315,7 +315,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
             if (prevId === nextId && !nextId) return;
 
-            // 1. DIM PREVIOUS
+            // dim previous
             if (prevId && prevId !== nextId) {
                 const prevMarker = markersRef.current.get(prevId);
                 if (prevMarker) {
@@ -330,7 +330,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 }
             }
             
-            // 2. HIGHLIGHT NEW
+            // highilight new
             if (nextId) {
                 const nextMarker = markersRef.current.get(nextId);
                 if (nextMarker) {
@@ -350,7 +350,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
                     const showPopup = () => {
                         nextMarker.openPopup();
-                        // re-check class after popup opens (Lealet sometimes re-renders)
+                        // recheck class after popup opens (Leaflet sometimes rerenders)
                         const newEl = nextMarker.getElement();
                         if (newEl) {
                             const iconInner = newEl.querySelector('.marker-icon');

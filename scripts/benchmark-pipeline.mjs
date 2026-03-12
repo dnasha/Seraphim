@@ -69,7 +69,7 @@ class Timer {
 
 // stage 1: Geodata Loading (via geocode.ts)
 async function benchmarkGeodataLoad(timer) {
-  sectionHeader('Stage 1 · Geodata Loading');
+  sectionHeader('Stage 1 Geodata Loading');
 
   const jsonPath = join(ROOT, 'data', 'geonames.json');
   const stats = statSync(jsonPath);
@@ -97,7 +97,7 @@ async function benchmarkGeodataLoad(timer) {
 
 // stage 2: RSS Sourcing (via rss.ts)
 async function benchmarkRSS(timer) {
-  sectionHeader('Stage 2 · RSS Feed Sourcing');
+  sectionHeader('Stage 2 RSS Feed Sourcing');
 
   const { fetchSingleFeed, fetchRedditFeed } = await import('../src/lib/rss.ts');
   const { RSS_SOURCES, REDDIT_SOURCES } = await import('../src/data/sources.ts');
@@ -183,10 +183,10 @@ async function benchmarkGNews(timer) {
 
 // stage 4: Social Feeds (via social-feeds.ts)
 async function benchmarkSocial(timer) {
-  sectionHeader('Stage 4 · Social Feeds (Telegram + X)');
+  sectionHeader('Stage 4 Social Feeds (Telegram + X)');
 
   if (SKIP_SOCIAL) {
-    console.log(`  ${c.yellow}⚠ Skipped${c.reset} (--skip-social flag)`);
+    console.log(`  ${c.yellow}! Skipped${c.reset} (--skip-social flag)`);
     return [];
   }
 
@@ -239,7 +239,7 @@ async function benchmarkSocial(timer) {
 
 // stage 5: Location Extraction (via geocode.ts)
 async function benchmarkExtraction(timer, items) {
-  sectionHeader('Stage 5 · Location Extraction');
+  sectionHeader('Stage 5 Location Extraction');
 
   const { extractLocation } = await import('../src/lib/geocoding');
 
@@ -269,7 +269,7 @@ async function benchmarkExtraction(timer, items) {
 
 // stage 6: Geocoding (via geocode.ts)
 async function benchmarkGeocoding(timer, extractionResults) {
-  sectionHeader('Stage 6 · Geocoding');
+  sectionHeader('Stage 6 Geocoding');
 
   const { geocodeLocation } = await import('../src/lib/geocoding');
 
@@ -372,7 +372,7 @@ async function main() {
     // stage 6
     await benchmarkGeocoding(timer, extractionResults);
   } else {
-    console.log(`\n  ${c.yellow}No articles collected, skipping extraction and geocoding stages${c.reset}`);
+    console.log(`\n  ${c.yellow}No articles collected, skipping extraction and geocoding ${c.reset}`);
   }
 
   // summary

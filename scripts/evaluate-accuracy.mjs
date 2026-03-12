@@ -5,8 +5,6 @@ tests the geocoding accuracy against hand-graded results
 run: npx tsx scripts/evaluate-accuracy.mjs
 */
 
-
-
 import fs from 'fs';
 import { performance } from 'perf_hooks';
 
@@ -18,8 +16,6 @@ function normalize(val) {
   if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
   return String(val).toLowerCase().trim();
 }
-
-// npx tsx scripts/evaluate-accuracy.mjs
 
 async function run() {
   const startTime = performance.now();
@@ -79,9 +75,7 @@ async function run() {
 
       let isCorrect = false;
       if (isApproved) {
-        // "don't care" about approved entries missing locations (likely defaults)
-        // if it found nothing, we assume it's avoiding a default location correctly.
-        // if it found something, it must match the approval.
+        // don't care about approved entries
         if (normActual === null || normActual === normExpected) {
           isCorrect = true;
         }

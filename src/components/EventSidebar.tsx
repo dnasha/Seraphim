@@ -170,10 +170,10 @@ export default function EventSidebar({
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
                 >
-                    {/* Category accent bar on left edge */}
+                    {/* category accent bar on left edge */}
                     <div className="event-card-accent" style={{ backgroundColor: catColor }} />
 
-                    {/* Main row: thumbnail + text */}
+                    {/* main row: thumbnail + text */}
                     <div className="event-card-row">
                         {item.imageUrl && (
                             <div className="event-card-thumb">
@@ -221,7 +221,7 @@ export default function EventSidebar({
                         </div>
                     </div>
 
-                    {/* Expanded detail panel for unmapped articles */}
+                    {/* expanded detail panel for unmapped articles */}
                     {isExpanded && (
                         <div className="event-card-detail">
                             {item.imageUrl && (

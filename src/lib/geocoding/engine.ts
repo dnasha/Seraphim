@@ -54,13 +54,13 @@ let MULTI_WORD_LOC_SET: Set<string>;
 export function ensureInitialized() {
     if (isInitialized) return;
 
-    // 1. Load GeoNames cities (population-weighted — highest pop wins on name collision)
+    // 1. load GeoNames cities (population-weighted, highest pop wins on name collision)
     for (const [key, city] of Object.entries(geoCities)) {
         if (key.length <= 2) continue;
         KNOWN_LOCATIONS[key] = { lat: city.lat, lon: city.lon, pop: city.pop, type: 'city' };
     }
 
-    // 2. Load admin1 regions (states/provinces) — only if not already occupied by a large city
+    // 2. load admin1 regions (states/provinces), only if not already occupied by a large city
     for (const [key, region] of Object.entries(geoAdmin1)) {
         if (key.length <= 2) continue;
         const existing = KNOWN_LOCATIONS[key];
@@ -69,13 +69,13 @@ export function ensureInitialized() {
         KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' };
     }
 
-    // 3. Countries from geonames.json — always override with their canonical centroids
+    // 3. countries from geonames.json, always override with their canonical centroids
     for (const [name, data] of Object.entries(geoCountries)) {
         if (name.length <= 2) continue;
         KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country' };
     }
 
-    // 4. Hardcoded landmarks & conflict zones
+    // 4. hardcoded landmarks & conflict zones
     for (const [name, coords] of Object.entries(LANDMARKS)) {
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
     }
@@ -91,16 +91,14 @@ export function ensureInitialized() {
     isInitialized = true;
 }
 
-/**
- * Check exact match ONLY. No destructive word-chopping.
- * if the full phrase is in the dictionary, return it. Otherwise return as-is.
- * also tries accent-normalized form.
- */
+/*
+check exact match ONLY. No destructive word-chopping.
+*/
 function disambiguate(candidate: string): string {
     ensureInitialized();
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
-    // try accent-normalized form (e.g. "Irán" → "iran")
+    // try accent-normalized form (e.g. "Irán" -> "iran")
     const normalized = normalizeAccents(key);
     if (normalized !== key && KNOWN_LOCATIONS[normalized]) {
         // return the display name that matches the dictionary key
@@ -109,9 +107,9 @@ function disambiguate(candidate: string): string {
     return candidate;
 }
 
-/**
- * Try to resolve a demonym ("Chinese" → "China")
- */
+/*
+try to resolve a demonym ("Chinese" -> "China")
+*/
 function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
     for (const word of words) {
@@ -126,10 +124,11 @@ function extractDemonym(text: string): string | null {
     return null;
 }
 
-/**
- * Try to resolve country abbreviations in text ("U.S." → "united states")
- * keeps periods so we can match "U.S." properly, unlike demonyms which strip punctuation
- */
+/*
+try to resolve country abbreviations in text ("U.S." -> "united states")
+keeps periods so we can match "U.S." properly, unlike demonyms which strip punctuation
+
+*/
 function extractCountryAbbrev(text: string): string | null {
     // split on whitespace and hyphens
     const tokens = text.split(/[\s\-]+/);
@@ -144,9 +143,9 @@ function extractCountryAbbrev(text: string): string | null {
     return null;
 }
 
-/**
- * Determine the priority type of a location (lower = more specific = better)
- */
+/*
+ determine the priority type of a location (lower = more specific = better)
+*/
 function locationPriority(key: string): number {
     ensureInitialized();
     const entry = KNOWN_LOCATIONS[key];
