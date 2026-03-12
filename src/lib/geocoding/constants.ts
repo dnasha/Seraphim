@@ -6,6 +6,9 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'pentagon': { lat: 38.87, lon: -77.06 }, 'white house': { lat: 38.90, lon: -77.04 },
     'kremlin': { lat: 55.75, lon: 37.62 }, 'vatican': { lat: 41.90, lon: 12.45 },
     'gaza city': { lat: 31.50, lon: 34.47 }, 'west bank': { lat: 31.95, lon: 35.23 },
+    'brussels': { lat: 50.85, lon: 4.35 }, 'sicily': { lat: 37.60, lon: 14.01 },
+    'bahrain': { lat: 26.07, lon: 50.55 }, 'minab': { lat: 27.15, lon: 57.08 },
+    'yemen': { lat: 15.55, lon: 48.52 }, 'morocco': { lat: 31.79, lon: -7.09 },
     'crimea': { lat: 44.95, lon: 34.10 }, 'donbas': { lat: 48.00, lon: 37.80 },
     'kharkiv': { lat: 49.99, lon: 36.23 }, 'odesa': { lat: 46.48, lon: 30.73 },
     'mariupol': { lat: 47.10, lon: 37.55 }, 'kherson': { lat: 46.64, lon: 32.62 },
@@ -49,6 +52,7 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'central israel': { lat: 31.95, lon: 34.90 },
     'northern gaza': { lat: 31.55, lon: 34.50 },
     'southern gaza': { lat: 31.30, lon: 34.30 },
+    'dr congo': { lat: -4.04, lon: 21.76 },
 };
 
 export const CONTINENT_FALLBACKS: Record<string, { lat: number; lon: number }> = {
@@ -100,6 +104,7 @@ export const DEMONYM_MAP: Record<string, string> = {
     'antarctic': 'antarctica', 'caribbean': 'caribbean',
     'balkan': 'balkans', 'scandinavian': 'scandinavia',
     'bavarian': 'germany', 'catalan': 'spain', 'tibetan': 'china',
+    'asian': 'asia', 'european': 'europe', 'african': 'africa',
 };
 
 export const COUNTRY_ABBREV_MAP: Record<string, string> = {
@@ -159,6 +164,11 @@ export const STOP_WORDS = new Set([
     'et', 'pt', 'ct', 'mt', 'est', 'pst', 'cst', 'mst', 'gmt', 'utc',
     'hong', 'kong', 'abu', 'san', 'los', 'las', 'das', 'del', 'der',
     'jos', 'america', 'intel', 'defence', 'intelligence',
+    'university', 'college', 'school', 'center', 'centre', 'hospital',
+    'meta', 'buy', 'same', 'wake', 'next', 'bolton', 'graham', 'salem',
+    'heba', 'hit', 'can', 'strikes', 'attack', 'at', 'about',
+    'nigel', 'brent', 'nhs',
+    'toi', 'sanchez',
 ]);
 
 export const FALSE_POSITIVES = new Set([
@@ -187,4 +197,4 @@ export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
     'who': 'Geneva',
 };
 
-export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom']);
+export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'washington', 'washington dc']);

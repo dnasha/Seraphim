@@ -227,6 +227,10 @@ export function extractLocation(title: string, description: string): { match: st
         for (let i = 0; i < words.length; i++) {
             for (let len = Math.min(4, words.length - i); len >= 2; len--) {
                 const slice = words.slice(i, i + len).join(' ');
+                // If the entire slice is lowercase, it's very likely a common noun phrase (e.g. "la paz" = "the peace")
+                // except for certain small connecting words, but even then, a location should usually have some capitalization.
+                if (slice === slice.toLowerCase()) continue;
+                
                 const cleaned = cleanCandidate(slice);
                 if (cleaned.length <= 3) continue;
                 const key = normalizeAccents(cleaned.toLowerCase());
@@ -315,10 +319,26 @@ export function extractLocation(title: string, description: string): { match: st
 
             if (!KNOWN_LOCATIONS[key]) {
                 const words = key.split(/\s+/);
+                const rawWords = raw.split(/\s+/);
                 let found = false;
+                
+                // If it's a multi-word candidate from regex/nlp, be VERY careful about picking just the first word
                 for (let len = words.length - 1; len >= 1; len--) {
                     const sub = words.slice(0, len).join(' ');
                     if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
+                        // Potential match. Check if the next word looks like a surname.
+                        // If the next word exists, is capitalized in original text, and isn't a known location/noise word
+                        const nextWordRaw = rawWords[len];
+                        if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
+                            const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                            // If the next word is NOT a known location and NOT a common location suffix (City, State, etc)
+                            if (!KNOWN_LOCATIONS[nextWordLower] && 
+                                !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
+                                // Probably a name like "Heba Morayef" or "Graham Harris"
+                                continue; 
+                            }
+                        }
+                        
                         key = sub;
                         found = true;
                         break;

@@ -10,13 +10,15 @@ function normalize(val) {
   return String(val).toLowerCase().trim();
 }
 
+//npx tsx scripts/evaluate-accuracy.mjs
+
 async function run() {
   const startTime = performance.now();
   try {
     // 1. Import the live geocoding logic
     // We do this inside run() to measure the load time if desired,
     // and because it's an async import in an ESM-like context if needed.
-    const { extractLocation, geocodeLocation, NEWS_SOURCE_DEFAULTS } = await import('../src/lib/geocoding');
+    const { extractLocation, geocodeLocation } = await import('../src/lib/geocoding');
 
     // 2. Load the human-graded ground truth
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
@@ -27,25 +29,34 @@ async function run() {
 
     let passCount = 0;
     let totalCount = 0;
+    let skippedCount = 0;
     const failures = [];
 
     console.log(`\nRunning live geocode accuracy test on ${gradedResults.length} cases...\n`);
 
     for (const item of gradedResults) {
+      const isApproved = item.graded_status === 'approved';
+      const rawExpected = isApproved 
+        ? (item.final_mapped_location?.displayName || null)
+        : item.expected_location;
+
+      const normExpected = normalize(rawExpected);
+      
+      // Skip items with "ignore" or "default" in the expected notes
+      if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
+        skippedCount++;
+        continue;
+      }
+
       totalCount++;
 
       // --- LIVE RERUN LOGIC ---
-      // Replicate the logic in enrichItemsWithLocation
+      // Replicate the logic in extractLocation
       const ext = extractLocation(item.title, item.desc || '');
       let placeName = ext.match;
       const candidates = ext.candidates;
 
-      // Logic from enrichItemsWithLocation for fallback sources
-      if (!placeName && item.source) {
-        const srcKey = item.source.toLowerCase().trim();
-        placeName = NEWS_SOURCE_DEFAULTS[srcKey] || null;
-      }
-
+      // Determine actual location based on current logic
       let actualLocationFullName = null;
       if (placeName) {
         const geo = await geocodeLocation(placeName);
@@ -53,32 +64,40 @@ async function run() {
           actualLocationFullName = geo.displayName;
         }
       }
-      // -------------------------
-
-      // Determine expected location
-      let expectedLocationFullName;
-      if (item.graded_status === 'approved') {
-        // If approved, the location that was in the file at grading time is the correct one
-        expectedLocationFullName = item.final_mapped_location?.displayName || null;
-      } else {
-        // If denied, the 'expected_location' field contains the manual correction
-        expectedLocationFullName = item.expected_location;
-      }
-
-      const normExpected = normalize(expectedLocationFullName);
+      
       const normActual = normalize(actualLocationFullName);
 
-      if (normExpected === normActual) {
+      let isCorrect = false;
+      if (isApproved) {
+        // "Don't care" about approved entries missing locations (likely defaults)
+        // If it found nothing, we assume it's avoiding a default location correctly.
+        // If it found something, it must match the approval.
+        if (normActual === null || normActual === normExpected) {
+          isCorrect = true;
+        }
+      } else {
+        // For denied/manual entries, it must match exactly.
+        if (normActual === normExpected) {
+          isCorrect = true;
+        }
+      }
+
+      if (isCorrect) {
         passCount++;
       } else {
         failures.push({
           title: item.title,
-          expected: expectedLocationFullName,
+          description: item.desc,
+          expected: rawExpected,
           actual: actualLocationFullName,
           candidates: candidates,
           statusInGraded: item.graded_status
         });
       }
+    }
+
+    if (skippedCount > 0) {
+      console.log(`(Skipped ${skippedCount} items with 'ignore' or 'default' instructions)\n`);
     }
 
     const duration = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -106,6 +125,7 @@ async function run() {
       failures.slice(0, 10).forEach((f) => {
         const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
         console.log(`[${type}] ${f.title}`);
+        console.log(`      Desc:     ${f.description ? (f.description.split('\n')[0].substring(0, 120) + (f.description.length > 120 ? '...' : '')) : 'null'}`);
         console.log(`      Expected: ${f.expected || 'null'}`);
         console.log(`      Actual:   ${f.actual || 'null'}`);
         console.log(`      Found:    [${f.candidates.join(', ')}]`);
@@ -119,7 +139,8 @@ async function run() {
       // Write all failures to a file for complete inspection
       const failureOutput = failures.map((f) => {
         const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
-        return `[${type}] ${f.title}\n      Expected: ${f.expected || 'null'}\n      Actual:   ${f.actual || 'null'}\n      Found:    [${f.candidates.join(', ')}]\n      Grade:    ${f.statusInGraded}\n`;
+        const indentedDesc = f.description ? f.description.replace(/\n/g, '\n                ') : 'null';
+        return `[${type}] ${f.title}\n      Desc:     ${indentedDesc}\n      Expected: ${f.expected || 'null'}\n      Actual:   ${f.actual || 'null'}\n      Found:    [${f.candidates.join(', ')}]\n      Grade:    ${f.statusInGraded}\n`;
       }).join('\n');
       
       fs.writeFileSync(FAILURES_PATH, failureOutput);

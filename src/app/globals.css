@@ -42,7 +42,7 @@ body {
   --text-muted: #374151;
   --red: #ef4444;
   --green: #22c55e;
-  --sidebar-width: 450px;
+  --sidebar-width: 400px;
 }
 
 [data-theme="dark"] body {
@@ -1377,19 +1377,11 @@ a {
 
   /* Make toggle rows scrollable horizontally on very narrow screens */
   .source-row {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    flex-wrap: nowrap;
-  }
-
-  .source-row::-webkit-scrollbar {
-    display: none;
+    flex-wrap: wrap;
   }
 
   .source-toggles {
-    flex-wrap: nowrap;
-    flex-shrink: 0;
+    flex-wrap: wrap;
   }
 
   .category-toggles {
@@ -1407,18 +1399,11 @@ a {
     flex-shrink: 0;
   }
 
-  /* Time toggles row: scrollable */
+  /* Time toggles row: wrap instead of scroll */
   .filter-section:has(.time-toggle) > div {
     display: flex;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    flex-wrap: wrap;
     gap: 4px;
-  }
-
-  .filter-section:has(.time-toggle) > div::-webkit-scrollbar {
-    display: none;
   }
 
   /* ── Event list fills remaining space ── */

@@ -1,0 +1,38 @@
+[WRONG] New $20 Million Grant to Enhance Public Financial Management for Syria’s Recovery and Development [EN/AR]
+      Desc:     Country: Syrian Arab Republic
+                Source: World Bank
+                
+                Please refer to the attached file.
+                Washington, March 11, 2025 – The World Bank Board of Executive Directors approved on March 5 a US$20 million grant financing to Syria from the International Development Association (IDA) to strengthen efficiency, transparency and accountability in the use of public funds. The Syria Public Financial Management Capacity Strengthening Projectwill help improve core public financial management (PFM) and procurement functions, laying the groundwork for their digitalization, strengthen budget controls, and establish robust institutional arrangements for effective coordination and oversight of PFM reforms.
+                After fourteen years of conflict and economic challenges, Syria’s PFM systems, institutions, and processes continue to face significant challenges. Fiscal space is severely constrained, undermining the government’s ability to meet people’s needs. Revenue collection has shrunk from close to 20% of GDP before the conflict to less than 5% of GDP due to lower oil and tax revenues. Custom duty collection is marginal despite a heavy reliance on imports of commodities since 2011. The Syria Public Financial Management Capacity Strengthening Project marks a strategic response to these needs, by strengthening government systems and efficiently managing public financial resources.
+                "A disciplined and transparent management of public funds is critical for the Syrian state to gain the trust of its citizens and that of the international community as it seeks to mobilize domestic and external assistance for the country’s massive reconstruction needs," said Jean-Christophe Carret, World Bank Middle East Division Director. "This Project will help strengthen the core systems that underpin effective governance to benefit the citizens. Implementation will follow an incremental approach starting with the ‘basics first’ to build foundational systems and capacities and prepare the ground for more advanced reforms."
+                The Project includes three components: PFM reform oversight; capacity development for essential public financial management and procurement functions; and establishing a Syria Integrated Financial Management Information System (SIFMIS). These activities are designed to enhance coordination of PFM reforms, improve compliance and transparency of essential PFM functions, and deliver accurate and timely fiscal data. The project will target essential PFM functions: budget preparation and execution, procurement, and financial reporting including simplification and digitalization of the related business processes. Improved payroll, procurement, and budgeting will ultimately contribute to better health, education, or infrastructure services. The upskilling of government staff through professionalization of the PFM and procurement functions will be institutionalized to ensure sustainability. The establishment of coordination mechanisms, including the Syria External Assistance Fiduciary Section (SEAFS) within the Ministry of Finance will serve both national and international projects, ensuring effective fiduciary oversight and harmonization of assistance provided through multiple channels.
+                "After several years of economic contraction, Syria is expected to record positive growth in 2025 and 2026, marking an important step towards economic stabilization and recovery," said H.E. Yisr Barnieh, Syria’s Minister of Finance. "Our ongoing reform efforts, including the strengthening of public financial management supported by this project, will support a steady economic recovery over the medium-term and help lay the foundation to improve service delivery in a transparent and accountable manner. The Ministry of Finance’s collaboration with the World Bank over the past year has paved the way for a solid partnership after decades of non-engagement."
+                The Syria Public Financial Management Capacity Strengthening Project is the second project in the World Bank’s growing engagement that is being developed in close collaboration with the Syrian government. The Syrian government and the World Bank are currently discussing a strategy to expand this engagement, aligned with the principles and priorities of the government’s Statement of National Recovery Priorities for International Cooperation. The World Bank’s emerging strategy for Syria is focused on three foundations for recovery and sustained economic growth: stabilizing the economy and core government systems; restoring essential services and social stability; and enabling growth and private sector-led recovery. PFM is a cross-cutting priority identified in the national recovery plan, aligned with these three foundations for recovery and growth.
+                Contacts
+                In Washington
+                Serene Jweied
+                sjweied@worldbank.org
+                In Beirut
+                Zeina El Khalil
+                zelkhalil@worldbank.org
+      Expected: Washington
+      Actual:   Middle East
+      Found:    [Middle East, Middle East, Beirut, Syria, Syria, Washington, Washington, Washington, Washington]
+      Grade:    approved
+
+[WRONG] Telescopes Team Up for New View of Cat’s Eye Nebula
+      Desc:     This March 3, 2026, image combines views from ESA’s (European Space Agency) Euclid and NASA’s Hubble Space Telescope to feature one of the most visually intricate remnants of a dying star: the Cat’s Eye Nebula, also known as NGC 6543. This extraordinary planetary nebula lies 4,400 light-years away in the constellation Draco and has captivated astronomers for decades […]
+      Expected: Washington DC
+      Actual:   Europe
+      Found:    [Europe]
+      Grade:    approved
+
+[WRONG] ❗️In the past day, we’ve received zero donations❗️We still need $1049 to keep Live: Ukraine working independently.No sponsors. No political …
+      Desc:     ❗️In the past day, we’ve received zero donations❗️We still need $1049 to keep Live: Ukraine working independently.No sponsors. No political funding. Only readers.If our work gives you verified information about Ukraine — it exists because someone decided to support it.Independent journalism doesn’t disappear suddenly. It fades quietly when support stops.If this project matters to you, now is the moment to act.Even a small amount keeps us moving.💸PayPal:2022liveukraine@gmail.com (click to copy)?
+                
+                Links: https://www.patreon.com/liveukraine_media, https://send.monobank.ua/6CkDfQdvRt, https://t.me/donateliveukraine, https://www.buymeacoffee.com/liveukraine/membership
+      Expected: Ukraine
+      Actual:   United States
+      Found:    [United States]
+      Grade:    denied
