@@ -9,7 +9,7 @@ export function useNewsData() {
     const isFirstLoad = useRef(true);
 
     const fetchNews = useCallback(async (isRefresh = false) => {
-        if (!isRefresh && isFirstLoad.current) setIsLoading(true);
+        setIsLoading(true);
         setError(null);
 
         try {

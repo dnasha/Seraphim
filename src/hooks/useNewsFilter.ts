@@ -21,11 +21,14 @@ export function useNewsFilter(news: NewsItem[]) {
 
     // Initialize time on mount and update every 5 minutes
     useEffect(() => {
-        setNow(Date.now());
+        const timer = setTimeout(() => setNow(Date.now()), 0);
         const interval = setInterval(() => {
             setNow(Date.now());
         }, 5 * 60 * 1000);
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(timer);
+            clearInterval(interval);
+        };
     }, []);
 
     const filteredNews = useMemo(() => {

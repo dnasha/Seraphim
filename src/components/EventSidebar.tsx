@@ -2,7 +2,7 @@
 
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 
 // Category colors (same as FilterBar / NewsMap)
 const CATEGORY_COLORS: Record<string, string> = {
@@ -81,7 +81,7 @@ export default function EventSidebar({
         }
     }, [selectedItemId, selectionVersion]);
 
-    const handleCardClick = (item: NewsItem) => {
+    const handleCardClick = useCallback((item: NewsItem) => {
         const hasGeo = item.latitude !== undefined;
 
         const isMobile = () => window.innerWidth < 860;
@@ -109,7 +109,146 @@ export default function EventSidebar({
                 onSelectItem(null);
             }
         }
-    };
+    }, [selectedItemId, onSelectItem, expandedId, onToggleSidebar]);
+
+    const eventListContent = useMemo(() => {
+        if (isLoading && items.length === 0) {
+            return (
+                <div className="event-list-loading">
+                    <div className="loading-spinner" />
+                    <p>Scanning sources…</p>
+                </div>
+            );
+        }
+
+        if (items.length === 0) {
+            return (
+                <div className="event-list-empty">
+                    <h3>No events found</h3>
+                    <p>Try adjusting your filters</p>
+                </div>
+            );
+        }
+
+        return items.map(item => {
+            const isSelected = item.id === selectedItemId;
+            const hasGeo = item.latitude !== undefined;
+            const isExpanded = expandedId === item.id || item.id === selectedItemId;
+            const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
+            let timeAgo = '';
+            try {
+                timeAgo = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
+            } catch {
+                timeAgo = '';
+            }
+
+            return (
+                <div
+                    key={item.id}
+                    ref={(el) => {
+                        if (el) {
+                            cardRefs.current.set(item.id, el);
+                        } else {
+                            cardRefs.current.delete(item.id);
+                        }
+                    }}
+                    className={`event-card${isSelected ? ' event-card-active' : ''}${hasGeo ? ' event-card-geo' : ' event-card-unmapped'}${isExpanded ? ' event-card-expanded' : ''}`}
+                    onClick={() => handleCardClick(item)}
+                    style={{
+                        backgroundColor: isSelected ? `${catColor}15` : undefined,
+                        borderColor: isSelected ? catColor : undefined,
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
+                >
+                    {/* Category accent bar on left edge */}
+                    <div className="event-card-accent" style={{ backgroundColor: catColor }} />
+
+                    {/* Main row: thumbnail + text */}
+                    <div className="event-card-row">
+                        {item.imageUrl && (
+                            <div className="event-card-thumb">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={item.imageUrl}
+                                    alt=""
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                        const img = e.target as HTMLImageElement;
+                                        if (img.parentElement) img.parentElement.style.display = 'none';
+                                    }}
+                                />
+                            </div>
+                        )}
+                        <div className="event-card-body">
+                            <h3 className="event-card-title">{item.title}</h3>
+                            <div className="event-card-meta">
+                                <span
+                                    className="event-card-source"
+                                    style={{
+                                        background: getSourceStyle(item.source).bg,
+                                        color: getSourceStyle(item.source).color,
+                                    }}
+                                >
+                                    {item.source}
+                                </span>
+                                <span className="event-card-time">{timeAgo}</span>
+                                {item.locationName && (
+                                    <>
+                                        <span className="event-card-meta-sep">•</span>
+                                        <span className="event-card-location">
+                                            <svg className="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px', marginTop: '-2px' }}>
+                                                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                            </svg>
+                                            {item.locationName}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                            {!isExpanded && (
+                                <span className="event-card-expand-hint">Click to expand</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Expanded detail panel for unmapped articles */}
+                    {isExpanded && (
+                        <div className="event-card-detail">
+                            {item.imageUrl && (
+                                <div className="event-card-detail-img">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={item.imageUrl}
+                                        alt=""
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                            const img = e.target as HTMLImageElement;
+                                            if (img.parentElement) img.parentElement.style.display = 'none';
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {item.description && (
+                                <p className="event-card-detail-desc">
+                                    {item.description}
+                                </p>
+                            )}
+                            <a
+                                className="event-card-detail-link"
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Read full article →
+                            </a>
+                        </div>
+                    )}
+                </div>
+            );
+        });
+    }, [items, selectedItemId, expandedId, isLoading, handleCardClick]);
 
     return (
         <aside className={`event-sidebar ${isOpen ? 'mobile-open' : 'collapsed'}`}>
@@ -186,136 +325,7 @@ export default function EventSidebar({
             {filterBar}
 
             <div className="event-list">
-                {isLoading && items.length === 0 ? (
-                    <div className="event-list-loading">
-                        <div className="loading-spinner" />
-                        <p>Scanning sources…</p>
-                    </div>
-                ) : items.length === 0 ? (
-                    <div className="event-list-empty">
-                        <h3>No events found</h3>
-                        <p>Try adjusting your filters</p>
-                    </div>
-                ) : (
-                    items.map(item => {
-                        const isSelected = item.id === selectedItemId;
-                        const hasGeo = item.latitude !== undefined;
-                        const isExpanded = expandedId === item.id || item.id === selectedItemId;
-                        const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
-                        let timeAgo = '';
-                        try {
-                            timeAgo = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
-                        } catch {
-                            timeAgo = '';
-                        }
-
-                        return (
-                            <div
-                                key={item.id}
-                                ref={(el) => {
-                                    if (el) {
-                                        cardRefs.current.set(item.id, el);
-                                    } else {
-                                        cardRefs.current.delete(item.id);
-                                    }
-                                }}
-                                className={`event-card${isSelected ? ' event-card-active' : ''}${hasGeo ? ' event-card-geo' : ' event-card-unmapped'}${isExpanded ? ' event-card-expanded' : ''}`}
-                                onClick={() => handleCardClick(item)}
-                                style={{
-                                    backgroundColor: isSelected ? `${catColor}15` : undefined,
-                                    borderColor: isSelected ? catColor : undefined,
-                                }}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
-                            >
-                                {/* Category accent bar on left edge */}
-                                <div className="event-card-accent" style={{ backgroundColor: catColor }} />
-
-                                {/* Main row: thumbnail + text */}
-                                <div className="event-card-row">
-                                    {item.imageUrl && (
-                                        <div className="event-card-thumb">
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img
-                                                src={item.imageUrl}
-                                                alt=""
-                                                loading="lazy"
-                                                referrerPolicy="no-referrer"
-                                                onError={(e) => {
-                                                    const img = e.target as HTMLImageElement;
-                                                    if (img.parentElement) img.parentElement.style.display = 'none';
-                                                }}
-                                            />
-                                        </div>
-                                    )}
-                                    <div className="event-card-body">
-                                        <h3 className="event-card-title">{item.title}</h3>
-                                        <div className="event-card-meta">
-                                            <span
-                                                className="event-card-source"
-                                                style={{
-                                                    background: getSourceStyle(item.source).bg,
-                                                    color: getSourceStyle(item.source).color,
-                                                }}
-                                            >
-                                                {item.source}
-                                            </span>
-                                            <span className="event-card-time">{timeAgo}</span>
-                                            {item.locationName && (
-                                                <>
-                                                    <span className="event-card-meta-sep">•</span>
-                                                    <span className="event-card-location">
-                                                        <svg className="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px', marginTop: '-2px' }}>
-                                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                                                        </svg>
-                                                        {item.locationName}
-                                                    </span>
-                                                </>
-                                            )}
-                                        </div>
-                                        {!isExpanded && (
-                                            <span className="event-card-expand-hint">Click to expand</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Expanded detail panel for unmapped articles */}
-                                {isExpanded && (
-                                    <div className="event-card-detail">
-                                        {item.imageUrl && (
-                                            <div className="event-card-detail-img">
-                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                <img
-                                                    src={item.imageUrl}
-                                                    alt=""
-                                                    referrerPolicy="no-referrer"
-                                                    onError={(e) => {
-                                                        const img = e.target as HTMLImageElement;
-                                                        if (img.parentElement) img.parentElement.style.display = 'none';
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-                                        {item.description && (
-                                            <p className="event-card-detail-desc">
-                                                {item.description}
-                                            </p>
-                                        )}
-                                        <a
-                                            className="event-card-detail-link"
-                                            href={item.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Read full article →
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                )}
+                {eventListContent}
             </div>
         </aside>
     );

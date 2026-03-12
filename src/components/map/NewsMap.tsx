@@ -38,6 +38,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const [clusteringEnabled, setClusteringEnabled] = useState(false);
     const settingsPanelRef = useRef<HTMLDivElement>(null);
     const selectedIdRef = useRef(selectedItemId);
+    const lastHighlightedIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         selectedIdRef.current = selectedItemId;
@@ -87,6 +88,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 zoom: 2.6,
                 zoomControl: false,
                 attributionControl: true,
+                preferCanvas: true,
                 minZoom: 2.4,
                 zoomSnap: 0.25,
                 zoomDelta: 1,
@@ -135,7 +137,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 setMapReady(false);
             }
         };
-    }, [onSelectItem]); // Remove isDarkMode dependency here!
+    }, [onSelectItem]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // handle container resizing
     useEffect(() => {
@@ -176,7 +178,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         showCoverageOnHover: false,
                         zoomToBoundsOnClick: true,
                         disableClusteringAtZoom: 7,
-                        removeOutsideVisibleBounds: false,
+                        removeOutsideVisibleBounds: true,
+                        chunkedLoading: true,
                         iconCreateFunction: (cluster: MarkerCluster) => {
                             const count = cluster.getChildCount();
                             let size = 36;
@@ -299,75 +302,87 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         const updateActiveMarker = async () => {
             const L = (await import('leaflet')).default;
 
-            markersRef.current.forEach((marker, id) => {
-                const item = geoItems.find(i => i.id === id);
-                const isActive = id === selectedItemId;
-                marker.setIcon(createCategoryIcon(L, item?.category, isActive));
-            });
+            const prevId = lastHighlightedIdRef.current;
+            const nextId = selectedItemId;
 
-            if (!selectedItemId) {
-                mapRef.current!.closePopup();
-                return;
-            }
+            if (prevId === nextId && !nextId) return;
 
-            const marker = markersRef.current.get(selectedItemId);
-            if (marker) {
-                const map = mapRef.current!;
-                
-                const showPopup = () => {
-                    const item = geoItems.find(i => i.id === selectedItemId);
-                    marker.setIcon(createCategoryIcon(L, item?.category, true));
-                    marker.openPopup();
-                };
-
-                if (clusteringEnabled && clusterGroupRef.current) {
-                    const visibleParent = clusterGroupRef.current.getVisibleParent(marker);
-
-                    if (visibleParent === marker) {
-                        const latlng = marker.getLatLng();
-                        const currentZoom = map.getZoom();
-                        const targetZoom = Math.max(currentZoom, 7);
-                        const p = map.project(latlng, targetZoom).subtract([0, 140]);
-                        const target = map.unproject(p, targetZoom);
-
-                        if (currentZoom === targetZoom && map.getCenter().distanceTo(target) < 10) {
-                            showPopup();
-                        } else {
-                            map.once('moveend', showPopup);
-                            map.flyTo(target, targetZoom, { animate: true, duration: 0.8 });
-                        }
-                    } else {
-                        clusterGroupRef.current.zoomToShowLayer(marker, () => {
-                            setTimeout(() => {
-                                if (!mapRef.current) return;
-                                const latlng = marker.getLatLng();
-                                const targetZoom = Math.max(mapRef.current.getZoom(), 7);
-                                const p = mapRef.current.project(latlng, targetZoom).subtract([0, 140]);
-                                const target = mapRef.current.unproject(p, targetZoom);
-
-                                mapRef.current.once('moveend', showPopup);
-                                mapRef.current.setView(target, targetZoom, { animate: true });
-                            }, 150);
-                        });
+            // 1. DIM PREVIOUS
+            if (prevId && prevId !== nextId) {
+                const prevMarker = markersRef.current.get(prevId);
+                if (prevMarker) {
+                    const el = prevMarker.getElement();
+                    if (el) {
+                        const iconInner = el.querySelector('.marker-icon');
+                        if (iconInner) iconInner.classList.remove('marker-icon-active');
                     }
-                } else {
-                    const latlng = marker.getLatLng();
+                    // Fallback to setIcon if element not in DOM (e.g. clustered)
+                    const item = geoItems.find(i => i.id === prevId);
+                    prevMarker.setIcon(createCategoryIcon(L, item?.category, false));
+                }
+            }
+            
+            // 2. HIGHLIGHT NEW
+            if (nextId) {
+                const nextMarker = markersRef.current.get(nextId);
+                if (nextMarker) {
+                    const el = nextMarker.getElement();
+                    if (el) {
+                        const iconInner = el.querySelector('.marker-icon');
+                        if (iconInner) iconInner.classList.add('marker-icon-active');
+                    }
+                    // Sync icon state
+                    const item = geoItems.find(i => i.id === nextId);
+                    nextMarker.setIcon(createCategoryIcon(L, item?.category, true));
+                    
+                    const map = mapRef.current!;
+                    const latlng = nextMarker.getLatLng();
                     const currentZoom = map.getZoom();
                     const targetZoom = Math.max(currentZoom, 7);
 
-                    const p = map.project(latlng, targetZoom).subtract([0, 140]);
-                    const target = map.unproject(p, targetZoom);
+                    const showPopup = () => {
+                        nextMarker.openPopup();
+                        // Re-check class after popup opens (Lealet sometimes re-renders)
+                        const newEl = nextMarker.getElement();
+                        if (newEl) {
+                            const iconInner = newEl.querySelector('.marker-icon');
+                            if (iconInner) iconInner.classList.add('marker-icon-active');
+                        }
+                    };
 
-                    if (currentZoom === targetZoom && map.getCenter().distanceTo(target) < 10) {
-                        showPopup();
+                    const flyToMarker = (targetLatlng: L.LatLng, zoom: number) => {
+                        const p = map.project(targetLatlng, zoom).subtract([0, 140]);
+                        const target = map.unproject(p, zoom);
+                        
+                        // Check if we are already close enough to skip flyTo
+                        const currentCenter = map.getCenter();
+                        const dist = currentCenter.distanceTo(target);
+                        if (zoom === currentZoom && dist < 50) {
+                            showPopup();
+                        } else {
+                            map.once('moveend', () => setTimeout(showPopup, 50));
+                            map.flyTo(target, zoom, { animate: true, duration: 0.8 });
+                        }
+                    };
+
+                    if (clusteringEnabled && clusterGroupRef.current) {
+                        const visibleParent = clusterGroupRef.current.getVisibleParent(nextMarker);
+                        if (visibleParent === nextMarker) {
+                            flyToMarker(latlng, targetZoom);
+                        } else {
+                            clusterGroupRef.current.zoomToShowLayer(nextMarker, () => {
+                                setTimeout(() => flyToMarker(latlng, Math.max(map.getZoom(), 7)), 100);
+                            });
+                        }
                     } else {
-                        map.once('moveend', showPopup);
-                        map.flyTo(target, targetZoom, { animate: true, duration: 0.8 });
+                        flyToMarker(latlng, targetZoom);
                     }
                 }
             } else {
                 mapRef.current!.closePopup();
             }
+
+            lastHighlightedIdRef.current = nextId;
         };
 
         updateActiveMarker();

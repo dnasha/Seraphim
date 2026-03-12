@@ -60,33 +60,28 @@ export function getCategoryColor(category?: string): string {
 export function createCategoryIcon(leaflet: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
-    const size = isActive ? 37 : 27;
+    
+    // Stable container size prevents anchor jitter
+    const containerSize = 44;
     const activeClass = isActive ? ' marker-icon-active' : '';
-    const shadowStyle = isActive
-        ? `box-shadow: 0 0 0 4px ${color}44, 0 0 12px ${color}66;`
-        : `box-shadow: 0 2px 6px rgba(0,0,0,0.3);`;
 
-    const html = `<div class="marker-icon${activeClass}" style="
-        width:${size}px;height:${size}px;
-        background:${color};
-        border-radius:50%;
-        border:2px solid #fff;
-        display:flex;align-items:center;justify-content:center;
-        line-height:0;
-        ${shadowStyle}
-        transition: all 0.2s ease;
-    ">
-        <svg viewBox="0 0 24 24" width="${size * 0.55}" height="${size * 0.55}" fill="#fff" style="display:block;flex-shrink:0;">
-            <path d="${iconPath}"/>
-        </svg>
+    const html = `<div class="marker-container" style="width:${containerSize}px;height:${containerSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+        <div class="marker-icon${activeClass}" style="
+            background:${color};
+            --marker-color: ${color};
+        ">
+            <svg viewBox="0 0 24 24" fill="#fff">
+                <path d="${iconPath}"/>
+            </svg>
+        </div>
     </div>`;
 
     return leaflet.divIcon({
         html,
         className: 'custom-marker-icon',
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
-        popupAnchor: [0, -size / 2],
+        iconSize: [containerSize, containerSize],
+        iconAnchor: [containerSize / 2, containerSize / 2],
+        popupAnchor: [0, -12],
     });
 }
 

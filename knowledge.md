@@ -179,13 +179,21 @@ The UI uses a modular component-based architecture with logic extracted into cus
 - **Cards**: Sidebar cards feature enlarged thumbnails (**88x66px**), right-justified "Read full article" links, and a location pin SVG for mapped items.
 - **Map styles**: Standard (Voyager), Dark, Light, Satellite, and Terrain layers — selectable via a floating settings panel (top-right).
 - **Settings panel**: Floating card opened by gear icon; includes map style grid + clustering toggle.
-- **Markers**: Large circle icons (**27px** normal / **37px** active) with category-specific white SVG glyphs. Active markers pulse and bring their popup to focus.
-- **Clustering**: `leaflet.markercluster` groups nearby pins. **Off by default**. Fixing race conditions: using `zoomToShowLayer` with a follow-up `setView` offset to ensure popups aren't cut off by cluster animations.
+- **Markers**: Large circle icons (**26px** normal / **36px** active) with category-specific white SVG glyphs.
+  - **Surgical Selection**: Uses a stable **44px** container for both states to prevent anchor point jumping.
+  - **Premium Highlighting**: Selected markers feature a "sonar pulse" CSS animation and vibrant color-matched glow.
+  - **Direct DOM Updates**: Marker highlights use direct CSS class manipulation (Ref-based) for instant, flicker-free feedback.
+- **Clustering**: `leaflet.markercluster` groups nearby pins. **Off by default**.
+  - **Performance**: Uses `chunkedLoading: true` and `removeOutsideVisibleBounds: true` to prevent UI lag with large datasets.
+  - **Race Conditions**: Uses `zoomToShowLayer` with specialized coordinate biasing to ensure popups aren't cut off by animations.
+- **Performance Optimization**:
+  - **GPU Acceleration**: Uses `preferCanvas: true` for the map and `will-change` CSS hints for the sidebar and containers.
+  - **Layer Isolation**: Implements `backface-visibility: hidden` and `cubic-bezier` transitions to offload animations to the GPU.
+  - **Memoization**: The high-density sidebar news list is aggressively memoized to prevent re-renders during map pans and pin clicks.
 - **Interaction**:
-  - **Sidebar Click**: Flies map to pin, zooms in (min zoom 7), and offsets center downward (140px bias).
-  - **Pin Click**: Selects sidebar card and expands detail.
-  - **Map Bounds**: Auto-frames the map on refresh, ignoring extreme latitudes like Antarctica to maintain a focused view.
-  - **Map Click**: Clicking the map background deselects any active item.
+  - **Fly To Animation**: Flies map to pin with an 800ms "smooth" transition and 140px vertical offset.
+  - **Map Boundary Framing**: Auto-frames on data refresh, ignoring extreme latitudes (<-60) to maintain focus.
+  - **Deselection**: Clicking the map background or re-clicking a selected card deselects the item and closes popups.
 
 ## Filtering & Controls
 

@@ -28,11 +28,14 @@ export default function Home() {
     
     // Initial mount and theme sync
     useEffect(() => {
-        setMounted(true);
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'light') {
-            setIsDarkMode(false);
-        }
+        const timer = setTimeout(() => {
+            setMounted(true);
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                setIsDarkMode(false);
+            }
+        }, 0);
+        return () => clearTimeout(timer);
     }, []);
 
     // Sync theme to CSS

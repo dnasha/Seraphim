@@ -71,7 +71,8 @@ a {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: margin-left 0.3s ease;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: margin-left;
 }
 
 .main-content.sidebar-collapsed {
@@ -113,7 +114,8 @@ a {
   flex-direction: column;
   overflow: hidden;
   z-index: 1000;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
 }
 
 .event-sidebar.collapsed {
@@ -373,6 +375,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .event-list::-webkit-scrollbar {
@@ -1001,28 +1005,56 @@ a {
 }
 
 .marker-icon {
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  z-index: 10;
+  backface-visibility: hidden;
+}
+
+.marker-icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: block;
 }
 
 .marker-icon:hover {
-  transform: scale(1.15);
-  z-index: 9999 !important;
+  transform: scale(1.18);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 100 !important;
 }
 
 .marker-icon-active {
-  animation: marker-pulse 1.5s ease-in-out infinite;
-  z-index: 10000 !important;
+  width: 36px !important;
+  height: 36px !important;
+  transform: scale(1);
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.2), 0 0 15px var(--marker-color, rgba(0, 0, 0, 0.3));
+  z-index: 1000 !important;
+  animation: marker-pulse-active 2s infinite;
 }
 
-@keyframes marker-pulse {
-  0%,
-  100% {
-    transform: scale(1);
+.marker-icon-active svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+@keyframes marker-pulse-active {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4), 0 0 0 0 var(--marker-color);
   }
-  50% {
-    transform: scale(1.12);
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 255, 255, 0), 0 0 0 15px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
   }
 }
 
@@ -1038,7 +1070,9 @@ a {
   border: 2.5px solid #fff;
   font-weight: 700;
   font-size: 0.85rem;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: none;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .cluster-icon:hover {
