@@ -739,11 +739,11 @@ a {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
-  z-index: 1100;
 }
 
 .map-settings-btn {
   position: relative;
+  z-index: 1000;
   width: 38px;
   height: 38px;
   border-radius: 6px;
@@ -829,6 +829,7 @@ a {
 
 .map-settings-panel {
   position: absolute;
+  z-index: 1100;
   top: 0;
   right: 46px;
   width: 220px;
