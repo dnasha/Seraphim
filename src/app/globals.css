@@ -42,7 +42,7 @@ body {
   --text-muted: #374151;
   --red: #ef4444;
   --green: #22c55e;
-  --sidebar-width: 400px;
+  --sidebar-width: 450px;
 }
 
 [data-theme="dark"] body {
@@ -61,6 +61,36 @@ body {
 
 a {
   color: var(--accent);
+}
+
+/* main content */
+.main-content {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: margin-left 0.3s ease;
+}
+
+.main-content.sidebar-collapsed {
+  margin-left: 0;
+}
+
+.top-actions {
+  position: absolute;
+  top: 12px;
+  right: 62px; /* bit to the left of the settings/zoom gear */
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 860px) {
+  .top-actions {
+    display: none; /* theme toggle moved to sidebar on mobile */
+  }
 }
 
 /* app layout */

@@ -1,6 +1,6 @@
 import { fetchAllRSSFeeds } from '../src/lib/rss';
 import { fetchSocialFeeds } from '../src/lib/social-feeds';
-import { enrichItemsWithLocation } from '../src/lib/geocode';
+import { enrichItemsWithLocation } from '../src/lib/geocoding';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -17,8 +17,8 @@ async function run() {
     const enrichedItems = await enrichItemsWithLocation(items);
 
     const results = enrichedItems.map(item => {
-        let title = item.title;
-        let desc = item.description || '';
+        const title = item.title;
+        const desc = item.description || '';
         
         // found_locations: based on the debug candidates attached by enrichItemsWithLocation
         const found_locations = item.foundLocations || [];

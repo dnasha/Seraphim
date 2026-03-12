@@ -26,31 +26,34 @@ newsscraper/
 ├── data/
 │   ├── cities5000.txt          # GeoNames raw city data (~14 MB)
 │   ├── admin1CodesASCII.txt    # GeoNames admin1 regions
-│   └── geonames.json           # Compiled geodata (~4.7 MB) — cities, admin1, countries
+│   └── geonames.json           # Compiled geodata (~4.7 MB)
 ├── scripts/
 │   ├── benchmark-pipeline.mjs  # Pipeline performance testing script
-│   └── build-geodata.mjs       # Parses GeoNames files → geonames.json
+│   ├── build-geodata.mjs       # Parses GeoNames files → geonames.json
+│   └── evaluate-accuracy.mjs   # Live regression test against human-graded data
 ├── src/
 │   ├── app/
-│   │   ├── api/news/route.ts   # GET /api/news — aggregates, geocodes, caches, returns items
-│   │   ├── globals.css         # All styles (dark/light themes, sidebar, map, popups)
-│   │   ├── layout.tsx          # Root layout, fonts, metadata
-│   │   └── page.tsx            # Main page — state management, filter/source wiring
+│   │   ├── api/news/route.ts   # GET /api/news — aggregates items
+│   │   └── page.tsx            # Main page — uses hooks for state
 │   ├── components/
-│   │   ├── NewsMap.tsx          # Leaflet map with colored category pins + popups
-│   │   ├── EventSidebar.tsx    # Scrollable list of news cards, synced with map selection
-│   │   └── FilterBar.tsx       # Source toggles, category toggles, search input
+│   │   ├── map/                # NewsMap, MapSettings, MapConstants
+│   │   ├── EventSidebar.tsx    # Scrollable list of news cards
+│   │   ├── FilterBar.tsx       # Source/Category UI toggles
+│   │   └── ThemeToggle.tsx     # Reusable theme switch
+│   ├── data/
+│   │   └── sources.ts          # Centralized RSS and Reddit source lists
+│   ├── hooks/
+│   │   ├── useNewsData.ts      # Fetching and polling logic
+│   │   └── useNewsFilter.ts    # Client-side useMemo filtering
 │   ├── lib/
-│   │   ├── geocode.ts          # Location extraction + dictionary lookup + Photon API fallback
-│   │   ├── rss.ts              # RSS feed fetcher (curated source list)
-│   │   ├── gnews.ts            # GNews API wrapper + OSINT keyword search
-│   │   ├── social-feeds.ts     # Telegram + X feeds via RSSHub bridge
-│   │   └── types.ts            # NewsItem, NewsResponse, NewsCategory interfaces
+│   │   ├── geocoding/          # Modular engine (engine, patterns, constants, enricher)
+│   │   ├── rss.ts              # RSS parsing engine
+│   │   ├── social-feeds.ts     # Social media feed scrapers
+│   │   └── types.ts            # Global interfaces
 │   └── types/
-│       └── css.d.ts            # CSS module ambient declarations
+│       └── css.d.ts            # Ambient declarations
 ├── package.json
-├── tsconfig.json
-└── next.config.ts
+└── tsconfig.json
 ```
 
 ## Data Pipeline
@@ -62,32 +65,43 @@ RSS Feeds / GNews API / Social Feeds (Concurrent Fetching)
   /api/news/route.ts ──── 5-min in-memory cache
         │
         ▼
-  enrichItemsWithLocation()  (geocode.ts)
+  enrichItemsWithLocation()  (lib/geocoding/enricher.ts)
         │
         ▼
-  Filtering (Source / Time / Search / MappedOnly)
+  Client-Side Filtering (useMemo) ── Source / Time / Search / MappedOnly
         │
-        └── Returns processed items to client
+        └── Instant UI updates on state change
 ```
 
         ├── 1. extractLocation(title, description)
         │       ├── Dateline regex  (e.g. "KYIV (Reuters) — " or "Albania: ...")
         │       ├── Comma-pair      (e.g. "Austin, Texas")
-        │       ├── Preposition/Verb regex (e.g. "fighting in Aleppo", "fled to Poland")
-        │       ├── compromise NLP  (title then description)
+        │       ├── Action-Target Regex (e.g. "strikes on Yemen") — High Priority
+        │       ├── Sliding-Window Dictionary Scan (O(N) multi-word lookup)
+        │       ├── compromise NLP  (fallback if regex/scan finds nothing)
         │       ├── Country Abbrev  ("U.S.", "U.K." — handles hyphens)
-        │       ├── Demonym fallback ("Iranians" → Iran — handles plurals)
-        │       └── Direct Country Name scan boundaries (for hyphenated pairs like "Iran-Israel")
+        │       └── Demonym fallback ("Iranians" → Iran — handles plurals)
         │
-        ├── 2. geocodeLocation(placeName)
+        ├── 2. normalizeLocation()
+        │       ├── Accent Normalization (São Paulo → Sao Paulo)
+        │       └── Title Case (london → London, washington dc → Washington DC)
+        │
+        ├── 3. geocodeLocation(placeName)
         │       └── KNOWN_LOCATIONS dictionary lookup (instant, ~78K cities + 4K admin1 + 209 countries)
-        │           Note: The external Photon API fallback was disabled for unverified regex hits to completely eliminate rate-limit bottlenecks.
+        │           Note: Photon API fallback is permanently disabled to prevent rate-limit bottlenecks.
         │
-        └── 3. Jitter applied to overlapping coordinates
+        └── 4. Jitter applied to overlapping coordinates
 
 ```
 
-## Geocoding System (geocode.ts) — Key Design Decisions
+## Geocoding System (lib/geocoding/) — Key Design Decisions
+
+The geocoding system is modularized for maintainability:
+- **engine.ts**: Core extraction and dictionary lookup logic.
+- **enricher.ts**: High-level wrapper that enriches NewsItems and applies jitter.
+- **constants.ts**: Landmarks, Demonyn maps, Stop words, and scoring weights.
+- **patterns.ts**: Regex patterns for datelines and Action-Target extraction.
+- **utils.ts**: Pure string normalization and cleaning functions.
 
 ### Location Dictionary Load Order
 
@@ -102,11 +116,13 @@ The `KNOWN_LOCATIONS` dictionary is loaded in a specific priority order where la
 
 Candidates are scored and sorted by two axes:
 
-- **Source priority**: dateline (0) > comma_pair (1) > regex (2) > nlp (3)
-- **Type priority**: landmark (0) > mega-city with >1M pop (1) > country (1.2) > smaller city (1.5) > admin1 (2)
-- **Tie-break**: population (larger wins)
+- **Source priority**: action_target (-2) > dateline (0) > regex/comma (1/2) > nlp (6)
+- **Type priority**: landmark (0) > mega-city (>1M pop) (2) > country (4) > city (6) > admin1 (8)
+- **Context Penalties**: 
+    - **Superpowers**: "United States" and "United Kingdom" receive a +10 penalty to prioritize the *target* of an action over the actor.
+    - **Continents**: Generic matches like "Africa" receive a +20 penalty to ensure they only win if nothing specific is found.
 
-This means countries beat obscure same-named cities (e.g., Albania the country beats "Albania" the municipality in Colombia), but mega-cities like Singapore still resolve to their city coordinates.
+This means countries beat obscure same-named cities, but event-specific targets (like "Yemen") always beat participating actors (like "U.S. strikes").
 
 ### Robust Extraction Heuristics
 
@@ -140,13 +156,17 @@ Run manually when GeoNames data files are updated:
 node scripts/build-geodata.mjs
 ````
 
-**Inputs**: `data/cities5000.txt`, `data/admin1CodesASCII.txt`, hardcoded COUNTRY_DATA (209 entries with ISO codes)
-
-**Output**: `data/geonames.json` containing `{ cities, admin1, countries }`
-
-The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downloaded from [geonames.org/export](https://download.geonames.org/export/dump/) and placed in `data/` before building.
-
 ## UI Architecture
+
+The UI uses a modular component-based architecture with logic extracted into custom hooks:
+- **Hooks**:
+    - `useNewsData`: Manages global news state, fetching, and 5-minute background polling.
+    - `useNewsFilter`: Manages filtering state and performs `useMemo`-based filtering of the news dataset.
+- **Components**:
+    - `EventSidebar`: Displays the news feed and statistics.
+    - `FilterBar`: Contains UI controls for sources, categories, and search.
+    - `NewsMap`: Multi-layered Leaflet map with marker synchronization.
+    - `ThemeToggle`: Reusable dark/light mode switcher.
 
 - **Layout**: Fixed Sidebar (400px) + full-bleed Leaflet map. Sidebar features a premium logo ("Seraphim") and quick actions (Theme toggle, Collapse).
 - **Theme**: Dark mode default, with a custom toggle button. Fonts: Cinezel Decorative for the logo, Inter for the UI.
@@ -160,11 +180,11 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
 - **Map styles**: Standard (Voyager), Dark, Light, Satellite, and Terrain layers — selectable via a floating settings panel (top-right).
 - **Settings panel**: Floating card opened by gear icon; includes map style grid + clustering toggle.
 - **Markers**: Large circle icons (**27px** normal / **37px** active) with category-specific white SVG glyphs. Active markers pulse and bring their popup to focus.
-- **Clustering**: `leaflet.markercluster` groups nearby pins; uses custom-styled circles based on count (Small: Blue, Medium: Red, Large: Dark Red). **Off by default**.
+- **Clustering**: `leaflet.markercluster` groups nearby pins. **Off by default**. Fixing race conditions: using `zoomToShowLayer` with a follow-up `setView` offset to ensure popups aren't cut off by cluster animations.
 - **Interaction**:
-  - **Sidebar Click**: Flies map to pin, zooms in (min zoom 7), and offsets center downward (140px bias) to ensure the popup is fully visible.
-  - **Pin Click**: Selects sidebar card, auto-scrolls it to the **top** of the list, and expands the card detail.
-  - **Toggles**: Clicking an already active pin or expanded card collapses/deselects it.
+  - **Sidebar Click**: Flies map to pin, zooms in (min zoom 7), and offsets center downward (140px bias).
+  - **Pin Click**: Selects sidebar card and expands detail.
+  - **Map Bounds**: Auto-frames the map on refresh, ignoring extreme latitudes like Antarctica to maintain a focused view.
   - **Map Click**: Clicking the map background deselects any active item.
 
 ## Filtering & Controls
@@ -175,9 +195,9 @@ The raw GeoNames files (`cities5000.txt`, `admin1CodesASCII.txt`) must be downlo
   - **Mapped Only**: High-visibility green toggle (default: **ON**) to isolate geolocated news.
 - **Categories**: Multi-select pill filters with category icons (Globe, Triangle, Flag, etc.) matching the map pins.
 - **Search**: Debounced keyword search input at the bottom of the filter stack.
-- **Refresh**: Manual cache override button with a spinning animation during load.
+- **Refresh**: Manual cache override button with a spinning animation during load (controlled via `fetchNews(true)` in `useNewsData`).
 
-### RSS Feeds (curated in `rss.ts`)
+### RSS Feeds (curated in `src/data/sources.ts`)
 
 Includes robust region metadata and categorized curation.
 
@@ -231,20 +251,19 @@ npm run dev        # Starts Next.js dev server
 
 | Task                   | Command / Location                                                 |
 | ---------------------- | ------------------------------------------------------------------ |
-| Run pipeline benchmark | `node scripts/benchmark-pipeline.mjs`                              |
-| Add a new RSS feed     | Append to `RSS_SOURCES` array in `src/lib/rss.ts`                  |
-| Add a new landmark     | Add to `LANDMARKS` object in `src/lib/geocode.ts`                  |
-| Add a stop word        | Add to `STOP_WORDS` set in `src/lib/geocode.ts`                    |
-| Add a demonym          | Add to `DEMONYM_MAP` in `src/lib/geocode.ts`                       |
+| Run pipeline benchmark | `npx tsx scripts/benchmark-pipeline.mjs`                           |
+| Run accuracy test      | `npx tsx scripts/evaluate-accuracy.mjs`                            |
+| Add a new RSS/Reddit feed | Append to `src/data/sources.ts`                                 |
+| Add a new landmark     | Add to `LANDMARKS` in `src/lib/geocoding/constants.ts`             |
+| Add a stop word        | Add to `STOP_WORDS` in `src/lib/geocoding/constants.ts`            |
 | Rebuild geodata        | `node scripts/build-geodata.mjs`                                   |
-| Add a country          | Add to `COUNTRY_DATA` in `scripts/build-geodata.mjs`, then rebuild |
-| Change map tile style  | Edit `MAP_STYLES` in `src/components/NewsMap.tsx`                  |
 | Adjust cache TTL       | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 5 min) |
 
 ## Known Gotchas
 
-- **JSON import size**: `geonames.json` is ~4.7 MB. It's loaded at module init in `geocode.ts`. This is fine for server-side but would be heavy on the client.
-- **Geocode is server-only**: `geocode.ts` runs exclusively on the server (API route). Never import it client-side.
-- **NewsMap is client-only**: Loaded via `next/dynamic` with `{ ssr: false }` because Leaflet requires the DOM.
-- **Rate limiting / Pipeline speed**: We strictly avoid relying on the external Photon API fallback for unknown locations specifically because unresolvable Regex hits (e.g. "Netflix, Hulu" or "MS exec") cause massive cascading rate-limit timeouts that block the pipeline.
-- **Coordinate jitter**: When multiple articles map to the same location (e.g., 3 articles about "Ukraine"), golden-angle spiral jitter is applied so pins don't stack.
+- **JSON import size**: `geonames.json` is ~4.7 MB. Loaded at module init in `lib/geocoding/engine.ts`.
+- **Client-Side Filtering**: For performance, the API returns a wide set of items which the client then filters via `useMemo` in `useNewsFilter`. This allows instant source/category toggling without network latency.
+- **Geocode is server-only**: Never import `lib/geocoding/` client-side.
+- **Rate limiting**: External Photon API fallback is disabled; we rely entirely on the local dictionary + heuristics for speed.
+- **Map Framing**: Framing logic ignores latitudes < -60 (Antarctica) when calculating bounds to prevent zooming out too far on refresh.
+- **Coordinate jitter**: Golden-angle spiral jitter is applied to prevent pin stacking.

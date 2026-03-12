@@ -16,7 +16,7 @@ async function run() {
     // 1. Import the live geocoding logic
     // We do this inside run() to measure the load time if desired,
     // and because it's an async import in an ESM-like context if needed.
-    const { extractLocation, geocodeLocation, NEWS_SOURCE_DEFAULTS } = await import('../src/lib/geocode.ts');
+    const { extractLocation, geocodeLocation, NEWS_SOURCE_DEFAULTS } = await import('../src/lib/geocoding');
 
     // 2. Load the human-graded ground truth
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {

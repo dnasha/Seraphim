@@ -78,7 +78,7 @@ async function benchmarkGeodataLoad(timer) {
   // We measure the time it takes to import the module, 
   // which triggers the top-level loading and processing of KNOWN_LOCATIONS.
   timer.start('geodata_total');
-  const { KNOWN_LOCATIONS } = await import('../src/lib/geocode.ts');
+  const { KNOWN_LOCATIONS } = await import('../src/lib/geocoding');
   timer.stop('geodata_total');
 
   const totalEntries = Object.keys(KNOWN_LOCATIONS).length;
@@ -247,7 +247,7 @@ async function benchmarkSocial(timer) {
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 · Location Extraction');
 
-  const { extractLocation } = await import('../src/lib/geocode.ts');
+  const { extractLocation } = await import('../src/lib/geocoding');
 
   let located = 0;
   let noLocation = 0;
@@ -279,7 +279,7 @@ async function benchmarkExtraction(timer, items) {
 async function benchmarkGeocoding(timer, extractionResults) {
   sectionHeader('Stage 6 · Geocoding');
 
-  const { geocodeLocation } = await import('../src/lib/geocode.ts');
+  const { geocodeLocation } = await import('../src/lib/geocoding');
 
   let hits = 0;
   let fails = 0;

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchGNews, fetchOSINTGNews } from '@/lib/gnews';
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from '@/lib/rss';
 import { fetchSocialFeeds } from '@/lib/social-feeds';
-import { enrichItemsWithLocation } from '@/lib/geocode';
+import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem, NewsResponse } from '@/lib/types';
 
 // simple in-memory cache for individual source groups

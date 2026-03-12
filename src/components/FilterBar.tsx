@@ -38,7 +38,7 @@ interface FilterBarProps {
 }
 
 const categoryOptions = [
-    { value: 'general', label: 'All' },
+    { value: 'all', label: 'All' },
     { value: 'world', label: 'World' },
     { value: 'crisis', label: 'Crisis' },
     { value: 'nation', label: 'Nation' },
@@ -87,18 +87,18 @@ export default function FilterBar({
     };
 
     const toggleCategory = (category: string) => {
-        if (category === 'general') {
-            onCategoriesChange(['general']);
+        if (category === 'all') {
+            onCategoriesChange(['all']);
             return;
         }
 
-        const withoutGeneral = categories.filter(c => c !== 'general');
+        const withoutAll = categories.filter(c => c !== 'all');
 
-        if (withoutGeneral.includes(category)) {
-            const updated = withoutGeneral.filter(c => c !== category);
-            onCategoriesChange(updated.length > 0 ? updated : ['general']);
+        if (withoutAll.includes(category)) {
+            const updated = withoutAll.filter(c => c !== category);
+            onCategoriesChange(updated.length > 0 ? updated : ['all']);
         } else {
-            onCategoriesChange([...withoutGeneral, category]);
+            onCategoriesChange([...withoutAll, category]);
         }
     };
 
