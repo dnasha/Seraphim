@@ -120,8 +120,8 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
 
         return posts.slice(0, 10).map((post, i) => ({
             id: `social-tg-${source.name.replace(/\s+/g, '-').toLowerCase()}-${i}-${Date.now()}`,
-            title: post.text.slice(0, 140) + (post.text.length > 140 ? '…' : ''),
-            description: post.text + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
+            title: safeSlice(post.text, 140) + (post.text.length > 140 ? '…' : ''),
+            description: safeSlice(post.text, 500) + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
             url: post.url,
             source: source.name,
             sourceType: 'social' as const,
@@ -270,8 +270,8 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
 
     return (feed.items || []).slice(0, 10).map((item, index) => ({
         id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
-        title: (item.title || item.contentSnippet || 'No title').slice(0, 200),
-        description: item.contentSnippet || item.content || '',
+        title: safeSlice(item.title || item.contentSnippet || 'No title', 200),
+        description: safeSlice(item.contentSnippet || item.content || '', 1000),
         url: item.link || '',
         source: source.name,
         sourceType: 'social' as const,
@@ -279,6 +279,18 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
         publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
         tags: ['OSINT', 'x'],
     }));
+}
+
+/**
+ * Safe slicing that respects surrogate pairs (emojis)
+ * Prevents invalid UTF-8 sequences in PostGREST/Postgres
+ */
+function safeSlice(str: string, limit: number): string {
+    if (!str) return '';
+    // Use Array.from to correctly handle multi-byte characters
+    const chars = Array.from(str);
+    if (chars.length <= limit) return str;
+    return chars.slice(0, limit).join('');
 }
 
 // main entry point

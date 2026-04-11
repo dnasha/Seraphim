@@ -50,24 +50,39 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
+ * Removes incomplete surrogate pairs and other characters that break Postgres UTF-8/JSON parsing.
+ */
+function cleanString(str: string | undefined | null): string {
+    if (!str) return '';
+    // Removes standalone surrogates (D800-DFFF) while keeping valid pairs
+    return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
+/**
  * Convert a scraped NewsItem into a Supabase-ready DbEvent row.
  * Items without a URL are dropped (URL is the UNIQUE conflict key).
  */
 function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     if (!item.url) return null;
+    let tags = item.tags ?? null;
+    if (Array.isArray(tags)) {
+        tags = tags.filter(t => typeof t === 'string' && t.trim().length > 0);
+        if (tags.length === 0) tags = null;
+    }
+    
     return {
-        title: item.title,
-        description: item.description,
+        title: cleanString(item.title),
+        description: cleanString(item.description),
         url: item.url,
         source: item.source,
         source_type: item.sourceType,
         category: item.category,
         image_url: item.imageUrl,
         published_at: item.publishedAt,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        location_name: item.locationName,
-        tags: item.tags ?? null,
+        latitude: (typeof item.latitude === 'number' && Number.isFinite(item.latitude)) ? item.latitude : null,
+        longitude: (typeof item.longitude === 'number' && Number.isFinite(item.longitude)) ? item.longitude : null,
+        location_name: cleanString(item.locationName) || null,
+        tags: tags,
     };
 }
 
@@ -161,18 +176,45 @@ async function run(): Promise<void> {
     }
 
     console.log(`[scraper] Upserting ${dbEvents.length} events into Supabase...`);
-    const { data: upserted, error: upsertError } = await supabase
-        .from('events')
-        .upsert(dbEvents, { onConflict: 'url', ignoreDuplicates: true })
-        .select('id');
 
-    if (upsertError) {
-        console.error('[scraper] Upsert failed:', upsertError.message);
-        process.exit(1);
+    // Chunk upserts to stay under request size limits and provide better error isolation
+    const UPSERT_CHUNK_SIZE = 50;
+    let totalUpserted = 0;
+
+    for (let i = 0; i < dbEvents.length; i += UPSERT_CHUNK_SIZE) {
+        const chunk = dbEvents.slice(i, i + UPSERT_CHUNK_SIZE);
+        const { data: upserted, error: upsertError } = await supabase
+            .from('events')
+            .upsert(chunk, { onConflict: 'url', ignoreDuplicates: true })
+            .select('id');
+
+        if (upsertError) {
+            console.error(`[scraper] Chunk upsert failed at index ${i}:`, upsertError.message);
+            
+            // If the chunk failed, try individual rows to find the offender
+            console.log(`[scraper] Attempting individual upserts for failed chunk to isolate error...`);
+            for (const event of chunk) {
+                const { error: singleError } = await supabase
+                    .from('events')
+                    .upsert([event], { onConflict: 'url', ignoreDuplicates: true });
+                
+                if (singleError) {
+                    console.error('[scraper] Individual upsert failed for URL:', event.url);
+                    console.error('[scraper] Error:', singleError.message);
+                    console.error('[scraper] Full payload:', JSON.stringify(event, (key, value) => 
+                        typeof value === 'number' && !Number.isFinite(value) ? 'SERIALIZATION_ERROR_NOT_FINITE' : value
+                    , 2));
+                } else {
+                    totalUpserted++;
+                }
+            }
+        } else {
+            totalUpserted += upserted?.length ?? chunk.length;
+        }
     }
 
     const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    console.log(`[scraper] ✓ Upserted ${upserted?.length ?? dbEvents.length} new event(s) in ${elapsed}s`);
+    console.log(`[scraper] ✓ Finished ingestion in ${elapsed}s. Total events successfully handled: ${totalUpserted}`);
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
