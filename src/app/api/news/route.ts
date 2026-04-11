@@ -1,21 +1,32 @@
 import { NextResponse } from 'next/server';
-import { fetchGNews, fetchOSINTGNews } from '@/lib/gnews';
-import { fetchAllRSSFeeds, fetchAllRedditFeeds } from '@/lib/rss';
-import { fetchSocialFeeds } from '@/lib/social-feeds';
-import { enrichItemsWithLocation } from '@/lib/geocoding';
+import { createClient } from '@supabase/supabase-js';
 import { NewsItem, NewsResponse } from '@/lib/types';
+import { DbEvent, dbEventToNewsItem } from '@/types';
 
 /*
 Dan Sharan
 
-API route for fetching news items from various sources
+API route — Supabase data proxy
+Fetches pre-processed events from the database and applies optional
+client-driven filters (categories, sources, time range, search).
 
+The scraper (src/scraper/index.ts) is solely responsible for ingesting new data.
+This route is intentionally "dumb": no RSS parsing, no geocoding.
 */
 
+// ─── Supabase client (read-only anon key, respects RLS) ───────────────────────
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// simple in-memory cache for individual source groups
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+});
+
+// ─── In-memory cache — shields Supabase from read bursts ─────────────────────
 const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const CACHE_KEY = 'events';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -28,59 +39,41 @@ export async function GET(request: Request) {
 
     try {
         const now = Date.now();
-        
-        // define which sources we need and how to fetch them
-        const sourceConfigs = [
-            { id: 'extra', fetch: () => Promise.all([fetchGNews('general', 20), fetchOSINTGNews()]).then(res => res.flat()) },
-            { id: 'news', fetch: () => fetchAllRSSFeeds() },
-            { id: 'social', fetch: () => fetchSocialFeeds() },
-            { id: 'reddit', fetch: () => fetchAllRedditFeeds() },
-        ];
 
-        // filter configs to only what's requested (x/telegram are combined in 'social')
-        const activeConfigs = sourceConfigs.filter(cfg => {
-            if (cfg.id === 'extra' && sources.includes('extra')) return true;
-            if (cfg.id === 'news' && sources.includes('news')) return true;
-            if (cfg.id === 'reddit' && sources.includes('reddit')) return true;
-            if (cfg.id === 'social' && (sources.includes('x') || sources.includes('telegram'))) return true;
-            return false;
-        });
+        // ── Cache check ───────────────────────────────────────────────────────
+        const cached = sourceCache.get(CACHE_KEY);
+        let allItems: NewsItem[];
 
-        // check cache and identify what needs fetching
-        const allItems: NewsItem[] = [];
-        const fetchPromises: Promise<void>[] = [];
+        if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
+            allItems = cached.data;
+        } else {
+            // ── Supabase query ────────────────────────────────────────────────
+            const { data: rows, error } = await supabase
+                .from('events')
+                .select('*')
+                .order('published_at', { ascending: false })
+                .limit(500);
 
-        for (const cfg of activeConfigs) {
-            const cachedValue = sourceCache.get(cfg.id);
-            if (!forceRefresh && cachedValue && (now - cachedValue.timestamp) < CACHE_TTL) {
-                allItems.push(...cachedValue.data);
-            } else {
-                fetchPromises.push(
-                    cfg.fetch().then(async (fetchedData) => {
-                        // enrich new data with location before caching
-                        const enriched = await enrichItemsWithLocation(fetchedData);
-                        sourceCache.set(cfg.id, { data: enriched, timestamp: Date.now() });
-                        allItems.push(...enriched);
-                    })
-                );
+            if (error) {
+                console.error('[api/news] Supabase query failed:', error.message);
+                return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
             }
+
+            allItems = (rows as DbEvent[]).map(dbEventToNewsItem);
+            sourceCache.set(CACHE_KEY, { data: allItems, timestamp: now });
         }
 
-        if (fetchPromises.length > 0) {
-            await Promise.all(fetchPromises);
-        }
-
-        // apply shared filters (redundant if client does it, but useful for API consistency)
+        // ── Filters ───────────────────────────────────────────────────────────
         let filteredItems = allItems;
 
-        // source filter (internal sanity check if we over-fetched)
+        // source filter
         filteredItems = filteredItems.filter(item => {
             if (sources.includes('news') && item.sourceType === 'rss') return true;
             if (sources.includes('extra') && item.sourceType === 'gnews') return true;
             if (item.sourceType === 'social') {
                 const s = item.source.toLowerCase();
                 if (sources.includes('reddit') && s.includes('reddit')) return true;
-                if (sources.includes('x') && (s.includes('x') || s.includes('twitter'))) return true;
+                if (sources.includes('x') && (s.includes('x)') || s.includes('twitter'))) return true;
                 if (sources.includes('telegram') && s.includes('telegram')) return true;
             }
             return false;
@@ -96,14 +89,16 @@ export async function GET(request: Request) {
         // time range filter
         if (timeRange !== 'all') {
             let msCutoff = 0;
-            switch(timeRange) {
+            switch (timeRange) {
                 case '1d': msCutoff = 24 * 60 * 60 * 1000; break;
                 case '3d': msCutoff = 3 * 24 * 60 * 60 * 1000; break;
                 case '1w': msCutoff = 7 * 24 * 60 * 60 * 1000; break;
                 case '1m': msCutoff = 30 * 24 * 60 * 60 * 1000; break;
             }
             if (msCutoff > 0) {
-                filteredItems = filteredItems.filter(item => (now - new Date(item.publishedAt).getTime()) <= msCutoff);
+                filteredItems = filteredItems.filter(
+                    item => (now - new Date(item.publishedAt).getTime()) <= msCutoff
+                );
             }
         }
 
@@ -116,7 +111,7 @@ export async function GET(request: Request) {
             );
         }
 
-        // sort by date
+        // sort by date (Supabase already orders, but filters may scramble it)
         filteredItems.sort((a, b) =>
             new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
         );
@@ -133,10 +128,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json(response);
     } catch (error) {
-        console.error('news api error:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch news' },
-            { status: 500 }
-        );
+        console.error('[api/news] Unhandled error:', error);
+        return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
     }
 }

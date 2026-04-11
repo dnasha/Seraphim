@@ -2,8 +2,6 @@
 
 ## Overview
 
-Seraphim is a real-time OSINT news aggregator that geocodes headlines and plots them on an interactive world map. It pulls articles from RSS feeds and the GNews API, extracts geographic locations from the text using NLP + regex heuristics, and displays everything in a Leaflet/OpenStreetMap map with a filterable sidebar.
-
 Seraphim is transitioning from a monolithic Node.js API route into an event-driven, decoupled architecture powered by Bun. This refactor prevents serverless timeout limits, radically accelerates background task execution, reduces client-side rendering lag, and creates a highly scalable, zero-cost foundation capable of handling thousands of OSINT events globally.
 
 ---
