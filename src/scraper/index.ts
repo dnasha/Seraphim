@@ -31,6 +31,7 @@ import { fetchSocialFeeds } from './fetchers/social-feeds';
 import { enrichItemsWithLocation } from './fetchers/geocoding';
 import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
+import { ensureIsoDate } from './utils/date';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         source_type: item.sourceType,
         category: item.category,
         image_url: item.imageUrl,
-        published_at: item.publishedAt,
+        published_at: ensureIsoDate(item.publishedAt),
         latitude: (typeof item.latitude === 'number' && Number.isFinite(item.latitude)) ? item.latitude : null,
         longitude: (typeof item.longitude === 'number' && Number.isFinite(item.longitude)) ? item.longitude : null,
         location_name: cleanString(item.locationName) || null,

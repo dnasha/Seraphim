@@ -1,6 +1,7 @@
 import Parser from 'rss-parser';
 import { NewsItem } from '@/lib/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
+import { ensureIsoDate } from '../utils/date';
 
 /*
 Dan Sharan
@@ -35,7 +36,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
         const feed = await parser.parseString(text);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (feed.items || []).slice(0, 10).map((item: any, index: number) => ({
+        return (feed.items || []).slice(0, 25).map((item: any, index: number) => ({
             id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -43,7 +44,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
             source: source.name,
             sourceType: 'social' as const,
             category: source.category,
-            publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
+            publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
     } catch (error) {
@@ -102,7 +103,7 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
         const feed = await parser.parseString(text);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (feed.items || []).slice(0, 5).map((item: any, index: number) => ({
+        return (feed.items || []).slice(0, 20).map((item: any, index: number) => ({
             id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -110,7 +111,7 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
             source: source.name,
             sourceType: 'rss' as const,
             category: source.category,
-            publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
+            publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
     } catch (error) {

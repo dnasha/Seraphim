@@ -1,6 +1,8 @@
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { NewsItem } from '@/lib/types';
+import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
+import { ensureIsoDate } from '../utils/date';
 
 /*
 Dan Sharan
@@ -19,14 +21,6 @@ const parser = new Parser({
     },
 });
 
-// source definition
-interface SocialSource {
-    name: string;
-    url: string;
-    platform: 'telegram' | 'x';
-    category: string;
-}
-
 // nitter instances to try — user reports these worked previously
 const NITTER_INSTANCES = [
     'https://nitter.privacydev.net',
@@ -41,25 +35,6 @@ const RSSHUB_INSTANCES = [
     'https://rsshub.app',
     'https://rsshub.rssforever.com',
     'https://rsshub.moeyy.cn',
-];
-
-export const TELEGRAM_CHANNELS: SocialSource[] = [
-    { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis' },
-    { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business' },
-];
-
-export const X_ACCOUNTS: SocialSource[] = [
-    { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis' },
-    { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis' },
-    { name: 'Liveuamap (X)', url: 'Liveuamap', platform: 'x', category: 'crisis' },
-    { name: 'The Intel Crab (X)', url: 'IntelCrab', platform: 'x', category: 'crisis' },
-    { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis' },
-    { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis' },
-    { name: 'Def Mon (X)', url: 'DefMon3', platform: 'x', category: 'crisis' },
-    { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis' },
-    { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
-    { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
-    { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis' },
 ];
 
 // telegram scraper (Cheerio-based)
@@ -118,7 +93,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
             });
         });
 
-        return posts.slice(0, 10).map((post, i) => ({
+        return posts.slice(0, 20).map((post, i) => ({
             id: `social-tg-${source.name.replace(/\s+/g, '-').toLowerCase()}-${i}-${Date.now()}`,
             title: safeSlice(post.text, 140) + (post.text.length > 140 ? '…' : ''),
             description: safeSlice(post.text, 500) + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
@@ -126,7 +101,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
             source: source.name,
             sourceType: 'social' as const,
             category: source.category,
-            publishedAt: post.date,
+            publishedAt: ensureIsoDate(post.date),
             tags: ['OSINT', 'telegram'],
         }));
     } catch (error) {
@@ -192,7 +167,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
         if (items.length === 0) return null;
         items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { items: items.slice(0, 10) } as any;
+        return { items: items.slice(0, 20) } as any;
     } catch {
         return null;
     }
@@ -268,7 +243,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
         return [];
     }
 
-    return (feed.items || []).slice(0, 10).map((item, index) => ({
+    return (feed.items || []).slice(0, 20).map((item, index) => ({
         id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
         title: safeSlice(item.title || item.contentSnippet || 'No title', 200),
         description: safeSlice(item.contentSnippet || item.content || '', 1000),
@@ -276,7 +251,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
         source: source.name,
         sourceType: 'social' as const,
         category: source.category,
-        publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
+        publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
         tags: ['OSINT', 'x'],
     }));
 }

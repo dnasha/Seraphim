@@ -1,6 +1,7 @@
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { NewsItem } from './types';
+import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 
 /*
 Dan Sharan
@@ -18,13 +19,7 @@ const parser = new Parser({
     },
 });
 
-// source definition
-interface SocialSource {
-    name: string;
-    url: string;
-    platform: 'telegram' | 'x';
-    category: string;
-}
+// telegram scraper (Cheerio-based)
 
 // nitter instances to try — user reports these worked previously
 const NITTER_INSTANCES = [
@@ -41,28 +36,6 @@ const RSSHUB_INSTANCES = [
     'https://rsshub.rssforever.com',
     'https://rsshub.moeyy.cn',
 ];
-
-export const TELEGRAM_CHANNELS: SocialSource[] = [
-    { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis' },
-    { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business' },
-];
-
-export const X_ACCOUNTS: SocialSource[] = [
-    { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis' },
-    { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis' },
-    { name: 'Liveuamap (X)', url: 'Liveuamap', platform: 'x', category: 'crisis' },
-    { name: 'The Intel Crab (X)', url: 'IntelCrab', platform: 'x', category: 'crisis' },
-    { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis' },
-    { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis' },
-    { name: 'Def Mon (X)', url: 'DefMon3', platform: 'x', category: 'crisis' },
-    { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis' },
-    { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
-    { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
-    { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis' },
-    //{ name: 'Jakub Janovsky / Oryx (X)', url: 'Rebel44CZ', platform: 'x', category: 'crisis' }
-];
-
-// telegram scraper (Cheerio-based)
 interface TelegramPost {
     text: string;
     date: string;
@@ -122,7 +95,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
             });
         });
 
-        return posts.slice(0, 10).map((post, i) => ({
+        return posts.slice(0, 20).map((post, i) => ({
             id: `social-tg-${source.name.replace(/\s+/g, '-').toLowerCase()}-${i}-${Date.now()}`,
             title: post.text.slice(0, 140) + (post.text.length > 140 ? '…' : ''),
             description: post.text + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
@@ -202,7 +175,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
         // sort by newest first, then take top 10
         items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { items: items.slice(0, 10) } as any;
+        return { items: items.slice(0, 20) } as any;
     } catch {
         return null; // fallback on error
     }
@@ -280,7 +253,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
         return [];
     }
 
-    return (feed.items || []).slice(0, 10).map((item, index) => ({
+    return (feed.items || []).slice(0, 20).map((item, index) => ({
         id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
         title: (item.title || item.contentSnippet || 'No title').slice(0, 200),
         description: item.contentSnippet || item.content || '',
