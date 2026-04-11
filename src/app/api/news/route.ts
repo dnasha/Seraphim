@@ -24,7 +24,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 // ─── In-memory cache — shields Supabase from read bursts ─────────────────────
 const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 const CACHE_KEY = 'events';
 
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
             // ── Supabase query ────────────────────────────────────────────────
             const { data: rows, error } = await supabase
                 .from('events')
-                .select('*')
+                .select('id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name')
                 .order('published_at', { ascending: false })
                 .limit(500);
 
@@ -126,7 +126,12 @@ export async function GET(request: Request) {
             },
         };
 
-        return NextResponse.json(response);
+        return NextResponse.json(response, {
+            headers: {
+                // Cache at the Edge for 15 minutes to eliminate server loads
+                'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=59'
+            }
+        });
     } catch (error) {
         console.error('[api/news] Unhandled error:', error);
         return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });

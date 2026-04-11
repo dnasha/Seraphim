@@ -11,10 +11,12 @@ Seraphim is a real-time OSINT news aggregator that geocodes headlines and plots 
 | Framework          | **Next.js 16** (App Router)                                                             |
 | Language           | **TypeScript**                                                                          |
 | Frontend           | **React 19**, vanilla CSS (no Tailwind)                                                 |
+| Database           | **Supabase** (PostgreSQL + PostGIS)                                                     |
+| Runtime            | **Bun** (for the scraper worker)                                                        |
 | Map                | **Leaflet 1.9** + **react-leaflet 5** on **OpenStreetMap** tiles                        |
 | NLP                | **compromise** (lightweight NLP for place-name extraction)                              |
 | RSS Parsing        | **rss-parser**                                                                          |
-| News API           | **GNews** (optional, requires `GNEWS_API_KEY` in `.env.local`)                          |
+| News API           | **GNews** (optional, requires `GNEWS_API_KEY`)                                          |
 | Geodata            | **GeoNames** (cities5000.txt + admin1CodesASCII.txt → compiled to `data/geonames.json`) |
 | Geocoding Fallback | **Photon / Komoot API** (OSM-based, no API key needed)                                  |
 | Fonts              | Inter, Playfair Display (Google Fonts)                                                  |
@@ -33,24 +35,25 @@ newsscraper/
 │   └── evaluate-accuracy.mjs   # Live regression test against human-graded data
 ├── src/
 │   ├── app/
-│   │   ├── api/news/route.ts   # GET /api/news — aggregates items
+│   │   ├── api/news/route.ts   # GET /api/news — Supabase proxy
 │   │   └── page.tsx            # Main page — uses hooks for state
 │   ├── components/
 │   │   ├── map/                # NewsMap, MapSettings, MapConstants
 │   │   ├── EventSidebar.tsx    # Scrollable list of news cards
-│   │   ├── FilterBar.tsx       # Source/Category UI toggles
-│   │   └── ThemeToggle.tsx     # Reusable theme switch
+│   │   └── FilterBar.tsx       # Source/Category UI toggles
+│   ├── scraper/
+│   │   ├── index.ts            # Bun Scraping Worker (Entry Point)
+│   │   └── fetchers/           # Modular fetchers (rss, gnews, social)
 │   ├── data/
 │   │   └── sources.ts          # Centralized RSS and Reddit source lists
 │   ├── hooks/
-│   │   ├── useNewsData.ts      # Fetching and polling logic
+│   │   ├── useNewsData.ts      # Fetching from /api/news
 │   │   └── useNewsFilter.ts    # Client-side useMemo filtering
 │   ├── lib/
-│   │   ├── geocoding/          # Modular engine (engine, patterns, constants, enricher)
-│   │   ├── rss.ts              # RSS parsing engine
-│   │   ├── social-feeds.ts     # Social media feed scrapers
+│   │   ├── geocoding/          # NLP engine (engine, patterns, constants, enricher)
 │   │   └── types.ts            # Global interfaces
 │   └── types/
+│       ├── index.ts            # DB Mapping: DbEvent <-> NewsItem
 │       └── css.d.ts            # Ambient declarations
 ├── package.json
 └── tsconfig.json
@@ -62,15 +65,16 @@ newsscraper/
 RSS Feeds / GNews API / Social Feeds (Concurrent Fetching)
         │
         ▼
-  /api/news/route.ts ──── 5-min in-memory cache
+   Geocoding Pipeline (enrichItemsWithLocation)
         │
         ▼
-  enrichItemsWithLocation()  (lib/geocoding/enricher.ts)
-        │
-        ▼
-  Client-Side Filtering (useMemo) ── Source / Time / Search / MappedOnly
-        │
-        └── Instant UI updates on state change
+    Standalone Scraper (Bun) ──> Upsert to Supabase (events table)
+                                     │ (Every 30 mins)
+                                     ▼
+                           /api/news/route.ts (Next.js)
+                                     │ (15m Server Cache + Edge CDN)
+                                     ▼
+                           Client-Side Filtering (useMemo)
 ```
 
         ├── 1. extractLocation(title, description)
@@ -160,7 +164,7 @@ node scripts/build-geodata.mjs
 
 The UI uses a modular component-based architecture with logic extracted into custom hooks:
 - **Hooks**:
-    - `useNewsData`: Manages global news state, fetching, and 5-minute background polling.
+    - `useNewsData`: Manages global news state, fetching, and 15-minute background polling (silent refresh).
     - `useNewsFilter`: Manages filtering state and performs `useMemo`-based filtering of the news dataset.
 - **Components**:
     - `EventSidebar`: Displays the news feed and statistics.
@@ -190,6 +194,7 @@ The UI uses a modular component-based architecture with logic extracted into cus
   - **GPU Acceleration**: Uses `preferCanvas: true` for the map and `will-change` CSS hints for the sidebar and containers.
   - **Layer Isolation**: Implements `backface-visibility: hidden` and `cubic-bezier` transitions to offload animations to the GPU.
   - **Memoization**: The high-density sidebar news list is aggressively memoized to prevent re-renders during map pans and pin clicks.
+  - **Data Resilience**: Implements strict nullish checks for geographic coordinates to prevent Leaflet runtime crashes on unmapped articles.
 - **Interaction**:
   - **Fly To Animation**: Flies map to pin with an 800ms "smooth" transition and 140px vertical offset.
   - **Map Boundary Framing**: Auto-frames on data refresh, ignoring extreme latitudes (<-60) to maintain focus.
@@ -252,20 +257,22 @@ Items arrive with `sourceType: 'social'`, `sourceType: 'rss'`, or `sourceType: '
 
 ```bash
 npm install
-npm run dev        # Starts Next.js dev server
+npm run dev               # Starts Next.js dev server
+bun run src/scraper/index.ts  # Runs the ingestion worker manually
 ```
 
 ## Common Tasks
 
 | Task                   | Command / Location                                                 |
 | ---------------------- | ------------------------------------------------------------------ |
+| Run ingestion worker   | `bun run src/scraper/index.ts` (Requires env vars)                 |
 | Run pipeline benchmark | `npx tsx scripts/benchmark-pipeline.mjs`                           |
 | Run accuracy test      | `npx tsx scripts/evaluate-accuracy.mjs`                            |
 | Add a new RSS/Reddit feed | Append to `src/data/sources.ts`                                 |
 | Add a new landmark     | Add to `LANDMARKS` in `src/lib/geocoding/constants.ts`             |
 | Add a stop word        | Add to `STOP_WORDS` in `src/lib/geocoding/constants.ts`            |
 | Rebuild geodata        | `node scripts/build-geodata.mjs`                                   |
-| Adjust cache TTL       | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 5 min) |
+| Adjust cache TTL       | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 15 min) |
 
 ## Known Gotchas
 
@@ -275,3 +282,6 @@ npm run dev        # Starts Next.js dev server
 - **Rate limiting**: External Photon API fallback is disabled; we rely entirely on the local dictionary + heuristics for speed.
 - **Map Framing**: Framing logic ignores latitudes < -60 (Antarctica) when calculating bounds to prevent zooming out too far on refresh.
 - **Coordinate jitter**: Golden-angle spiral jitter is applied to prevent pin stacking.
+- **Egress Optimization**: The API uses selective `SELECT` queries to omit unused fields (like `tags`) and heavyweight data from the initial payload.
+- **Edge Caching**: `route.ts` serves `Cache-Control` headers for Edge CDN caching, drastically reducing database read volume and latency for concurrent users.
+- **Polling Strategy**: Background polling uses silent cached fetches every 15 minutes, while the manual refresh button explicitly overrides the server cache with `?refresh=true`.

@@ -42,8 +42,8 @@ export function useNewsData() {
 
     useEffect(() => {
         const interval = setInterval(() => {
-            fetchNews(true);
-        }, 5 * 60 * 1000); // 5 minutes
+            fetchNews();
+        }, 15 * 60 * 1000); // 15 minutes
         return () => clearInterval(interval);
     }, [fetchNews]);
 

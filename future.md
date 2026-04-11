@@ -23,33 +23,34 @@ Seraphim is transitioning from a monolithic Node.js API route into an event-driv
 
 ---
 
-## Phase 1: The Database Bridge (Supabase)
+## Phase 1: The Database Bridge (Supabase) [DONE]
 
 1. **Provision Supabase:** Create a new project and enable the **Data API**.
 2. **Enable PostGIS:** Turn on the `postgis` extension to handle geographic data.
 3. **Create `events` Table:** Create a table with columns for `id`, `title`, `description`, `source`, `url` (unique constraint), `category`, `latitude`, `longitude`, and `published_at`.
-4. **Secure with RLS:** - Public Policy: `SELECT` only (for the Next.js viewer).
+4. **Secure with RLS:** Public `SELECT` and Service Role `INSERT`/`UPDATE` policies.
 
-- Service Role Policy: `INSERT`/`UPDATE` only (for the GitHub Action scraper).
+## Phase 2: Decoupling the Scraper (Backend) [DONE]
 
-## Phase 2: Decoupling the Scraper (Backend)
+1. **Isolate Logic:** Move fetchers and geocoding into a dedicated `src/scraper/` directory.
+2. **Setup Background Worker (Bun):** Transitioned to Bun for 30x faster cold starts and native TS support.
+3. **Configure Cron & Execution:** Implemented `.github/workflows/scrape.yml` running every 30 minutes.
+4. **Inject Secrets:** Configured `SUPABASE_SERVICE_ROLE_KEY` and `GNEWS_API_KEY` for secure ingestion.
 
-1. **Isolate Logic:** Move `rss.ts`, `gnews.ts`, and `geocode.ts` out of the Next.js API route and into a dedicated `scraper/` directory within the monorepo. Transition the package manager to Bun (`bun install`).
-2. **Setup Background Worker (Bun):** Create a `.github/workflows/scrape.yml` file and implement the `setup-bun` action to provision the runtime instantly.
-3. **Configure Cron & Execution:** Set the cron schedule to `*/30 * * * *` (runs every 30 minutes). Execute the scraper natively using `bun run src/scraper/index.ts` to skip the build step and stay well under the 2,000 min/mo free tier.
-4. **Inject Secrets:** Store `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `GNEWS_API_KEY` in GitHub Repository Secrets.
+## Phase 3: The Viewer & Map Upgrade [CURRENT FOCUS]
 
-## Phase 3: The Viewer & Map Upgrade (Frontend)
+1. **Refactor Next.js:** The frontend now only fetches data via the Supabase client (Edge-ready).
+2. **Replace Leaflet with MapLibre GL JS:** (Pending) Necessary to handle larger datasets and provide better pan/zoom performance.
+3. **Implement Vector Tiles (Protomaps):** (Pending) Migrate from raster tiles to PMTiles for better visual fidelity and $0 egress costs.
+4. **Stability & Error Handling:** (Ongoing) Strengthen the bridge between the scraper and frontend by handled nullable geodata and edge-case coordinates.
 
-1. **Refactor Next.js:** Remove NLP and scraping dependencies from the client. The frontend should only fetch data via `supabase-js`.
-2. **Replace Leaflet:** Install `maplibre-gl` and `react-map-gl`.
-3. **Implement Protomaps:**
+---
 
-- Download the `planet.pmtiles` extract (or a regional subset for testing).
-- Upload to a free Cloudflare R2 bucket.
-- Configure MapLibre to read the PMTiles protocol via HTTP Range Requests.
+## Technical Debt & Stability [RECENT IMPROVEMENTS]
 
-4. **Deploy:** Push to Vercel and map the custom `seraphi.me` domain. Add `git diff --quiet HEAD^ HEAD ./src/` to Vercel's Ignored Build Step so scraper updates don't trigger unnecessary website rebuilds.
+- **Coordinate Robustness**: Standardized `!= null` checks across `NewsMap`, `EventSidebar`, and `useNewsFilter` to prevent Leaflet crashes on incomplete geodata.
+- **Type Safety**: Updated `DbEvent` and `dbEventToNewsItem` to explicitly handle SQL `NULL` values, ensuring the frontend never receives corrupted lat/lng objects.
+- **Worker Isolation**: The Bun scraper is now fully independent of the Next.js runtime, allowing for easier scaling of ingestion sources.
 
 ---
 
