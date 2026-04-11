@@ -14,7 +14,7 @@ export * from '@/lib/types';
 // Mirrors the `events` table in Supabase (snake_case to match PostgreSQL).
 // The scraper writes rows matching this interface; the API route reads them.
 export interface DbEvent {
-  id?: number;                // auto-generated bigint primary key
+  id?: string;                // auto-generated UUID primary key
   title: string;
   description: string;
   url: string;                // UNIQUE — used as the upsert conflict key

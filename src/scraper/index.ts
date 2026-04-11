@@ -106,18 +106,27 @@ async function run(): Promise<void> {
     console.log('[scraper] Fetching recent known URLs from Supabase...');
     const incomingUrls = itemsWithUrl.map(i => i.url);
 
-    // Supabase in() operator has a limit; batch if needed (usually fine for ~200 URLs)
-    const { data: existingRows, error: selectError } = await supabase
-        .from('events')
-        .select('url')
-        .in('url', incomingUrls);
-
-    if (selectError) {
-        console.error('[scraper] Failed to pre-fetch known URLs:', selectError.message);
-        // Non-fatal: continue without deduplication guard (upsert will handle conflicts)
+    // Supabase in() generates a GET request, so large arrays exceed URI length limits.
+    // Batch into chunks of 50 to stay well under the limit.
+    const knownUrls = new Set<string>();
+    const CHUNK_SIZE = 50;
+    
+    for (let i = 0; i < incomingUrls.length; i += CHUNK_SIZE) {
+        const chunk = incomingUrls.slice(i, i + CHUNK_SIZE);
+        const { data, error } = await supabase
+            .from('events')
+            .select('url')
+            .in('url', chunk);
+            
+        if (error) {
+            console.error(`[scraper] Failed to pre-fetch chunk ${i / CHUNK_SIZE + 1}:`, error.message);
+            // Non-fatal: if this fails, we just don't dedupe this chunk here
+            // (the database unique constraint will still protect during upsert)
+        } else if (data) {
+            data.forEach((r: { url: string }) => knownUrls.add(r.url));
+        }
     }
-
-    const knownUrls = new Set((existingRows ?? []).map((r: { url: string }) => r.url));
+    
     console.log(`[scraper] Known URLs in DB: ${knownUrls.size}`);
 
     // ── Step 3: Filter out already-processed items ────────────────────────────
