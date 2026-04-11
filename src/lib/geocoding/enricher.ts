@@ -16,7 +16,7 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
     const usedCoords = new Map<string, number>();
 
     for (const item of items) {
-        if (item.latitude !== undefined && item.longitude !== undefined) {
+        if (item.latitude != null && item.longitude != null) {
             enriched.push(item);
             continue;
         }

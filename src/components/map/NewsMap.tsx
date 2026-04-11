@@ -52,7 +52,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         selectedIdRef.current = selectedItemId;
     }, [selectedItemId]);
 
-    const geoItems = useMemo(() => items.filter(i => i.latitude !== undefined && i.longitude !== undefined), [items]);
+    const geoItems = useMemo(() => items.filter(i => i.latitude != null && i.longitude != null), [items]);
 
     // close panel on outside click
     useEffect(() => {

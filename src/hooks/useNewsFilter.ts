@@ -87,7 +87,7 @@ export function useNewsFilter(news: NewsItem[]) {
 
         // mapped only filter
         if (mappedOnly) {
-            filtered = filtered.filter(n => n.latitude !== undefined);
+            filtered = filtered.filter(n => n.latitude != null);
         }
 
         return filtered;

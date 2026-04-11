@@ -157,7 +157,7 @@ async function run(): Promise<void> {
     console.log('[scraper] Running NLP geocoding on new items...');
     const enrichedItems = await enrichItemsWithLocation(newItems);
 
-    const geocodedCount = enrichedItems.filter(i => i.latitude !== undefined).length;
+    const geocodedCount = enrichedItems.filter(i => i.latitude != null).length;
     console.log(`[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`);
 
     // ── Step 5: Build DB rows and upsert ─────────────────────────────────────

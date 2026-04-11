@@ -90,7 +90,7 @@ export default function EventSidebar({
     }, [selectedItemId, selectionVersion]);
 
     const handleCardClick = useCallback((item: NewsItem) => {
-        const hasGeo = item.latitude !== undefined;
+        const hasGeo = item.latitude != null;
 
         const isMobile = () => window.innerWidth < 860;
 
@@ -140,7 +140,7 @@ export default function EventSidebar({
 
         return items.map(item => {
             const isSelected = item.id === selectedItemId;
-            const hasGeo = item.latitude !== undefined;
+            const hasGeo = item.latitude != null;
             const isExpanded = expandedId === item.id || item.id === selectedItemId;
             const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
             let timeAgo = '';
@@ -310,7 +310,7 @@ export default function EventSidebar({
                     {items.length} articles
                 </span>
                 <span className="stat-pill stat-pill-geo">
-                    {items.filter(i => i.latitude !== undefined).length} mapped
+                    {items.filter(i => i.latitude != null).length} mapped
                 </span>
                 {lastUpdated && mounted && !isNaN(new Date(lastUpdated).getTime()) && (
                     <span className="last-updated">

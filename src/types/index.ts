@@ -23,9 +23,9 @@ export interface DbEvent {
   category?: string;
   image_url?: string;
   published_at: string;       // ISO-8601 timestamp
-  latitude?: number;
-  longitude?: number;
-  location_name?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
   tags?: string[] | null;       // stored as JSONB in Supabase
   created_at?: string;        // set by Supabase default
 }
@@ -45,9 +45,9 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     category: row.category,
     publishedAt: row.published_at,
     imageUrl: row.image_url,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    locationName: row.location_name,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    locationName: row.location_name ?? undefined,
     tags: row.tags ?? undefined,
   };
 }
