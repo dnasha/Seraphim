@@ -67,7 +67,7 @@ function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         latitude: item.latitude,
         longitude: item.longitude,
         location_name: item.locationName,
-        tags: item.tags,
+        tags: item.tags ?? null,
     };
 }
 

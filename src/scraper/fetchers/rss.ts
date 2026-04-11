@@ -10,7 +10,7 @@ Run standalone via Bun; imported by src/scraper/index.ts
 */
 
 const parser = new Parser({
-    timeout: 5000,
+    timeout: 15000,
     headers: {
         'User-Agent': 'Seraphim/1.0 (news aggregator)',
         'Accept': 'application/rss+xml, application/xml, text/xml',
@@ -28,7 +28,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
                 'User-Agent': 'Seraphim/1.0 (news aggregator)',
                 'Accept': 'application/rss+xml, application/xml, text/xml',
             },
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) throw new Error(`Status code ${res.status}`);
         const text = await res.text();
@@ -86,7 +86,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 2500;
+const FEED_TIMEOUT_MS = 10000; // 10s — generous for server-side GitHub Actions runner
 
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {

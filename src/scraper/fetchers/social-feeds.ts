@@ -13,7 +13,7 @@ const parser = new Parser({
     customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
     },
-    timeout: 3000,
+    timeout: 10000,
     headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
@@ -78,7 +78,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
                 'Accept': 'text/html',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(15000),
         });
 
         if (!res.ok) {
@@ -137,7 +137,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
 
 // x/twitter rss - multi-strategy fallback
 
-async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
+async function fetchInstanceTimeout(url: string, timeoutMs = 10000): Promise<ReturnType<typeof parser.parseURL>> {
     const res = await fetch(url, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -165,7 +165,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(10000)
         });
         if (!res.ok) return null;
         const html = await res.text();

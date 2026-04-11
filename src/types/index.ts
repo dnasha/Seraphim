@@ -26,7 +26,7 @@ export interface DbEvent {
   latitude?: number;
   longitude?: number;
   location_name?: string;
-  tags?: string[];
+  tags?: string[] | null;       // stored as JSONB in Supabase
   created_at?: string;        // set by Supabase default
 }
 
@@ -48,6 +48,6 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     latitude: row.latitude,
     longitude: row.longitude,
     locationName: row.location_name,
-    tags: row.tags,
+    tags: row.tags ?? undefined,
   };
 }

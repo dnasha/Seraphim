@@ -43,7 +43,7 @@ export async function fetchGNews(
         });
 
         const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`, {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(15000),
         });
         if (res.status === 403 || res.status === 429) {
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
@@ -86,7 +86,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
         });
 
         const res = await fetch(`${GNEWS_BASE_URL}/search?${params}`, {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(15000),
         });
         if (res.status === 403 || res.status === 429) {
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
