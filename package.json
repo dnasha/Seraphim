@@ -21,7 +21,7 @@
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
-    "next": "16.1.6",
+    "next": "^16.2.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0",

@@ -10,7 +10,18 @@ uses leaflet and markercluster libraries
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
-import type { Map as LeafletMap, TileLayer, Marker, MarkerClusterGroup, MarkerCluster, LayerGroup } from 'leaflet';
+import type { 
+    Map as LeafletMap, 
+    TileLayer, 
+    Marker, 
+    MarkerClusterGroup, 
+    MarkerCluster, 
+    LayerGroup, 
+    LatLng, 
+    Point, 
+    LatLngExpression,
+    LeafletMouseEvent
+} from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -23,6 +34,85 @@ import {
     getSourceBadgeColor
 } from './MapConstants';
 import MapSettings from './MapSettings';
+
+// Help TypeScript with internal Leaflet properties
+interface ExtendedMap extends LeafletMap {
+    _getNewPixelOrigin: (center: LatLng, zoom?: number) => Point;
+    _getMapPanePos: () => Point;
+    _move: (center: LatLng, zoom: number, data?: unknown, suppressEvent?: boolean) => void;
+    _moveStart: (zoomChanged: boolean, noMoveStart: boolean) => void;
+    _moveEnd: (zoomChanged: boolean) => void;
+}
+
+/**
+ * Anti-jitter sub-pixel patches
+ * Leaflet's _getNewPixelOrigin and latLngToLayerPoint both call ._round(),
+ * snapping to integer pixels every frame causing 1px random-direction wobble.
+ * We remove rounding during smooth zoom and restore it on settle.
+ */
+function createSubpixelManager(
+    map: LeafletMap,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    L: any // runtime Leaflet object
+) {
+    const emap = map as unknown as ExtendedMap;
+    const origGetNewPixelOrigin = emap._getNewPixelOrigin;
+    const origLatLngToLayerPoint = emap.latLngToLayerPoint;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const L_ref = (window as any).L || L;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origGridSetZoomTransform = (L_ref?.GridLayer?.prototype as any)?._setZoomTransform;
+
+    return {
+        enable: () => {
+            emap._getNewPixelOrigin = (center: LatLng, zoom?: number) => {
+                const viewHalf = emap.getSize().divideBy(2);
+                const pt = emap.project(center, zoom)
+                    .subtract(viewHalf)
+                    .add(emap._getMapPanePos());
+                pt.x = Math.round(pt.x * 100) / 100;
+                pt.y = Math.round(pt.y * 100) / 100;
+                return pt;
+            };
+
+            emap.latLngToLayerPoint = (latlng: LatLngExpression) => {
+                const projectedPoint = emap.project(L.latLng(latlng));
+                const pt = projectedPoint.subtract(emap.getPixelOrigin());
+                pt.x = Math.round(pt.x * 100) / 100;
+                pt.y = Math.round(pt.y * 100) / 100;
+                return pt;
+            };
+
+            if (L_ref?.GridLayer?.prototype) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (L_ref.GridLayer.prototype as any)._setZoomTransform = function (
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    this: any, level: any, center: LatLng, zoom: number
+                ) {
+                    const scale = this._map.getZoomScale(zoom, level.zoom);
+                    const translate = level.origin.multiplyBy(scale)
+                        .subtract((this._map as ExtendedMap)._getNewPixelOrigin(center, zoom));
+                    translate.x = Math.round(translate.x * 100) / 100;
+                    translate.y = Math.round(translate.y * 100) / 100;
+
+                    if (L_ref.Browser.any3d) {
+                        L_ref.DomUtil.setTransform(level.el, translate, scale);
+                    } else {
+                        L_ref.DomUtil.setPosition(level.el, translate);
+                    }
+                };
+            }
+        },
+        disable: () => {
+            emap._getNewPixelOrigin = origGetNewPixelOrigin;
+            emap.latLngToLayerPoint = origLatLngToLayerPoint;
+            if (origGridSetZoomTransform && L_ref?.GridLayer?.prototype) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (L_ref.GridLayer.prototype as any)._setZoomTransform = origGridSetZoomTransform;
+            }
+        }
+    };
+}
 
 interface NewsMapProps {
     items: NewsItem[];
@@ -77,7 +167,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         let aborted = false;
 
         const loadLeaflet = async () => {
-            const L = (await import('leaflet')).default;
+            const leafletModule = await import('leaflet');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (leafletModule as any).default || leafletModule;
             await import('leaflet.markercluster');
 
             if (aborted) return;
@@ -97,10 +189,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 zoomControl: false,
                 attributionControl: true,
                 preferCanvas: true,
+                scrollWheelZoom: false, // disabled — we use custom smooth zoom below
                 minZoom: 2.4,
-                zoomSnap: 0.25,
-                zoomDelta: 1,
-                wheelPxPerZoomLevel: 80,
+                zoomSnap: 0,
+                zoomDelta: 0.5,
                 worldCopyJump: true,
                 maxBounds: L.latLngBounds(
                     L.latLng(-85, -Infinity),
@@ -109,6 +201,148 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 maxBoundsViscosity: 1.0,
             });
 
+            // ── Custom Smooth Wheel Zoom (Google Maps-style) ──────────────
+            {
+                const emap = map as unknown as ExtendedMap;
+                const subpixel = createSubpixelManager(map, L);
+
+                let targetZoom = map.getZoom();
+                let currentZoom = targetZoom;
+                let rafId: number | null = null;
+                let zooming = false;
+
+                // Anchor: world coordinate that stays under the cursor
+                let anchorLatLng: LatLng | null = null;
+                let anchorContainerPt: Point | null = null;
+
+                const SMOOTH_FACTOR = 0.15;
+                const ZOOM_SPEED = 1 / 150;
+                const EPSILON = 0.0005;
+
+                // Compute map center keeping anchorLatLng under anchorContainerPt
+                const computeCenter = (zoom: number): LatLng => {
+                    if (anchorLatLng && anchorContainerPt) {
+                        const worldPt = emap.project(anchorLatLng, zoom);
+                        const viewHalf = emap.getSize().divideBy(2);
+                        return emap.unproject(
+                            worldPt.subtract(anchorContainerPt).add(viewHalf),
+                            zoom
+                        );
+                    }
+                    return emap.getCenter();
+                };
+
+                const smoothZoomLoop = () => {
+                    const diff = targetZoom - currentZoom;
+
+                    if (Math.abs(diff) < EPSILON) {
+                        currentZoom = targetZoom;
+                        subpixel.disable();
+                        const center = computeCenter(currentZoom);
+                        emap._move(center, currentZoom);
+                        emap._moveEnd(true);
+                        zooming = false;
+                        anchorLatLng = null;
+                        anchorContainerPt = null;
+                        rafId = null;
+                        return;
+                    }
+
+                    currentZoom += diff * SMOOTH_FACTOR;
+                    const center = computeCenter(currentZoom);
+                    emap._move(center, currentZoom);
+
+                    rafId = requestAnimationFrame(smoothZoomLoop);
+                };
+
+                // Shared "begin-or-continue" helper for both wheel & buttons
+                const beginZoom = (containerPt: Point) => {
+                    zooming = true;
+                    currentZoom = emap.getZoom();
+                    targetZoom = currentZoom;
+                    subpixel.enable();
+                    anchorContainerPt = containerPt;
+                    anchorLatLng = emap.containerPointToLatLng(anchorContainerPt);
+                    emap._moveStart(true, false);
+                };
+
+                const kick = () => {
+                    if (rafId === null) {
+                        rafId = requestAnimationFrame(smoothZoomLoop);
+                    }
+                };
+
+                // ── Wheel handler ────────────────────────────────────────
+                container.addEventListener('wheel', (e: WheelEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    let delta = e.deltaY;
+                    if (e.deltaMode === 1) delta *= 40;
+                    else if (e.deltaMode === 2) delta *= 800;
+
+                    if (!zooming) {
+                        const rect = container.getBoundingClientRect();
+                        beginZoom(L.point(
+                            Math.round(e.clientX - rect.left),
+                            Math.round(e.clientY - rect.top),
+                        ));
+                    }
+
+                    targetZoom -= delta * ZOOM_SPEED;
+                    targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), targetZoom));
+                    kick();
+                }, { passive: false });
+
+                // ── Custom zoom buttons (smooth animated) ────────────────
+                const zoomCtrl = new L.Control({ position: 'topright' });
+                zoomCtrl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'leaflet-control-zoom leaflet-bar');
+
+                    const btnIn = L.DomUtil.create('a', 'leaflet-control-zoom-in', div);
+                    btnIn.innerHTML = '+';
+                    btnIn.href = '#';
+                    btnIn.title = 'Zoom in';
+                    btnIn.setAttribute('role', 'button');
+                    btnIn.setAttribute('aria-label', 'Zoom in');
+
+                    const btnOut = L.DomUtil.create('a', 'leaflet-control-zoom-out', div);
+                    btnOut.innerHTML = '&#x2212;';
+                    btnOut.href = '#';
+                    btnOut.title = 'Zoom out';
+                    btnOut.setAttribute('role', 'button');
+                    btnOut.setAttribute('aria-label', 'Zoom out');
+
+                    const handleBtn = (delta: number) => (e: Event) => {
+                        L.DomEvent.preventDefault(e);
+                        L.DomEvent.stopPropagation(e);
+                        if (!zooming) {
+                            const sz = map.getSize();
+                            beginZoom(L.point(sz.x / 2, sz.y / 2));
+                        }
+                        targetZoom += delta;
+                        targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), targetZoom));
+                        kick();
+                    };
+
+                    L.DomEvent.on(btnIn, 'click', handleBtn(1));
+                    L.DomEvent.on(btnOut, 'click', handleBtn(-1));
+                    L.DomEvent.disableClickPropagation(div);
+                    L.DomEvent.disableScrollPropagation(div);
+                    return div;
+                };
+                zoomCtrl.addTo(map);
+
+                // Sync when zoom changes externally (flyTo, fitBounds)
+                map.on('zoomend', () => {
+                    if (!zooming) {
+                        targetZoom = map.getZoom();
+                        currentZoom = targetZoom;
+                    }
+                });
+            }
+            // ── End Custom Smooth Wheel Zoom ──────────────────────────────
+
             // initial style
             tileLayerRef.current = L.tileLayer(style.url, {
                 maxZoom: 19,
@@ -116,9 +350,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 noWrap: false,
             }).addTo(map);
 
-            L.control.zoom({ position: 'topright' }).addTo(map);
-
-            map.on('click', (e: L.LeafletMouseEvent) => {
+            map.on('click', (e: LeafletMouseEvent) => {
                 if ((e.originalEvent as unknown as { _stopped?: boolean })._stopped) return;
                 onSelectItem(null);
             });
@@ -145,7 +377,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 setMapReady(false);
             }
         };
-    }, [onSelectItem]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [onSelectItem, isDarkMode]);
 
     // handle container resizing
     useEffect(() => {
@@ -163,7 +395,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         let cancelled = false;
 
         const loadLeaflet = async () => {
-            const L = (await import('leaflet')).default;
+            const leafletModule = await import('leaflet');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (leafletModule as any).default || leafletModule;
             await import('leaflet.markercluster');
             if (cancelled || !mapRef.current) return;
             const map = mapRef.current;
@@ -180,7 +414,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             let targetLayer: LayerGroup | MarkerClusterGroup;
             if (clusteringEnabled) {
                 if (!clusterGroupRef.current) {
-                    clusterGroupRef.current = L.markerClusterGroup({
+                    const group = L.markerClusterGroup({
                         maxClusterRadius: 35,
                         spiderfyOnMaxZoom: true,
                         showCoverageOnHover: false,
@@ -202,15 +436,17 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                             });
                         },
                     });
-                    map.addLayer(clusterGroupRef.current);
+                    clusterGroupRef.current = group;
+                    map.addLayer(group);
                 }
-                targetLayer = clusterGroupRef.current;
+                targetLayer = clusterGroupRef.current!;
             } else {
                 if (!directGroupRef.current) {
-                    directGroupRef.current = L.layerGroup();
-                    map.addLayer(directGroupRef.current);
+                    const group = L.layerGroup();
+                    directGroupRef.current = group;
+                    map.addLayer(group);
                 }
-                targetLayer = directGroupRef.current;
+                targetLayer = directGroupRef.current!;
             }
 
             const currentMarkerIds = new Set(markersRef.current.keys());
@@ -229,7 +465,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 }
             });
 
-            const toAdd: L.Marker[] = [];
+            const toAdd: Marker[] = [];
             added.forEach(id => {
                 const item = nextItemMap.get(id)!;
                 const icon = createCategoryIcon(L, item.category, item.id === selectedIdRef.current);
@@ -269,7 +505,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     className: 'news-popup-container',
                 });
 
-                marker.on('click', (e: L.LeafletMouseEvent) => {
+                marker.on('click', (e: LeafletMouseEvent) => {
                     L.DomEvent.stopPropagation(e);
                     const isSelected = selectedIdRef.current === item.id;
                     onSelectItem(isSelected ? null : item.id);
@@ -308,7 +544,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         if (!mapReady || !mapRef.current) return;
 
         const updateActiveMarker = async () => {
-            const L = (await import('leaflet')).default;
+            const leafletModule = await import('leaflet');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (leafletModule as any).default || leafletModule;
 
             const prevId = lastHighlightedIdRef.current;
             const nextId = selectedItemId;
@@ -358,7 +596,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         }
                     };
 
-                    const flyToMarker = (targetLatlng: L.LatLng, zoom: number) => {
+                    const flyToMarker = (targetLatlng: LatLng, zoom: number) => {
                         const p = map.project(targetLatlng, zoom).subtract([0, 140]);
                         const target = map.unproject(p, zoom);
                         
@@ -404,7 +642,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         if (!mapRef.current) return;
 
         const applyStyle = async () => {
-            const L = (await import('leaflet')).default;
+            const leafletModule = await import('leaflet');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (leafletModule as any).default || leafletModule;
             const style = MAP_STYLES[mapStyle];
             
             if (tileLayerRef.current) {

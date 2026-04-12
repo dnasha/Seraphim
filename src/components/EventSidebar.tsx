@@ -313,7 +313,7 @@ export default function EventSidebar({
                     {items.filter(i => i.latitude != null).length} mapped
                 </span>
                 {lastUpdated && mounted && !isNaN(new Date(lastUpdated).getTime()) && (
-                    <span className="last-updated">
+                    <span className="last-updated" suppressHydrationWarning>
                         UPDATED: {new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
                     </span>
                 )}

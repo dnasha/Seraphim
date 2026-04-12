@@ -32,7 +32,8 @@ newsscraper/
 ├── scripts/
 │   ├── benchmark-pipeline.mjs  # Pipeline performance testing script
 │   ├── build-geodata.mjs       # Parses GeoNames files → geonames.json
-│   └── evaluate-accuracy.mjs   # Live regression test against human-graded data
+│   ├── evaluate-accuracy.mjs   # Live regression test against human-graded data
+│   └── test-scrape.mjs         # Visual diagnostic for all fetchers
 ├── src/
 │   ├── app/
 │   │   ├── api/news/route.ts   # GET /api/news — Supabase proxy
@@ -43,7 +44,9 @@ newsscraper/
 │   │   └── FilterBar.tsx       # Source/Category UI toggles
 │   ├── scraper/
 │   │   ├── index.ts            # Bun Scraping Worker (Entry Point)
-│   │   └── fetchers/           # Modular fetchers (rss, gnews, social)
+│   │   ├── fetchers/           # Modular fetchers (rss, gnews, social)
+│   │   └── utils/
+│   │       └── date.ts         # Robust ISO 8601 normalization
 │   ├── data/
 │   │   └── sources.ts          # Centralized RSS and Reddit source lists
 │   ├── hooks/
@@ -128,11 +131,13 @@ Candidates are scored and sorted by two axes:
 
 This means countries beat obscure same-named cities, but event-specific targets (like "Yemen") always beat participating actors (like "U.S. strikes").
 
-### Robust Extraction Heuristics
+### Robust Extraction & Normalization
 
 - **Hyphenation Support**: Tokenizers for demonyms and abbreviations now split on both whitespace and hyphens, preventing items like "U.S.-backed" from losing the "U.S." location.
 - **Plural Demonyms**: The system intelligently handles plurals (e.g., "Iranians", "Russians") by attempting to match the stem against the demonym map.
-- **Direct Country Scan**: As a last-resort safety net of the extraction pipeline, the system performs a boundary-aware regex scan for known country names to catch cases like "Iran-Israel war" that NLP often fragments.
+- **Direct Country Scan**: As a last-resort safety net of the extraction pipeline, the system performs a boundary-aware regex scan for known country names.
+- **Date Normalization (`ensureIsoDate`)**: All incoming date strings (including non-standard formats like ICG CrisisWatch's "Friday, April 10, 2026 - 16:35") are normalized to valid ISO 8601 strings to prevent database parsing errors.
+- **UTF-8 Cleaning**: Descriptions and titles are stripped of incomplete surrogate pairs to prevent Postgres JSONB encoding failures.
 
 ### False Positive Filter
 
@@ -196,6 +201,11 @@ The UI uses a modular component-based architecture with logic extracted into cus
   - **Memoization**: The high-density sidebar news list is aggressively memoized to prevent re-renders during map pans and pin clicks.
   - **Data Resilience**: Implements strict nullish checks for geographic coordinates to prevent Leaflet runtime crashes on unmapped articles.
 - **Interaction**:
+  - **Smooth Zoom System**: Leaflet's built-in `scrollWheelZoom` is disabled and replaced with a custom `requestAnimationFrame` lerp loop that calls Leaflet's internal `_move()` per frame and `_moveEnd()` once on settle. This eliminates the debounce-then-snap bounce on trackpads. Zoom buttons also route through this system for smooth animated zoom. Key details:
+    - **Tile Preservation**: `_move()` fires `zoom` event → tile CSS transforms + marker repositioning. `_moveEnd()` fires `moveend` → final tile loading. Tiles are never blank during zoom.
+    - **Anti-Jitter**: During smooth zoom, Leaflet's `_getNewPixelOrigin` and `latLngToLayerPoint` are temporarily monkey-patched to remove `._round()` calls that cause 1px random-direction wobble. Rounding is restored on settle for pixel-perfect final positions.
+    - **Zoom-to-Cursor**: Anchor lat/lng is captured once at gesture start; the map center is computed each frame to keep that world coordinate under the cursor.
+    - **Custom Zoom Buttons**: The default `L.control.zoom` is replaced with custom buttons that feed into the same smooth zoom loop, anchored to map center.
   - **Fly To Animation**: Flies map to pin with an 800ms "smooth" transition and 140px vertical offset.
   - **Map Boundary Framing**: Auto-frames on data refresh, ignoring extreme latitudes (<-60) to maintain focus.
   - **Deselection**: Clicking the map background or re-clicking a selected card deselects the item and closes popups.
@@ -216,8 +226,8 @@ Includes robust region metadata and categorized curation.
 
 | Category   | Sources                                                                                                                                                                                                                                                        |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, CNA Asia, Times of Israel, Al Arabiya English, MercoPress LatAm, War on the Rocks, Bellingcat, RNZ World, Politico Europe, The Hindu, Middle East Eye, AllAfrica News |
-| Crisis     | USGS Earthquakes, ReliefWeb, ISW Daily Updates, Reddit CombatFootage (RSS), Reddit CredibleDefense (RSS)                                                                                                                                                       |
+| World      | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, CNA Asia, Times of Israel, Al Arabiya English, MercoPress LatAm, War on the Rocks, Foreign Affairs, CFR, Chatham House, ECFR, The Diplomat, Geopolitical Futures, RNZ World, The Hindu, Politico Europe, Middle East Eye, The Rio Times, AllAfrica News |
+| Crisis     | USGS Earthquakes, ReliefWeb, ISW Daily Updates, ICG CrisisWatch, ACLED, Reddit CombatFootage, Reddit CredibleDefense, Reddit UkraineWarVideoReport, Reddit GlobalConflict |
 | Nation     | NPR US                                                                                                                                                                                                                                                         |
 | Business   | CNBC, MarketWatch                                                                                                                                                                                                                                              |
 | Technology | Ars Technica, The Verge, BleepingComputer, The Hacker News                                                                                                                                                                                                     |
@@ -240,18 +250,20 @@ Two strategies, no API keys required:
   3. **RSSHub Instances**
   4. **Google News RSS**
 
-| Platform | Accounts / Channels                                                                                                                               |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Telegram | LiveUkraine, Geopolitics Live, ISW, DDGeopolitics, Bellingcat, Cyberknow, Faytuks                                                                 |
-| X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, @IntelCrab, @AuroraIntel, @ELINTNews, @DefMon3, @RALee85, @clashreport, @OAlexanderDK, @KofmanMichael |
+| Platform | Accounts / Channels                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Telegram | LiveUkraine, bloomberg, War Translated, NEXTA, Kyiv Independent, Intel Slava Z, OSINTdefender, Middle East Eye                                                                                                                                                                                 |
+| X        | @GeoConfirmed, @OSINTtechnical, @Liveuamap, @IntelCrab, @AuroraIntel, @ELINTNews, @DefMon3, @RALee85, @clashreport, @OAlexanderDK, @KofmanMichael, @sentdefender, @IDF, @IsraelWarRoom, @GeoFront5                                                                                                                                                                  |
 
 Items arrive with `sourceType: 'social'`, `sourceType: 'rss'`, or `sourceType: 'gnews'` and are dynamically categorized in the UI by matching the source string or type.
 
 ## Environment Variables
 
-| Variable        | Required | Description                              |
-| --------------- | -------- | ---------------------------------------- |
-| `GNEWS_API_KEY` | No       | GNews API key for additional news source |
+| Variable                    | Required | Description                                    |
+| --------------------------- | -------- | ---------------------------------------------- |
+| `SUPABASE_URL`              | **Yes**  | Your Supabase Project URL                      |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes**  | Service role key for bypass-RLS scraper writes |
+| `GNEWS_API_KEY`              | No       | GNews API key for additional news source       |
 
 ## Running Locally
 
