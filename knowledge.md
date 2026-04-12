@@ -178,8 +178,8 @@ The UI uses a modular component-based architecture with logic extracted into cus
     - `ThemeToggle`: Reusable dark/light mode switcher.
 
 - **Layout**: Fixed Sidebar (400px) + full-bleed Leaflet map. Sidebar features a premium logo ("Seraphim") and quick actions (Theme toggle, Collapse).
-- **Theme**: Dark mode default, with a custom toggle button. Fonts: Cinezel Decorative for the logo, Inter for the UI.
-- **Aesthetics**: High-contrast dark theme (#0f1117) with vibrant accent colors for categories:
+- **Theme**: Light mode default (to prevent initial loading flash), with a custom toggle button. Fonts: Cinzel Decorative for the logo, Inter for the UI.
+- **Aesthetics**: harmonious color palettes with vibrant accent colors for categories:
   - **World**: Red
   - **Crisis**: Dark Red / Warning
   - **Nation**: Blue
@@ -197,13 +197,15 @@ The UI uses a modular component-based architecture with logic extracted into cus
   - **Race Conditions**: Uses `zoomToShowLayer` with specialized coordinate biasing to ensure popups aren't cut off by animations.
 - **Performance Optimization**:
   - **GPU Acceleration**: Uses `preferCanvas: true` for the map and `will-change` CSS hints for the sidebar and containers.
+  - **Icon Caching**: Implements an `IconCache` in `MapConstants.tsx` to reuse `DivIcon` instances. This prevents thousands of redundant Leaflet objects from being created, drastically reducing memory churn and script execution time.
+  - **Singleton Loading**: Consolidates Leaflet and MarkerCluster imports into a single Ref-based initialization pattern in `NewsMap.tsx`. This eliminates redundant script compilation and evaluation overhead during React state updates.
   - **Layer Isolation**: Implements `backface-visibility: hidden` and `cubic-bezier` transitions to offload animations to the GPU.
   - **Memoization**: The high-density sidebar news list is aggressively memoized to prevent re-renders during map pans and pin clicks.
   - **Data Resilience**: Implements strict nullish checks for geographic coordinates to prevent Leaflet runtime crashes on unmapped articles.
 - **Interaction**:
   - **Smooth Zoom System**: Leaflet's built-in `scrollWheelZoom` is disabled and replaced with a custom `requestAnimationFrame` lerp loop that calls Leaflet's internal `_move()` per frame and `_moveEnd()` once on settle. This eliminates the debounce-then-snap bounce on trackpads. Zoom buttons also route through this system for smooth animated zoom. Key details:
     - **Tile Preservation**: `_move()` fires `zoom` event → tile CSS transforms + marker repositioning. `_moveEnd()` fires `moveend` → final tile loading. Tiles are never blank during zoom.
-    - **Anti-Jitter**: During smooth zoom, Leaflet's `_getNewPixelOrigin` and `latLngToLayerPoint` are temporarily monkey-patched to remove `._round()` calls that cause 1px random-direction wobble. Rounding is restored on settle for pixel-perfect final positions.
+    - **Anti-Jitter**: During smooth zoom, Leaflet's `_getNewPixelOrigin` and `latLngToLayerPoint` are temporarily monkey-patched to remove `._round()` calls that cause 1px random-direction wobble. This extends to `GridLayer` for sub-pixel tile positioning, ensuring markers and tiles stay perfectly synced. Rounding is restored on settle for pixel-perfect final positions.
     - **Zoom-to-Cursor**: Anchor lat/lng is captured once at gesture start; the map center is computed each frame to keep that world coordinate under the cursor.
     - **Custom Zoom Buttons**: The default `L.control.zoom` is replaced with custom buttons that feed into the same smooth zoom loop, anchored to map center.
   - **Fly To Animation**: Flies map to pin with an 800ms "smooth" transition and 140px vertical offset.

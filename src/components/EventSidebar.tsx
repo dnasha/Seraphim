@@ -10,6 +10,7 @@ shows list of news items
 
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+import Image from 'next/image';
 import { ReactNode, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 
 // category colors (same as FilterBar / NewsMap)
@@ -262,8 +263,15 @@ export default function EventSidebar({
         <aside className={`event-sidebar ${isOpen ? 'mobile-open' : 'collapsed'}`}>
             <div className="event-sidebar-header">
                 <div className="event-sidebar-logo">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logo.webp" alt="Seraphim Logo" style={{ height: '3.4rem', width: 'auto', borderRadius: '4px' }} />
+                    <Image 
+                        src="/logo.webp" 
+                        alt="Seraphim Logo" 
+                        width={54} 
+                        height={54} 
+                        priority
+                        className="sidebar-logo-img"
+                        style={{ height: '3.4rem', width: 'auto', borderRadius: '4px' }} 
+                    />
                     <h1>Seraphim</h1>
                     <div className="event-sidebar-actions">
                         <button

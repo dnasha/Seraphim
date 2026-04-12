@@ -63,23 +63,48 @@ function createSubpixelManager(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const origGridSetZoomTransform = (L_ref?.GridLayer?.prototype as any)?._setZoomTransform;
 
+    // Patch Marker prototype globally if not already done
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const MarkerProto = L_ref?.Marker?.prototype as any;
+    if (MarkerProto && !MarkerProto._origUpdate) {
+        MarkerProto._origUpdate = MarkerProto.update;
+        MarkerProto._origAnimateZoom = MarkerProto._animateZoom;
+
+        MarkerProto.update = function () {
+            if (this._icon && this._map && (this._map as any)._isSmoothZooming) {
+                const pos = this._map.latLngToLayerPoint(this._latlng);
+                this._setPos(pos);
+                return this;
+            }
+            return this._origUpdate();
+        };
+
+        MarkerProto._animateZoom = function (opt: any) {
+            if (this._map && (this._map as any)._isSmoothZooming) {
+                const pos = this._map._latLngToNewLayerPoint(this._latlng, opt.zoom, opt.center);
+                this._setPos(pos);
+                return;
+            }
+            return this._origAnimateZoom(opt);
+        };
+    }
+
     return {
         enable: () => {
+            (map as any)._isSmoothZooming = true;
             emap._getNewPixelOrigin = (center: LatLng, zoom?: number) => {
                 const viewHalf = emap.getSize().divideBy(2);
                 const pt = emap.project(center, zoom)
                     .subtract(viewHalf)
                     .add(emap._getMapPanePos());
-                pt.x = Math.round(pt.x * 100) / 100;
-                pt.y = Math.round(pt.y * 100) / 100;
+                // No rounding here
                 return pt;
             };
 
             emap.latLngToLayerPoint = (latlng: LatLngExpression) => {
                 const projectedPoint = emap.project(L.latLng(latlng));
                 const pt = projectedPoint.subtract(emap.getPixelOrigin());
-                pt.x = Math.round(pt.x * 100) / 100;
-                pt.y = Math.round(pt.y * 100) / 100;
+                // No rounding here
                 return pt;
             };
 
@@ -92,9 +117,8 @@ function createSubpixelManager(
                     const scale = this._map.getZoomScale(zoom, level.zoom);
                     const translate = level.origin.multiplyBy(scale)
                         .subtract((this._map as ExtendedMap)._getNewPixelOrigin(center, zoom));
-                    translate.x = Math.round(translate.x * 100) / 100;
-                    translate.y = Math.round(translate.y * 100) / 100;
-
+                    
+                    // sub-pixel precision for tiles too
                     if (L_ref.Browser.any3d) {
                         L_ref.DomUtil.setTransform(level.el, translate, scale);
                     } else {
@@ -104,6 +128,7 @@ function createSubpixelManager(
             }
         },
         disable: () => {
+            (map as any)._isSmoothZooming = false;
             emap._getNewPixelOrigin = origGetNewPixelOrigin;
             emap.latLngToLayerPoint = origLatLngToLayerPoint;
             if (origGridSetZoomTransform && L_ref?.GridLayer?.prototype) {
@@ -130,8 +155,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const directGroupRef = useRef<LayerGroup | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const initializedRef = useRef(false);
+    
+    // Store Leaflet module once loaded
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const LRef = useRef<any>(null);
+
     const [mapReady, setMapReady] = useState(false);
-    const [mapStyle, setMapStyle] = useState(isDarkMode ? 'dark' : 'standard');
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [clusteringEnabled, setClusteringEnabled] = useState(false);
     const settingsPanelRef = useRef<HTMLDivElement>(null);
@@ -167,10 +196,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         let aborted = false;
 
         const loadLeaflet = async () => {
-            const leafletModule = await import('leaflet');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const L = (leafletModule as any).default || leafletModule;
-            await import('leaflet.markercluster');
+            if (!LRef.current) {
+                const leafletModule = await import('leaflet');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                LRef.current = (leafletModule as any).default || leafletModule;
+                await import('leaflet.markercluster');
+            }
+            
+            const L = LRef.current;
 
             if (aborted) return;
             if (initializedRef.current && mapRef.current) return;
@@ -189,8 +222,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 zoomControl: false,
                 attributionControl: true,
                 preferCanvas: true,
-                scrollWheelZoom: false, // disabled — we use custom smooth zoom below
-                minZoom: 2.4,
+                scrollWheelZoom: false,
+                minZoom: 2.3,
                 zoomSnap: 0,
                 zoomDelta: 0.5,
                 worldCopyJump: true,
@@ -211,15 +244,13 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 let rafId: number | null = null;
                 let zooming = false;
 
-                // Anchor: world coordinate that stays under the cursor
                 let anchorLatLng: LatLng | null = null;
                 let anchorContainerPt: Point | null = null;
 
-                const SMOOTH_FACTOR = 0.15;
-                const ZOOM_SPEED = 1 / 150;
+                const SMOOTH_FACTOR = 0.18;
+                const ZOOM_SPEED = 1 / 220;
                 const EPSILON = 0.0005;
 
-                // Compute map center keeping anchorLatLng under anchorContainerPt
                 const computeCenter = (zoom: number): LatLng => {
                     if (anchorLatLng && anchorContainerPt) {
                         const worldPt = emap.project(anchorLatLng, zoom);
@@ -255,7 +286,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     rafId = requestAnimationFrame(smoothZoomLoop);
                 };
 
-                // Shared "begin-or-continue" helper for both wheel & buttons
                 const beginZoom = (containerPt: Point) => {
                     zooming = true;
                     currentZoom = emap.getZoom();
@@ -272,7 +302,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     }
                 };
 
-                // ── Wheel handler ────────────────────────────────────────
                 container.addEventListener('wheel', (e: WheelEvent) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -294,11 +323,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     kick();
                 }, { passive: false });
 
-                // ── Custom zoom buttons (smooth animated) ────────────────
                 const zoomCtrl = new L.Control({ position: 'topright' });
                 zoomCtrl.onAdd = function () {
                     const div = L.DomUtil.create('div', 'leaflet-control-zoom leaflet-bar');
-
                     const btnIn = L.DomUtil.create('a', 'leaflet-control-zoom-in', div);
                     btnIn.innerHTML = '+';
                     btnIn.href = '#';
@@ -333,7 +360,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 };
                 zoomCtrl.addTo(map);
 
-                // Sync when zoom changes externally (flyTo, fitBounds)
                 map.on('zoomend', () => {
                     if (!zooming) {
                         targetZoom = map.getZoom();
@@ -341,9 +367,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     }
                 });
             }
-            // ── End Custom Smooth Wheel Zoom ──────────────────────────────
 
-            // initial style
             tileLayerRef.current = L.tileLayer(style.url, {
                 maxZoom: 19,
                 attribution: style.attribution,
@@ -377,7 +401,25 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 setMapReady(false);
             }
         };
-    }, [onSelectItem, isDarkMode]);
+    }, []); // Only runs once on mount. 
+
+    // Handle map style changes separately to avoid Re-initializing the whole map
+    useEffect(() => {
+        if (!mapRef.current || !mapReady || !LRef.current) return;
+        const L = LRef.current;
+        const style = MAP_STYLES[isDarkMode ? 'dark' : 'standard'];
+        
+        if (tileLayerRef.current) {
+            mapRef.current.removeLayer(tileLayerRef.current);
+        }
+
+        tileLayerRef.current = L.tileLayer(style.url, {
+            maxZoom: 19,
+            attribution: style.attribution,
+            noWrap: false,
+        }).addTo(mapRef.current);
+    }, [isDarkMode, mapReady]);
+
 
     // handle container resizing
     useEffect(() => {
@@ -391,288 +433,230 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     // sync markers
     useEffect(() => {
-        if (!mapReady || !mapRef.current) return;
-        let cancelled = false;
+        if (!mapReady || !mapRef.current || !LRef.current) return;
+        const L = LRef.current;
+        const map = mapRef.current;
 
-        const loadLeaflet = async () => {
-            const leafletModule = await import('leaflet');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const L = (leafletModule as any).default || leafletModule;
-            await import('leaflet.markercluster');
-            if (cancelled || !mapRef.current) return;
-            const map = mapRef.current;
+        const currentIsClustered = !!clusterGroupRef.current;
+        if (currentIsClustered !== clusteringEnabled) {
+            if (clusterGroupRef.current) map.removeLayer(clusterGroupRef.current);
+            if (directGroupRef.current) map.removeLayer(directGroupRef.current);
+            clusterGroupRef.current = null;
+            directGroupRef.current = null;
+            markersRef.current.clear();
+        }
 
-            const currentIsClustered = !!clusterGroupRef.current;
-            if (currentIsClustered !== clusteringEnabled) {
-                if (clusterGroupRef.current) map.removeLayer(clusterGroupRef.current);
-                if (directGroupRef.current) map.removeLayer(directGroupRef.current);
-                clusterGroupRef.current = null;
-                directGroupRef.current = null;
-                markersRef.current.clear();
+        let targetLayer: LayerGroup | MarkerClusterGroup;
+        if (clusteringEnabled) {
+            if (!clusterGroupRef.current) {
+                const group = L.markerClusterGroup({
+                    maxClusterRadius: 35,
+                    spiderfyOnMaxZoom: true,
+                    showCoverageOnHover: false,
+                    zoomToBoundsOnClick: true,
+                    disableClusteringAtZoom: 7,
+                    removeOutsideVisibleBounds: true,
+                    chunkedLoading: true,
+                    iconCreateFunction: (cluster: MarkerCluster) => {
+                        const count = cluster.getChildCount();
+                        let size = 36;
+                        let className = 'cluster-small';
+                        if (count >= 35) { size = 50; className = 'cluster-large'; }
+                        else if (count >= 10) { size = 42; className = 'cluster-medium'; }
+
+                        return L.divIcon({
+                            html: `<div class="cluster-icon ${className}"><span>${count}</span></div>`,
+                            className: 'custom-cluster-icon',
+                            iconSize: [size, size],
+                        });
+                    },
+                });
+                clusterGroupRef.current = group;
+                map.addLayer(group);
             }
+            targetLayer = clusterGroupRef.current!;
+        } else {
+            if (!directGroupRef.current) {
+                const group = L.layerGroup();
+                directGroupRef.current = group;
+                map.addLayer(group);
+            }
+            targetLayer = directGroupRef.current!;
+        }
 
-            let targetLayer: LayerGroup | MarkerClusterGroup;
+        const currentMarkerIds = new Set(markersRef.current.keys());
+        const nextItemMap = new Map(geoItems.map(i => [i.id, i]));
+        const nextItemIds = new Set(nextItemMap.keys());
+        
+        const added = Array.from(nextItemIds).filter(id => !currentMarkerIds.has(id));
+        const removed = Array.from(currentMarkerIds).filter(id => !nextItemIds.has(id));
+
+        removed.forEach(id => {
+            const marker = markersRef.current.get(id);
+            if (marker) {
+                targetLayer.removeLayer(marker);
+                markersRef.current.delete(id);
+            }
+        });
+
+        const toAdd: Marker[] = [];
+        added.forEach(id => {
+            const item = nextItemMap.get(id)!;
+            const icon = createCategoryIcon(L, item.category, item.id === selectedIdRef.current);
+            const marker = L.marker([item.latitude!, item.longitude!], { icon });
+
+            const pinColor = getCategoryColor(item.category);
+            const categoryLabel = item.category
+                ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
+                : '';
+
+            const popupHtml = `
+                <div class="news-popup">
+                ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
+                <div class="news-popup-body">
+                    <div class="news-popup-meta">
+                    <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
+                    ${categoryLabel}
+                    <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                    </div>
+                    <h3 class="news-popup-title">${item.title}</h3>
+                    ${item.locationName ? `
+                    <div class="news-popup-location">
+                        <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
+                        ${item.locationName}
+                    </div>` : ''}
+                    <div class="news-popup-summary">${item.description || ''}</div>
+                    <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
+                </div>
+                </div>
+            `;
+
+            marker.bindPopup(popupHtml, {
+                maxWidth: 400,
+                minWidth: 320,
+                className: 'news-popup-container',
+            });
+
+            marker.on('click', (e: LeafletMouseEvent) => {
+                L.DomEvent.stopPropagation(e);
+                const isSelected = selectedIdRef.current === item.id;
+                onSelectItem(isSelected ? null : item.id);
+            });
+
+            markersRef.current.set(item.id, marker);
+            toAdd.push(marker);
+        });
+
+        if (toAdd.length > 0) {
             if (clusteringEnabled) {
-                if (!clusterGroupRef.current) {
-                    const group = L.markerClusterGroup({
-                        maxClusterRadius: 35,
-                        spiderfyOnMaxZoom: true,
-                        showCoverageOnHover: false,
-                        zoomToBoundsOnClick: true,
-                        disableClusteringAtZoom: 7,
-                        removeOutsideVisibleBounds: true,
-                        chunkedLoading: true,
-                        iconCreateFunction: (cluster: MarkerCluster) => {
-                            const count = cluster.getChildCount();
-                            let size = 36;
-                            let className = 'cluster-small';
-                            if (count >= 35) { size = 50; className = 'cluster-large'; }
-                            else if (count >= 10) { size = 42; className = 'cluster-medium'; }
-
-                            return L.divIcon({
-                                html: `<div class="cluster-icon ${className}"><span>${count}</span></div>`,
-                                className: 'custom-cluster-icon',
-                                iconSize: [size, size],
-                            });
-                        },
-                    });
-                    clusterGroupRef.current = group;
-                    map.addLayer(group);
-                }
-                targetLayer = clusterGroupRef.current!;
+                (targetLayer as MarkerClusterGroup).addLayers(toAdd);
             } else {
-                if (!directGroupRef.current) {
-                    const group = L.layerGroup();
-                    directGroupRef.current = group;
-                    map.addLayer(group);
-                }
-                targetLayer = directGroupRef.current!;
+                toAdd.forEach(m => (targetLayer as LayerGroup).addLayer(m));
             }
+        }
 
-            const currentMarkerIds = new Set(markersRef.current.keys());
-            const nextItemMap = new Map(geoItems.map(i => [i.id, i]));
-            const nextItemIds = new Set(nextItemMap.keys());
-            
-            // determine if markers actually changed
-            const added = Array.from(nextItemIds).filter(id => !currentMarkerIds.has(id));
-            const removed = Array.from(currentMarkerIds).filter(id => !nextItemIds.has(id));
-
-            removed.forEach(id => {
-                const marker = markersRef.current.get(id);
-                if (marker) {
-                    targetLayer.removeLayer(marker);
-                    markersRef.current.delete(id);
-                }
-            });
-
-            const toAdd: Marker[] = [];
-            added.forEach(id => {
-                const item = nextItemMap.get(id)!;
-                const icon = createCategoryIcon(L, item.category, item.id === selectedIdRef.current);
-                const marker = L.marker([item.latitude!, item.longitude!], { icon });
-
-                const pinColor = getCategoryColor(item.category);
-                const categoryLabel = item.category
-                    ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
-                    : '';
-
-                const popupHtml = `
-          <div class="news-popup">
-            ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
-            <div class="news-popup-body">
-              <div class="news-popup-meta">
-                <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
-                ${categoryLabel}
-                <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
-              </div>
-              <h3 class="news-popup-title">${item.title}</h3>
-              ${item.locationName ? `
-                <div class="news-popup-location">
-                  <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                  </svg>
-                  ${item.locationName}
-                </div>` : ''}
-              <div class="news-popup-summary">${item.description || ''}</div>
-              <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
-            </div>
-          </div>
-        `;
-
-                marker.bindPopup(popupHtml, {
-                    maxWidth: 400,
-                    minWidth: 320,
-                    className: 'news-popup-container',
-                });
-
-                marker.on('click', (e: LeafletMouseEvent) => {
-                    L.DomEvent.stopPropagation(e);
-                    const isSelected = selectedIdRef.current === item.id;
-                    onSelectItem(isSelected ? null : item.id);
-                });
-
-                markersRef.current.set(item.id, marker);
-                toAdd.push(marker);
-            });
-
-            if (toAdd.length > 0) {
-                if (clusteringEnabled) {
-                    (targetLayer as MarkerClusterGroup).addLayers(toAdd);
-                } else {
-                    toAdd.forEach(m => (targetLayer as LayerGroup).addLayer(m));
-                }
-            }
-
-            // fix fitBounds: trigger only if the set of locations changed
-            if (geoItems.length > 0 && (added.length > 0 || removed.length > 0)) {
-                let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
-                if (itemsToFrame.length === 0) itemsToFrame = geoItems;
-
-                const bounds = L.latLngBounds(
-                    itemsToFrame.map(i => [i.latitude!, i.longitude!] as [number, number])
-                );
-                map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
-            }
-        };
-
-        loadLeaflet();
-        return () => { cancelled = true; };
+        if (geoItems.length > 0 && (added.length > 0 || removed.length > 0)) {
+            let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
+            if (itemsToFrame.length === 0) itemsToFrame = geoItems;
+            const bounds = L.latLngBounds(itemsToFrame.map(i => [i.latitude!, i.longitude!] as [number, number]));
+            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
+        }
     }, [mapReady, clusteringEnabled, onSelectItem, geoItems]);
 
     // highlight active marker
     useEffect(() => {
-        if (!mapReady || !mapRef.current) return;
+        if (!mapReady || !mapRef.current || !LRef.current) return;
+        const L = LRef.current;
+        const map = mapRef.current;
 
-        const updateActiveMarker = async () => {
-            const leafletModule = await import('leaflet');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const L = (leafletModule as any).default || leafletModule;
+        const prevId = lastHighlightedIdRef.current;
+        const nextId = selectedItemId;
 
-            const prevId = lastHighlightedIdRef.current;
-            const nextId = selectedItemId;
+        if (prevId === nextId && !nextId) return;
 
-            if (prevId === nextId && !nextId) return;
-
-            // dim previous
-            if (prevId && prevId !== nextId) {
-                const prevMarker = markersRef.current.get(prevId);
-                if (prevMarker) {
-                    const el = prevMarker.getElement();
-                    if (el) {
-                        const iconInner = el.querySelector('.marker-icon');
-                        if (iconInner) iconInner.classList.remove('marker-icon-active');
-                    }
-                    // fallback to setIcon if element not in DOM (e.g. clustered)
-                    const item = geoItems.find(i => i.id === prevId);
-                    prevMarker.setIcon(createCategoryIcon(L, item?.category, false));
+        if (prevId && prevId !== nextId) {
+            const prevMarker = markersRef.current.get(prevId);
+            if (prevMarker) {
+                const el = prevMarker.getElement();
+                if (el) {
+                    const iconInner = el.querySelector('.marker-icon');
+                    if (iconInner) iconInner.classList.remove('marker-icon-active');
                 }
+                const item = geoItems.find(i => i.id === prevId);
+                prevMarker.setIcon(createCategoryIcon(L, item?.category, false));
             }
-            
-            // highilight new
-            if (nextId) {
-                const nextMarker = markersRef.current.get(nextId);
-                if (nextMarker) {
-                    const el = nextMarker.getElement();
-                    if (el) {
-                        const iconInner = el.querySelector('.marker-icon');
+        }
+        
+        if (nextId) {
+            const nextMarker = markersRef.current.get(nextId);
+            if (nextMarker) {
+                const el = nextMarker.getElement();
+                if (el) {
+                    const iconInner = el.querySelector('.marker-icon');
+                    if (iconInner) iconInner.classList.add('marker-icon-active');
+                }
+                const item = geoItems.find(i => i.id === nextId);
+                nextMarker.setIcon(createCategoryIcon(L, item?.category, true));
+                
+                const latlng = nextMarker.getLatLng();
+                const currentZoom = map.getZoom();
+                const targetZoom = Math.max(currentZoom, 7);
+
+                const showPopup = () => {
+                    nextMarker.openPopup();
+                    const newEl = nextMarker.getElement();
+                    if (newEl) {
+                        const iconInner = newEl.querySelector('.marker-icon');
                         if (iconInner) iconInner.classList.add('marker-icon-active');
                     }
-                    // sync icon state
-                    const item = geoItems.find(i => i.id === nextId);
-                    nextMarker.setIcon(createCategoryIcon(L, item?.category, true));
-                    
-                    const map = mapRef.current!;
-                    const latlng = nextMarker.getLatLng();
-                    const currentZoom = map.getZoom();
-                    const targetZoom = Math.max(currentZoom, 7);
+                };
 
-                    const showPopup = () => {
-                        nextMarker.openPopup();
-                        // recheck class after popup opens (Leaflet sometimes rerenders)
-                        const newEl = nextMarker.getElement();
-                        if (newEl) {
-                            const iconInner = newEl.querySelector('.marker-icon');
-                            if (iconInner) iconInner.classList.add('marker-icon-active');
-                        }
-                    };
-
-                    const flyToMarker = (targetLatlng: LatLng, zoom: number) => {
-                        const p = map.project(targetLatlng, zoom).subtract([0, 140]);
-                        const target = map.unproject(p, zoom);
-                        
-                        // check if we are already close enough to skip flyTo
-                        const currentCenter = map.getCenter();
-                        const dist = currentCenter.distanceTo(target);
-                        if (zoom === currentZoom && dist < 50) {
-                            showPopup();
-                        } else {
-                            map.once('moveend', () => setTimeout(showPopup, 50));
-                            map.flyTo(target, zoom, { animate: true, duration: 0.8 });
-                        }
-                    };
-
-                    if (clusteringEnabled && clusterGroupRef.current) {
-                        const visibleParent = clusterGroupRef.current.getVisibleParent(nextMarker);
-                        if (visibleParent === nextMarker) {
-                            flyToMarker(latlng, targetZoom);
-                        } else {
-                            clusterGroupRef.current.zoomToShowLayer(nextMarker, () => {
-                                setTimeout(() => flyToMarker(latlng, Math.max(map.getZoom(), 7)), 100);
-                            });
-                        }
+                const flyToMarker = (targetLatlng: LatLng, zoom: number) => {
+                    const p = map.project(targetLatlng, zoom).subtract([0, 140]);
+                    const target = map.unproject(p, zoom);
+                    const currentCenter = map.getCenter();
+                    const dist = currentCenter.distanceTo(target);
+                    if (zoom === currentZoom && dist < 50) {
+                        showPopup();
                     } else {
-                        flyToMarker(latlng, targetZoom);
+                        map.once('moveend', () => setTimeout(showPopup, 50));
+                        map.flyTo(target, zoom, { animate: true, duration: 0.8 });
                     }
+                };
+
+                if (clusteringEnabled && clusterGroupRef.current) {
+                    const visibleParent = clusterGroupRef.current.getVisibleParent(nextMarker);
+                    if (visibleParent === nextMarker) {
+                        flyToMarker(latlng, targetZoom);
+                    } else {
+                        clusterGroupRef.current.zoomToShowLayer(nextMarker, () => {
+                            setTimeout(() => flyToMarker(latlng, Math.max(map.getZoom(), 7)), 100);
+                        });
+                    }
+                } else {
+                    flyToMarker(latlng, targetZoom);
                 }
-            } else {
-                mapRef.current!.closePopup();
             }
+        } else {
+            map.closePopup();
+        }
 
-            lastHighlightedIdRef.current = nextId;
-        };
-
-        updateActiveMarker();
+        lastHighlightedIdRef.current = nextId;
     }, [selectedItemId, selectionVersion, clusteringEnabled, geoItems, mapReady]);
-
-    useEffect(() => {
-        setMapStyle(isDarkMode ? 'dark' : 'standard');
-    }, [isDarkMode]);
-
-    useEffect(() => {
-        if (!mapRef.current) return;
-
-        const applyStyle = async () => {
-            const leafletModule = await import('leaflet');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const L = (leafletModule as any).default || leafletModule;
-            const style = MAP_STYLES[mapStyle];
-            
-            if (tileLayerRef.current) {
-                mapRef.current!.removeLayer(tileLayerRef.current);
-            }
-
-            tileLayerRef.current = L.tileLayer(style.url, {
-                maxZoom: 19,
-                attribution: style.attribution,
-                noWrap: false,
-            }).addTo(mapRef.current!);
-        };
-
-        applyStyle();
-    }, [mapStyle]);
 
     return (
         <div className="map-wrapper">
             <MapSettings
-                mapStyle={mapStyle}
-                onStyleChange={setMapStyle}
+                mapStyle={isDarkMode ? 'dark' : 'standard'}
+                onStyleChange={() => {}} // Internal style changes handled by isDarkMode prop
                 clusteringEnabled={clusteringEnabled}
                 onClusteringToggle={() => setClusteringEnabled(v => !v)}
                 isOpen={settingsOpen}
                 onToggleOpen={() => setSettingsOpen(o => !o)}
                 panelRef={settingsPanelRef}
             />
-
             <div ref={containerRef} id="news-map" className="news-map-container" />
         </div>
     );

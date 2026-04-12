@@ -64,7 +64,12 @@ export function getCategoryColor(category?: string): string {
     return CATEGORY_COLORS[category] || DEFAULT_PIN_COLOR;
 }
 
+const iconCache: Record<string, L.DivIcon> = {};
+
 export function createCategoryIcon(leaflet: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
+    const key = `${category || 'general'}_${isActive ? 'active' : 'inactive'}`;
+    if (iconCache[key]) return iconCache[key];
+
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
     
@@ -83,13 +88,16 @@ export function createCategoryIcon(leaflet: typeof import('leaflet'), category?:
         </div>
     </div>`;
 
-    return leaflet.divIcon({
+    const icon = leaflet.divIcon({
         html,
         className: 'custom-marker-icon',
         iconSize: [containerSize, containerSize],
         iconAnchor: [containerSize / 2, containerSize / 2],
         popupAnchor: [0, -12],
     });
+    
+    iconCache[key] = icon;
+    return icon;
 }
 
 export function formatTimeAgo(dateStr: string): string {

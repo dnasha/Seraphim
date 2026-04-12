@@ -26,7 +26,7 @@ export default function Home() {
         filteredNews
     } = useNewsFilter(news);
 
-    const [isDarkMode, setIsDarkMode] = useState(true);
+    const [isDarkMode, setIsDarkMode] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [selectionVersion, setSelectionVersion] = useState(0);
@@ -35,11 +35,11 @@ export default function Home() {
     // initial mount and theme sync
     useEffect(() => {
         const timer = setTimeout(() => {
-            setMounted(true);
             const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'light') {
-                setIsDarkMode(false);
+            if (savedTheme === 'dark') {
+                setIsDarkMode(true);
             }
+            setMounted(true);
         }, 0);
         return () => clearTimeout(timer);
     }, []);
