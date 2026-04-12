@@ -65,6 +65,12 @@ function cleanString(str: string | undefined | null): string {
  */
 function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     if (!item.url) return null;
+
+    // Security: Validate URL protocol to prevent javascript: or other injections
+    if (!item.url.startsWith('http://') && !item.url.startsWith('https://')) {
+        return null;
+    }
+
     let tags = item.tags ?? null;
     if (Array.isArray(tags)) {
         tags = tags.filter(t => typeof t === 'string' && t.trim().length > 0);

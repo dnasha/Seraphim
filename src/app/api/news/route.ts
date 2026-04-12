@@ -28,18 +28,33 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 const CACHE_KEY = 'events';
 
+// Basic throttle for refresh bypass (in-memory, per-server-instance)
+const refreshThrottle = new Map<string, number>();
+const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
+
 export async function GET(request: Request) {
+    const now = Date.now();
     const { searchParams } = new URL(request.url);
     const categoriesArray = (searchParams.get('categories') || 'general').split(',');
-    const search = searchParams.get('search');
+    let search = searchParams.get('search');
+    if (search && search.length > 200) search = search.slice(0, 200);
+
     const sourcesParam = searchParams.get('sources') || 'news,reddit,x,telegram,extra';
     const sources = sourcesParam.split(',');
     const timeRange = searchParams.get('timeRange') || 'all';
-    const forceRefresh = searchParams.get('refresh') === 'true';
+    let forceRefresh = searchParams.get('refresh') === 'true';
+
+    // Throttle refresh attempts
+    if (forceRefresh) {
+        const lastRefresh = refreshThrottle.get('global') || 0;
+        if (now - lastRefresh < REFRESH_COOLDOWN) {
+            forceRefresh = false; // Downgrade to cached version if spammed
+        } else {
+            refreshThrottle.set('global', now);
+        }
+    }
 
     try {
-        const now = Date.now();
-
         // ── Cache check ───────────────────────────────────────────────────────
         const cached = sourceCache.get(CACHE_KEY);
         let allItems: NewsItem[];
