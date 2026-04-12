@@ -1,9 +1,9 @@
 name: Seraphim Scraper
 
 on:
-  schedule:
+  #schedule:
     # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    #- cron: '*/30 * * * *'
   workflow_dispatch:
     # Allow manual trigger from the GitHub Actions UI
 
