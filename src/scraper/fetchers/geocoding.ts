@@ -1,9 +1,7 @@
 /*
 Dan Sharan
 
-Geocoding re-export for the scraper worker.
-The geocoding engine has no Next.js/browser dependencies, so the scraper
-imports it directly from the shared lib rather than duplicating it.
-This file exists purely to keep import paths consistent within src/scraper/.
+Geocoding engine re-export for the scraper worker.
+Allows the standalone scraper to use the shared geocoding library directly.
 */
 export * from '@/lib/geocoding';

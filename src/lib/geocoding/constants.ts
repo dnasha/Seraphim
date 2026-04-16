@@ -1,10 +1,8 @@
 /*
-Dan Sharan
+ * Dan Sharan
+ * geocoding lookup maps: landmarks, demonyms, and stop words
+ */
 
-geocoding constants
-
-lookup maps for the geocoding engine
-*/
 
 export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'pentagon': { lat: 38.87, lon: -77.06 }, 'white house': { lat: 38.90, lon: -77.04 },

@@ -2,12 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
 
 /*
-Dan Sharan
-
-news filter hook
-
-filters news by source, category, time range, and search query
-
+  Dan Sharan
+  
+  useNewsFilter — React hook for client-side news filtering.
+  Filters by source, category, time range, and search query.
 */
 
 export function useNewsFilter(news: NewsItem[]) {
@@ -44,7 +42,7 @@ export function useNewsFilter(news: NewsItem[]) {
         let filtered = news;
         if (now === 0) return filtered; // skip filtering until client provides current time
 
-        // source filter
+        // 1. Source filtering (RSS, GNews, Social)
         filtered = filtered.filter(item => {
             if (sources.includes('news') && item.sourceType === 'rss') return true;
             if (sources.includes('extra') && item.sourceType === 'gnews') return true;
@@ -57,14 +55,14 @@ export function useNewsFilter(news: NewsItem[]) {
             return false;
         });
 
-        // category filter
+        // 2. Category filtering
         if (categories.length > 0 && !categories.includes('all')) {
             filtered = filtered.filter(item =>
                 item.category ? categories.includes(item.category) : categories.includes('general')
             );
         }
 
-        // time filter
+        // 3. Time range filtering
         const rangeMs = {
             '1d': 24 * 60 * 60 * 1000,
             '3d': 3 * 24 * 60 * 60 * 1000,
@@ -75,7 +73,7 @@ export function useNewsFilter(news: NewsItem[]) {
 
         filtered = filtered.filter(item => (now - new Date(item.publishedAt).getTime()) <= rangeMs);
 
-        // search filter
+        // 4. Search query filtering (title, description, location)
         if (debouncedSearch) {
             const q = debouncedSearch.toLowerCase();
             filtered = filtered.filter(item =>
@@ -85,7 +83,7 @@ export function useNewsFilter(news: NewsItem[]) {
             );
         }
 
-        // mapped only filter
+        // 5. Geographical filter (items with coordinates)
         if (mappedOnly) {
             filtered = filtered.filter(n => n.latitude != null);
         }

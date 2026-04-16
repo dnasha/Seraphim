@@ -9,7 +9,7 @@ run: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews]
  
 
 import { performance } from 'node:perf_hooks';
-import {  statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -18,21 +18,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 
-// execution flags
+// parse command line arguments
 const args = new Set(process.argv.slice(2).map(a => a.toLowerCase()));
 const SKIP_SOCIAL = args.has('--skip-social');
 const SKIP_GNEWS  = args.has('--skip-gnews');
 const QUICK_MODE  = args.has('--quick');
 
-// text color helpers
-const c = {
-  reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
-  red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m',
-  blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
-  bgRed: '\x1b[41m', bgGreen: '\x1b[42m', bgYellow: '\x1b[43m',
-};
-
-// fancy styling 
+// terminal output formatting
 function banner(text) {
   const line = '═'.repeat(70);
   console.log(`\n${c.cyan}${line}${c.reset}`);
@@ -52,10 +44,10 @@ function formatMs(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-// percentage helper
+// helper to format percentage strings
 function pct(part, total) { return total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '0%'; }
 
-// timer utility
+// lightweight performance tracking utility
 class Timer {
   constructor() { this.marks = {}; this.starts = {}; }
   start(label) { this.starts[label] = performance.now(); }
@@ -75,8 +67,7 @@ async function benchmarkGeodataLoad(timer) {
   const stats = statSync(jsonPath);
   const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
 
-  // measure the time it takes to import the module, 
-  // which triggers the top-level loading and processing of KNOWN_LOCATIONS
+  // Measure time to import and initialize known locations dictionary
   timer.start('geodata_total');
   const { KNOWN_LOCATIONS, ensureInitialized } = await import('../src/lib/geocoding/index.ts');
   ensureInitialized();
@@ -279,7 +270,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
 
   timer.start('geocoding_total');
 
-  // deduplicate locations to simulate real-world geocoding cache/bottleneck
+  // filter for unique matches to simulate geocoding cache dynamics
   const uniqueLocations = [...new Set(extractionResults.map(r => r.match).filter(Boolean))];
 
   const geocodeFails = [];
@@ -306,7 +297,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
   console.log(`  Avg Time:         ${c.white}${formatMs(totalTime / Math.max(uniqueLocations.length, 1))}${c.reset} / lookup`);
 }
 
-// summary table
+// display a performance summary table
 function printSummary(timer) {
   banner('BENCHMARK SUMMARY');
 
@@ -375,11 +366,10 @@ async function main() {
     console.log(`\n  ${c.yellow}No articles collected, skipping extraction and geocoding ${c.reset}`);
   }
 
-  // summary
+  // generate and print final stats
   printSummary(timer);
 }
 
-// catch errors
 main().catch(err => {
   console.error(`${c.red}Fatal error:${c.reset}`, err);
   process.exit(1);

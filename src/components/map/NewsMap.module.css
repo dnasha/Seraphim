@@ -1,0 +1,337 @@
+/* NewsMap.module.css — map wrapper, markers, clusters, Leaflet overrides, popups */
+
+/* ── Map wrapper ── */
+.mapWrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+}
+
+.newsMapContainer {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Leaflet zoom controls — match settings button style ── */
+.leaflet-bar {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+:global(.leaflet-bar) {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+:global(.leaflet-control-zoom) {
+  border: none !important;
+  box-shadow: none !important;
+  margin-right: 12px !important;
+  background: transparent !important;
+}
+
+:global(.leaflet-control-zoom-in),
+:global(.leaflet-control-zoom-out) {
+  width: 38px !important;
+  height: 38px !important;
+  line-height: 38px !important;
+  background: var(--surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  margin-bottom: 6px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  transition: background 0.15s, transform 0.15s !important;
+}
+
+:global(.leaflet-control-zoom-in:hover),
+:global(.leaflet-control-zoom-out:hover) {
+  background: var(--surface-alt) !important;
+  transform: scale(1.05);
+}
+
+:global(.leaflet-touch .leaflet-control-zoom-in),
+:global(.leaflet-touch .leaflet-control-zoom-out) {
+  width: 38px !important;
+  height: 38px !important;
+}
+
+:global(.leaflet-top.leaflet-right .leaflet-control-zoom) {
+  margin-top: calc(44px + max(12px, env(safe-area-inset-top))) !important;
+  margin-right: max(12px, env(safe-area-inset-right)) !important;
+}
+
+/* ── Leaflet dark mode fixes ── */
+:global([data-theme="dark"] .leaflet-control-zoom a:hover) {
+  background: var(--surface-alt) !important;
+}
+
+:global([data-theme="dark"] .leaflet-control-attribution) {
+  background: rgba(15, 17, 23, 0.7) !important;
+  color: var(--text-muted) !important;
+}
+
+:global([data-theme="dark"] .leaflet-control-attribution a) {
+  color: var(--text-secondary) !important;
+}
+
+/* ── Leaflet container background ── */
+:global(.leaflet-container) {
+  background: var(--surface-alt) !important;
+}
+
+/* ── Marker clustering — single authoritative definition ── */
+:global(.custom-cluster-icon) {
+  background: transparent !important;
+}
+
+:global(.cluster-icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 2.5px solid #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  transition: none;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+:global(.cluster-icon:hover) {
+  transform: scale(1.1);
+  z-index: 1000;
+}
+
+/* small — amber */
+:global(.cluster-icon.cluster-small) {
+  background: rgb(255, 187, 0) !important;
+  color: #000 !important;
+}
+
+/* medium — orange/red */
+:global(.cluster-icon.cluster-medium) {
+  background: rgba(245, 17, 1, 0.95) !important;
+  color: #fff !important;
+}
+
+/* large — dark red */
+:global(.cluster-icon.cluster-large) {
+  background: rgba(129, 5, 5, 0.95) !important;
+  color: #fff !important;
+}
+
+:global([data-theme="dark"] .cluster-icon) {
+  border-color: #1e212c;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Custom marker icons ── */
+:global(.custom-marker-icon) {
+  background: transparent !important;
+  border: none !important;
+}
+
+:global(.marker-icon) {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    box-shadow 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    width 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    height 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  z-index: 10;
+  backface-visibility: hidden;
+}
+
+:global(.marker-icon svg) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: block;
+}
+
+:global(.marker-icon:hover) {
+  transform: scale(1.18);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 100 !important;
+}
+
+:global(.marker-icon-active) {
+  width: 36px !important;
+  height: 36px !important;
+  transform: scale(1);
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.2), 0 0 15px var(--marker-color, rgba(0, 0, 0, 0.3));
+  z-index: 1000 !important;
+  animation: marker-pulse-active 2s infinite;
+}
+
+:global(.marker-icon-active svg) {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* ── Popup overrides (Leaflet injects DOM directly) ── */
+:global(.news-popup-container .leaflet-popup-content-wrapper) {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+}
+
+:global(.news-popup-container .leaflet-popup-content) {
+  margin: 0;
+  width: 100% !important;
+}
+
+:global(.news-popup-container .leaflet-popup-tip-container) {
+  display: none;
+}
+
+:global(.news-popup-container a.leaflet-popup-close-button) {
+  color: #8b0000 !important;
+  padding: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  right: 4px;
+  top: 4px;
+}
+
+:global(.news-popup-container a.leaflet-popup-close-button:hover) {
+  color: var(--text-primary);
+  background: var(--surface-alt);
+  border-radius: 4px;
+}
+
+/* inside popup */
+:global(.news-popup) {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  max-width: 400px;
+}
+
+:global(.news-popup-img) {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  background: var(--surface-alt);
+}
+
+:global(.news-popup-body) {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.news-popup-title) {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+:global(.news-popup-summary) {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0 0 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+:global(.news-popup-summary::-webkit-scrollbar) {
+  width: 4px;
+}
+
+:global(.news-popup-summary::-webkit-scrollbar-thumb) {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+:global(.news-popup-meta) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+:global(.news-popup-source) {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.625rem;
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+:global(.news-popup-category) {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+:global(.news-popup-location) {
+  font-size: 0.6875rem;
+  color: var(--green);
+  margin-bottom: 8px;
+}
+
+:global(.location-icon-svg) {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  opacity: 0.8;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  :global(.news-popup) {
+    width: calc(100vw - 48px);
+    max-width: 320px;
+  }
+
+  :global(.news-popup-container .leaflet-popup-content-wrapper) {
+    max-width: calc(100vw - 32px);
+  }
+
+  :global(.leaflet-top.leaflet-right .leaflet-control-zoom) {
+    margin-top: 56px !important;
+  }
+}

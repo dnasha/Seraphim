@@ -2,11 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse } from '@/lib/types';
 
 /*
-Dan Sharan
-
-news data hook
-
-fetches news from api
+  Dan Sharan
+  
+  useNewsData — React hook for fetching and polling news data.
+  Handles initial load, manual refresh, and periodic updates.
 */
 
 export function useNewsData() {

@@ -3,13 +3,11 @@ import { extractLocation, geocodeLocation } from './engine';
 import { NEWS_SOURCE_DEFAULTS } from './constants';
 
 /*
-Dan Sharan
+ * Dan Sharan
+ * geocoding enricher: attaches coordinates to news items
+ * implements golden-angle spiral jitter to prevent pin stacking
+ */
 
-geocoding enricher
-
-enriches a list of news items with geographic coordinates
-applies jitter to prevent pins from stacking on the same exact coordinate
-*/
 
 export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsItem[]> {
     const enriched: NewsItem[] = [];
@@ -25,7 +23,7 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
         let placeName = ext.match;
         let candidates = ext.candidates;
 
-        // if no location was extracted, check if the news source has a default location
+        // fallback to news source default if no specific location is found
         if (!placeName && item.source) {
             const srcKey = item.source.toLowerCase().trim();
             placeName = NEWS_SOURCE_DEFAULTS[srcKey] || null;
@@ -40,7 +38,7 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
         const geo = await geocodeLocation(placeName);
 
         if (geo) {
-            // apply jitter if another item already occupies the same coords
+            // compute jitter to handle coordinate collisions
             const coordKey = `${geo.lat.toFixed(2)},${geo.lon.toFixed(2)}`;
             const count = usedCoords.get(coordKey) || 0;
             usedCoords.set(coordKey, count + 1);

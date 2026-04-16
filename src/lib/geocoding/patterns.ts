@@ -1,10 +1,8 @@
 /*
-Dan Sharan
+ * Dan Sharan
+ * regex patterns for geographic location extraction
+ */
 
-geocoding patterns
-
-regex patterns for location extraction
-*/
 
 // regex for standard datelines (e.g. "WASHINGTON (Reuters) - ")
 export const DATELINE_PATTERN = /^(?:\[[^\]]+\]\s*)?([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
@@ -20,7 +18,7 @@ export const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A
 const L = '[a-zA-Z\u00C0-\u024F]'; // a single letter including accented
 const LOC = `[A-Z\u00C0-\u024F]${L}+(?:\\s+[A-Z\u00C0-\u024F]${L}+){0,3}`; // multi-word location
 
-// regex patterns to pull "in Place", "from Place", "bombards Place", etc.
+// spatial context patterns (e.g., "in [Place]", "near [Place]")
 export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ii]n\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ii]n\\s+[Tt]he\\s+(${LOC})`, 'g'),
@@ -36,7 +34,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Oo]n\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:[Cc]ity|[Tt]own|[Pp]rovince|[Ss]tate|[Rr]egion|[Vv]illage|[Cc]enter|[Cc]entre)\\s+[Oo]f\\s+(${LOC})`, 'g'),
 
-    // present-tense action verbs
+    // active conflict and event verbs
     new RegExp(`\\b[Hh]its?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ss]trikes?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]ttacks?\\s+(?:[Oo]n\\s+)?(${LOC})`, 'g'),
@@ -64,7 +62,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Bb]ombed\\s+(${LOC})`, 'g'),
 ];
 
-// action target patterns
+// specific event-target relationship patterns
 export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),

@@ -3,11 +3,9 @@ import * as cheerio from 'cheerio';
 import { NewsItem } from './types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 
-/*
-Dan Sharan
-
-social feeds integration
-*/
+/**
+ * Social media feed scrapers and aggregators (Telegram, X/Twitter).
+ */
 
 const parser = new Parser({
     customFields: {
@@ -114,7 +112,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
 
 // x/twitter rss - multi-strategy fallback
 
-// fetch wrapper that races a parser call against a strict timeout
+// Helper to fetch and parse a feed with a strict timeout
 async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<ReturnType<typeof parser.parseURL>> {
     const res = await fetch(url, {
         headers: {
@@ -139,7 +137,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 3000): Promise<Retu
     return feed;
 }
 
-// strategy 1: Native Twitter Syndication (fastest, clearest, no API key needed)
+// strategy 1: native Twitter syndication (fastest, clearest, no API key needed)
 async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
@@ -181,7 +179,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     }
 }
 
-// strategy 2: Nitter RSS (query all known healthy instances at once and take the first success)
+// strategy 2: nitter rss (query all known healthy instances at once and take the first success)
 // using a cached "best instance" once found to speed up subsequent requests in a batch
 let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
@@ -205,7 +203,7 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-// strategy 3: RSSHub RSS (Concurrent query across all instances)
+// strategy 3: RSSHub RSS (concurrent query across all instances)
 let bestRSSHubInstance: string | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -228,7 +226,7 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-// strategy 3: Google News RSS as last resort
+// strategy 4: google news rss as last resort
 async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`@${username} OR from:${username}`)}&hl=en`;
@@ -266,7 +264,9 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     }));
 }
 
-// main entry point
+/**
+ * Fetches and aggregates all configured social media feeds.
+ */
 export async function fetchSocialFeeds(): Promise<NewsItem[]> {
     const telegramPromises = TELEGRAM_CHANNELS.map(source => scrapeTelegramChannel(source));
     const xPromises = X_ACCOUNTS.map(source => fetchXFeed(source));

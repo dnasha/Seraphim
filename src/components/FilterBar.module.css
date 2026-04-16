@@ -1,0 +1,171 @@
+/* FilterBar.module.css — filter bar, source/category/time toggles, search input */
+
+.filterBar {
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filterLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* Search */
+.searchInputContainer {
+  position: relative;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.searchInput {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 8px 10px 8px 30px;
+  font-size: 0.875rem;
+  width: 100%;
+  border-radius: 6px;
+  color: var(--text-primary);
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Toggle rows */
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sourceToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+.categoryToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sourceToggle,
+.categoryToggle,
+.timeToggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  height: 28px;
+  padding: 0 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sourceToggle:hover,
+.categoryToggle:hover,
+.timeToggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sourceToggleActive,
+.timeToggleActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.categoryToggleActive {
+  color: #fff;
+}
+
+.filterDivider {
+  width: 1px;
+  height: 16px;
+  background: var(--text-muted);
+  opacity: 0.4;
+  margin: 0 6px;
+  align-self: center;
+}
+
+/* category icon SVG inside filter buttons */
+.categoryIconSvg {
+  display: inline-block;
+  flex-shrink: 0;
+  transition: fill 0.15s;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .filterBar {
+    padding: 8px 10px;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow-x: hidden;
+  }
+
+  .filterSection {
+    gap: 3px;
+  }
+
+  .sourceRow {
+    flex-wrap: wrap;
+  }
+
+  .sourceToggles {
+    flex-wrap: wrap;
+  }
+
+  .categoryToggles {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .sourceToggle,
+  .categoryToggle,
+  .timeToggle {
+    height: 26px;
+    padding: 0 9px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .filterSection:has(.timeToggle) > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}

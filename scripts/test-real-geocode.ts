@@ -1,10 +1,9 @@
 /*
-Dan Sharan
+Seraphim Real Geocode Live Tester
+Runs the actual production geocoding pipeline against current feed items
+to generate a results JSON for inspection and grading.
 
-runs the real geocoding pipeline against all RSS and social feeds
-to construct a result JSON for evaluation
-
-run: npx tsx scripts/test-real-geocode.ts
+Run: npx tsx scripts/test-real-geocode.ts
 */
 
 import { fetchAllRSSFeeds } from '../src/lib/rss';
@@ -21,18 +20,16 @@ async function run() {
 
     console.log(`\nTesting ${items.length} items. Running through enrichItemsWithLocation...`);
 
-    // use the real geocoding pipeline built into the app
-    // this handles extraction, geocoding, and source defaults!
+    // run items through the production geocoding pipeline (extraction + geocoding)
     const enrichedItems = await enrichItemsWithLocation(items);
 
     const results = enrichedItems.map(item => {
         const title = item.title;
         const desc = item.description || '';
         
-        // found_locations: based on the debug candidates attached by enrichItemsWithLocation
         const found_locations = item.foundLocations || [];
 
-        // final_mapped_location: The coordinates and the display name
+        // format final geocoded results for comparison
         const final_mapped_location = (item.latitude !== undefined && item.longitude !== undefined) 
             ? {
                 lat: item.latitude,

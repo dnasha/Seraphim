@@ -1,8 +1,6 @@
-/*
-Dan Sharan
-
-news types
-*/
+/**
+ * Core type definitions for the news aggregation pipeline.
+ */
 
 export interface NewsItem {
   id: string;

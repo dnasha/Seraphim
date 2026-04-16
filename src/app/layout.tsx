@@ -11,12 +11,11 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 /*
-Dan Sharan
-
-layout file that handles app fonts, metadata, and viewport settings
-also vercel tracking and stuff
-
+  Dan Sharan
+  Root layout defining typography, metadata, and viewport settings for the application.
+  Integrates Vercel Speed Insights and Analytics.
 */
+// Font Configurations
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -46,6 +45,7 @@ const cinzelDecorative = Cinzel_Decorative({
   display: "swap",
 });
 
+// Viewport and Device Settings
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -54,6 +54,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Site Metadata (SEO & Social)
 export const metadata: Metadata = {
   metadataBase: new URL("https://seraphi.me"),
   title: "Seraphim",

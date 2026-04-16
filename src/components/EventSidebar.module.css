@@ -1,0 +1,514 @@
+/* EventSidebar.module.css — sidebar, header, stats pills, card list, cards, expand detail */
+
+/* Sidebar shell */
+.eventSidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.eventSidebarCollapsed {
+  transform: translateX(-100%);
+  position: absolute;
+  height: 100%;
+}
+
+/* Header */
+.eventSidebarHeader {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.eventSidebarLogo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eventSidebarLogo h1 {
+  font-family: var(--font-cinzel-decorative), cursive;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.eventSidebarActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Stats row */
+.eventSidebarStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.statPill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  height: 26px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.statPillGeo {
+  color: var(--green);
+  border-color: var(--green);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+[data-theme="dark"] .statPillGeo {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.lastUpdated {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background-color: #dc2626;
+  height: 26px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+/* Theme toggle */
+.themeToggle {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.themeToggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+.themeToggle:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* Sidebar toggle buttons */
+.sidebarToggleBtn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.sidebarToggleBtn:hover {
+  background: var(--surface-alt);
+  color: var(--text-primary);
+}
+
+.sidebarCollapseBtn {
+  margin-right: 8px;
+}
+
+.mobileCloseBtn {
+  display: none;
+}
+
+/* Refresh button */
+.refreshButton {
+  background: var(--green);
+  border: 1px solid transparent;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.refreshButton:hover {
+  background: #16a34a;
+}
+
+.refreshButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refreshIcon {
+  width: 15px;
+  height: 15px;
+}
+
+.refreshButtonLoading .refreshIcon {
+  animation: spin 1s linear infinite;
+}
+
+/* Event list */
+.eventList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.eventList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.eventList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.eventList::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.eventListLoading,
+.eventListEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.eventListLoading .loadingSpinner {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+.eventListEmpty .emptyIcon {
+  font-size: 2.5rem;
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+/* Event card */
+.eventCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+  background: var(--surface);
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+}
+
+.eventCard:hover {
+  background: var(--surface-alt);
+  border-color: var(--accent);
+  box-shadow: 0 1px 6px rgba(59, 130, 246, 0.08);
+}
+
+.eventCardActive {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.06);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+[data-theme="dark"] .eventCardActive {
+  background: rgba(96, 165, 250, 0.08);
+}
+
+/* category accent bar on left edge */
+.eventCardAccent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 8px 0 0 8px;
+}
+
+/* main row: thumbnail + body side by side */
+.eventCardRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 10px 8px 12px;
+  width: 100%;
+}
+
+.eventCardThumb {
+  width: 88px;
+  height: 66px;
+  min-width: 88px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-alt);
+  flex-shrink: 0;
+}
+
+.eventCardThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.eventCardBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.eventCardTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.eventCardExpanded .eventCardTitle {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+.eventCardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.6875rem;
+}
+
+.eventCardSource {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.625rem;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.eventCardTime {
+  color: var(--text-muted);
+}
+
+.eventCardLocation {
+  font-size: 0.6875rem;
+  color: var(--green);
+  display: inline;
+}
+
+.eventCardMetaSep {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* expand hint for unmapped cards */
+.eventCardExpandHint {
+  display: block;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+  font-style: italic;
+  opacity: 0;
+  transition: opacity 0.15s;
+  text-align: right;
+}
+
+.eventCardUnmapped:hover .eventCardExpandHint {
+  opacity: 1;
+}
+
+/* expanded detail panel */
+.eventCardDetail {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  cursor: default;
+}
+
+.eventCardDetailImg {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: var(--surface-alt);
+}
+
+.eventCardDetailImg img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.eventCardDetailDesc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+
+.eventCardDetailLink {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  text-align: right;
+  margin-top: 4px;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.eventCardDetailLink:visited {
+  color: var(--accent);
+}
+
+.eventCardDetailLink:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+/* shared location icon SVG */
+.locationIconSvg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  opacity: 0.8;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .eventSidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: min(360px, 92vw);
+    min-width: unset;
+    height: 100%;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.18);
+    transform: translateX(-100%);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .eventSidebarMobileOpen {
+    transform: translateX(0);
+  }
+
+  .eventSidebarHeader {
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+
+  .eventSidebarLogo h1 {
+    font-size: 1.4rem;
+  }
+
+  .themeToggle,
+  .sidebarToggleBtn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .eventSidebarStats {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+
+  .lastUpdated {
+    font-size: 0.6rem;
+    padding: 0 8px;
+    height: 24px;
+  }
+
+  .statPill {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 0.65rem;
+  }
+
+  .sidebarCollapseBtn {
+    display: none;
+  }
+
+  .mobileCloseBtn {
+    display: flex;
+  }
+
+  .eventList {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+}

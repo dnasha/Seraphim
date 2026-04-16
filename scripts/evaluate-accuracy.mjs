@@ -1,8 +1,8 @@
-/* Dan Sharan
+/*
+Seraphim Geocoding Accuracy Validator
+Compares current extraction results against a hand-graded ground truth dataset.
 
-tests the geocoding accuracy against hand-graded results
-
-run: npx tsx scripts/evaluate-accuracy.mjs
+Run: npx tsx scripts/evaluate-accuracy.mjs
 */
 
 import fs from 'fs';
@@ -20,10 +20,8 @@ function normalize(val) {
 async function run() {
   const startTime = performance.now();
   try {
-    // import the live geocoding logic
     const { extractLocation, geocodeLocation } = await import('../src/lib/geocoding');
 
-    // load the hand-graded results
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
       console.error(`Error: Graded results file not found at ${GRADED_RESULTS_PATH}`);
       return;
@@ -39,7 +37,6 @@ async function run() {
 
     console.log(`\nRunning live geocode accuracy test on ${gradedResults.length} cases...\n`);
 
-    // for each item in the graded results
     for (const item of gradedResults) {
       const isApproved = item.graded_status === 'approved';
       const rawExpected = isApproved 
@@ -80,7 +77,7 @@ async function run() {
           isCorrect = true;
         }
       } else {
-        // for denied/manual entries, it must match exactly.
+        // for denied/manual entries, require an exact match
         if (normActual === normExpected) {
           isCorrect = true;
         }

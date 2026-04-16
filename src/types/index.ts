@@ -1,23 +1,21 @@
 /*
-Dan Sharan
-
-Shared types — used by both the Next.js frontend and the Bun scraper worker.
-Exported from @/types so that neither side is tightly coupled to the other's
-directory structure.
+  Dan Sharan
+  
+  Centralized types — shared by both the Next.js frontend and Bun scraper.
+  Exported from @/types to decouple the directory structures.
 */
 
 // Re-export everything from the lib types so existing frontend code
 // that still imports from @/lib/types continues to compile unchanged.
 export * from '@/lib/types';
 
-// ─── Database row shape ────────────────────────────────────────────────────────
-// Mirrors the `events` table in Supabase (snake_case to match PostgreSQL).
-// The scraper writes rows matching this interface; the API route reads them.
+// Database event interface (matches Supabase 'events' table).
+// Scraper writes these rows; API route reads and transforms them.
 export interface DbEvent {
   id?: string;                // auto-generated UUID primary key
   title: string;
   description: string;
-  url: string;                // UNIQUE — used as the upsert conflict key
+  url: string;                // Primary conflict key for upserts
   source: string;
   source_type: 'gnews' | 'rss' | 'social';
   category?: string;
@@ -30,7 +28,7 @@ export interface DbEvent {
   created_at?: string;        // set by Supabase default
 }
 
-// ─── Helper: map a DbEvent row → NewsItem ─────────────────────────────────────
+// helper: map a DbEvent row → NewsItem
 // Keeps the API route thin — no manual field mapping scattered around.
 import { NewsItem } from '@/lib/types';
 

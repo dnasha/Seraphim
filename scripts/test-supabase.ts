@@ -1,12 +1,8 @@
 /*
-http://localhost:3000/test-map
+Seraphim Supabase Bridge Test
+Verifies read/write connectivity to the database using mock events.
 
-Supabase connection test (write + read).
-run with: bun run scripts/test-supabase.ts
-
-Required env vars (loaded automatically from .env.local by Bun):
-    SUPABASE_URL
-    SUPABASE_SERVICE_ROLE_KEY
+Run: bun run scripts/test-supabase.ts
 */
 
 import { createClient } from "@supabase/supabase-js";
@@ -25,7 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// mock OSINT events. url is the upsert key (UNIQUE constraint).
+// prepare mock events for testing (uses URL as unique identifier)
 const mockEvents = [
   {
     title: "[TEST] Drone activity reported near Kyiv infrastructure",
@@ -63,7 +59,7 @@ const mockEvents = [
 ];
 
 async function run() {
-  // write
+  // Step 1: Write mock data
   console.log(`Connecting to ${SUPABASE_URL}`);
   console.log("Upserting 3 mock events...");
 
@@ -79,7 +75,7 @@ async function run() {
 
   console.log(`Upserted ${upserted?.length ?? 0} row(s).`);
 
-  // read
+  // Step 2: Read back and verify
   console.log("Reading back test rows...");
 
   const { data: rows, error: readError } = await supabase

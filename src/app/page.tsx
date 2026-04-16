@@ -1,9 +1,9 @@
 'use client';
 
 /*
-Dan Sharan
-
-main page file that handles the general layout of the app
+  Dan Sharan
+  Main entry point for the application. Coordinates layout, data filtering, 
+  and theme management between the EventSidebar and NewsMap.
 */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -12,10 +12,13 @@ import FilterBar from '@/components/FilterBar';
 import EventSidebar from '@/components/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
+import styles from '@/components/Layout.module.css';
 
+// Dynamically import NewsMap to prevent SSR issues with Leaflet
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export default function Home() {
+    // Data and Filter State
     const { news, isLoading, error, lastUpdated, fetchNews } = useNewsData();
     const {
         sources, setSources,
@@ -26,13 +29,14 @@ export default function Home() {
         filteredNews
     } = useNewsFilter(news);
 
+    // UI State
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     
-    // initial mount and theme sync
+    // Initialize mount state and synchronize theme from local storage
     useEffect(() => {
         const timer = setTimeout(() => {
             const savedTheme = localStorage.getItem('theme');
@@ -44,7 +48,7 @@ export default function Home() {
         return () => clearTimeout(timer);
     }, []);
 
-    // sync theme to CSS
+    // Apply theme data attribute to the document element for global styling
     useEffect(() => {
         if (!mounted) return;
         document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
@@ -62,6 +66,7 @@ export default function Home() {
         setSelectionVersion(v => v + 1);
     }, []);
 
+    // Reusable UI Slots
     const filterBarSlot = (
         <>
             <FilterBar
@@ -87,10 +92,10 @@ export default function Home() {
     );
 
     return (
-        <div className="app-layout">
+        <div className={styles.appLayout}>
             {!isSidebarOpen && (
                 <button
-                    className="sidebar-expand-btn"
+                    className={styles.sidebarExpandBtn}
                     onClick={() => setIsSidebarOpen(true)}
                     aria-label="Open sidebar"
                 >
@@ -116,7 +121,7 @@ export default function Home() {
                 mounted={mounted}
             />
 
-            <main className={`main-content ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
+            <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
                     items={filteredNews}
                     selectedItemId={selectedItemId}

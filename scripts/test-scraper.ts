@@ -1,18 +1,9 @@
 /*
-Seraphim Scraper — dry-run test
-══════════════════════════════════════════════════════════════════════════════
+Seraphim Scraper Dry-Run
+Validates the full ingestion pipeline (fetch -> dedup -> geocode) 
+without committing changes to the database.
 
-Tests the full scraper pipeline WITHOUT writing anything to the database.
-Fetches data from all sources, runs geocoding, and prints the proposed upsert
-payload so you can visually inspect the output.
-
-Run with:
-    bun run scripts/test-scraper.ts
-
-Required env vars (loaded from .env.local by Bun automatically):
-    SUPABASE_URL               – needed only for the URL deduplication check
-    SUPABASE_SERVICE_ROLE_KEY  – needed only for the URL deduplication check
-    GNEWS_API_KEY              – optional; GNews is skipped when absent
+Run: bun run scripts/test-scraper.ts
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -23,7 +14,7 @@ import { enrichItemsWithLocation } from '../src/scraper/fetchers/geocoding';
 import type { NewsItem } from '../src/lib/types';
 import type { DbEvent } from '../src/types';
 
-// ─── Supabase (read-only for dedup check) ─────────────────────────────────────
+// --- Configuration ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -36,6 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
+// convert internal NewsItem format to database event schema
 function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     if (!item.url) return null;
     return {
@@ -99,7 +91,7 @@ async function run() {
     console.log(`  Known in DB:   ${knownUrls.size} URLs`);
     console.log(`  New to ingest: ${newItems.length} items\n`);
 
-    // Step 3: Geocode
+    // Step 3: Extract locations and geocode
     console.log('Step 3/4 — Running geocoding on new items...');
     const enriched = await enrichItemsWithLocation(newItems);
     const geocodedCount = enriched.filter(i => i.latitude !== undefined).length;

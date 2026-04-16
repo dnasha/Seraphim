@@ -1,10 +1,8 @@
 import { NewsItem } from './types';
 
-/*
-Dan Sharan
-
-gnews API integration
-*/
+/**
+ * gnews API integration for top headlines and OSINT-specific searches.
+ */
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
@@ -112,7 +110,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
     }
 }
 
-// OSINT keyword-driven search
+// OSINT-specific keyword search queries
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -134,7 +132,7 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
             const text = (item.title + ' ' + item.description).toLowerCase();
             
             for (const { query, tags } of OSINT_QUERIES) {
-                // simple check for keywords (removing quotes and OR for basic matching)
+                // simple check for keywords within title or description
                 const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
                 if (keywords.some(k => text.includes(k.trim()))) {
                     tags.forEach(t => matchedTags.add(t));

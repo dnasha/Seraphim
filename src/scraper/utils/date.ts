@@ -1,6 +1,12 @@
+/*
+  Dan Sharan
+  
+  Date Utility — normalization for complex/non-standard date formats.
+*/
+
 /**
- * Ensures a date string is in valid ISO 8601 format.
- * Handles non-standard formats like "Friday, April 10, 2026 - 16:35"
+ * Normalizes a date string to valid ISO 8601 format.
+ * Primarily handles non-standard formats (e.g., CrisisWatch: "Friday, April 10, 2026 - 16:35").
  */
 export function ensureIsoDate(dateStr: string | undefined | null): string {
     if (!dateStr) return new Date().toISOString();

@@ -44,37 +44,16 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Security**: URL protocol validation in scraper, RLS policies on Supabase, `SUPABASE_SERVICE_ROLE_KEY` never exposed to client (only anon key used in route.ts).
 - **Analytics**: `@vercel/analytics` and `@vercel/speed-insights` integrated.
 
+### Phase 0: Housekeeping & Foundations
+- **CSS Modularization**: Split the `globals.css` monolith into component-specific CSS modules and consolidated duplicate rules.
+- **Deduplication**: Removed redundant filtering logic from the API route (now client-side only) and centralized category/source colors into `src/lib/colors.ts`.
+- **Component Decomposition**: Refactored `NewsMap.tsx` (664 lines) into specialized modules (`smoothZoom.ts` and `markerManager.ts`) for significantly improved maintainability.
+
 ---
 
 ## 🔧 Phase 0: Housekeeping & Foundations
 
 Before adding features, harden what exists. These are concrete code-level tasks.
-
-### 0.1 — Break Up the Monolith CSS
-- **The problem**: `globals.css` is **1,450 lines / 28KB** in a single file (it literally has `"CRAZY MONOLITH CSS FILE"` as its first comment). It contains styles for every component, every Leaflet override, every responsive breakpoint, and duplicate `.cluster-icon` blocks (lines 968–1003 and 1069–1107 define overlapping rules).
-- **Action**: Split into CSS Modules or co-located files per component:
-  - `globals.css` → base reset, CSS custom properties (theme tokens), and typography only.
-  - `EventSidebar.module.css` — sidebar, cards, stats, expand animations.
-  - `FilterBar.module.css` — toggles, search input, category pills.
-  - `NewsMap.module.css` — map wrapper, markers, clusters, popups, Leaflet overrides.
-  - `MapSettings.module.css` — settings panel, style grid, toggle switch.
-  - `Layout.module.css` — app-layout, main-content, responsive breakpoints.
-- **Cleanup**: Remove the duplicate `.cluster-icon` block. Consolidate `.cluster-small`, `.cluster-medium`, `.cluster-large` into one authoritative set.
-- **Bonus**: Remove `@tailwindcss/postcss` from `devDependencies` in `package.json` — it's installed but completely unused.
-
-### 0.2 — Eliminate Duplicated Logic
-- **Duplicate filtering**: The exact same source/category/time-range filtering logic exists in **both** `src/app/api/news/route.ts` (lines 84–132) and `src/hooks/useNewsFilter.ts` (lines 43–93). The API route does server-side filtering, then the client re-filters the same data with identical logic.
-  - **Decision needed**: Either the API returns *all* 500 items and the client filters (current behavior for cached requests), or the API filters and the client trusts it. Don't do both.
-  - **Recommendation**: Keep client-side filtering only (enables instant toggle switching without network round-trips). Strip the filtering logic from `route.ts` — it should only do the Supabase query and caching.
-- **Duplicate color maps**: `CATEGORY_COLORS` is defined separately in `EventSidebar.tsx` (line 17) and `MapConstants.tsx`. `getSourceBadgeColor` in MapConstants and `getSourceStyle` in EventSidebar serve the same purpose with slightly different APIs.
-  - **Action**: Extract into a single shared `src/lib/colors.ts` module.
-
-### 0.3 — Decompose NewsMap.tsx
-- **The problem**: `NewsMap.tsx` is **664 lines** of highly imperative code mixing Leaflet initialization, the smooth zoom system (~130 lines of `requestAnimationFrame` + monkey-patching), marker CRUD, popup HTML templating, cluster management, highlight logic, and the React component itself.
-- **Action**: Extract into focused modules:
-  - `smoothZoom.ts` — the `createSubpixelManager`, lerp loop, and custom zoom control creation. Pure Leaflet, no React.
-  - `markerManager.ts` — marker add/remove/sync logic, popup HTML generation.
-  - `NewsMap.tsx` — slim React shell that wires up the above modules via refs and effects.
 
 ### 0.4 — Testing Infrastructure
 - **Current state**: No test framework is installed. The only "tests" are ad-hoc scripts (`scripts/evaluate-accuracy.mjs`, `scripts/test-scrape.ts`, `scripts/benchmark-pipeline.mjs`) that must be run manually with no pass/fail assertions.

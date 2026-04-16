@@ -2,15 +2,11 @@
 
 /*
 Dan Sharan
-
-filter bar component
-
-shows list of news items
-
-long things are svg paths
+FilterBar component provides interface for filtering news by source, category, and time.
 */
+import styles from './FilterBar.module.css';
 
-// category colors shared with NewsMap for pin colors
+// Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
     general: '#6b7280',
     world: '#dc2626',
@@ -87,6 +83,7 @@ export default function FilterBar({
     onSearchChange,
 }: FilterBarProps) {
     const toggleSource = (source: string) => {
+        // Ensure at least one source remains selected
         if (sources.includes(source)) {
             if (sources.length > 1) {
                 onSourcesChange(sources.filter(s => s !== source));
@@ -97,6 +94,7 @@ export default function FilterBar({
     };
 
     const toggleCategory = (category: string) => {
+        // 'all' resets selection, specific categories toggle individually
         if (category === 'all') {
             onCategoriesChange(['all']);
             return;
@@ -113,17 +111,17 @@ export default function FilterBar({
     };
 
     return (
-        <div className="filter-bar">
-            <div className="filter-section">
-                <label className="filter-label">Sources</label>
-                <div className="source-row">
-                    <div className="source-toggles">
+        <div className={styles.filterBar}>
+            <div className={styles.filterSection}>
+                <label className={styles.filterLabel}>Sources</label>
+                <div className={styles.sourceRow}>
+                    <div className={styles.sourceToggles}>
                         {sourceOptions.map((option) => {
                             const isActive = sources.includes(option.value);
                             return (
                                 <button
                                     key={option.value}
-                                    className={`source-toggle ${isActive ? 'active' : ''}`}
+                                    className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
                                     onClick={() => toggleSource(option.value)}
                                     style={{
                                         backgroundColor: isActive ? option.bg : undefined,
@@ -139,24 +137,24 @@ export default function FilterBar({
                 </div>
             </div>
 
-            <div className="filter-section">
+            <div className={styles.filterSection}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="filter-label">Time & Location</label>
+                    <label className={styles.filterLabel}>Time &amp; Location</label>
                 </div>
-                <div className="source-row">
-                    <div className="source-toggles">
+                <div className={styles.sourceRow}>
+                    <div className={styles.sourceToggles}>
                         {timeOptions.map((option) => (
                             <button
                                 key={option.value}
-                                className={`time-toggle ${timeRange === option.value ? 'active' : ''}`}
+                                className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
                                 onClick={() => onTimeRangeChange(option.value)}
                             >
                                 {option.label}
                             </button>
                         ))}
-                        <div className="filter-divider" />
+                        <div className={styles.filterDivider} />
                         <button
-                            className={`time-toggle mapped-only-toggle ${mappedOnly ? 'active' : ''}`}
+                            className={`${styles.timeToggle} ${mappedOnly ? styles.timeToggleActive : ''}`}
                             onClick={() => onMappedOnlyChange(!mappedOnly)}
                             style={{ backgroundColor: mappedOnly ? '#22c55e' : undefined, borderColor: mappedOnly ? '#22c55e' : undefined }}
                         >
@@ -166,9 +164,9 @@ export default function FilterBar({
                 </div>
             </div>
 
-            <div className="filter-section">
-                <label className="filter-label">Categories</label>
-                <div className="category-toggles">
+            <div className={styles.filterSection}>
+                <label className={styles.filterLabel}>Categories</label>
+                <div className={styles.categoryToggles}>
                     {categoryOptions.map((cat) => {
                         const isActive = categories.includes(cat.value);
                         const color = CATEGORY_COLORS[cat.value] || '#6b7280';
@@ -176,7 +174,7 @@ export default function FilterBar({
                         return (
                             <button
                                 key={cat.value}
-                                className={`category-toggle ${isActive ? 'active' : ''}`}
+                                className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
                                 onClick={() => toggleCategory(cat.value)}
                                 style={{
                                     borderColor: isActive ? color : undefined,
@@ -184,7 +182,7 @@ export default function FilterBar({
                                 }}
                             >
                                 <svg
-                                    className="category-icon-svg"
+                                    className={styles.categoryIconSvg}
                                     viewBox="0 0 24 24"
                                     width="15"
                                     height="15"
@@ -200,9 +198,9 @@ export default function FilterBar({
                 </div>
             </div>
 
-            <div className="filter-section" style={{ marginTop: '4px' }}>
-                <div className="search-input-container">
-                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <div className={styles.filterSection} style={{ marginTop: '4px' }}>
+                <div className={styles.searchInputContainer}>
+                    <svg className={styles.searchIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <circle cx="11" cy="11" r="8" />
                         <path d="m21 21-4.35-4.35" />
                     </svg>
@@ -211,7 +209,7 @@ export default function FilterBar({
                         placeholder="Search news..."
                         value={searchQuery}
                         onChange={(e) => onSearchChange(e.target.value)}
-                        className="search-input"
+                        className={styles.searchInput}
                     />
                 </div>
             </div>

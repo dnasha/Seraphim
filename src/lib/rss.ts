@@ -1,11 +1,9 @@
 import Parser from 'rss-parser';
 import { NewsItem } from './types';
 
-/*
-Dan Sharan
-
-rss integration
-*/
+/**
+ * RSS feed integration for news sources and Reddit subreddits.
+ */
 
 const parser = new Parser({
     timeout: 5000,
@@ -63,6 +61,9 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     return items;
 }
 
+/**
+ * Extracts the first available image URL from various common RSS/MediaRSS fields.
+ */
 function extractImageUrl(item: Record<string, unknown>): string | undefined {
     if (item['media:content'] && typeof item['media:content'] === 'object') {
         const media = item['media:content'] as Record<string, unknown>;

@@ -1,11 +1,9 @@
-/* Dan Sharan
+/*
+Seraphim Geodata Builder
+Processes GeoNames datasets and custom country/location mappings
+to produce a compact JSON database for the extraction pipeline.
 
-Parses GeoNames data files (cities5000.txt, admin1CodesASCII.txt) and
-produces a compact data/geonames.json with population-weighted cities,
-admin1 regions, and a comprehensive list of all countries
-
-run: node scripts/build-geodata.mjs
-
+Run: node scripts/build-geodata.mjs
 */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -15,9 +13,8 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
 
-// ISO 3166-1 alpha-2 country name mapping
-// maps every country code to an array of [name, lat, lon] entries
-// coordinates are canonical centroids for each country
+// ISO 3166-1 alpha-2 country mappings
+// Each country maps to one or more recognizable names and a canonical centroid.
 const COUNTRY_DATA = {
     'AD': [['andorra', 42.55, 1.60]],
     'AE': [['united arab emirates', 23.42, 53.85], ['uae', 23.42, 53.85]],
@@ -222,7 +219,8 @@ const COUNTRY_DATA = {
     'GZ': [['gaza', 31.35, 34.31]],
 };
 
-// parse cities5000.txt
+// --- Stage 1: Process cities ---
+// We use cities5000.txt which includes cities with population > 5000.
 console.log('Reading cities5000.txt...');
 const citiesRaw = readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8');
 const citiesLines = citiesRaw.split('\n').filter(l => l.trim());
@@ -246,6 +244,7 @@ for (const line of citiesLines) {
 
     const key = (asciiName || name).toLowerCase();
 
+    // keep the city with the highest population if names collide
     const existing = cityMap.get(key);
     if (!existing || population > existing.pop) {
         cityMap.set(key, { lat, lon, pop: population, cc: countryCode });
@@ -259,6 +258,7 @@ for (const line of citiesLines) {
         }
     }
 
+    // track the most populous city in each admin1 region as a fallback centroid
     if (admin1Code) {
         const a1key = `${countryCode}.${admin1Code}`;
         const existA1 = admin1Centroids.get(a1key);
@@ -270,7 +270,7 @@ for (const line of citiesLines) {
 
 console.log(`  Parsed ${cityMap.size} unique city names`);
 
-// parse admin1CodesASCII.txt 
+// --- Stage 2: Process admin1 regions (states/provinces) ---
 console.log('Reading admin1CodesASCII.txt...');
 const admin1Raw = readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8');
 const admin1Lines = admin1Raw.split('\n').filter(l => l.trim());
@@ -293,7 +293,7 @@ for (const line of admin1Lines) {
 
     const key = (asciiName || name).toLowerCase();
 
-    // don't overwrite a very large city with an admin1 region
+    // prioritize major cities over admin1 regions if names are identical
     const existingCity = cityMap.get(key);
     if (existingCity && existingCity.pop > 500000) continue;
 
@@ -318,6 +318,7 @@ let countryCount = 0;
 for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
     for (const [name, lat, lon] of entries) {
         if (name.length <= 2) continue;
+        // round coordinates to reduce JSON size
         countriesOut[name] = { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100, cc };
         countryCount++;
     }
@@ -325,7 +326,7 @@ for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
 
 console.log(`  ${countryCount} country name entries`);
 
-// build output
+// --- Stage 3: Assemble final dataset ---
 const cities = {};
 for (const [key, val] of cityMap.entries()) {
     if (key.length <= 2) continue;

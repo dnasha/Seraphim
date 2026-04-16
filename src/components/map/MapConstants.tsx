@@ -1,12 +1,8 @@
 import type L from 'leaflet';
 
 /*
-Dan Sharan
-
-map constants file
-
-like links and colors
-*/
+ * Map configuration constants including styles, icons, and categories.
+ */
 export const MAP_STYLES: Record<string, { url: string; attribution: string; label: string }> = {
     standard: {
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -35,16 +31,9 @@ export const MAP_STYLES: Record<string, { url: string; attribution: string; labe
     },
 };
 
-export const CATEGORY_COLORS: Record<string, string> = {
-    general: '#6b7280',
-    world: '#dc2626',
-    crisis: '#b91c1c',
-    nation: '#2563eb',
-    business: '#d97706',
-    technology: '#0891b2',
-    science: '#059669',
-    health: '#7c3aed',
-};
+import { CATEGORY_COLORS, DEFAULT_PIN_COLOR, getCategoryColor, getSourceBadgeColor } from '@/lib/colors';
+
+export { CATEGORY_COLORS, DEFAULT_PIN_COLOR, getCategoryColor, getSourceBadgeColor };
 
 export const CATEGORY_ICONS: Record<string, string> = {
     general: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
@@ -57,13 +46,7 @@ export const CATEGORY_ICONS: Record<string, string> = {
     health: 'M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z',
 };
 
-const DEFAULT_PIN_COLOR = '#6b7280';
-
-export function getCategoryColor(category?: string): string {
-    if (!category) return DEFAULT_PIN_COLOR;
-    return CATEGORY_COLORS[category] || DEFAULT_PIN_COLOR;
-}
-
+// cache icons to improve performance and prevent re-rendering jitter
 const iconCache: Record<string, L.DivIcon> = {};
 
 export function createCategoryIcon(leaflet: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
@@ -112,14 +95,4 @@ export function formatTimeAgo(dateStr: string): string {
     return `${days}d ago`;
 }
 
-export function getSourceBadgeColor(sourceName: string): string {
-    const s = sourceName.toLowerCase();
-    if (s.includes('(x)') || s.includes('twitter')) return '#000000';
-    if (s.includes('reddit')) return '#ff4500';
-    if (s.includes('telegram')) return '#006effff';
-    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks')) return '#6d3100ff';
-    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news')) return '#008fb3ff';
-    if (s.includes('nasa') || s.includes('nature')) return '#059669';
-    if (s.includes('who ')) return '#7c3aed';
-    return '#818181ff';
-}
+

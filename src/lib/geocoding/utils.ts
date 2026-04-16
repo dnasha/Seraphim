@@ -1,19 +1,15 @@
 /*
-Dan Sharan
+ * Dan Sharan
+ * geocoding utilities for normalization and cleaning
+ */
 
-geocoding utilities
+// converts unicode diacritics to ascii (e.g., "Irán" -> "Iran")
 
-string normalization and cleaning
-*/
-
-// normalize unicode diacritics/accents to ascii equivalents
-// "Irán" -> "Iran", "São Paulo" -> "Sao Paulo", "Zürich" -> "Zurich"
 export function normalizeAccents(s: string): string {
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-// normalize a location string to Title Case
-// handles special cases like "DC" and hyphenated names
+// normalizes a location string to Title Case, handling special acronyms and hyphenation
 export function toTitleCase(s: string): string {
     if (!s) return s;
     return s.toLowerCase().split(' ').map(word => {
@@ -28,7 +24,7 @@ export function toTitleCase(s: string): string {
     }).join(' ');
 }
 
-// clean a candidate: strip possessives, trailing punctuation, dashes, etc
+// strips possessives ("'s"), trailing punctuation, and leading/trailing dashes
 export function cleanCandidate(raw: string): string {
     let s = raw.trim();
     s = s.replace(/['\u2019]s\b/g, '');      // "Canada's" → "Canada"

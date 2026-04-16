@@ -1,10 +1,8 @@
 /*
-Dan Sharan
+ * Dan Sharan
+ * core geocoding engine: NLP-based location extraction and disambiguation
+ */
 
-geocoding engine
-
-uses compromise.js for NLP plus custom regex logic
-*/
 
 import nlp from 'compromise';
 import geoData from '../../../data/geonames.json';
@@ -54,13 +52,13 @@ let MULTI_WORD_LOC_SET: Set<string>;
 export function ensureInitialized() {
     if (isInitialized) return;
 
-    // 1. load GeoNames cities (population-weighted, highest pop wins on name collision)
+    // load GeoNames cities: largest population wins on collision
     for (const [key, city] of Object.entries(geoCities)) {
         if (key.length <= 2) continue;
         KNOWN_LOCATIONS[key] = { lat: city.lat, lon: city.lon, pop: city.pop, type: 'city' };
     }
 
-    // 2. load admin1 regions (states/provinces), only if not already occupied by a large city
+    // Load admin1 regions (states/provinces), respecting existing city pop density
     for (const [key, region] of Object.entries(geoAdmin1)) {
         if (key.length <= 2) continue;
         const existing = KNOWN_LOCATIONS[key];
@@ -69,13 +67,13 @@ export function ensureInitialized() {
         KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' };
     }
 
-    // 3. countries from geonames.json, always override with their canonical centroids
+    // load country centroids from geonames
     for (const [name, data] of Object.entries(geoCountries)) {
         if (name.length <= 2) continue;
         KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country' };
     }
 
-    // 4. hardcoded landmarks & conflict zones
+    // load hardcoded landmarks and conflict zones
     for (const [name, coords] of Object.entries(LANDMARKS)) {
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
     }
@@ -91,9 +89,7 @@ export function ensureInitialized() {
     isInitialized = true;
 }
 
-/*
-check exact match ONLY. No destructive word-chopping.
-*/
+// exact match check: looks up candidates in the normalized location dictionary
 function disambiguate(candidate: string): string {
     ensureInitialized();
     const key = candidate.toLowerCase().trim();
@@ -107,9 +103,7 @@ function disambiguate(candidate: string): string {
     return candidate;
 }
 
-/*
-try to resolve a demonym ("Chinese" -> "China")
-*/
+// try to resolve a demonym ("chinese" -> "china")
 function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
     for (const word of words) {
@@ -124,11 +118,8 @@ function extractDemonym(text: string): string | null {
     return null;
 }
 
-/*
-try to resolve country abbreviations in text ("U.S." -> "united states")
-keeps periods so we can match "U.S." properly, unlike demonyms which strip punctuation
-
-*/
+// try to resolve country abbreviations in text ("u.s." -> "united states")
+// keeps periods so we can match "u.s." properly, unlike demonyms which strip punctuation
 function extractCountryAbbrev(text: string): string | null {
     // split on whitespace and hyphens
     const tokens = text.split(/[\s\-]+/);
@@ -143,9 +134,7 @@ function extractCountryAbbrev(text: string): string | null {
     return null;
 }
 
-/*
- determine the priority type of a location (lower = more specific = better)
-*/
+// assigns priority scores (lower is better/more specific)
 function locationPriority(key: string): number {
     ensureInitialized();
     const entry = KNOWN_LOCATIONS[key];
@@ -228,7 +217,7 @@ export function extractLocation(title: string, description: string): { match: st
         candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'description' });
     }
 
-    // 3. Optimized dictionary scan for multi-word place names
+    // pass 3: optimized multi-word dictionary scan
     const fastDictionaryScan = (text: string, placement: 'title' | 'description') => {
         const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
         for (let i = 0; i < words.length; i++) {
@@ -250,7 +239,7 @@ export function extractLocation(title: string, description: string): { match: st
     fastDictionaryScan(title, 'title');
     fastDictionaryScan(description, 'description');
 
-    // 4. regex passes on title AND description
+    // pass 4: regex-based extraction from both title and description
     for (const pattern of LOCATION_PATTERNS) {
         pattern.lastIndex = 0;
         let match;
@@ -287,7 +276,7 @@ export function extractLocation(title: string, description: string): { match: st
     const descDemonym = extractDemonym(description);
     if (descDemonym) candidates.push({ name: descDemonym, source: 'demonym', placement: 'description' });
 
-    // 6. Optimized direct landmark scan
+    // pass 6: scanning for known high-priority landmarks
     const scanLandmarks = (text: string, placement: 'title' | 'description') => {
         const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
         for (let i = 0; i < words.length; i++) {
@@ -329,7 +318,7 @@ export function extractLocation(title: string, description: string): { match: st
                 const rawWords = raw.split(/\s+/);
                 let found = false;
                 
-                // if it's a multi-word candidate from regex/nlp, be VERY careful about picking just the first word
+                // handle multi-word candidates: verify prefix matches and avoid surname collisions
                 for (let len = words.length - 1; len >= 1; len--) {
                     const sub = words.slice(0, len).join(' ');
                     if (sub.length > 2 && !STOP_WORDS.has(sub) && KNOWN_LOCATIONS[sub]) {
@@ -354,7 +343,7 @@ export function extractLocation(title: string, description: string): { match: st
                 if (!found && source !== 'abbrev' && source !== 'demonym') continue;
             }
 
-            // reject topic-like multi-word candidates (e.g., "Iran War", "Gaza Update")
+            // filter out noisy topic headers (e.g., "Israel War", "Gaza Update")
             const lowKey = raw.toLowerCase();
             if (lowKey.endsWith(' war') || lowKey.endsWith(' update') ||
                 lowKey.endsWith(' report') || lowKey.endsWith(' brief') ||

@@ -6,8 +6,8 @@ import { ensureIsoDate } from '../utils/date';
 /*
 Dan Sharan
 
-rss integration — scraper worker copy
-Run standalone via Bun; imported by src/scraper/index.ts
+RSS feed integration for the scraper worker.
+Supports standard RSS feeds and Reddit's RSS endpoints.
 */
 
 const parser = new Parser({
@@ -54,6 +54,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
 }
 
 export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
+    // Concurrent fetch with Promise.allSettled to handle individual failures gracefully
     const results = await Promise.allSettled(
         REDDIT_SOURCES.map(source => fetchRedditFeed(source))
     );
@@ -64,7 +65,11 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     return items;
 }
 
+/**
+ * Extracts the first available image URL from various standard RSS media fields.
+ */
 function extractImageUrl(item: Record<string, unknown>): string | undefined {
+    // Check MediaRSS content tags
     if (item['media:content'] && typeof item['media:content'] === 'object') {
         const media = item['media:content'] as Record<string, unknown>;
         if (media.$ && typeof media.$ === 'object' && 'url' in (media.$ as object)) {
@@ -72,6 +77,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
         }
     }
 
+    // Check MediaRSS thumbnail tags
     if (item['media:thumbnail'] && typeof item['media:thumbnail'] === 'object') {
         const thumb = item['media:thumbnail'] as Record<string, unknown>;
         if (thumb.$ && typeof thumb.$ === 'object' && 'url' in (thumb.$ as object)) {
@@ -87,7 +93,7 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 10000; // 10s — generous for server-side GitHub Actions runner
+const FEED_TIMEOUT_MS = 10000; // 10s — standard for server-side runners
 
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {

@@ -2,26 +2,24 @@
 Dan Sharan
 
 Seraphim Scraper — main ingestion worker
-═══════════════════════════════════════════════════════════════════════════════
 
-Run locally:
+run locally:
     bun run src/scraper/index.ts
 
-Dry-run (no DB writes, prints payload instead):
+dry-run (no db writes, prints payload instead):
     DRY_RUN=true bun run src/scraper/index.ts
 
-Environment variables (loaded from .env.local by Bun automatically):
+environment variables (loaded from .env.local by bun automatically):
     SUPABASE_URL               – Supabase project URL
     SUPABASE_SERVICE_ROLE_KEY  – Service-role key (bypasses RLS for writes)
     GNEWS_API_KEY              – GNews.io API key (optional; skipped when absent)
 
-Pipeline:
-    1. Fetch raw items from RSS feeds, GNews, Reddit, and social channels.
-    2. Pre-fetch recent event URLs from Supabase to avoid redundant NLP/geocoding.
-    3. Filter out already-ingested URLs (deduplication guard).
-    4. Geocode remaining items using the local NLP engine.
-    5. Upsert events into Supabase (conflict key: `url`).
-═══════════════════════════════════════════════════════════════════════════════
+pipeline:
+    1. fetch raw items from RSS feeds, GNews, Reddit, and social channels.
+    2. pre-fetch recent event URLs from Supabase to avoid redundant NLP/geocoding.
+    3. filter out already-ingested URLs (deduplication guard).
+    4. geocode remaining items using the local NLP engine.
+    5. upsert events into Supabase (conflict key: `url`).
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -33,7 +31,7 @@ import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from './utils/date';
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// config
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,7 +46,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// helpers
 
 /**
  * Removes incomplete surrogate pairs and other characters that break Postgres UTF-8/JSON parsing.
@@ -93,13 +91,13 @@ function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     };
 }
 
-// ─── Main pipeline ────────────────────────────────────────────────────────────
+// main pipeline
 
 async function run(): Promise<void> {
     const startMs = Date.now();
     console.log(`[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`);
 
-    // ── Step 1: Fetch raw items from all sources ──────────────────────────────
+    // step 1: fetch raw items from all sources
     console.log('[scraper] Fetching raw items from all sources...');
     const [rssItems, redditItems, gnewsItems, osintItems, socialItems] = await Promise.allSettled([
         fetchAllRSSFeeds(),
@@ -124,7 +122,7 @@ async function run(): Promise<void> {
     // Drop items with no URL (can't upsert without the conflict key)
     const itemsWithUrl = rawItems.filter(item => !!item.url);
 
-    // ── Step 2: Pre-fetch known URLs from DB to skip redundant geocoding ──────
+    // step 2: pre-fetch known URLs from DB to skip redundant geocoding
     console.log('[scraper] Fetching recent known URLs from Supabase...');
     const incomingUrls = itemsWithUrl.map(i => i.url);
 
@@ -151,7 +149,7 @@ async function run(): Promise<void> {
     
     console.log(`[scraper] Known URLs in DB: ${knownUrls.size}`);
 
-    // ── Step 3: Filter out already-processed items ────────────────────────────
+    // step 3: filter out already-processed items
     const newItems = itemsWithUrl.filter(item => !knownUrls.has(item.url));
     console.log(`[scraper] New items to process: ${newItems.length}`);
 
@@ -160,14 +158,14 @@ async function run(): Promise<void> {
         return;
     }
 
-    // ── Step 4: Geocode new items ─────────────────────────────────────────────
+    // step 4: geocode new items using NLP engine
     console.log('[scraper] Running NLP geocoding on new items...');
     const enrichedItems = await enrichItemsWithLocation(newItems);
 
     const geocodedCount = enrichedItems.filter(i => i.latitude != null).length;
     console.log(`[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`);
 
-    // ── Step 5: Build DB rows and upsert ─────────────────────────────────────
+    // step 5: build db rows and upsert
     const dbEvents: DbEvent[] = enrichedItems
         .map(newsItemToDbEvent)
         .filter((e): e is DbEvent => e !== null);
@@ -224,7 +222,7 @@ async function run(): Promise<void> {
     console.log(`[scraper] ✓ Finished ingestion in ${elapsed}s. Total events successfully handled: ${totalUpserted}`);
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
+// entry point
 run().catch(err => {
     console.error('[scraper] Unhandled error:', err);
     process.exit(1);

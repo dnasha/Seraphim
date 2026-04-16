@@ -2,12 +2,7 @@
 
 /*
 Dan Sharan
-
-theme toggle component
-
-shows light/dark mode toggle
-
-long things are svg paths
+ThemeToggle component provides a switch for light and dark modes.
 */
 
 import React from 'react';

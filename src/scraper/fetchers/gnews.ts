@@ -3,8 +3,8 @@ import { NewsItem } from '@/lib/types';
 /*
 Dan Sharan
 
-gnews API integration — scraper worker copy
-Run standalone via Bun; imported by src/scraper/index.ts
+GNews API integration for the scraper worker.
+Designed to run standalone via Bun.
 */
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
@@ -45,6 +45,7 @@ export async function fetchGNews(
         const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`, {
             signal: AbortSignal.timeout(15000),
         });
+        // Handle specific quota or rate limiting errors
         if (res.status === 403 || res.status === 429) {
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
             console.warn(`gnews: ${reason} (${res.status}), skipping headlines`);
@@ -113,7 +114,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
     }
 }
 
-// OSINT keyword-driven search
+// OSINT keyword-driven search (OSINT_QUERIES)
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -124,7 +125,7 @@ const OSINT_QUERIES: { query: string; tags: string[] }[] = [
 export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) return [];
 
-    // combine queries into one call to save quota (100 req/day limit)
+    // Combine queries into one call to minimize quota usage (typically 100 req/day)
     const combinedQuery = OSINT_QUERIES.map(q => q.query).join(' OR ');
 
     try {
@@ -134,6 +135,7 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
             const matchedTags = new Set<string>(['OSINT']);
             const text = (item.title + ' ' + item.description).toLowerCase();
 
+            // Run sub-query matching to re-apply specific tags to the combined results
             for (const { query, tags } of OSINT_QUERIES) {
                 const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
                 if (keywords.some(k => text.includes(k.trim()))) {

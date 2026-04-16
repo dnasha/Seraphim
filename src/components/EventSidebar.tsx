@@ -2,18 +2,16 @@
 
 /*
 Dan Sharan
-
-event sidebar component
-
-shows list of news items
+EventSidebar component displays news articles and handles item selection.
 */
 
 import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
 import { ReactNode, useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import styles from './EventSidebar.module.css';
 
-// category colors (same as FilterBar / NewsMap)
+// Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
     general: '#6b7280',
     world: '#dc2626',
@@ -27,6 +25,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // source platform colors for badge styling
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
+
     const s = sourceName.toLowerCase();
     if (s.includes('(x)') || s.includes('twitter'))
         return { bg: '#000000', color: '#ffffff' };
@@ -77,6 +76,7 @@ export default function EventSidebar({
     onRefresh,
     mounted,
 }: EventSidebarProps) {
+    // References to card elements for auto-scrolling
     const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     // track which card is expanded (for unmapped articles)
     const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -93,6 +93,7 @@ export default function EventSidebar({
     const handleCardClick = useCallback((item: NewsItem) => {
         const hasGeo = item.latitude != null;
 
+        // Responsive breakpoint matching CSS media query
         const isMobile = () => window.innerWidth < 860;
 
         if (hasGeo) {
@@ -120,11 +121,13 @@ export default function EventSidebar({
         }
     }, [selectedItemId, onSelectItem, expandedId, onToggleSidebar]);
 
+
+
     const eventListContent = useMemo(() => {
         if (isLoading && items.length === 0) {
             return (
-                <div className="event-list-loading">
-                    <div className="loading-spinner" />
+                <div className={styles.eventListLoading}>
+                    <div className={styles.loadingSpinner} />
                     <p>Scanning sources…</p>
                 </div>
             );
@@ -132,7 +135,7 @@ export default function EventSidebar({
 
         if (items.length === 0) {
             return (
-                <div className="event-list-empty">
+                <div className={styles.eventListEmpty}>
                     <h3>No events found</h3>
                     <p>Try adjusting your filters</p>
                 </div>
@@ -161,7 +164,13 @@ export default function EventSidebar({
                             cardRefs.current.delete(item.id);
                         }
                     }}
-                    className={`event-card${isSelected ? ' event-card-active' : ''}${hasGeo ? ' event-card-geo' : ' event-card-unmapped'}${isExpanded ? ' event-card-expanded' : ''}`}
+                    // Selection and layout state classes
+                    className={[
+                        styles.eventCard,
+                        isSelected ? styles.eventCardActive : '',
+                        hasGeo ? styles.eventCardGeo : styles.eventCardUnmapped,
+                        isExpanded ? styles.eventCardExpanded : '',
+                    ].join(' ').trim()}
                     onClick={() => handleCardClick(item)}
                     style={{
                         backgroundColor: isSelected ? `${catColor}15` : undefined,
@@ -172,17 +181,18 @@ export default function EventSidebar({
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(item); }}
                 >
                     {/* category accent bar on left edge */}
-                    <div className="event-card-accent" style={{ backgroundColor: catColor }} />
+                    <div className={styles.eventCardAccent} style={{ backgroundColor: catColor }} />
 
                     {/* main row: thumbnail + text */}
-                    <div className="event-card-row">
+                    <div className={styles.eventCardRow}>
                         {item.imageUrl && (
-                            <div className="event-card-thumb">
+                            <div className={styles.eventCardThumb}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src={item.imageUrl}
                                     alt=""
                                     loading="lazy"
+                                    // Avoid 403 errors from sources that block hotlinking
                                     referrerPolicy="no-referrer"
                                     onError={(e) => {
                                         const img = e.target as HTMLImageElement;
@@ -191,11 +201,11 @@ export default function EventSidebar({
                                 />
                             </div>
                         )}
-                        <div className="event-card-body">
-                            <h3 className="event-card-title">{item.title}</h3>
-                            <div className="event-card-meta">
+                        <div className={styles.eventCardBody}>
+                            <h3 className={styles.eventCardTitle}>{item.title}</h3>
+                            <div className={styles.eventCardMeta}>
                                 <span
-                                    className="event-card-source"
+                                    className={styles.eventCardSource}
                                     style={{
                                         background: getSourceStyle(item.source).bg,
                                         color: getSourceStyle(item.source).color,
@@ -203,12 +213,12 @@ export default function EventSidebar({
                                 >
                                     {item.source}
                                 </span>
-                                <span className="event-card-time">{timeAgo}</span>
+                                <span className={styles.eventCardTime}>{timeAgo}</span>
                                 {item.locationName && (
                                     <>
-                                        <span className="event-card-meta-sep">•</span>
-                                        <span className="event-card-location">
-                                            <svg className="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px', marginTop: '-2px' }}>
+                                        <span className={styles.eventCardMetaSep}>•</span>
+                                        <span className={styles.eventCardLocation}>
+                                            <svg className={styles.locationIconSvg} viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '2px', marginTop: '-2px' }}>
                                                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                                             </svg>
                                             {item.locationName}
@@ -217,16 +227,16 @@ export default function EventSidebar({
                                 )}
                             </div>
                             {!isExpanded && (
-                                <span className="event-card-expand-hint">Click to expand</span>
+                                <span className={styles.eventCardExpandHint}>Click to expand</span>
                             )}
                         </div>
                     </div>
 
                     {/* expanded detail panel for unmapped articles */}
                     {isExpanded && (
-                        <div className="event-card-detail">
+                        <div className={styles.eventCardDetail}>
                             {item.imageUrl && (
-                                <div className="event-card-detail-img">
+                                <div className={styles.eventCardDetailImg}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src={item.imageUrl}
@@ -240,12 +250,12 @@ export default function EventSidebar({
                                 </div>
                             )}
                             {item.description && (
-                                <p className="event-card-detail-desc">
+                                <p className={styles.eventCardDetailDesc}>
                                     {item.description}
                                 </p>
                             )}
                             <a
-                                className="event-card-detail-link"
+                                className={styles.eventCardDetailLink}
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -260,22 +270,24 @@ export default function EventSidebar({
     }, [items, selectedItemId, expandedId, isLoading, handleCardClick]);
 
     return (
-        <aside className={`event-sidebar ${isOpen ? 'mobile-open' : 'collapsed'}`}>
-            <div className="event-sidebar-header">
-                <div className="event-sidebar-logo">
+        <aside className={[
+            styles.eventSidebar,
+            isOpen ? styles.eventSidebarMobileOpen : styles.eventSidebarCollapsed,
+        ].join(' ')}>
+            <div className={styles.eventSidebarHeader}>
+                <div className={styles.eventSidebarLogo}>
                     <Image 
                         src="/logo.webp" 
                         alt="Seraphim Logo" 
                         width={54} 
                         height={54} 
                         priority
-                        className="sidebar-logo-img"
                         style={{ height: '3.4rem', width: 'auto', borderRadius: '4px' }} 
                     />
                     <h1>Seraphim</h1>
-                    <div className="event-sidebar-actions">
+                    <div className={styles.eventSidebarActions}>
                         <button
-                            className="theme-toggle"
+                            className={styles.themeToggle}
                             onClick={onToggleTheme}
                             aria-label={!mounted ? '...' : (isDarkMode ? 'Switch to light mode' : 'Switch to dark mode')}
                         >
@@ -292,7 +304,7 @@ export default function EventSidebar({
                             )}
                         </button>
                         <button
-                            className="sidebar-toggle-btn sidebar-collapse-btn"
+                            className={`${styles.sidebarToggleBtn} ${styles.sidebarCollapseBtn}`}
                             onClick={onToggleSidebar}
                             aria-label="Collapse sidebar"
                         >
@@ -301,7 +313,7 @@ export default function EventSidebar({
                             </svg>
                         </button>
                         <button
-                            className="sidebar-toggle-btn mobile-close-btn"
+                            className={`${styles.sidebarToggleBtn} ${styles.mobileCloseBtn}`}
                             onClick={onToggleSidebar}
                             aria-label="Close sidebar"
                         >
@@ -313,25 +325,26 @@ export default function EventSidebar({
                 </div>
             </div>
 
-            <div className="event-sidebar-stats">
-                <span className="stat-pill">
+            <div className={styles.eventSidebarStats}>
+                <span className={styles.statPill}>
                     {items.length} articles
                 </span>
-                <span className="stat-pill stat-pill-geo">
+                <span className={`${styles.statPill} ${styles.statPillGeo}`}>
                     {items.filter(i => i.latitude != null).length} mapped
                 </span>
+                {/* Prevent hydration mismatch for client-side time formatting */}
                 {lastUpdated && mounted && !isNaN(new Date(lastUpdated).getTime()) && (
-                    <span className="last-updated" suppressHydrationWarning>
+                    <span className={styles.lastUpdated} suppressHydrationWarning>
                         UPDATED: {new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
                     </span>
                 )}
                 <button
-                    className={`refresh-button ${isLoading ? 'loading' : ''}`}
+                    className={`${styles.refreshButton} ${isLoading ? styles.refreshButtonLoading : ''}`}
                     onClick={onRefresh}
                     disabled={isLoading}
                     title="Refresh news"
                 >
-                    <svg className="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg className={styles.refreshIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <path d="M21 12a9 9 0 1 1-9-9c4.52 0 8.21 3.33 8.88 7.67" />
                         <path d="M21 3v6h-6" />
                     </svg>
@@ -340,7 +353,7 @@ export default function EventSidebar({
 
             {filterBar}
 
-            <div className="event-list">
+            <div className={styles.eventList}>
                 {eventListContent}
             </div>
         </aside>

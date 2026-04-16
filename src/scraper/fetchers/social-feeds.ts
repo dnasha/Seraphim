@@ -7,8 +7,8 @@ import { ensureIsoDate } from '../utils/date';
 /*
 Dan Sharan
 
-social feeds integration — scraper worker copy
-Run standalone via Bun; imported by src/scraper/index.ts
+Social media feed integration (Telegram & X/Twitter) for the scraper worker.
+Uses scraping and multiple fallback strategies to bypass platform restrictions.
 */
 
 const parser = new Parser({
@@ -37,7 +37,7 @@ const RSSHUB_INSTANCES = [
     'https://rsshub.moeyy.cn',
 ];
 
-// telegram scraper (Cheerio-based)
+// Telegram scraper (HTML-based via Cheerio)
 interface TelegramPost {
     text: string;
     date: string;
@@ -65,7 +65,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
         const $ = cheerio.load(html);
         const posts: TelegramPost[] = [];
 
-        // each message is a .tgme_widget_message element
+        // Each message is contained within a .tgme_widget_message element
         $('.tgme_widget_message').each((_i, el) => {
             const $msg = $(el);
             const postId = $msg.attr('data-post') || '';
@@ -110,8 +110,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
     }
 }
 
-// x/twitter rss - multi-strategy fallback
-
+// X/Twitter feed fetching using a multi-strategy fallback system to ensure reliability
 async function fetchInstanceTimeout(url: string, timeoutMs = 10000): Promise<ReturnType<typeof parser.parseURL>> {
     const res = await fetch(url, {
         headers: {
@@ -135,7 +134,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 10000): Promise<Ret
     return feed;
 }
 
-// strategy 1: Native Twitter Syndication
+// Strategy 1: Attempt to use the native Twitter syndication endpoint
 async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
@@ -173,7 +172,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     }
 }
 
-// strategy 2: Nitter RSS (races all healthy instances)
+// Strategy 2: Nitter RSS (races multiple healthy instances for the first success)
 let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -257,8 +256,8 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
 }
 
 /**
- * Safe slicing that respects surrogate pairs (emojis)
- * Prevents invalid UTF-8 sequences in PostGREST/Postgres
+ * Performs a safe string slice that respects multi-byte characters (like emojis).
+ * Prevents invalid UTF-8 sequences that could cause database insertion errors.
  */
 function safeSlice(str: string, limit: number): string {
     if (!str) return '';
