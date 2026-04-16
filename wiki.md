@@ -17,7 +17,8 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 |---|---|---|
 | **Framework** | Next.js 16 (App Router) | React 19, deployed to Vercel |
 | **Language** | TypeScript | Strict mode across frontend and scraper |
-| **Styling** | Vanilla CSS | Single `globals.css` (no Tailwind). CSS custom properties for theming |
+| **Styling** | Vanilla CSS | CSS Modules for component isolation. Base tokens in `globals.css` |
+| **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
 | **Database** | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries |
 | **Scraper Runtime** | Bun | Native TS execution, 30x faster cold starts than Node |
 | **Map** | Leaflet 1.9 + react-leaflet 5 | OpenStreetMap tiles (Voyager/Dark). Canvas renderer |
@@ -36,7 +37,8 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 ```
 SeraphimPreview/
 ├── .github/workflows/
-│   └── main.yml                    # GitHub Actions cron — runs scraper every 30 min
+│   ├── main.yml                    # GitHub Actions cron — runs scraper every 30 min
+│   └── test.yml                    # CI workflow — runs Vitest suite on push/PR
 ├── data/
 │   ├── cities5000.txt              # GeoNames raw city data (~14 MB)
 │   ├── admin1CodesASCII.txt        # GeoNames admin1 regions
@@ -51,18 +53,23 @@ SeraphimPreview/
 │   └── test-real-geocode.ts        # Live geocoding accuracy spot-check
 ├── src/
 │   ├── app/
-│   │   ├── api/news/route.ts       # GET /api/news — Supabase proxy with 15m cache
-│   │   ├── globals.css             # All application styles (1,450 lines)
+│   │   ├── api/news/route.ts       # Supabase proxy with 15m cache & Edge CDN headers
+│   │   ├── globals.css             # Base resets, design tokens, and global typography
 │   │   ├── layout.tsx              # Root layout — fonts, metadata, analytics
 │   │   └── page.tsx                # Main page — orchestrates sidebar + map
 │   ├── components/
 │   │   ├── map/
-│   │   │   ├── NewsMap.tsx         # Leaflet map — markers, smooth zoom, popups (664 lines)
-│   │   │   ├── MapConstants.tsx    # Icon cache, color maps, tile styles, formatters
-│   │   │   ├── MapSettings.tsx     # Settings panel — map style selector, cluster toggle
+│   │   │   ├── NewsMap.tsx         # Leaflet map component shell
+│   │   │   ├── NewsMap.module.css  # Scoped map styles
+│   │   │   ├── MapConstants.tsx    # Icon cache, tile styles, formatters
+│   │   │   ├── MapSettings.tsx     # Settings panel UI
+│   │   │   ├── smoothZoom.ts       # Imperative Leaflet sub-pixel lerp system
+│   │   │   ├── markerManager.ts    # Marker creation & state synchronization
 │   │   │   └── index.tsx           # Barrel export
-│   │   ├── EventSidebar.tsx        # Sidebar — logo, stats, card list (349 lines)
+│   │   ├── EventSidebar.tsx        # Sidebar + card list
+│   │   ├── EventSidebar.module.css # Scoped sidebar styles
 │   │   ├── FilterBar.tsx           # Source/category/time/search controls
+│   │   ├── FilterBar.module.css    # Scoped filter styles
 │   │   └── ThemeToggle.tsx         # Dark/light mode switch button
 │   ├── scraper/
 │   │   ├── index.ts                # Bun worker entry — fetch → dedup → geocode → upsert
@@ -72,13 +79,16 @@ SeraphimPreview/
 │   │   │   ├── social-feeds.ts     # Telegram HTML scraper + X multi-strategy fetcher
 │   │   │   └── geocoding.ts        # enrichItemsWithLocation wrapper for scraper
 │   │   └── utils/
-│   │       └── date.ts             # ensureIsoDate() — robust date normalization
+│   │       ├── date.ts             # ensureIsoDate() — robust date normalization
+│   │       └── transforms.ts       # cleanString() & DB mapping utilities
 │   ├── data/
 │   │   └── sources.ts              # Centralized source definitions (RSS URLs, Reddit subs)
 │   ├── hooks/
 │   │   ├── useNewsData.ts          # Data fetching + 15-minute polling
 │   │   └── useNewsFilter.ts        # Client-side useMemo filtering (source/category/time/search)
 │   ├── lib/
+│   │   ├── colors.ts               # Source of truth for category & source colors
+│   │   ├── filters.ts              # Pure functions for client-side news filtering
 │   │   ├── geocoding/
 │   │   │   ├── engine.ts           # Core extraction + dictionary lookup (~20KB)
 │   │   │   ├── constants.ts        # Landmarks, demonyms, stop words, scoring weights (~11KB)
@@ -134,11 +144,12 @@ SeraphimPreview/
               ↓
 ┌─────────────────────────────────────────────────────────┐
 │  /api/news/route.ts  (Next.js Edge Route)               │
-│  ├── In-memory cache (15 min TTL)                       │
-│  ├── Refresh throttle (1 min cooldown)                  │
-│  ├── Selective SELECT (omits unused fields)             │
-│  ├── LIMIT 500, ORDER BY published_at DESC              │
-│  └── Cache-Control: s-maxage=900                        │
+│  ├── In-memory cache (15 min TTL)
+│  ├── Refresh throttle (1 min cooldown)
+│  ├── Selective SELECT (omits unused fields)
+│  ├── LIMIT 500, ORDER BY published_at DESC
+│  └── Cache-Control: s-maxage=900
+│
 └─────────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -245,7 +256,9 @@ page.tsx (client component)
 │       └── Unmapped cards → click expands inline detail
 │
 └── NewsMap (dynamic import, SSR disabled)
-    ├── Leaflet map (canvas renderer, custom smooth zoom)
+    ├── Leaflet map (canvas renderer)
+    ├── smoothZoom.ts (lerp loop + sub-pixel patches)
+    ├── markerManager.ts (marker sync + icon caching)
     ├── MapSettings (gear icon → style selector + cluster toggle)
     ├── Marker layer (direct or clustered)
     └── Popup layer (HTML-templated, not React-rendered)
@@ -264,6 +277,8 @@ page.tsx (client component)
 - **Map sync**: Theme change swaps tile layer between Voyager (light) and Dark Matter (dark)
 
 ### Category Colors
+
+> **Location**: `src/lib/colors.ts` (Centralized source of truth)
 
 | Category | Color | Hex |
 |---|---|---|
@@ -285,6 +300,8 @@ page.tsx (client component)
 - **Highlighting**: Uses direct DOM class manipulation (`.marker-icon-active`) via element refs — bypasses React reconciliation for instant, flicker-free feedback.
 
 ### Smooth Zoom System
+
+> **Location**: `src/components/map/smoothZoom.ts`
 
 Leaflet's default `scrollWheelZoom` is disabled. Replaced with a custom system:
 
@@ -412,6 +429,9 @@ DRY_RUN=true bun run src/scraper/index.ts
 | Test Supabase connection | `bun run scripts/test-supabase.ts` |
 | Run geocoding accuracy test | `npx tsx scripts/evaluate-accuracy.mjs` |
 | Run pipeline benchmark | `npx tsx scripts/benchmark-pipeline.mjs` |
+| Run all tests | `npm test` |
+| Run tests in watch mode | `npm run test:watch` |
+| Run accuracy benchmark | `npm run test:accuracy` |
 | Add a new RSS/Reddit feed | Append to `src/data/sources.ts` |
 | Add a new Telegram channel | Add to `TELEGRAM_CHANNELS` in `src/lib/social-feeds.ts` |
 | Add a new X account | Add to `X_ACCOUNTS` in `src/lib/social-feeds.ts` |
@@ -443,7 +463,7 @@ DRY_RUN=true bun run src/scraper/index.ts
 - **Client polling**: `useNewsData` polls every 15 minutes via `setInterval`. The refresh button bypasses cache via `?refresh=true` query param.
 
 ### Known Duplications (technical debt)
-- Filtering logic is duplicated: `route.ts` (lines 84–132) and `useNewsFilter.ts` (lines 43–93) implement identical source/category/time filtering.
-- `CATEGORY_COLORS` is defined in both `EventSidebar.tsx` and `MapConstants.tsx`.
-- Source badge color logic exists as `getSourceStyle()` in EventSidebar and `getSourceBadgeColor()` in MapConstants.
-- `@tailwindcss/postcss` is in `devDependencies` but completely unused — safe to remove.
+- **Resolved**: CSS monolithic styles split into modules.
+- **Resolved**: Filtering logic centralized in `src/lib/filters.ts`.
+- **Resolved**: Colors centralized in `src/lib/colors.ts`.
+- **Resolved**: `@tailwindcss/postcss` dependency removed.

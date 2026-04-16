@@ -54,6 +54,7 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Deduplication**: Removed redundant filtering logic from the API route (now client-side only) and centralized category/source colors into `src/lib/colors.ts`.
 - **Component Decomposition**: Refactored `NewsMap.tsx` (664 lines) into specialized modules (`smoothZoom.ts` and `markerManager.ts`) for significantly improved maintainability.
 - **Testing Infrastructure**: Installed Vitest with 127 tests across 6 suites covering utilities, data transforms, geocoding engine (50+ headline cases), enricher pipeline, filter logic, and accuracy regression (96.5% on 256 graded samples). Extracted `cleanString`/`newsItemToDbEvent` to `src/scraper/utils/transforms.ts` and filter logic to `src/lib/filters.ts` for testability. Added CI workflow (`.github/workflows/test.yml`) and `npm test` / `npm run test:watch` / `npm run test:accuracy` scripts.
+- **Animation Restoration**: Fixed broken loading wheel and refresh animations caused by CSS modularization. Defined local `@keyframes spin` within `EventSidebar.module.css` to ensure self-contained, reliable UI feedback.
 
 ---
 

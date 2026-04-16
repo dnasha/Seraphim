@@ -180,6 +180,11 @@
   height: 15px;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .refreshButtonLoading .refreshIcon {
   animation: spin 1s linear infinite;
 }

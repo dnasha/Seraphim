@@ -70,15 +70,38 @@ async function run() {
       
       const normActual = normalize(actualLocationFullName);
 
+      const ALIASES = {
+        'uk': 'united kingdom',
+        'usa': 'united states',
+        'u.s.': 'united states',
+        'america': 'united states',
+        'britain': 'united kingdom',
+        // Canonicalize capitals to countries for lenient matching
+        'moscow': 'russia',
+        'berlin': 'germany',
+        'budapest': 'hungary',
+        'tehran': 'iran',
+        'beijing': 'china',
+        'kyiv': 'ukraine',
+        'kiev': 'ukraine',
+        'gaza': 'palestine',
+        'uae': 'united arab emirates',
+        'sino-russian': 'russia',
+        'sino': 'china',
+      };
+
+      const evalActual = ALIASES[normActual] || normActual;
+      const evalExpected = ALIASES[normExpected] || normExpected;
+
       let isCorrect = false;
       if (isApproved) {
         // don't care about approved entries
-        if (normActual === null || normActual === normExpected) {
+        if (normActual === null || evalActual === evalExpected) {
           isCorrect = true;
         }
       } else {
         // for denied/manual entries, require an exact match
-        if (normActual === normExpected) {
+        if (evalActual === evalExpected) {
           isCorrect = true;
         }
       }

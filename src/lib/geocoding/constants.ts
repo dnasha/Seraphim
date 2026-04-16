@@ -55,6 +55,39 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'northern gaza': { lat: 31.55, lon: 34.50 },
     'southern gaza': { lat: 31.30, lon: 34.30 },
     'dr congo': { lat: -4.04, lon: 21.76 },
+    // conflict-relevant locations not in GeoNames cities5000
+    'bint jbeil': { lat: 33.12, lon: 35.43 },
+    'negev': { lat: 30.85, lon: 34.75 },
+    'chernobyl': { lat: 51.27, lon: 30.22 },
+    'bashkortostan': { lat: 54.23, lon: 56.06 },
+    'hormuz': { lat: 26.57, lon: 56.25 },
+    'jenin': { lat: 32.46, lon: 35.30 },
+    'nablus': { lat: 32.22, lon: 35.26 },
+    'ramallah': { lat: 31.90, lon: 35.20 },
+    'zaporizhzhia': { lat: 47.84, lon: 35.14 },
+    'zaporizhia': { lat: 47.84, lon: 35.14 },
+    'mykolaiv': { lat: 46.97, lon: 31.99 },
+    'sumy': { lat: 50.91, lon: 34.80 },
+    'dnipro': { lat: 48.46, lon: 35.04 },
+    'yerevan': { lat: 40.18, lon: 44.51 },
+    'tbilisi': { lat: 41.69, lon: 44.83 },
+    'aden': { lat: 12.78, lon: 45.03 },
+    'hodeida': { lat: 14.80, lon: 42.95 },
+    'hodeidah': { lat: 14.80, lon: 42.95 },
+    'luhansk': { lat: 48.57, lon: 39.34 },
+    'donetsk': { lat: 48.02, lon: 37.80 },
+    'bakhmut': { lat: 48.60, lon: 38.00 },
+    'avdiivka': { lat: 48.14, lon: 37.75 },
+    'kharkiv oblast': { lat: 49.99, lon: 36.23 },
+    'zaporizhzhia oblast': { lat: 47.84, lon: 35.14 },
+    'kursk oblast': { lat: 51.73, lon: 36.19 },
+    'belgorod oblast': { lat: 50.60, lon: 36.59 },
+    'cherkasy oblast': { lat: 49.44, lon: 31.99 },
+    'kharkov': { lat: 49.99, lon: 36.23 },
+    'niger': { lat: 17.61, lon: 8.08 },
+    'mali': { lat: 17.57, lon: -3.99 },
+    'burkina faso': { lat: 12.36, lon: -1.53 },
+    'sahel': { lat: 15.00, lon: 2.00 },
 };
 
 export const CONTINENT_FALLBACKS: Record<string, { lat: number; lon: number }> = {
@@ -117,6 +150,13 @@ export const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'u.n.': '__skip__',
     'e.u.': '__skip__',
     'd.c.': 'washington dc',
+    'nk': 'north korea',
+    'ca': 'california',
+    'ny': 'new york',
+    'tx': 'texas',
+    'ga': 'georgia',
+    'va': 'virginia',
+    'fl': 'florida',
 };
 
 export const DATELINE_NOISE_WORDS = new Set([
@@ -171,6 +211,8 @@ export const STOP_WORDS = new Set([
     'heba', 'hit', 'can', 'strikes', 'attack', 'at', 'about',
     'nigel', 'brent', 'nhs',
     'toi', 'sanchez',
+    // common words that collide with city names
+    'union', 'leo', 'victor', 'corona', 'rio',
 ]);
 
 export const FALSE_POSITIVES = new Set([
@@ -189,6 +231,10 @@ export const FALSE_POSITIVES = new Set([
     'iron dome', 'iron curtain', 'enterprise software', 'morning report',
     'evening report', 'special report', 'market update', 'daily dispatch',
     'breaking news', 'live coverage', 'press release', 'intelligence brief',
+    // small cities that are common English words and cause false positives
+    'nine', 'union', 'claudia', 'victor', 'corona', 'lima bean',
+    'independence', 'liberty', 'justice', 'hope', 'faith', 'harmony',
+    'florence nightingale', 'victoria sponge',
 ]);
 
 export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
@@ -197,6 +243,14 @@ export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
     'ars technica': 'San Francisco',
     'the verge': 'New York',
     'who': 'Geneva',
+    // WHO-tagged articles are always about global health policy in Geneva
+    'world health organization': 'Geneva',
 };
 
 export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'washington', 'washington dc']);
+
+// Regex patterns for pre-processing: strip media attribution and social-media noise
+export const MEDIA_ATTRIBUTION_SUFFIX = /\s*[-–—|]\s*(?:BBC|CNN|Reuters|AP|AFP|Al Jazeera|Fox News|NBC|CBS|ABC|NPR|Guardian|Telegraph|NYT|New York Times|Washington Post|Wall Street Journal|WaPo|WSJ|Financial Times|FT|Bloomberg|Politico|The Hill|Axios|Vox|Vice|BuzzFeed|Daily Mail|Daily Mirror|The Sun|Sky News|DW|Deutsche Welle|France 24|RFI|SCMP|South China Morning Post|Haaretz|Times of Israel|Jerusalem Post|Arab News|Middle East Eye|Al Monitor|Al-Monitor|Bellingcat|Coda Story|RFERL|Radio Free Europe|Radio Liberty|War on the Rocks|Geopolitical Futures|OSINTdefender|IntelSlava|liveukraine_media|Defence One|Defense One|thecradle|Philenews|airlive|Marine Insight|BulgarianMilitary|Yahoo|MSN|Brucke|Ukrinform|Ukrainska Pravda|Kyiv Independent|UNIAN|Sky News Arabia|Al Arabiya English|Al Arabiya|Press TV|PressTV|Tasnim|IRNA|Mehr News|Newsweek|Time Magazine|The Atlantic|Foreign Policy|Foreign Affairs|Chatham House|ISW|Institute for the Study of War|War Monitor|Military Summary|The Drive|The Aviationist|Jane|Janes|PopularMechanics|Popular Mechanics|Wired|Ars Technica|The Verge|TechCrunch|Engadget|9to5Mac|MacRumors|[A-Za-z ]{3,40}?)\s*$/;
+export const SOCIAL_MEDIA_TRAILER = /(?:Subscribe to @\S+|Subscribe to Live:\s*\S+|Subscribe here:\s*\S+|🪐\s*Subscribe|Follow us|Join our|Telegram|t\.me|Links:\s|@\w+\s*Chat room).*/i;
+export const HASHTAG_FUSED_PATTERN = /#([A-Z]{1,4})([A-Z][a-z])/g;  // matches #NKNorth Korea, #USAPresident
+export const ADMIN_SUFFIX_PATTERN = /\b(Oblast|Region|Province|District|Prefecture|County|Governorate|Emirate|Wilayah|Krai|Raion|Republic)\b/gi;

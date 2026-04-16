@@ -60,9 +60,40 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b(?:mayor|governor|leader)\\s+of\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ss]helled\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Bb]ombed\\s+(${LOC})`, 'g'),
+
+    // extraction / movement patterns
+    new RegExp(`\\b[Oo]ut\\s+[Oo]f\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Rr]eturning\\s+(?:to|from)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ll]aunched\\s+from\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ee]scapes?\\s+from\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Hh]eading\\s+(?:to|for|towards?)\\s+(${LOC})`, 'g'),
+
+    // kill/casualty event patterns
+    new RegExp(`\\b[Kk]ills?\\s+(?:\\w+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ww]ounded?\\s+(?:in|near)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Dd]ead\\s+(?:in|near)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ee]xplosion\\s+(?:in|near|rocks?)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ee]xplodes?\\s+(?:in|near)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Rr]ocks?\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ss]hakes?\\s+(${LOC})`, 'g'),
+    new RegExp(`\\bdowns?\\s+(?:\\w+\\s+)?(?:over|in|near)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ss]hot\\s+down\\s+over\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Ii]ntercepts?\\s+(?:\\w+\\s+)?(?:over|in|near)\\s+(${LOC})`, 'g'),
+
+    // “X attacking Y” — capture Y (the target)
+    new RegExp(`\\b[Aa]ttacking\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Vv]isits?\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Aa]rrives?\\s+in\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Mm]eets?\\s+(?:with\\s+)?(?:[A-Z]\\w+\\s+)?in\\s+(${LOC})`, 'g'),
+
+    // “Pope’s X visit highlights” / “Amid crisis in X” patterns
+    new RegExp(`\\b(?:[A-Z]\\w+\'s?)\\s+(?:\\w+\\s+)?[Vv]isit\\s+(?:to\\s+)?(${LOC})`, 'g'),
+    new RegExp(`\\b[Aa]mid\\s+(?:\\w+\\s+){0,3}(?:in|across)\\s+(${LOC})`, 'g'),
 ];
 
-// specific event-target relationship patterns
+
+
+// specific event-target relationship patterns (higher confidence than LOCATION_PATTERNS)
 export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
@@ -80,4 +111,11 @@ export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b[Ww]eapons\\s+on\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]ir\\s+[Ss]trikes?\\s+(?:on|in|against|over)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:intercept(?:s|ed|ing)?)\\s+(${LOC})`, 'g'),
+    // additional high-confidence target patterns
+    new RegExp(`\\b(?:downs?|downed|shot\\s+down)\\s+(?:[Ff]-\\d+|drone|aircraft|jet|plane|helicopter|UAV)\\s+(?:over|in|near)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:kills?|killed)\\s+(?:\\d+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:injur(?:es?|ed|ing))\\s+(?:\\d+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:hits?|struck)\\s+(?:\\w+\\s+)?(?:in|central|southern|northern|eastern|western)\\s+(${LOC})`, 'g'),
+    // "X country attacks/strikes/bombs Y" — capture Y (prevents actor from winning over target)
+    new RegExp(`(?:[A-Z]\\w+(?:i|an|ese|ish)\\s+)?(?:forces?|troops|military|army|navy|jets?)\\s+(?:attack(?:s|ed)?|bomb(?:s|ed)?|strike(?:s)?|struck|shell(?:s|ed)?)\\s+(?:\\w+\\s+)?(?:in|near)?\\s*(${LOC})`, 'g'),
 ];

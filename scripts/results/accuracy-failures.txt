@@ -1,0 +1,569 @@
+[WRONG] Trump says Israel and Lebanon to hold talks Thursday
+      Desc:     US President Donald Trump said Wednesday that leaders of Israel and Lebanon will speak Thursday, after they held a high-level face-to-face meeting in Washington Tuesday – the first such negotiation since 1993.
+                “Trying to get a little breathing room between Israel and Lebanon. It has been a long time since the two leaders have spoken, like 34 years. It will happen tomorrow,” Trump wrote on Truth Social without specifying who will be involved or offering further details.
+                Lebanon was pulled into...
+      Expected: Washington
+      Actual:   Israel
+      Found:    [Israel, Lebanon, Israel, Lebanon, Israel, Lebanon, Lebanon, Washington, Washington, United States]
+      Grade:    approved
+
+[WRONG] Trump says Israel and Lebanon’s leaders will speak on Thursday
+      Desc:     US president says the leaders of the two countries will speak for the first time in 34 years on Thursday.
+      Expected: United States
+      Actual:   Israel
+      Found:    [Israel, Lebanon, United States]
+      Grade:    approved
+
+[WRONG] Democrats clash with US Energy Secretary over Iran war and gas prices
+      Desc:     Watch the moment a Democratic congresswoman tells the US Energy Secretary he is ‘living in a different world’.
+      Expected: Washington
+      Actual:   Iran
+      Found:    [Iran, Iran, United States, United States]
+      Grade:    denied
+
+[WRONG] PM says Israel ready for Iran war resumption, while US gears for another round of talks
+      Desc:     White House says second meeting will likely be in Islamabad if it's finalized, as Pakistani delegation arrives in Tehran to prepare; US tries to turn screw on Iran with port blockade
+                The post PM says Israel ready for Iran war resumption, while US gears for another round of talks appeared first on The Times of Israel.
+      Expected: White House
+      Actual:   Tehran
+      Found:    [Tehran, Tehran, Israel, Iran, White House, Iran, Islamabad, White House, Tehran, United States, Iran, Israel, Iran, Israel, Pakistan, Islamabad, United States]
+      Grade:    approved
+
+[WRONG] Bonus In Brief: Choke Point: The Risks and Realities of America’s Iran Blockade
+      Desc:     On April 13, the U.S. military began a “blockade of all maritime traffic entering and exiting Iranian ports.” The move came after U.S. President Donald Trump announced on April 12 that the United States would begin a blockade after American and Iranian negotiators were unable to reach an agreement during a meeting in Islamabad.The announcement of a blockade immediately raised questions about how a blockade would work, how it fits into a broader U.S. strategy, its impacts on the global economy, and more. We asked five experts to assess the practicalities of enforcing a blockade, its legality, Iran’s likely response,
+                The post Bonus In Brief: Choke Point: The Risks and Realities of America’s Iran Blockade appeared first on War on the Rocks.
+      Expected: Islamabad
+      Actual:   Iran
+      Found:    [Iran, Islamabad, Iran, Iran, Iran, Islamabad, United States, United States]
+      Grade:    approved
+
+[WRONG] Examining the Cracks and the Cement in the Sino-Russian Relationship
+      Desc:     In 2024, John Stanko and Spenser Warren wrote, “Russian Threat Perception and Nuclear Strategy in its Plans for War with China,” where they explained some of the potential tensions between Russia and China that could make armed conflict between the two countries a possibility. Two years later, we asked them to revisit their arguments. Image: Wikimedia CommonsIn your 2024 article, you explained some of the potential tensions in the Sino-Russian partnership that could make armed conflict between the two countries a possibility. Two years later, have any new tensions emerged between the two countries? Are Russia and China stronger partners than they were
+                The post Examining the Cracks and the Cement in the Sino-Russian Relationship appeared first on War on the Rocks.
+      Expected: Russia
+      Actual:   China
+      Found:    [China, China, Russia, China, Russia, China, Russia]
+      Grade:    approved
+
+[WRONG] The full monty: Why the Mediterranean pact needs to offer the works
+      Desc:     Europe’s energy, industrial and migration interests all converge in its southern neighbourhood, where rivals are eroding its influence. The new Pact for the Mediterranean can reverse this, but only if Brussels puts grand bargains on the table
+      Expected: Brussels
+      Actual:   Mediterranean
+      Found:    [Mediterranean, Mediterranean, Mediterranean, Brussels, Mediterranean, Brussels, Europe]
+      Grade:    denied
+
+[WRONG] Italian papers united as PM Meloni faces off with Trump
+      Desc:     PRESS REVIEW – Wednesday, April 15, 2026: First, the Italian front pages rally around Prime Minister Giorgia Meloni as she stands up to US President Donald Trump. Next, war robots in Ukraine have captured Russian positions for the first time in history. Meanwhile, the war in Sudan enters its fourth year. Elsewhere, the World Press Photo awards have been given out. Finally, an unusual campaign takes the UK by storm.
+      Expected: Italy
+      Actual:   Sudan
+      Found:    [Sudan, Sudan, Italy, Ukraine, Sudan, Sudan, Ukraine, Sudan, Italy, United States]
+      Grade:    denied
+
+[WRONG] Why Booz Allen is Partnering With One of the World’s Most Important VC Firms
+      Desc:     What happens when one of the defense industry’s leading technology integrators partners with one of Silicon Valley’s most influential venture firms? Bryce Pippert of Booz Allen and Matt Cronin of Andreessen Horowitz join Ryan to unpack their new partnership and discuss how the United States is trying to tap into the tech ecosystem. The conversation gets into venture capital’s growing role in national security, how this partnership is supposed to work in practice, and why getting real technology into government hands is still harder than it should be.Image: Midjourney
+                The post Why Booz Allen is Partnering With One of the World’s Most Important VC Firms appeared first on War on the Rocks.
+      Expected: Sillicon Valley
+      Actual:   United States
+      Found:    [United States]
+      Grade:    denied
+
+[WRONG] From good to not good: The impact of the war in Iran on Russia
+      Desc:     Russia is reaping the rewards from Trump’s war in Iran, but the benefits will likely not extend beyond the short term. Here’s how Europeans can make the long term arrive more quickly
+      Expected: Russia
+      Actual:   Iran
+      Found:    [Iran, Iran, Iran, Russia, Iran, Iran, Iran, Iran, Russia, Iran, Iran, Russia, Iran, Europe]
+      Grade:    denied
+
+[WRONG] US and Iran could be headed toward a second round of talks: Reports - Al Arabiya English
+      Desc:     US and Iran could be headed toward a second round of talks: Reports  Al Arabiya English
+      Expected: United States
+      Actual:   Iran
+      Found:    [Iran, United States, Iran, United States]
+      Grade:    approved
+
+[WRONG] U.S.-Iran Peace Talks Hit an Impasse. What Comes Next? - Council on Foreign Relations
+      Desc:     U.S.-Iran Peace Talks Hit an Impasse. What Comes Next?  Council on Foreign Relations
+      Expected: United States
+      Actual:   Iran
+      Found:    [Iran, United States, Iran, United States]
+      Grade:    approved
+
+[WRONG] Ghalibaf says Iran ‘will not bow to any threats’ after Trump orders Hormuz blockade - Al Arabiya English
+      Desc:     Ghalibaf says Iran ‘will not bow to any threats’ after Trump orders Hormuz blockade  Al Arabiya English
+      Expected: Iran
+      Actual:   Strait of Hormuz
+      Found:    [Hormuz, Hormuz, Iran, Hormuz, Hormuz, Iran]
+      Grade:    approved
+
+[WRONG] Europe Should Use Its Leverage Over the Iran War - Council on Foreign Relations
+      Desc:     Europe Should Use Its Leverage Over the Iran War  Council on Foreign Relations
+      Expected: Europe
+      Actual:   Iran
+      Found:    [Iran, Iran, Europe, Europe]
+      Grade:    approved
+
+[MISS] Mo Ibrahim Foundation Academy Fellowship - Chatham House
+      Desc:     Mo Ibrahim Foundation Academy Fellowship  Chatham House
+      Expected: Chatham
+      Actual:   null
+      Found:    []
+      Grade:    denied
+
+[WRONG] Preventing Lebanon’s Collapse: A Way out of the Israel-Hizbollah War?
+      Desc:     In this online event, Crisis Group experts and Aurélie Daher, Lebanon Analyst and Associate Professor at Paris-Dauphine PSL University, assessed where the Israel-Hizbollah war stands, what the parties are seeking to achieve, and what off-ramps still exist.
+      Expected: Lebanon
+      Actual:   Paris
+      Found:    [Paris, Lebanon, Lebanon]
+      Grade:    denied
+
+[WRONG] Iran Crisis Monitor #1
+      Desc:     Crisis Group experts take stock of the past week's developments in the Middle East war and the progress of efforts to end it.
+      Expected: Middle East
+      Actual:   Iran
+      Found:    [Iran, Iran, Middle East, Middle East, Middle East]
+      Grade:    approved
+
+[WRONG] EU and NATO Members Grapple with War in Iran
+      Desc:     This week on War & Peace, Olga speaks with Crisis Group’s head of EU Affairs, Lisa Musiol, about how the EU, its members and European members of NATO have responded to the U.S.-Israeli war with Iran and what it reveals about EU foreign policy and its constraints.
+      Expected: Europe
+      Actual:   Iran
+      Found:    [Iran, Iran, Iran, Iran, Iran, Iran, Iran, United States, Europe]
+      Grade:    denied
+
+[WRONG] Trump says first Israel-Lebanon talks in decades will happen Thursday
+      Desc:     Trump says first Israel-Lebanon talks in decades will happen Thursday
+                
+                    
+                In a post on Truth Social, US President Donald Trump says that talks between Israel and Lebanon will happen for the first time on Thursday. 
+                 "Trying to get a little breathing room between Israel and Lebanon. It has been a long time since the two leaders have spoken, like 34 years. It will happen tomorrow. Nice!" he wrote.
+      Expected: United States
+      Actual:   Israel
+      Found:    [Israel, Lebanon, Israel, Lebanon, United States]
+      Grade:    approved
+
+[WRONG] War on Iran 'can be over very soon', Trump says
+      Desc:     War on Iran 'can be over very soon', Trump says
+                
+                    
+                US President Donald Trump now says his joint war with Israel on Iran may be ending soon, as the US weighs extending the ceasefire window beyond two weeks to make room for further negotiations.
+                Pakistan's army chief of staff and its interior minister arrived in Tehran on Wednesday, following the collapse on Saturday morning of direct US-Iran talks that they had mediated in Islamabad.
+                "I think it can be over very soon," Trump told Fox Business host Maria Bartiromo in an interview taped at the White House on Tuesday, as she asked him about the American public's concerns about petrol prices. 
+                "They have no navy, they have no air force. Everything's been wiped out," he said of Iran, but the Iranians deny that it is the case. 
+                Read more: War on Iran 'can be over very soon' Trump says, as backchannel diplomacy resumes
+      Expected: White House
+      Actual:   Iran
+      Found:    [Iran, Israel, Israel, Tehran, Iran, White House, Israel, Iran, Iran, Iran, Islamabad, White House, Tehran, Iran, Israel, Iran, Pakistan, Iran, Iran, Islamabad, United States, United States]
+      Grade:    approved
+
+[WRONG] Iran crisis shoves Europe’s economic woes off summit agenda
+      Desc:     War in Middle East will upend leaders' plans to talk about the bloc's economy and budget next week.
+      Expected: Europe
+      Actual:   Iran
+      Found:    [Iran, Iran, Middle East, Middle East, Middle East, Europe, Middle East]
+      Grade:    denied
+
+[WRONG] US pushes for global signatories for ‘trade over aid’ initiative
+      Desc:     US pushes for global signatories for ‘trade over aid’ initiative
+                
+                    
+                US President Donald Trump's administration is urging countries across the globe to sign a new global trade initiative that calls for the dismantling of the global aid system in favour of trade and investments.
+                According to a cable reviewed by Washington Post sent on Wednesday to all US embassies and consular posts, Secretary of State Marco Rubio ordered American diplomats to issue an official call to action to foreign nations that asks for their support before the US initiative is set to be unveiled at the United Nations at the end of April.
+                Titled the “trade over aid” initiative, the move aims to pull back from humanitarian assistance and pushes to promote "America First values and create business opportunities for U.S. companies", Rubio’s directive said as quoted by The Post.
+      Expected: Washington
+      Actual:   United States
+      Found:    [United States, Washington, Washington, United States, United States]
+      Grade:    approved
+
+[WRONG] What Georgia swing voters say about Trump, the Iran war and the cost of living
+      Desc:     The war in Iran has been dragging down President Trump's approval rating. A new focus group of swing voters finds broad displeasure with the president's handling of that war.
+      Expected: Georgia
+      Actual:   Iran
+      Found:    [Iran, Iran, Georgia, Iran, Iran, Iran, Iran]
+      Grade:    denied
+
+[WRONG] Ford’s EV and software chief Doug Field is leaving the company
+      Desc:     Ford is shaking things up as it relates to its EV and software teams. Doug Field, who left Apple five years ago to helm Ford's multibillion-dollar bet on electric vehicles and software, is stepping down next month. Getting a promotion will be Alan Clarke, the ex-Tesla engineer who now leads Ford's California-based skunkworks lab. Clarke's new title will be vice president of advanced development projects, and he will continue to helm the effort to develop Ford's Universal Electric Vehicle (UEV) Platform.
+                The shake-up comes less five months after Ford announced a massive $19.5 billion writedown on its EV investment, as well as the discontinua …
+                Read the full story at The Verge.
+      Expected: New York
+      Actual:   California
+      Found:    [California]
+      Grade:    approved
+
+[FALSE POS] Regulators are reportedly zeroing in on suspicious trades ahead of market-moving Trump post
+      Desc:     The information sought includes so-called Tag 50 identifiers, which can be used to determine who was behind the trades.
+      Expected: null
+      Actual:   Geneva
+      Found:    [Geneva]
+      Grade:    approved
+
+[WRONG] India Mulls Deployment of Crocodiles and Snakes at Border with Bangladesh
+      Desc:     The plan was discussed even as Indian and Bangladeshi diplomats are working to reset bilateral relations.
+      Expected: Bangladesh
+      Actual:   India
+      Found:    [India, Bangladesh, India, Bangladesh, India]
+      Grade:    approved
+
+[WRONG] 🇦🇪🇮🇷 Satellite imagery from 10 April showed a large smoke plume rising from oil storage tanks on Siri Island, Iran, consistent with dama…
+      Desc:     🇦🇪🇮🇷 Satellite imagery from 10 April showed a large smoke plume rising from oil storage tanks on Siri Island, Iran, consistent with damage reported following strikes on 8 April, which have been attributed by some sources to the UAE but remain unconfirmed.@IntelSlava
+                
+                Links: https://t.me/IntelSlava
+      Expected: United Arab Emirates
+      Actual:   Iran
+      Found:    [Iran, Iran, Uae, United Arab Emirates]
+      Grade:    approved
+
+[WRONG] $4 billion for air defense and over $1.5 billion for drones — Defense Minister Mykhailo Fedorov summarized the aid packages agreed at the Ra…
+      Desc:     $4 billion for air defense and over $1.5 billion for drones — Defense Minister Mykhailo Fedorov summarized the aid packages agreed at the Ramstein-format meeting, including several previously undisclosed contributions:🔴United Kingdom. Will deliver its largest-ever drone package this year, including 120,000 long-range strike, reconnaissance, logistics UAVs, and maritime systems.🔴Germany. Will invest $4 billion in strengthening air defense. An additional $600 million will go toward enhancing Ukr
+                
+                Links: https://t.me/liveukraine_media
+      Expected: United Kingdom
+      Actual:   Germany
+      Found:    [Germany, United Kingdom]
+      Grade:    approved
+
+[WRONG] 🇺🇸 U.S. Energy Secretary Chris Wright said it is unlikely that the United States will extend the waiver allowing the purchase of Russian o…
+      Desc:     🇺🇸 U.S. Energy Secretary Chris Wright said it is unlikely that the United States will extend the waiver allowing the purchase of Russian oil.Amid the war in the Middle East, on March 13 the U.S. Treasury issued a temporary license permitting the sale of Russian crude oil that had been stranded on tankers at sea. The 30-day period expired, and sanctions returned on April 13.However, on April 10, Reuters reported citing sources that the U.S. might extend the relief. According to them, the issue 
+                
+                Links: https://t.me/liveukraine_media
+      Expected: Middle East
+      Actual:   Russia
+      Found:    [Russia, United States, Middle East, United States, Russia, Middle East, United States, Middle East, United States]
+      Grade:    approved
+
+[WRONG] #Lebanon #Israel Israel has denied claims of a ceasefire that includes Lebanon, stating that any ceasefire does not involve the armed group …
+      Desc:     #Lebanon #Israel Israel has denied claims of a ceasefire that includes Lebanon, stating that any ceasefire does not involve the armed group Hezbollah, which is a central issue in the ongoing conflict. The situation remains tense, with ongoing military actions and negotiations taking place.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23Lebanon, ?q=%23Israel, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: Lebanon
+      Actual:   Israel
+      Found:    [Israel, Israel, Lebanon, Israel, Lebanon]
+      Grade:    approved
+
+[WRONG] The UK has announced its largest-ever drone package for Ukraine - a record-breaking 120,000 UAVs.
+      Desc:     The UK has announced its largest-ever drone package for Ukraine - a record-breaking 120,000 UAVs.
+                
+                Links: https://www.gov.uk/government/news/uk-announces-biggest-ever-drone-package-for-ukraine-to-push-back-putin
+      Expected: United Kingdom
+      Actual:   Ukraine
+      Found:    [Ukraine, United Kingdom, Ukraine, United Kingdom]
+      Grade:    approved
+
+[WRONG] Russia's Gazprom has delivered its second shipment of liquefied natural gas from the Baltic "Portovaya" plant to China since sanctions were …
+      Desc:     Russia's Gazprom has delivered its second shipment of liquefied natural gas from the Baltic "Portovaya" plant to China since sanctions were lifted, according to LSEG data.The LNG carrier Valera took on the cargo at the plant on January 25 and delivered it to the Beihai LNG terminal on Wednesday. Another sanctioned Russian facility, "Arctic LNG 2," is also supplying gas to the Beihai terminal.
+                
+                Links: https://www.reuters.com/business/energy/russia-delivers-second-post-sanctions-lng-cargo-portovaya-china-data-shows-2026-04-15/
+      Expected: China
+      Actual:   Russia
+      Found:    [Russia, China, Russia, China, China, Arctic, Arctic, Russia, China, Russia, Beihai, Beihai]
+      Grade:    approved
+
+[WRONG] #China #USAPresident Trump stated that he wrote a letter to Xi Jinping asking China not to supply weapons to Iran, and Xi responded by claim…
+      Desc:     #China #USAPresident Trump stated that he wrote a letter to Xi Jinping asking China not to supply weapons to Iran, and Xi responded by claiming that China is not doing so.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23China, ?q=%23USA, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: China
+      Actual:   Iran
+      Found:    [Iran, China, Iran, Iran, China, Iran, China]
+      Grade:    denied
+
+[WRONG] #METhe U.S. is deploying over 10,000 troops, a dozen warships, and dozens of aircraft to the Middle East to enforce a naval blockade on Iran…
+      Desc:     #METhe U.S. is deploying over 10,000 troops, a dozen warships, and dozens of aircraft to the Middle East to enforce a naval blockade on Iran. This buildup includes Carrier Strike Groups and Marine units, adding to the approximately 50,000 U.S. personnel already in the region.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23ME, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: Middle East
+      Actual:   Iran
+      Found:    [Iran, Iran, Middle East, Middle East, United States, Iran, Middle East, Middle East, United States]
+      Grade:    approved
+
+[WRONG] #USA #UkraineUkrainian President Volodymyr Zelensky has expressed that U.S. peace negotiators are preoccupied with the Iran war, which is ca…
+      Desc:     #USA #UkraineUkrainian President Volodymyr Zelensky has expressed that U.S. peace negotiators are preoccupied with the Iran war, which is causing delays in arms deliveries to Ukraine.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23USA, ?q=%23Ukraine, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: Ukraine
+      Actual:   Iran
+      Found:    [Iran, Ukraine, United States, Iran, Ukraine, United States]
+      Grade:    denied
+
+[WRONG] 🇮🇷🇮🇶 Yesterday, Iranian Shahed-136 drones struck the Surdash Camp, a training facility used by the Komala Party of Iranian Kurdistan in …
+      Desc:     🇮🇷🇮🇶 Yesterday, Iranian Shahed-136 drones struck the Surdash Camp, a training facility used by the Komala Party of Iranian Kurdistan in Zigwez, near Sulaymaniyah, killing Ghazal Molaei and injuring several others.Two drones were intercepted en route, with footage suggesting they were engaged by a French Air Force Dassault Rafale.The Islamic Revolutionary Guard Corps has not issued any official comment regarding the strikes in Iraq.@IntelSlava🇮🇷🇮🇶 Yesterday, Iranian Shahed-136 drones stru
+                
+                Links: https://t.me/IntelSlava
+      Expected: Kurdistan
+      Actual:   Iraq
+      Found:    [Iraq, Iraq, Kurdistan, Kurdistan, Iran, Iraq, Sulaymaniyah, Kurdistan, Kurdistan, Iraq, Iran, Sulaymaniyah]
+      Grade:    approved
+
+[WRONG] 🇬🇧🇺🇦 The United Kingdom will supply Ukraine with at least 120,000 drones — the largest drone package in its history.The package will inc…
+      Desc:     🇬🇧🇺🇦 The United Kingdom will supply Ukraine with at least 120,000 drones — the largest drone package in its history.The package will include thousands of long-range strike UAVs, reconnaissance drones, logistics drones, and maritime systems. Deliveries of one batch have already begun this month.The new drone package is part of a broader UK aid package worth over $4 billion this year, as well as funding under the ERA program.▪️ERA (Extraordinary Revenue Acceleration for Ukraine) is a G7 financ
+                
+                Links: https://t.me/liveukraine_media
+      Expected: United Kingdom
+      Actual:   Ukraine
+      Found:    [Ukraine, United Kingdom, Ukraine, Ukraine, United Kingdom, United Kingdom]
+      Grade:    approved
+
+[WRONG] The FT reports that Iran secretly purchased a Chinese satellite to monitor U.S. military bases in the Middle East.According to documents rel…
+      Desc:     The FT reports that Iran secretly purchased a Chinese satellite to monitor U.S. military bases in the Middle East.According to documents released by the publication, the IRGC acquired the satellite in 2024 and received images directly as strikes were occurring. The Corps paid approximately 250 million yuan to gain control of the satellite system.
+                
+                Links: https://www.ft.com/world
+      Expected: Middle East
+      Actual:   China
+      Found:    [China, Iran, Middle East, Middle East, Middle East, Middle East, United States, Iran, China, Middle East, Middle East, United States]
+      Grade:    approved
+
+[WRONG] 🇺🇸 The United States has extended temporary sanctions waivers allowing Russia’s Lukoil to operate outside Russia until October 29, Reuters…
+      Desc:     🇺🇸 The United States has extended temporary sanctions waivers allowing Russia’s Lukoil to operate outside Russia until October 29, Reuters reports.The exemption covers around 2,000 gas stations across Europe, Central Asia, the Middle East, and the Americas.The network will also continue operating under licenses that permit certain activities involving the company’s infrastructure abroad, including Lukoil Neftohim Burgas in Bulgaria — the largest refinery in the Balkans.🪐 Subscribe to Live: Uk
+                
+                Links: https://t.me/liveukraine_media
+      Expected: Bulgaria
+      Actual:   Russia
+      Found:    [Russia, Russia, Bulgaria, United States, Russia, Russia, Bulgaria, Central, Burgas, Middle East, United States, Europe, Middle East, Europe, Europe, Asia, Balkans]
+      Grade:    denied
+
+[WRONG] "I have a feeling that from the very beginning, he said he would remain in the middle. This shows that he is neither on my side nor on Russi…
+      Desc:     "I have a feeling that from the very beginning, he said he would remain in the middle. This shows that he is neither on my side nor on Russia's side." - Zelenskyy said in an interview with ZDF.
+                
+                Links: https://www.welt.de/politik/ausland/article69dea5b9eb7a70750aaf7a92/zdf-interview-usa-haben-wegen-iran-krieg-keine-zeit-fuer-die-ukraine-fuerchtet-selenskyj.html
+      Expected: Russia
+      Actual:   Russi
+      Found:    [Russi, Russia, Russia]
+      Grade:    denied
+
+[WRONG] U.S. Vice President Vance stated that ending the funding for Ukraine is one of the decisions he is most proud of during this administration'…
+      Desc:     U.S. Vice President Vance stated that ending the funding for Ukraine is one of the decisions he is most proud of during this administration's term.
+      Expected: United States
+      Actual:   Ukraine
+      Found:    [Ukraine, United States, Ukraine, United States]
+      Grade:    approved
+
+[WRONG] #China #Iran #USAThe U.S. Treasury is collaborating with Gulf allies to identify and freeze bank accounts of Iranian regime members, and is …
+      Desc:     #China #Iran #USAThe U.S. Treasury is collaborating with Gulf allies to identify and freeze bank accounts of Iranian regime members, and is also engaging with banks, including Chinese institutions, to enforce sanctions against Iranian goods purchases.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23China, ?q=%23Iran, ?q=%23USA, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: China
+      Actual:   Iran
+      Found:    [Iran, United States, Iran, United States]
+      Grade:    approved
+
+[WRONG] Russia attacked Ukraine with three missiles and 324 drones, with air defenses neutralizing 309 UAVs.🔴Dnipro. A Russian attack damaged an ad…
+      Desc:     Russia attacked Ukraine with three missiles and 324 drones, with air defenses neutralizing 309 UAVs.🔴Dnipro. A Russian attack damaged an administrative building and a high-rise residential building. Three people were injured — women aged 29 and 22, and a 65-year-old man.🔴Zaporizhzhia. A 74-year-old kiosk vendor was killed in a Russian strike around 5 a.m. A parking area, an enterprise, a kiosk, and residential buildings were damaged.🔴Kherson. In the morning, Russian forces attacked the Dnipro
+                
+                Links: https://t.me/liveukraine_media
+      Expected: Kherson
+      Actual:   Dnipro
+      Found:    [Dnipro, Russia, Dnipro, Dnipro, Russia, Russia, Ukraine, Dnipro, Zaporizhzhia, Kherson, Dnipro, Dnipro, Zaporizhzhia, Kherson, Dnipro, Russia, Ukraine, Russia]
+      Grade:    approved
+
+[WRONG] #EU #Russia The breakdown of international law is evident in today’s two preeminent global crises — Russia’s war of aggression against Ukrai…
+      Desc:     #EU #Russia The breakdown of international law is evident in today’s two preeminent global crises — Russia’s war of aggression against Ukraine and the war in the Middle East. Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23EU, ?q=%23Russia, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: Middle East
+      Actual:   Russia
+      Found:    [Russia, Ukraine, Middle East, Russia, Ukraine, Middle East, Middle East]
+      Grade:    approved
+
+[WRONG] #Israel #LebanonIsrael and Lebanon are holding their first direct diplomatic talks since 1993 in Washington, aimed at easing tensions after …
+      Desc:     #Israel #LebanonIsrael and Lebanon are holding their first direct diplomatic talks since 1993 in Washington, aimed at easing tensions after recent conflicts. The discussions will focus on improving security and potentially disarming Hezbollah.Subscribe to @OSINTdefender Chat room
+                
+                Links: ?q=%23Israel, ?q=%23Lebanon, https://t.me/+DwDkxaYZhSRiMzVi, https://t.me/OSINTdefender, https://t.me/+DwDkxaYZhSRiMzVi
+      Expected: Israel
+      Actual:   Washington
+      Found:    [Washington, Lebanon, Washington, Washington, Washington, Lebanon, Washington, Washington]
+      Grade:    approved
+
+[WRONG] US deploys 3rd aircraft carrier to Middle East amid ongoing Iran war: report - The Express Tribune
+      Desc:     US deploys 3rd aircraft carrier to Middle East amid ongoing Iran war: report  The Express Tribune
+      Expected: Middle East
+      Actual:   Iran
+      Found:    [Iran, Middle East, Middle East, Middle East, Middle East, United States, Iran, Middle East, Middle East, United States]
+      Grade:    approved
+
+[WRONG] 🇺🇸🇮🇷 A U.S. Navy F/A-18 Super Hornet flying low over Iran’s port city of Chabahar during a strafing run. The jet fires its internal 20 mm M61A2 Vulcan cannon, a six-barrel Gatling gun capable of f
+      Desc:     🇺🇸🇮🇷 A U.S. Navy F/A-18 Super Hornet flying low over Iran’s port city of Chabahar during a strafing run. The jet fires its internal 20 mm M61A2 Vulcan cannon, a six-barrel Gatling gun capable of firing up to about 6,000 rounds per minute. The Super Hornet is t  x.com
+      Expected: Chabahar
+      Actual:   Iran
+      Found:    [Iran, Chabahar, Iran, Iran, Chabahar, United States, Iran, United States]
+      Grade:    denied
+
+[WRONG] Israeli strike reportedly kills four in central Gaza; no immediate comment from IDF - The Times of Israel
+      Desc:     Israeli strike reportedly kills four in central Gaza; no immediate comment from IDF  The Times of Israel
+      Expected: Gaza
+      Actual:   Israel
+      Found:    [Israel, Gaza, Gaza, Israel, Israel]
+      Grade:    denied
+
+[WRONG] Missiles and drones from Iran’s direction strike Azerbaijani airport - Philenews
+      Desc:     Missiles and drones from Iran’s direction strike Azerbaijani airport  Philenews
+      Expected: Azerbaijan
+      Actual:   Iran
+      Found:    [Iran, Iran, Iran, Iran]
+      Grade:    denied
+
+[WRONG] Pakistan declares war on Afghanistan - ukranews.com
+      Desc:     Pakistan declares war on Afghanistan  ukranews.com
+      Expected: Afghanistan
+      Actual:   Pakistan
+      Found:    [Pakistan, Afghanistan, Afghanistan, Pakistan, Afghanistan, Afghanistan, Afghanistan, Pakistan, Afghanistan, Afghanistan, Pakistan, Afghanistan]
+      Grade:    approved
+
+[FALSE POS] A new AI automation tool from Anthropic sparked a $285 billion rout in stocks across the software, financial services and asset management s…
+      Desc:     A new AI automation tool from Anthropic sparked a $285 billion rout in stocks across the software, financial services and asset management sectors on Tuesday as investors raced to dump shares with even the slightest exposure. https://bloom.bg/49UxtGo📷: Michael Nagle/Bloomberg
+                
+                Links: https://bloom.bg/49UxtGo
+      Expected: null
+      Actual:   Michael
+      Found:    [Michael]
+      Grade:    approved
+
+[WRONG] 🚨🇷🇺 HELICOPTER IN RUSSIA IS COMPLETELY DESTROYED AFTER SNAGGING ZIP LINES, KILLING THE CREW Shocking footage out of Russia's snowy Perm Krai as the helicopter gets hooked on the wires mid-flight, t
+      Desc:     🚨🇷🇺 HELICOPTER IN RUSSIA IS COMPLETELY DESTROYED AFTER SNAGGING ZIP LINES, KILLING THE CREW Shocking footage out of Russia's snowy Perm Krai as the helicopter gets hooked on the wires mid-flight, then plummets hard. A private chopp  x.com
+      Expected: Perm Krai
+      Actual:   Russia
+      Found:    [Russia, Perm Krai, Russia, Russia, Russia, Perm, Perm Krai, Russia, Russia, Perm]
+      Grade:    approved
+
+[MISS] An AI-enabled teddy bear sold by a Singapore-based company is back on the shelves after researchers discovered it chats unprompted about sex…
+      Desc:     An AI-enabled teddy bear sold by a Singapore-based company is back on the shelves after researchers discovered it chats unprompted about sexual fetishes and other unsuitable topics. https://bloom.bg/3M4UYmv📷: FoloToy
+                
+                Links: https://bloom.bg/3M4UYmv
+      Expected: Singapore
+      Actual:   null
+      Found:    []
+      Grade:    denied
+
+[WRONG] Russia steps up Kherson shelling, dismisses Zelenskyy's peace plan - Euractiv
+      Desc:     Russia steps up Kherson shelling, dismisses Zelenskyy's peace plan  Euractiv
+      Expected: Kherson
+      Actual:   Russia
+      Found:    [Russia, Kherson, Kherson, Russia, Kherson, Kherson, Russia]
+      Grade:    approved
+
+[WRONG] Russia’s New Battlefield Tactics in Ukraine - Foreign Policy Research Institute
+      Desc:     Russia’s New Battlefield Tactics in Ukraine  Foreign Policy Research Institute
+      Expected: Ukraine
+      Actual:   Russia
+      Found:    [Russia, Ukraine, Russia, Ukraine, Russia, Ukraine]
+      Grade:    approved
+
+[MISS] Video uploaded by Minneapolis child killer surfaces - www.israelhayom.com
+      Desc:     Video uploaded by Minneapolis child killer surfaces  www.israelhayom.com
+      Expected: Minneapolis
+      Actual:   null
+      Found:    []
+      Grade:    denied
+
+[WRONG] Iran strikes Israel with missiles again: explosions heard in Tel Aviv and Jerusalem, skyscraper hit – videos - Українська правда
+      Desc:     Iran strikes Israel with missiles again: explosions heard in Tel Aviv and Jerusalem, skyscraper hit – videos  Українська правда
+      Expected: Tel Aviv
+      Actual:   Iran
+      Found:    [Iran, Iran, Israel, Tel Aviv, Iran, Tel Aviv, Iran, Israel, Israel, Jerusalem, Tel Aviv, Tel Aviv, Iran, Israel, Jerusalem]
+      Grade:    denied
+
+[WRONG] Israel Escalates To Attacking Iranian Energy Targets After Ballistic Missiles Hit Tel Aviv (Updated) - Yahoo
+      Desc:     Israel Escalates To Attacking Iranian Energy Targets After Ballistic Missiles Hit Tel Aviv (Updated)  Yahoo
+      Expected: Tel Aviv
+      Actual:   Israel
+      Found:    [Israel, Tel Aviv, Tel Aviv, Iran, Israel, Tel Aviv, Tel Aviv, Israel, Iran]
+      Grade:    denied
+
+[WRONG] US Strikes Injure 3 Russian Sailors On Oil Tanker At Yemeni Port Of Ras Isa - Marine Insight
+      Desc:     US Strikes Injure 3 Russian Sailors On Oil Tanker At Yemeni Port Of Ras Isa  Marine Insight
+      Expected: Yemen
+      Actual:   Russia
+      Found:    [Russia, United States, Russia, United States]
+      Grade:    denied
+
+[WRONG] Ukraine says Russian drone strikes Chernobyl plant at dawn - BulgarianMilitary.com
+      Desc:     Ukraine says Russian drone strikes Chernobyl plant at dawn  BulgarianMilitary.com
+      Expected: Chernobyl
+      Actual:   Ukraine
+      Found:    [Ukraine, Chernobyl, Ukraine, Chernobyl, Chernobyl, Chernobyl, Russia, Ukraine, Chernobyl, Chernobyl, Ukraine, Russia]
+      Grade:    denied
+
+[WRONG] Russia Says Ukraine Launches 'Counterattack' in Kursk Region - The Moscow Times
+      Desc:     Russia Says Ukraine Launches 'Counterattack' in Kursk Region  The Moscow Times
+      Expected: Kursk
+      Actual:   Russia
+      Found:    [Russia, Kursk, Russia, Ukraine, Moscow, Russia, Ukraine]
+      Grade:    denied
+
+[WRONG] MidEast conflict escalates with Israel attacking Lebanon - Philenews
+      Desc:     MidEast conflict escalates with Israel attacking Lebanon  Philenews
+      Expected: Lebanon
+      Actual:   Israel
+      Found:    [Israel, Lebanon, Israel, Lebanon, Israel, Israel, Lebanon]
+      Grade:    denied
+
+[WRONG] Did New York City’s Mehwish Omer and Stephanie Gonzales attack a Jewish woman in Manhattan? - CONAN Daily
+      Desc:     Did New York City’s Mehwish Omer and Stephanie Gonzales attack a Jewish woman in Manhattan?  CONAN Daily
+      Expected: New York City
+      Actual:   Manhattan
+      Found:    [Manhattan, New York City, Manhattan, New York, Manhattan, New York City, New York, Manhattan]
+      Grade:    approved
+
+[WRONG] Accounts Musk recommended on X are connected to a teen and a U.S. soldier - The Washington Post
+      Desc:     Accounts Musk recommended on X are connected to a teen and a U.S. soldier  The Washington Post
+      Expected: Washington
+      Actual:   United States
+      Found:    [United States, Washington, Washington, United States]
+      Grade:    approved
+
+[WRONG] ⚡️'Counter-terrorist operation' in Russia's Belgorod region canceled.Vyacheslav Gladkov, the governor of Russia's Belgorod Oblast, reported …
+      Desc:     ⚡️'Counter-terrorist operation' in Russia's Belgorod region canceled.Vyacheslav Gladkov, the governor of Russia's Belgorod Oblast, reported calling off the "counter-terrorist operation" shortly after Russian Defense Ministry announced a defeat of the Belgorod incursion.
+      Expected: Belgorod
+      Actual:   Belgorod Oblast
+      Found:    [Belgorod Oblast, Belgorod, Belgorod Oblast, Belgorod Oblast, Russia, Russia, Belgorod Oblast, Belgorod, Russia, Russia, Belgorod Oblast, Russia, Russia, Belgorod Oblast, Russia, Russia, Russia]
+      Grade:    denied
+
+[WRONG] The Kyiv Independent will publish the next part of the "Ukraine's True History" project today, May 23. The episode will talk about Crimea an…
+      Desc:     The Kyiv Independent will publish the next part of the "Ukraine's True History" project today, May 23. The episode will talk about Crimea and why Russia doesn't have a "historical right" to annex the Ukrainian peninsula.Subscribe here: https://t.co/ILgsEnyH35 https://t.co/3FLjbZjEl2
+                
+                Links: https://t.co/ILgsEnyH35, https://t.co/3FLjbZjEl2
+      Expected: Crimea
+      Actual:   Kyiv
+      Found:    [Kyiv, Crimea, Kyiv, Crimea, Ukraine, Kyiv, Crimea, Kyiv, Crimea, Ukraine, Russia, Ukraine]
+      Grade:    denied
+
+[WRONG] ⚡️Russia claims 'defeating' Belgorod incursion without providing any footage.Russian Defense Ministry said it stopped an alleged attack on R…
+      Desc:     ⚡️Russia claims 'defeating' Belgorod incursion without providing any footage.Russian Defense Ministry said it stopped an alleged attack on Russia's Belgorod Oblast. The Defense Ministry provided no footage backing their claim.
+      Expected: Belgorod
+      Actual:   Belgorod Oblast
+      Found:    [Belgorod Oblast, Russia, Russia, Russia, Belgorod Oblast, Russia, Russia, Belgorod Oblast, Russia, Russia]
+      Grade:    denied
+
+[WRONG] Euroclear, a Belgium-based financial company that provides depository services, submitted the request to the bank in order to comply with th…
+      Desc:     Euroclear, a Belgium-based financial company that provides depository services, submitted the request to the bank in order to comply with the sanctions against Russia and Belarus, according to the publication.
+      Expected: Belgium
+      Actual:   Russia
+      Found:    [Russia, Russia, Russia, Belarus]
+      Grade:    denied
+
+[WRONG] This is the fourth tranche of an 18 billion euro package, aiming to help Ukraine pay for essential public services, maintain macroeconomic s…
+      Desc:     This is the fourth tranche of an 18 billion euro package, aiming to help Ukraine pay for essential public services, maintain macroeconomic stability, and restore critical infrastructure destroyed by Russian attacks.
+      Expected: Russia
+      Actual:   Ukraine
+      Found:    [Ukraine, Ukraine, Russia]
+      Grade:    approved
+
+[WRONG] Watch: Massive explosion rocks Dubai's Jebel Ali Port, no casualties reported - Sambad English
+      Desc:     Watch: Massive explosion rocks Dubai's Jebel Ali Port, no casualties reported  Sambad English
+      Expected: Jebel Ali
+      Actual:   Dubai
+      Found:    [Dubai, Dubai, Dubai, Dubai, Dubai, Jebel Ali, Jebel Ali, Dubai]
+      Grade:    approved
+
+[WRONG] Russia Claims Convoy Rammed U.S. Military In Syria In Self-Defense - Radio Free Europe/Radio Liberty
+      Desc:     Russia Claims Convoy Rammed U.S. Military In Syria In Self-Defense  Radio Free Europe/Radio Liberty
+      Expected: Syria
+      Actual:   Russia
+      Found:    [Russia, Russia, Syria, United States, Russia, Syria, United States]
+      Grade:    denied
+
+[WRONG] Iran Aircraft Carrier Wreck Poses Risk to Strait of Hormuz Oil Flow - Business Insider
+      Desc:     Iran Aircraft Carrier Wreck Poses Risk to Strait of Hormuz Oil Flow  Business Insider
+      Expected: Strait Of Hormuz
+      Actual:   Iran
+      Found:    [Iran, Strait Of Hormuz, Hormuz, Strait Of Hormuz, Hormuz, Iran, Strait Of Hormuz, Hormuz, Strait Of Hormuz, Hormuz, Iran]
+      Grade:    approved

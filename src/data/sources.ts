@@ -40,7 +40,7 @@ export const RSS_SOURCES: RSSSource[] = [
 
     // crisis and humanitarian
     { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.atom', category: 'crisis', region: 'global' },
-    { name: 'ReliefWeb', url: 'https://reliefweb.int/updates/rss.xml', category: 'crisis', region: 'global' },
+    // { name: 'ReliefWeb', url: 'https://reliefweb.int/updates/rss.xml', category: 'crisis', region: 'global' },
 
     // geopolitical think tanks
     { name: 'War on the Rocks', url: 'https://warontherocks.com/feed/', category: 'world', region: 'global' },
@@ -136,7 +136,7 @@ export const TELEGRAM_CHANNELS: SocialSource[] = [
 { name: 'War Translated (Telegram)', url: 'https://t.me/s/wartranslated', platform: 'telegram', category: 'crisis' },
 // Translates Russian milbloggers in near real-time — essential for understanding the Russian side without going to pro-Kremlin channels directly
 
-{ name: 'NEXTA (Telegram)', url: 'https://t.me/s/nexta_live', platform: 'telegram', category: 'crisis' },
+//{ name: 'NEXTA (Telegram)', url: 'https://t.me/s/nexta_live', platform: 'telegram', category: 'crisis' },
 // Belarusian opposition outlet, fast Ukraine/Belarus breaking news
 
 { name: 'Kyiv Independent (Telegram)', url: 'https://t.me/s/kyivindependent', platform: 'telegram', category: 'crisis' },
@@ -159,7 +159,7 @@ export const X_ACCOUNTS: SocialSource[] = [
     { name: 'The Intel Crab (X)', url: 'IntelCrab', platform: 'x', category: 'crisis' },
     { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis' },
     { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis' },
-    { name: 'Def Mon (X)', url: 'DefMon3', platform: 'x', category: 'crisis' },
+    //{ name: 'Def Mon (X)', url: 'DefMon3', platform: 'x', category: 'crisis' },
     { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis' },
     { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis' },
     { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis' },
@@ -167,5 +167,5 @@ export const X_ACCOUNTS: SocialSource[] = [
     { name: 'OSINTdefender (X)', url: 'sentdefender', platform: 'x', category: 'crisis' },
     { name: 'IDF (X)', url: 'IDF', platform: 'x', category: 'crisis' },
     { name: 'IsraelWarRoom (X)', url: 'IsraelWarRoom', platform: 'x', category: 'crisis' },
-    { name: 'Geoff P. Smith (X)', url: 'GeoFront5', platform: 'x', category: 'crisis' },
+    // { name: 'Geoff P. Smith (X)', url: 'GeoFront5', platform: 'x', category: 'crisis' },
 ];

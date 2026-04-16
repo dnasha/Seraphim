@@ -21,11 +21,11 @@ const parser = new Parser({
 
 // nitter instances to try — user reports these worked previously
 const NITTER_INSTANCES = [
-    'https://nitter.privacydev.net',
-    'https://nitter.poast.org',
     'https://nitter.net',
-    'https://xcancel.com',
     'https://nitter.cz',
+    'https://nitter.esmailelbob.xyz',
+    'https://nitter.1d4.us',
+    'https://nitter.kavin.rocks',
 ];
 
 // RSSHub instances as secondary fallback

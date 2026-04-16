@@ -1,4 +1,5 @@
 import Parser from 'rss-parser';
+import { Agent } from 'undici';
 import { NewsItem } from './types';
 
 /**
@@ -96,7 +97,9 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
                 'User-Agent': 'Seraphim/1.0 (news aggregator)',
                 'Accept': 'application/rss+xml, application/xml, text/xml',
             },
-            signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
+            signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+            // @ts-expect-error - dispatcher is not in standard fetch types but works in Node's undici
+            dispatcher: new Agent({ connect: { rejectUnauthorized: false } })
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
