@@ -24,9 +24,12 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 const CACHE_KEY = 'events';
 
-// Basic throttle for refresh bypass (prevents rapid-fire database hits)
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
+
+// Rate limit for pagination (prevents scraping/spamming)
+const cursorThrottle = new Map<string, number>();
+const CURSOR_COOLDOWN = 1500; // 1.5 seconds between page loads
 
 export async function GET(request: Request) {
     const now = Date.now();
@@ -47,6 +50,19 @@ export async function GET(request: Request) {
         } else {
             refreshThrottle.set('global', now);
         }
+    }
+
+    // Rate limit paginated requests
+    if (cursor) {
+        const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'anonymous';
+        const lastCursorReq = cursorThrottle.get(ip) || 0;
+        if (now - lastCursorReq < CURSOR_COOLDOWN) {
+            return NextResponse.json(
+                { error: 'Please wait before loading more events' }, 
+                { status: 429 }
+            );
+        }
+        cursorThrottle.set(ip, now);
     }
 
     try {

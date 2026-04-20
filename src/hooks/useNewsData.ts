@@ -42,9 +42,21 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
         }
     }, [includeUnmapped]);
 
+    const lastLoadMoreTime = useRef(0);
+    const LOAD_MORE_COOLDOWN = 1500; // Match server-side throttle
+
     const loadMore = useCallback(async () => {
+        const now = Date.now();
         if (!nextCursor || isLoadingMore) return;
+        
+        // Client-side rate limit check
+        if (now - lastLoadMoreTime.current < LOAD_MORE_COOLDOWN) {
+            console.warn('[useNewsData] Load more throttled');
+            return;
+        }
+
         setIsLoadingMore(true);
+        lastLoadMoreTime.current = now;
         setError(null);
 
         try {
@@ -54,6 +66,12 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
 
             const url = `/api/news?${params.toString()}`;
             const res = await fetch(url);
+            
+            if (res.status === 429) {
+                const data = await res.json();
+                throw new Error(data.error || 'Too many requests');
+            }
+            
             if (!res.ok) throw new Error('Failed to load more news');
 
             const data: NewsResponse = await res.json();
