@@ -10,7 +10,7 @@ import { applyNewsFilters } from '@/lib/filters';
 */
 
 export function useNewsFilter(news: NewsItem[], mappedOnly: boolean) {
-    const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram']);
+    const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
     const [timeRange, setTimeRange] = useState<string>('1d');
     const [searchQuery, setSearchQuery] = useState('');

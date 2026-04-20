@@ -2,7 +2,7 @@
  * Category and source-specific styling constants and utilities.
  */
 export const CATEGORY_COLORS: Record<string, string> = {
-    general: '#6b7280',
+    general: '#166534',
     world: '#dc2626',
     crisis: '#b91c1c',
     nation: '#2563eb',
@@ -12,7 +12,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
     health: '#7c3aed',
 };
 
-export const DEFAULT_PIN_COLOR = '#6b7280';
+export const DEFAULT_PIN_COLOR = '#166534';
 
 export function getCategoryColor(category?: string): string {
     if (!category) return DEFAULT_PIN_COLOR;

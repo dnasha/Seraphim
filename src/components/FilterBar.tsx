@@ -8,7 +8,7 @@ import styles from './FilterBar.module.css';
 
 // Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
-    general: '#6b7280',
+    general: '#166534',
     world: '#dc2626',
     crisis: '#b91c1c',
     nation: '#2563eb',
@@ -53,7 +53,7 @@ const categoryOptions = [
 ];
 
 const sourceOptions = [
-    { value: 'news', label: 'News', bg: '#6b7280', color: '#ffffff' },
+    { value: 'news', label: 'News', bg: '#166534', color: '#ffffff' },
     { value: 'reddit', label: 'Reddit', bg: '#ff4500', color: '#ffffff' },
     { value: 'x', label: 'X', bg: '#000000', color: '#ffffff' },
     { value: 'telegram', label: 'Telegram', bg: '#006eff', color: '#ffffff' },
@@ -61,11 +61,11 @@ const sourceOptions = [
 ];
 
 const timeOptions = [
-    { value: '1d', label: '1D' },
-    { value: '3d', label: '3D' },
-    { value: '1w', label: '1W' },
-    { value: '1m', label: '1M' },
-    { value: 'all', label: 'All' },
+    { value: '1d', label: '24 Hrs' },
+    { value: '3d', label: '3 Days' },
+    { value: '1w', label: '1 Week' },
+    { value: '1m', label: '1 Month' },
+    { value: 'all', label: 'All Time' },
 ];
 
 export default function FilterBar({
