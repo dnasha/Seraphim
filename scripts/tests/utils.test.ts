@@ -1,5 +1,5 @@
 /*
-  Seraphim Unit Tests — Pure Utility Functions
+  Seraphim Unit Tests - Pure Utility Functions
 
   Tests for geocoding utilities, date normalization, string cleaning, and color helpers.
   Run: npm test
@@ -10,7 +10,7 @@ import { normalizeAccents, toTitleCase, cleanCandidate } from '../../src/lib/geo
 import { ensureIsoDate } from '../../src/scraper/utils/date';
 import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } from '../../src/lib/colors';
 
-// ─── normalizeAccents ───
+// --- normalizeAccents ---
 
 describe('normalizeAccents', () => {
     it('strips diacritics from accented characters', () => {
@@ -33,7 +33,7 @@ describe('normalizeAccents', () => {
     });
 });
 
-// ─── toTitleCase ───
+// --- toTitleCase ---
 
 describe('toTitleCase', () => {
     it('capitalizes each word', () => {
@@ -59,7 +59,7 @@ describe('toTitleCase', () => {
     });
 });
 
-// ─── cleanCandidate ───
+// --- cleanCandidate ---
 
 describe('cleanCandidate', () => {
     it('strips possessives', () => {
@@ -95,7 +95,7 @@ describe('cleanCandidate', () => {
     });
 });
 
-// ─── ensureIsoDate ───
+// --- ensureIsoDate ---
 
 describe('ensureIsoDate', () => {
     it('returns valid ISO for a standard ISO string', () => {
@@ -142,7 +142,7 @@ describe('ensureIsoDate', () => {
     });
 });
 
-// ─── getCategoryColor ───
+// --- getCategoryColor ---
 
 describe('getCategoryColor', () => {
     it('returns correct hex for known categories', () => {
@@ -161,7 +161,7 @@ describe('getCategoryColor', () => {
     });
 });
 
-// ─── getSourceStyle ───
+// --- getSourceStyle ---
 
 describe('getSourceStyle', () => {
     it('returns black bg for X/Twitter sources', () => {

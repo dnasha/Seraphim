@@ -39,7 +39,7 @@ beforeAll(() => {
     ensureInitialized();
 
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
-        console.warn(`Graded results file not found at ${GRADED_RESULTS_PATH} — skipping accuracy tests.`);
+        console.warn(`Graded results file not found at ${GRADED_RESULTS_PATH} - skipping accuracy tests.`);
         return;
     }
     gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
@@ -120,14 +120,14 @@ describe('geocoding accuracy regression', () => {
         const wrongs = failures.filter(f => f.type === 'WRONG').length;
         const falsePos = failures.filter(f => f.type === 'FALSE_POS').length;
 
-        console.log('\n━━━ Geocoding Accuracy Report ━━━');
+        console.log('\n--- Geocoding Accuracy Report ---');
         console.log(`  Total:      ${totalCount} (skipped: ${skipCount})`);
         console.log(`  Passed:     ${passCount}/${totalCount} (${percentage.toFixed(1)}%)`);
         console.log(`  Failures:   ${failures.length}`);
         console.log(`    No match: ${misses}`);
         console.log(`    Wrong:    ${wrongs}`);
         console.log(`    False+:   ${falsePos}`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('----------------------------------');
 
         if (failures.length > 0) {
             console.log('\n  Top failures:');

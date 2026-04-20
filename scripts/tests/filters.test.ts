@@ -1,7 +1,7 @@
 /*
-  Seraphim Unit Tests — Filter Logic
+  Seraphim Unit Tests - Filter Logic
 
-  Tests for applyNewsFilters() — the pure filtering function extracted from useNewsFilter.
+  Tests for applyNewsFilters() - the pure filtering function extracted from useNewsFilter.
   Run: npm test
 */
 
@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { applyNewsFilters, FilterOptions } from '../../src/lib/filters';
 import type { NewsItem } from '../../src/lib/types';
 
-// ─── Test Data Factory ───
+// --- Test Data Factory ---
 
 const NOW = new Date('2026-04-15T12:00:00Z').getTime();
 
@@ -41,9 +41,9 @@ function defaultOpts(overrides: Partial<FilterOptions> = {}): FilterOptions {
     };
 }
 
-// ─── Source Filtering ───
+// --- Source Filtering ---
 
-describe('applyNewsFilters — source filtering', () => {
+describe('applyNewsFilters - source filtering', () => {
     const rssItem = makeItem({ sourceType: 'rss' });
     const gnewsItem = makeItem({ sourceType: 'gnews' });
     const redditItem = makeItem({ sourceType: 'social', source: 'Reddit - CombatFootage' });
@@ -93,9 +93,9 @@ describe('applyNewsFilters — source filtering', () => {
     });
 });
 
-// ─── Category Filtering ───
+// --- Category Filtering ---
 
-describe('applyNewsFilters — category filtering', () => {
+describe('applyNewsFilters - category filtering', () => {
     const crisisItem = makeItem({ category: 'crisis' });
     const worldItem = makeItem({ category: 'world' });
     const noCatItem = makeItem({ category: undefined });
@@ -121,9 +121,9 @@ describe('applyNewsFilters — category filtering', () => {
     });
 });
 
-// ─── Time Range Filtering ───
+// --- Time Range Filtering ---
 
-describe('applyNewsFilters — time range filtering', () => {
+describe('applyNewsFilters - time range filtering', () => {
     const recentItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60).toISOString() }); // 1h ago
     const oldItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60 * 48).toISOString() }); // 48h ago
     const ancientItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60 * 24 * 14).toISOString() }); // 14d ago
@@ -154,9 +154,9 @@ describe('applyNewsFilters — time range filtering', () => {
     });
 });
 
-// ─── Search Query Filtering ───
+// --- Search Query Filtering ---
 
-describe('applyNewsFilters — search query', () => {
+describe('applyNewsFilters - search query', () => {
     const item1 = makeItem({ title: 'Ukraine war update: Kyiv defenses hold' });
     const item2 = makeItem({ title: 'Stock market crashes', description: 'Nasdaq drops 5%' });
     const item3 = makeItem({ title: 'Generic news', locationName: 'Damascus' });
@@ -187,9 +187,9 @@ describe('applyNewsFilters — search query', () => {
     });
 });
 
-// ─── Mapped Only Filter ───
+// --- Mapped Only Filter ---
 
-describe('applyNewsFilters — mapped only', () => {
+describe('applyNewsFilters - mapped only', () => {
     const mappedItem = makeItem({ latitude: 50.45, longitude: 30.52 });
     const unmappedItem = makeItem({ latitude: undefined, longitude: undefined });
 
@@ -204,9 +204,9 @@ describe('applyNewsFilters — mapped only', () => {
     });
 });
 
-// ─── Combined Filters ───
+// --- Combined Filters ---
 
-describe('applyNewsFilters — combined', () => {
+describe('applyNewsFilters - combined', () => {
     it('applies multiple filters as intersection', () => {
         const items = [
             makeItem({ sourceType: 'rss', category: 'crisis', title: 'Ukraine crisis deepens' }),
@@ -223,9 +223,9 @@ describe('applyNewsFilters — combined', () => {
     });
 });
 
-// ─── Edge Cases ───
+// --- Edge Cases ---
 
-describe('applyNewsFilters — edge cases', () => {
+describe('applyNewsFilters - edge cases', () => {
     it('returns unfiltered items when now=0 (pre-hydration)', () => {
         const items = [makeItem(), makeItem()];
         const result = applyNewsFilters(items, defaultOpts({ now: 0 }));

@@ -1,7 +1,7 @@
 /*
-  Seraphim Unit Tests — Geocoding Engine
+  Seraphim Unit Tests - Geocoding Engine
 
-  Tests for extractLocation() and geocodeLocation() — the core NLP pipeline.
+  Tests for extractLocation() and geocodeLocation() - the core NLP pipeline.
   Run: npm test
 */
 
@@ -13,7 +13,7 @@ beforeAll(() => {
     ensureInitialized();
 });
 
-// ─── Dictionary Initialization ───
+// --- Dictionary Initialization ---
 
 describe('KNOWN_LOCATIONS dictionary', () => {
     it('loads without errors', () => {
@@ -46,7 +46,7 @@ describe('KNOWN_LOCATIONS dictionary', () => {
     });
 });
 
-// ─── geocodeLocation ───
+// --- geocodeLocation ---
 
 describe('geocodeLocation', () => {
     it('resolves a known city', async () => {
@@ -78,9 +78,9 @@ describe('geocodeLocation', () => {
     });
 });
 
-// ─── extractLocation — Dateline Patterns ───
+// --- extractLocation - Dateline Patterns ---
 
-describe('extractLocation — datelines', () => {
+describe('extractLocation - datelines', () => {
     it('detects standard Reuters dateline', () => {
         const { match } = extractLocation('KYIV (Reuters) - Ukraine says air defenses intercepted drones', '');
         expect(match?.toLowerCase()).toContain('kyiv');
@@ -99,9 +99,9 @@ describe('extractLocation — datelines', () => {
     });
 });
 
-// ─── extractLocation — Action-Target Patterns ───
+// --- extractLocation - Action-Target Patterns ---
 
-describe('extractLocation — action-target', () => {
+describe('extractLocation - action-target', () => {
     it('detects "strikes on [Location]"', () => {
         const { match } = extractLocation('Drone strikes on Kharkiv damage power grid', '');
         expect(match?.toLowerCase()).toContain('kharkiv');
@@ -128,9 +128,9 @@ describe('extractLocation — action-target', () => {
     });
 });
 
-// ─── extractLocation — Spatial Prepositions ───
+// --- extractLocation - Spatial Prepositions ---
 
-describe('extractLocation — spatial prepositions', () => {
+describe('extractLocation - spatial prepositions', () => {
     it('detects "in [Location]"', () => {
         const { match } = extractLocation('Protests erupt in Tehran over economic conditions', '');
         expect(match?.toLowerCase()).toContain('tehran');
@@ -154,9 +154,9 @@ describe('extractLocation — spatial prepositions', () => {
     });
 });
 
-// ─── extractLocation — Comma Pair ───
+// --- extractLocation - Comma Pair ---
 
-describe('extractLocation — comma pairs', () => {
+describe('extractLocation - comma pairs', () => {
     it('detects "City, State" pattern', () => {
         const { match, candidates } = extractLocation('Shooting in Austin, Texas leaves 3 dead', '');
         expect(match).toBeDefined();
@@ -166,9 +166,9 @@ describe('extractLocation — comma pairs', () => {
     });
 });
 
-// ─── extractLocation — Multi-Word Locations ───
+// --- extractLocation - Multi-Word Locations ---
 
-describe('extractLocation — multi-word locations', () => {
+describe('extractLocation - multi-word locations', () => {
     it('detects multi-word city: New York', () => {
         const { match } = extractLocation('Protests erupt in New York City streets', '');
         expect(match?.toLowerCase()).toContain('new york');
@@ -190,9 +190,9 @@ describe('extractLocation — multi-word locations', () => {
     });
 });
 
-// ─── extractLocation — Landmarks ───
+// --- extractLocation - Landmarks ---
 
-describe('extractLocation — landmarks', () => {
+describe('extractLocation - landmarks', () => {
     it('detects Pentagon', () => {
         const { match } = extractLocation('Pentagon briefing outlines new NATO deployment strategy', '');
         expect(match?.toLowerCase()).toContain('pentagon');
@@ -209,9 +209,9 @@ describe('extractLocation — landmarks', () => {
     });
 });
 
-// ─── extractLocation — Demonym Resolution ───
+// --- extractLocation - Demonym Resolution ---
 
-describe('extractLocation — demonyms', () => {
+describe('extractLocation - demonyms', () => {
     it('resolves "Ukrainian" to Ukraine', () => {
         const { match, candidates } = extractLocation('Ukrainian forces advance near front lines', '');
         expect(match).toBeDefined();
@@ -227,9 +227,9 @@ describe('extractLocation — demonyms', () => {
     });
 });
 
-// ─── extractLocation — Country Abbreviations ───
+// --- extractLocation - Country Abbreviations ---
 
-describe('extractLocation — abbreviations', () => {
+describe('extractLocation - abbreviations', () => {
     it('resolves "U.S." in text', () => {
         const { candidates } = extractLocation('U.S. imposes new sanctions on Russia', '');
         const allLower = candidates.map(c => c.toLowerCase());
@@ -243,18 +243,18 @@ describe('extractLocation — abbreviations', () => {
     });
 });
 
-// ─── extractLocation — Metadata Pattern ───
+// --- extractLocation - Metadata Pattern ---
 
-describe('extractLocation — metadata', () => {
+describe('extractLocation - metadata', () => {
     it('detects "Country: [Name]" pattern', () => {
         const { match } = extractLocation('Country: Nigeria - Floods displace thousands in south', '');
         expect(match?.toLowerCase()).toContain('nigeria');
     });
 });
 
-// ─── extractLocation — Description Fallback ───
+// --- extractLocation - Description Fallback ---
 
-describe('extractLocation — description fallback', () => {
+describe('extractLocation - description fallback', () => {
     it('extracts from description when title has no location', () => {
         const { match } = extractLocation(
             'Breaking: Major infrastructure damaged overnight',
@@ -265,9 +265,9 @@ describe('extractLocation — description fallback', () => {
     });
 });
 
-// ─── extractLocation — False Positive Protection ───
+// --- extractLocation - False Positive Protection ---
 
-describe('extractLocation — false positives', () => {
+describe('extractLocation - false positives', () => {
     it('does not match "Arsenal" as a location', () => {
         const { match, candidates } = extractLocation('Arsenal signs new striker from Serie A', '');
         // Arsenal should be filtered; if there's a match, it shouldn't be Arsenal
@@ -285,9 +285,9 @@ describe('extractLocation — false positives', () => {
     });
 });
 
-// ─── extractLocation — Superpower Penalty ───
+// --- extractLocation - Superpower Penalty ---
 
-describe('extractLocation — superpower penalty', () => {
+describe('extractLocation - superpower penalty', () => {
     it('prioritizes target location over acting superpower', () => {
         const { match } = extractLocation('U.S. launches air strikes on targets in Syria', '');
         // Syria (the target) should rank higher than United States (the actor)
@@ -295,12 +295,12 @@ describe('extractLocation — superpower penalty', () => {
     });
 });
 
-// ─── extractLocation — No Match ───
+// --- extractLocation - No Match ---
 
-describe('extractLocation — no location', () => {
+describe('extractLocation - no location', () => {
     it('returns null for locationless headlines', () => {
         const { match } = extractLocation('Scientists develop breakthrough quantum computing algorithm', '');
-        // May or may not find a location — the key thing is it doesn't crash
+        // May or may not find a location - the key thing is it doesn't crash
         expect(match === null || typeof match === 'string').toBe(true);
     });
 

@@ -1,5 +1,5 @@
 /*
-  Seraphim Unit Tests — Data Transform Functions
+  Seraphim Unit Tests - Data Transform Functions
 
   Tests for newsItemToDbEvent, cleanString, and dbEventToNewsItem.
   Run: npm test
@@ -11,7 +11,7 @@ import { dbEventToNewsItem } from '../../src/types';
 import type { NewsItem } from '../../src/lib/types';
 import type { DbEvent } from '../../src/types';
 
-// ─── Helper: minimal valid NewsItem ───
+// --- Helper: minimal valid NewsItem ---
 
 function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     return {
@@ -27,7 +27,7 @@ function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     };
 }
 
-// ─── cleanString ───
+// --- cleanString ---
 
 describe('cleanString', () => {
     it('returns empty string for null/undefined', () => {
@@ -59,7 +59,7 @@ describe('cleanString', () => {
     });
 });
 
-// ─── newsItemToDbEvent ───
+// --- newsItemToDbEvent ---
 
 describe('newsItemToDbEvent', () => {
     it('converts a valid NewsItem to DbEvent', () => {
@@ -154,7 +154,7 @@ describe('newsItemToDbEvent', () => {
     });
 });
 
-// ─── dbEventToNewsItem ───
+// --- dbEventToNewsItem ---
 
 describe('dbEventToNewsItem', () => {
     function makeDbEvent(overrides: Partial<DbEvent> = {}): DbEvent {

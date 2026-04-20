@@ -1,5 +1,5 @@
 /*
-  Seraphim Unit Tests — Enricher Pipeline
+  Seraphim Unit Tests - Enricher Pipeline
 
   Integration tests for enrichItemsWithLocation():
   coordinate attachment, jitter, source defaults, and passthrough.
@@ -28,9 +28,9 @@ function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
     };
 }
 
-// ─── Coordinate Attachment ───
+// --- Coordinate Attachment ---
 
-describe('enrichItemsWithLocation — coordinate attachment', () => {
+describe('enrichItemsWithLocation - coordinate attachment', () => {
     it('attaches lat/lon for a clear location in title', async () => {
         const items = [makeItem({ title: 'KYIV (Reuters) - Explosions reported across capital' })];
         const result = await enrichItemsWithLocation(items);
@@ -44,13 +44,13 @@ describe('enrichItemsWithLocation — coordinate attachment', () => {
         const items = [makeItem({ title: 'Scientists develop new quantum algorithm' })];
         const result = await enrichItemsWithLocation(items);
         expect(result).toHaveLength(1);
-        // may or may not have a location — but shouldn't crash
+        // may or may not have a location - but shouldn't crash
     });
 });
 
-// ─── Pre-Geocoded Passthrough ───
+// --- Pre-Geocoded Passthrough ---
 
-describe('enrichItemsWithLocation — passthrough', () => {
+describe('enrichItemsWithLocation - passthrough', () => {
     it('preserves pre-existing coordinates without re-geocoding', async () => {
         const items = [makeItem({
             title: 'Some article',
@@ -63,9 +63,9 @@ describe('enrichItemsWithLocation — passthrough', () => {
     });
 });
 
-// ─── Source Default Fallback ───
+// --- Source Default Fallback ---
 
-describe('enrichItemsWithLocation — source defaults', () => {
+describe('enrichItemsWithLocation - source defaults', () => {
     it('falls back to NASA source default (Washington DC)', async () => {
         const items = [makeItem({
             title: 'Hubble telescope captures stunning nebula image',
@@ -80,9 +80,9 @@ describe('enrichItemsWithLocation — source defaults', () => {
     });
 });
 
-// ─── Golden-Angle Spiral Jitter ───
+// --- Golden-Angle Spiral Jitter ---
 
-describe('enrichItemsWithLocation — jitter', () => {
+describe('enrichItemsWithLocation - jitter', () => {
     it('applies jitter to prevent coordinate stacking', async () => {
         // Two items mapping to the same location
         const items = [
@@ -104,9 +104,9 @@ describe('enrichItemsWithLocation — jitter', () => {
     });
 });
 
-// ─── Empty Input ───
+// --- Empty Input ---
 
-describe('enrichItemsWithLocation — edge cases', () => {
+describe('enrichItemsWithLocation - edge cases', () => {
     it('returns empty array for empty input', async () => {
         const result = await enrichItemsWithLocation([]);
         expect(result).toEqual([]);

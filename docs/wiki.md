@@ -173,6 +173,7 @@ SeraphimPreview/
 ## Geocoding System
 
 > **Location**: `src/lib/geocoding/` (6 files, ~40KB total)
+> **Accuracy**: 96.5% on 256-sample graded corpus (as of April 2026).
 > **⚠️ Server-only** — never import this module client-side.
 
 ### Extraction Pipeline
@@ -184,11 +185,11 @@ Each headline + description is run through these strategies in order. The first 
 | 1 | **Dateline regex** | `KYIV (Reuters) — ...` | 0 (high) |
 | 2 | **Comma-pair** | `Austin, Texas` | 2 |
 | 3 | **Action-target regex** | `strikes on Yemen` | -2 (highest) |
-| 4 | **Sliding-window dictionary scan** | Multi-word city names | 3 |
+| 4 | **Dictionary scan** | Multi-word cities & single-word fallback | 3 |
 | 5 | **compromise NLP** | Fallback entity extraction | 6 (low) |
-| 6 | **Country abbreviations** | `U.S.`, `U.K.` (handles hyphens: `U.S.-backed`) | 4 |
-| 7 | **Demonym fallback** | `Iranians` → Iran (handles plurals) | 5 |
-| 8 | **Direct country scan** | Last-resort boundary-aware regex for country names | 7 |
+| 6 | **Country abbreviations**| `U.S.`, `U.K.` | 4 |
+| 7 | **Demonym fallback** | `Iranians` → Iran | 5 |
+| 8 | **Direct country scan** | Last-resort regex | 7 |
 
 ### Dictionary Load Order
 
@@ -205,9 +206,11 @@ When multiple locations are found, they're ranked by combined score (lower = bet
 
 - **Source score**: action_target (-2) > dateline (0) > regex (1) > comma (2) > nlp (6)
 - **Type score**: landmark (0) > mega-city >1M pop (2) > country (4) > city (6) > admin1 (8)
-- **Context penalties**:
-  - Superpowers (US, UK): +10 — ensures "U.S. strikes on Yemen" maps to Yemen, not Washington
-  - Continents (Africa, Asia): +20 — only win if nothing more specific is found
+- **Filters & Weights**:
+  - **Population Filter**: Standard cities must have >5,000 population to trigger (prevents small-town false positives).
+  - **Admin1 Weights**: States/Provinces are penalized (+8) to prioritize cities, but rewarded if they match via specific patterns.
+  - **Superpowers**: U.S./U.K. penalized (+10) to prioritize strike locations over actors.
+  - **Continents**: Africa/Asia penalized (+20) as low-confidence fallbacks.
 
 ### Normalization & Edge Cases
 
