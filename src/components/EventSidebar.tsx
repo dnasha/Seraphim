@@ -57,7 +57,6 @@ interface EventSidebarProps {
     filterBar: ReactNode;
     isDarkMode: boolean;
     onToggleTheme: () => void;
-    lastUpdated: string | null;
     isOpen: boolean;
     onToggleSidebar: () => void;
     onRefresh: () => void;
@@ -76,7 +75,6 @@ export default function EventSidebar({
     filterBar,
     isDarkMode,
     onToggleTheme,
-    lastUpdated,
     isOpen,
     onToggleSidebar,
     onRefresh,
@@ -86,6 +84,13 @@ export default function EventSidebar({
     const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     // track which card is expanded (for unmapped articles)
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    // Get timestamp of the newest event in the current list
+    const newestEventTime = useMemo(() => {
+        if (items.length === 0) return null;
+        const times = items.map(i => new Date(i.publishedAt).getTime()).filter(t => !isNaN(t));
+        return times.length > 0 ? Math.max(...times) : null;
+    }, [items]);
 
     // auto-scroll the selected card into view when selection changes
     useEffect(() => {
@@ -295,11 +300,10 @@ export default function EventSidebar({
                         <button
                             className={styles.themeToggle}
                             onClick={onToggleTheme}
-                            aria-label={!mounted ? '...' : (isDarkMode ? 'Switch to light mode' : 'Switch to dark mode')}
+                            aria-label={!mounted ? 'Switch theme' : (isDarkMode ? 'Switch to light mode' : 'Switch to dark mode')}
                         >
-                            {!mounted ? (
-                                <div style={{ width: 20, height: 20 }} />
-                            ) : isDarkMode ? (
+                            {/* Render a default icon during SSR to prevent flicker/disappearance */}
+                            {mounted && isDarkMode ? (
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"></path>
                                 </svg>
@@ -332,18 +336,15 @@ export default function EventSidebar({
             </div>
 
             <div className={styles.eventSidebarStats}>
-                <span className={styles.statPill}>
-                    {items.length} articles
-                </span>
-                <span className={`${styles.statPill} ${styles.statPillGeo}`}>
-                    {items.filter(i => i.latitude != null).length} mapped
-                </span>
                 {/* Prevent hydration mismatch for client-side time formatting */}
-                {lastUpdated && mounted && !isNaN(new Date(lastUpdated).getTime()) && (
+                {(newestEventTime || isLoading) && (
                     <span className={styles.lastUpdated} suppressHydrationWarning>
-                        UPDATED: {new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
+                        LAST UPDATED: {newestEventTime && mounted ? new Date(newestEventTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : '--:-- --'}
                     </span>
                 )}
+                <span className={styles.statPill}>
+                    {items.length} events found
+                </span>
                 <button
                     className={`${styles.refreshButton} ${isLoading ? styles.refreshButtonLoading : ''}`}
                     onClick={onRefresh}

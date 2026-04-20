@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "newsscraper",
+      "name": "seraphim",
       "dependencies": {
         "@supabase/supabase-js": "^2.101.1",
         "@types/leaflet": "^1.9.21",
@@ -19,7 +19,7 @@
         "react": "19.2.3",
         "react-dom": "19.2.3",
         "react-leaflet": "^5.0.0",
-        "rss-parser": "^3.13.0",
+        "rss-parser": "^3.13.0"
       },
       "devDependencies": {
         "@types/node": "^20",
@@ -28,9 +28,9 @@
         "eslint": "^9",
         "eslint-config-next": "16.1.6",
         "typescript": "^5",
-        "vitest": "^4.1.4",
-      },
-    },
+        "vitest": "^4.1.4"
+      }
+    }
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
@@ -1047,6 +1047,6 @@
 
     "@typescript-eslint/typescript-estree/minimatch/brace-expansion": ["brace-expansion@5.0.3", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-fy6KJm2RawA5RcHkLa1z/ScpBeA762UF9KmZQxwIbDtRJrgLzM10depAiEQ+CXYcoiqW1/m96OAAoke2nE9EeA=="],
 
-    "@typescript-eslint/typescript-estree/minimatch/brace-expansion/balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
+    "@typescript-eslint/typescript-estree/minimatch/brace-expansion/balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="]
   }
 }

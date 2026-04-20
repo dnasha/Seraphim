@@ -21,7 +21,7 @@ export default function Home() {
     const [mappedOnly, setMappedOnly] = useState(true);
 
     // Data and Filter State
-    const { news, isLoading, isLoadingMore, hasMore, error, lastUpdated, fetchNews, loadMore } = useNewsData({ 
+    const { news, isLoading, isLoadingMore, hasMore, error, fetchNews, loadMore } = useNewsData({ 
         includeUnmapped: !mappedOnly 
     });
     
@@ -80,8 +80,6 @@ export default function Home() {
                 onCategoriesChange={setCategories}
                 timeRange={timeRange}
                 onTimeRangeChange={setTimeRange}
-                mappedOnly={mappedOnly}
-                onMappedOnlyChange={setMappedOnly}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
             />
@@ -118,7 +116,6 @@ export default function Home() {
                 hasMore={hasMore}
                 isLoadingMore={isLoadingMore}
                 onLoadMore={loadMore}
-                lastUpdated={lastUpdated}
                 onRefresh={() => fetchNews(true)}
                 isOpen={isSidebarOpen}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -135,6 +132,8 @@ export default function Home() {
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
                     isDarkMode={isDarkMode}
+                    mappedOnly={mappedOnly}
+                    onMappedOnlyChange={setMappedOnly}
                 />
             </main>
         </div>

@@ -37,7 +37,7 @@ export class MarkerManager {
     /**
      * Updates map markers to match provided geo-items, handling clustering transitions.
      */
-    public syncMarkers(geoItems: NewsItem[], clusteringEnabled: boolean, initialSelectedId: string | null) {
+    public syncMarkers(geoItems: NewsItem[], clusteringEnabled: boolean, initialSelectedId: string | null, animate: boolean = true) {
         const L = this.L;
         const map = this.map;
 
@@ -169,7 +169,7 @@ export class MarkerManager {
             let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
             if (itemsToFrame.length === 0) itemsToFrame = geoItems;
             const bounds = L.latLngBounds(itemsToFrame.map(i => [i.latitude!, i.longitude!] as [number, number]));
-            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
+            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6, animate });
         }
     }
 

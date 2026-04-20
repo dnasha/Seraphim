@@ -37,8 +37,6 @@ interface FilterBarProps {
     onCategoriesChange: (categories: string[]) => void;
     timeRange: string;
     onTimeRangeChange: (time: string) => void;
-    mappedOnly: boolean;
-    onMappedOnlyChange: (mappedOnly: boolean) => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
 }
@@ -77,8 +75,6 @@ export default function FilterBar({
     onCategoriesChange,
     timeRange,
     onTimeRangeChange,
-    mappedOnly,
-    onMappedOnlyChange,
     searchQuery,
     onSearchChange,
 }: FilterBarProps) {
@@ -113,6 +109,25 @@ export default function FilterBar({
     return (
         <div className={styles.filterBar}>
             <div className={styles.filterSection}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className={styles.filterLabel}>Time</label>
+                </div>
+                <div className={styles.sourceRow}>
+                    <div className={styles.sourceToggles}>
+                        {timeOptions.map((option) => (
+                            <button
+                                key={option.value}
+                                className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
+                                onClick={() => onTimeRangeChange(option.value)}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className={styles.filterSection}>
                 <label className={styles.filterLabel}>Sources</label>
                 <div className={styles.sourceRow}>
                     <div className={styles.sourceToggles}>
@@ -133,33 +148,6 @@ export default function FilterBar({
                                 </button>
                             );
                         })}
-                    </div>
-                </div>
-            </div>
-
-            <div className={styles.filterSection}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className={styles.filterLabel}>Time &amp; Location</label>
-                </div>
-                <div className={styles.sourceRow}>
-                    <div className={styles.sourceToggles}>
-                        {timeOptions.map((option) => (
-                            <button
-                                key={option.value}
-                                className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
-                                onClick={() => onTimeRangeChange(option.value)}
-                            >
-                                {option.label}
-                            </button>
-                        ))}
-                        <div className={styles.filterDivider} />
-                        <button
-                            className={`${styles.timeToggle} ${mappedOnly ? styles.timeToggleActive : ''}`}
-                            onClick={() => onMappedOnlyChange(!mappedOnly)}
-                            style={{ backgroundColor: mappedOnly ? '#22c55e' : undefined, borderColor: mappedOnly ? '#22c55e' : undefined }}
-                        >
-                            Mapped Only
-                        </button>
                     </div>
                 </div>
             </div>
@@ -206,7 +194,7 @@ export default function FilterBar({
                     </svg>
                     <input
                         type="text"
-                        placeholder="Search news..."
+                        placeholder="Search events..."
                         value={searchQuery}
                         onChange={(e) => onSearchChange(e.target.value)}
                         className={styles.searchInput}

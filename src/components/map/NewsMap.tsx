@@ -25,11 +25,14 @@ interface NewsMapProps {
     selectionVersion: number;
     onSelectItem: (id: string | null) => void;
     isDarkMode: boolean;
+    mappedOnly: boolean;
+    onMappedOnlyChange: (val: boolean) => void;
 }
 
-export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode }: NewsMapProps) {
+export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode, mappedOnly, onMappedOnlyChange }: NewsMapProps) {
     const mapRef = useRef<LeafletMap | null>(null);
     const tileLayerRef = useRef<TileLayer | null>(null);
+    const labelLayerRef = useRef<TileLayer | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const initializedRef = useRef(false);
     
@@ -40,6 +43,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const [mapReady, setMapReady] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [clusteringEnabled, setClusteringEnabled] = useState(false);
+    const [currentStyle, setCurrentStyle] = useState<string>(isDarkMode ? 'dark' : 'standard');
     
     const settingsPanelRef = useRef<HTMLDivElement>(null);
     const selectedIdRef = useRef(selectedItemId);
@@ -96,8 +100,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             if (aborted) return;
             if (initializedRef.current && mapRef.current) return;
 
-            const styleName = isDarkModeRef.current ? 'dark' : 'standard';
-            const style = MAP_STYLES[styleName];
+
 
             const container = containerRef.current!;
             
@@ -126,12 +129,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
             cleanupZoomRef.current = setupSmoothZoom(map, L, container);
 
-            tileLayerRef.current = L.tileLayer(style.url, {
-                maxZoom: 19,
-                attribution: style.attribution,
-                noWrap: false,
-            }).addTo(map);
-
             map.on('click', (e: LeafletMouseEvent) => {
                 if ((e.originalEvent as unknown as { _stopped?: boolean })._stopped) return;
                 onSelectItemRef.current(null);
@@ -150,7 +147,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             
             // delay helps Leaflet calculate container dimensions correctly after mount
             setTimeout(() => {
-                if (!aborted && mapRef.current) mapRef.current.invalidateSize();
+                if (!aborted && mapRef.current) {
+                    mapRef.current.invalidateSize();
+                }
             }, 100);
             
             setMapReady(true);
@@ -172,19 +171,31 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 mapRef.current.remove();
                 mapRef.current = null;
                 tileLayerRef.current = null;
+                labelLayerRef.current = null;
                 initializedRef.current = false;
                 setMapReady(false);
             }
         };
     }, []);
-    // update tile layer when dark mode changes
+
+    // update style when isDarkMode prop changes
+    useEffect(() => {
+        setCurrentStyle(isDarkMode ? 'dark' : 'standard');
+    }, [isDarkMode]);
+
+    // update tile layer when style changes
     useEffect(() => {
         if (!mapRef.current || !mapReady || !LRef.current) return;
         const L = LRef.current;
-        const style = MAP_STYLES[isDarkMode ? 'dark' : 'standard'];
+        const style = MAP_STYLES[currentStyle];
         
         if (tileLayerRef.current) {
             mapRef.current.removeLayer(tileLayerRef.current);
+            tileLayerRef.current = null;
+        }
+        if (labelLayerRef.current) {
+            mapRef.current.removeLayer(labelLayerRef.current);
+            labelLayerRef.current = null;
         }
 
         tileLayerRef.current = L.tileLayer(style.url, {
@@ -192,7 +203,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             attribution: style.attribution,
             noWrap: false,
         }).addTo(mapRef.current);
-    }, [isDarkMode, mapReady]);
+
+        if (style.labelsUrl) {
+            labelLayerRef.current = L.tileLayer(style.labelsUrl, {
+                maxZoom: 19,
+                noWrap: false,
+            }).addTo(mapRef.current);
+        }
+    }, [currentStyle, mapReady]);
 
     // handle container resizing
     useEffect(() => {
@@ -206,7 +224,13 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
 
     useEffect(() => {
+        // Only sync if map is ready AND we're not in the middle of initial mount 
+        // (which is handled in the main init effect above)
         if (!mapReady || !markerManagerRef.current) return;
+        
+        // We only want this effect to handle updates to items or clustering, 
+        // not the very first sync which we did in the init effect.
+        // However, Leaflet handles redundant syncs gracefully, so we'll just let it run.
         markerManagerRef.current.syncMarkers(geoItems, clusteringEnabled, selectedIdRef.current);
     }, [mapReady, clusteringEnabled, geoItems]);
 
@@ -219,13 +243,15 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     return (
         <div className={styles.mapWrapper}>
             <MapSettings
-                mapStyle={isDarkMode ? 'dark' : 'standard'}
-                onStyleChange={() => {}} // Internal style changes handled by isDarkMode prop
+                mapStyle={currentStyle}
+                onStyleChange={setCurrentStyle}
                 clusteringEnabled={clusteringEnabled}
                 onClusteringToggle={() => setClusteringEnabled(v => !v)}
                 isOpen={settingsOpen}
                 onToggleOpen={() => setSettingsOpen(o => !o)}
                 panelRef={settingsPanelRef}
+                mappedOnly={mappedOnly}
+                onMappedOnlyChange={onMappedOnlyChange}
             />
             <div ref={containerRef} id="news-map" className={styles.newsMapContainer} />
         </div>

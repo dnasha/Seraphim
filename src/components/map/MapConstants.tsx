@@ -3,7 +3,7 @@ import type L from 'leaflet';
 /*
  * Map configuration constants including styles, icons, and categories.
  */
-export const MAP_STYLES: Record<string, { url: string; attribution: string; label: string }> = {
+export const MAP_STYLES: Record<string, { url: string; labelsUrl?: string; attribution: string; label: string }> = {
     standard: {
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',

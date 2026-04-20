@@ -14,6 +14,8 @@ interface MapSettingsProps {
     isOpen: boolean;
     onToggleOpen: () => void;
     panelRef: React.RefObject<HTMLDivElement | null>;
+    mappedOnly: boolean;
+    onMappedOnlyChange: (val: boolean) => void;
 }
 
 const MapSettings: React.FC<MapSettingsProps> = ({
@@ -24,6 +26,8 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     isOpen,
     onToggleOpen,
     panelRef,
+    mappedOnly,
+    onMappedOnlyChange,
 }) => {
     return (
         <div className={styles.mapSettingsArea} ref={panelRef}>
@@ -65,6 +69,21 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                             <div
                                 className={`${styles.toggleSwitch}${clusteringEnabled ? ` ${styles.toggleSwitchOn}` : ''}`}
                                 onClick={onClusteringToggle}
+                            >
+                                <div className={styles.toggleKnob} />
+                            </div>
+                        </label>
+                    </div>
+
+                    <div className={styles.settingsDivider} />
+
+                    <div className={styles.settingsSection}>
+                        <div className={styles.settingsLabel}>Visibility</div>
+                        <label className={styles.settingsToggle}>
+                            <span className={styles.settingsToggleLabel}>Mapped only</span>
+                            <div
+                                className={`${styles.toggleSwitch}${mappedOnly ? ` ${styles.toggleSwitchOn}` : ''}`}
+                                onClick={() => onMappedOnlyChange(!mappedOnly)}
                             >
                                 <div className={styles.toggleKnob} />
                             </div>
