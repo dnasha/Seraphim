@@ -22,6 +22,7 @@ export interface NewsItem {
 export interface NewsResponse {
   items: NewsItem[];
   lastUpdated: string;
+  nextCursor?: string;
   sources: {
     gnews: boolean;
     rss: boolean;

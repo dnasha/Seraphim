@@ -32,6 +32,12 @@ export async function GET(request: Request) {
     const now = Date.now();
     const { searchParams } = new URL(request.url);
     let forceRefresh = searchParams.get('refresh') === 'true';
+    const cursor = searchParams.get('cursor');
+    const includeUnmapped = searchParams.get('include_unmapped') === 'true';
+    const LIMIT = 500;
+
+    // Cache is only used for the default query (no cursor, mapped only)
+    const canUseCache = !cursor && !includeUnmapped;
 
     // Throttle refresh attempts
     if (forceRefresh) {
@@ -44,19 +50,31 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Check local cache first
-        const cached = sourceCache.get(CACHE_KEY);
         let allItems: NewsItem[];
+        let nextCursor: string | undefined;
 
-        if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
+        // Check local cache first (only for default query)
+        const cached = sourceCache.get(CACHE_KEY);
+
+        if (canUseCache && !forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
             allItems = cached.data;
         } else {
             // Fetch fresh data from Supabase
-            const { data: rows, error } = await supabase
+            let query = supabase
                 .from('events')
                 .select('id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name')
                 .order('published_at', { ascending: false })
-                .limit(500);
+                .limit(LIMIT);
+
+            if (!includeUnmapped) {
+                query = query.not('latitude', 'is', null);
+            }
+
+            if (cursor) {
+                query = query.lt('published_at', cursor);
+            }
+
+            const { data: rows, error } = await query;
 
             if (error) {
                 console.error('[api/news] Supabase query failed:', error.message);
@@ -64,12 +82,21 @@ export async function GET(request: Request) {
             }
 
             allItems = (rows as DbEvent[]).map(dbEventToNewsItem);
-            sourceCache.set(CACHE_KEY, { data: allItems, timestamp: now });
+            
+            if (rows.length === LIMIT) {
+                nextCursor = rows[rows.length - 1].published_at;
+            }
+
+            // Only cache the default mapped-only initial view
+            if (canUseCache) {
+                sourceCache.set(CACHE_KEY, { data: allItems, timestamp: now });
+            }
         }
 
         const response: NewsResponse = {
             items: allItems,
             lastUpdated: new Date().toISOString(),
+            nextCursor,
             sources: {
                 gnews: true,
                 rss: true,
@@ -77,10 +104,14 @@ export async function GET(request: Request) {
             },
         };
 
+        // If it's a paginated or unmapped query, don't cache aggressively at the Edge to avoid stale slices.
+        const cacheControl = canUseCache 
+            ? 'public, s-maxage=900, stale-while-revalidate=59' 
+            : 'public, s-maxage=60, stale-while-revalidate=10';
+
         return NextResponse.json(response, {
             headers: {
-                // Cache at the Edge for 15 minutes to eliminate server loads
-                'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=59'
+                'Cache-Control': cacheControl
             }
         });
     } catch (error) {

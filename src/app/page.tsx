@@ -18,16 +18,20 @@ import styles from '@/components/Layout.module.css';
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export default function Home() {
+    const [mappedOnly, setMappedOnly] = useState(true);
+
     // Data and Filter State
-    const { news, isLoading, error, lastUpdated, fetchNews } = useNewsData();
+    const { news, isLoading, isLoadingMore, hasMore, error, lastUpdated, fetchNews, loadMore } = useNewsData({ 
+        includeUnmapped: !mappedOnly 
+    });
+    
     const {
         sources, setSources,
         categories, setCategories,
         timeRange, setTimeRange,
-        mappedOnly, setMappedOnly,
         searchQuery, setSearchQuery,
         filteredNews
-    } = useNewsFilter(news);
+    } = useNewsFilter(news, mappedOnly);
 
     // UI State
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -111,6 +115,9 @@ export default function Home() {
                 selectionVersion={selectionVersion}
                 onSelectItem={handleSelectItem}
                 isLoading={isLoading}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+                onLoadMore={loadMore}
                 lastUpdated={lastUpdated}
                 onRefresh={() => fetchNews(true)}
                 isOpen={isSidebarOpen}

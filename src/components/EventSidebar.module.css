@@ -446,6 +446,34 @@
   opacity: 0.8;
 }
 
+/* Load More Button */
+.loadMoreButton {
+  margin: 12px auto;
+  padding: 8px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  width: calc(100% - 24px);
+  max-width: 200px;
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreButton:hover:not(:disabled) {
+  background: var(--border);
+  border-color: var(--text-muted);
+}
+
+.loadMoreButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Responsive */
 @media (max-width: 860px) {
   .eventSidebar {

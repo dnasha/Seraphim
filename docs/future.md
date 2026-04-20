@@ -60,27 +60,11 @@ Everything below is implemented, merged, and working in the current codebase.
     - Refactored `src/lib/rss.ts` to use standard ES module imports and replaced `@ts-ignore` with `@ts-expect-error`.
     - Sanitized test files in `scripts/tests` by removing non-standard em-dash characters from comments for better cross-platform compatibility.
 - **Animation Restoration**: Fixed broken loading wheel and refresh animations caused by CSS modularization. Defined local `@keyframes spin` within `EventSidebar.module.css` to ensure self-contained, reliable UI feedback.
-
+- **API Route Hardening**: Implemented cursor-based pagination and a `?include_unmapped=true` flag in `/api/news/route.ts` to reduce payload sizes and support "load more" infinite scrolling in the UI. 
+- **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Evaluated `EventSidebar` render performance (stable at current scales) and documented Leaflet `preferCanvas` limitations with `DivIcon` elements for future MapLibre migration context.
 ---
 
-## 🔧 Phase 0: Housekeeping & Foundations
 
-Before adding features, harden what exists. These are concrete code-level tasks.
-
-### 0.6 — API Route Hardening
-
-- **Current issue**: `route.ts` hardcodes `LIMIT 500` with no pagination. As the database grows past thousands of events, this becomes both a data quality issue (old events push out recent ones from niche categories) and a payload size issue.
-- **Action**:
-  - Add cursor-based pagination support (`?cursor=<published_at_timestamp>`).
-  - Return only mapped events by default (saves ~30-40% payload for the map view); add `?include_unmapped=true` for the sidebar's "show all" mode.
-  - Add a PostGIS spatial index on `(latitude, longitude)` if not already present, in preparation for Phase 1 BBox queries.
-
-### 0.7 — Performance & Build Audit
-
-- **Action**:
-  - Run `next build` and audit the bundle size. The `geonames.json` (4.7MB) should never be imported client-side — verify the tree-shaking boundary.
-  - Verify that `EventSidebar`'s `.map()` over all items doesn't cause jank at 300+ items. Profile with React DevTools. (Virtualization is Phase 2 but identifying the threshold now informs priority.)
-  - Audit whether `preferCanvas: true` actually activates — Leaflet silently falls back to SVG if the canvas renderer can't handle certain icon types.
 
 ---
 

@@ -51,6 +51,9 @@ interface EventSidebarProps {
     selectionVersion: number;
     onSelectItem: (id: string | null) => void;
     isLoading: boolean;
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
     filterBar: ReactNode;
     isDarkMode: boolean;
     onToggleTheme: () => void;
@@ -67,6 +70,9 @@ export default function EventSidebar({
     selectionVersion,
     onSelectItem,
     isLoading,
+    hasMore,
+    isLoadingMore,
+    onLoadMore,
     filterBar,
     isDarkMode,
     onToggleTheme,
@@ -355,6 +361,15 @@ export default function EventSidebar({
 
             <div className={styles.eventList}>
                 {eventListContent}
+                {hasMore && items.length > 0 && (
+                    <button 
+                        className={styles.loadMoreButton} 
+                        onClick={onLoadMore}
+                        disabled={isLoadingMore}
+                    >
+                        {isLoadingMore ? 'Loading...' : 'Load More'}
+                    </button>
+                )}
             </div>
         </aside>
     );
