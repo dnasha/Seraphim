@@ -1,8 +1,4 @@
-/* 
-  Dan Sharan
-  Global styles including resets, theme tokens, and typography.
-  Component-specific styles are located in their respective *.module.css files.
-*/
+/* Global styles: resets, theme tokens, and typography. Component-specific styles are in *.module.css. */
 
 *,
 *::before,
@@ -34,7 +30,7 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
 
-  /* Design Tokens — Light mode */
+  /* Design Tokens - Light Mode */
   --source-gnews: #e65100;
   --source-rss: #0066cc;
 
@@ -56,7 +52,7 @@ body {
   background: #0f1117;
   color: #e5e7eb;
 
-  /* Design Tokens — Dark mode overrides */
+  /* Design Tokens - Dark Mode Overrides */
   --accent: #60a5fa;
   --accent-hover: #3b82f6;
   --surface: #1a1d27;
@@ -77,17 +73,6 @@ a {
   to   { transform: rotate(360deg); }
 }
 
-
-/* Shared Components & Utilities (Legacy or Global-only) */
-.global-loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 12px;
-}
 
 /* Inline Error Banner (rendered in page.tsx) */
 .error-banner {
@@ -139,15 +124,13 @@ a {
   opacity: 0.8;
 }
 
-/* Virtuoso (react-virtuoso) creates its own internal scroll container.
-   Target it directly so the custom sidebar scrollbar styles apply.
-   (The .eventList CSS-module scrollbar rules don't reach into Virtuoso's DOM.) */
+/* Virtuoso scroll container overrides for consistent sidebar scrollbar styling */
 [data-virtuoso-scroller="true"] {
   scrollbar-width: thin;
   scrollbar-color: #888 transparent;
 }
 
-/* More aggressive scrollbar styling for Chrome/Edge/Safari */
+/* Webkit scrollbar styling */
 [data-virtuoso-scroller="true"]::-webkit-scrollbar {
   width: 8px !important;
 }
@@ -176,7 +159,7 @@ a {
   background: #666 !important;
 }
 
-/* Ensure arrows are completely gone */
+/* Removes scrollbar buttons */
 [data-virtuoso-scroller="true"]::-webkit-scrollbar-button {
   display: none !important;
   height: 0 !important;

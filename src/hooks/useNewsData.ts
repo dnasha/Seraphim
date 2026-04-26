@@ -1,31 +1,11 @@
+'use client';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
 
 /*
-  Dan Sharan
-
-  useNewsData — React hook for fetching news data driven by the map viewport.
-
-  Key behaviors:
-  - Initial fetch: all mapped events (no BBox, no description) as a safe default
-    while the map initializes and emits its first bounds.
-  - BBox fetch: every time the user pans or zooms, the map calls onBoundsChange
-    with the new viewport. Results are cached client-side (bbox+timeRange key →
-    items) so panning back to a seen area skips the DB round-trip.
-  - Zoom-aware: zoom is always forwarded to the API. At zoom < 5 the API
-    automatically returns server-side cluster objects, protecting the client from
-    large DOM counts at global scale.
-  - Time-aware: the active timeRange is forwarded to the API so server-side
-    clustering respects the same time window the client uses. When timeRange
-    changes, the client cache is invalidated and the current view refetches.
-  - Force-raw: power users can enable the manual cluster toggle which sets
-    forceRaw=true, bypassing server-side clustering.
-  - On-demand detail: fetchEventDetails(id) hits /api/news/[id] and patches the
-    description into the existing item in place.
-  - Realtime: subscribes to Supabase INSERT events. New rows within the current
-    bounding box are prepended to the list without a full refetch.
-  - Fallback polling: 15-minute setInterval heartbeat in case the WebSocket drops.
+  useNewsData - React hook for fetching news data driven by the map viewport.
 */
 
 export interface BBox {
@@ -35,7 +15,7 @@ export interface BBox {
     maxLng: number;
     zoom?: number;
     forceRaw?: boolean;
-    /** ISO timestamp — events older than this are excluded server-side. */
+    /** ISO timestamp - events older than this are excluded server-side. */
     since?: string;
     /** Human-readable label used in the cache key (e.g. '1d', '1w'). */
     timeRange?: string;
@@ -43,12 +23,13 @@ export interface BBox {
     query?: string;
 }
 
-// Supabase client for Realtime only — read-only anon key
+// Supabase client for Realtime only - read-only anon key
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 function snapBBox(b: BBox): BBox {
     const z = b.zoom || 5;
+    // Larger grid at lower zooms reduces cache fragmentation while panning.
     const grid = z < 4 ? 20 : z < 7 ? 10 : z < 10 ? 5 : 2;
     return {
         ...b,
@@ -143,7 +124,7 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
     });
 }
 
-// Client-side cache: bbox+timeRange key → NewsItem array
+// Client-side cache: bbox+timeRange key - NewsItem array
 const bboxCache = new Map<string, { bbox: BBox; data: NewsItem[]; timestamp: number }>();
 const BBOX_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
@@ -153,12 +134,12 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-    // Track the current bounding box so Realtime and heartbeat can filter/refetch correctly
+    // Track the current bounding box so Realtime can filter/refetch correctly
     const currentBBoxRef = useRef<BBox | null>(null);
     const timeRangeRef = useRef(timeRange);
     const searchQueryRef = useRef(searchQuery);
 
-    // Client-side description cache: id → description string
+    // Client-side description cache: id - description string
     const descriptionCache = useRef<Map<string, string>>(new Map());
 
     // -------------------------------------------------------------------------
@@ -239,10 +220,10 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
         } finally {
             setIsLoading(false);
         }
-    }, [includeUnmapped, searchQuery]);
+    }, [includeUnmapped, searchQuery]); // Dependencies trigger a full clear/refetch on preference changes.
 
     // -------------------------------------------------------------------------
-    // Re-fetch when timeRange or searchQuery changes — invalidate cache and reload
+    // Re-fetch when timeRange or searchQuery changes - invalidate cache and reload
     // -------------------------------------------------------------------------
     useEffect(() => {
         const prevTimeRange = timeRangeRef.current;
@@ -252,7 +233,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
 
         if (prevTimeRange === timeRange && prevSearch === searchQuery) return; // no actual change on mount
 
-        // Invalidate all cached results — they may span a different time window or query
+        // Invalidate all cached results - they may span a different time window or query
         bboxCache.clear();
 
         const currentBBox = currentBBoxRef.current;
@@ -289,7 +270,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
                 bboxCache.set(key, { ...entry, data: updated });
             });
         } catch {
-            // Silently fail — the card will just show no description
+            // Silently fail - the card will just show no description
         }
     }, []);
 
@@ -310,7 +291,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     }, [fetchNews]);
 
     // -------------------------------------------------------------------------
-    // Supabase Realtime — INSERT subscription
+    // Supabase Realtime - INSERT subscription
     // -------------------------------------------------------------------------
     useEffect(() => {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
@@ -382,23 +363,10 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     }, []);
 
     // -------------------------------------------------------------------------
-    // Initial fetch + polling fallback heartbeat
+    // Initial fetch
     // -------------------------------------------------------------------------
     useEffect(() => {
         fetchNews();
-    }, [fetchNews]);
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            const bbox = currentBBoxRef.current;
-            if (bbox) {
-                const since = computeSince(timeRangeRef.current);
-                fetchNews(true, { ...bbox, since: since ?? undefined, timeRange: timeRangeRef.current, query: searchQueryRef.current });
-            } else {
-                fetchNews(true);
-            }
-        }, 15 * 60 * 1000);
-        return () => clearInterval(interval);
     }, [fetchNews]);
 
     return {

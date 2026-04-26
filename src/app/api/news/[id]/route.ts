@@ -3,11 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { DbEvent } from '@/types';
 
 /*
-  Dan Sharan
   Detail Endpoint: Fetches the full description of a single event by UUID.
-  Called on-demand when a user expands a sidebar card.
-  This keeps the initial list payload small (no descriptions) and fetches
-  the heavier text content only when the user actually requests it.
 */
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -19,7 +15,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 // Simple in-memory cache so expanding/collapsing a card doesn't re-fetch
 const detailCache = new Map<string, { description: string; timestamp: number }>();
-const DETAIL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — descriptions rarely change
+const DETAIL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes - descriptions rarely change
 
 export async function GET(
     _request: Request,

@@ -1,10 +1,6 @@
 'use client';
 
-/*
-  Dan Sharan
-  Main entry point for the application. Coordinates layout, data filtering, 
-  and theme management between the EventSidebar and NewsMap.
-*/
+/** Application entry point coordinating layout, data filtering, and theme management. */
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
@@ -19,11 +15,10 @@ const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap
 
 export default function Home() {
     const [mappedOnly, setMappedOnly] = useState(true);
-    // timeRange lives here so both useNewsData (server-side filtering)
-    // and useNewsFilter (client-side filtering) share the same value.
+    // timeRange shared between server-side and client-side filtering
     const [timeRange, setTimeRange] = useState('1d');
     
-    // Search query state lifted here to be shared with useNewsData for global search
+    // Search state for global data fetching
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 

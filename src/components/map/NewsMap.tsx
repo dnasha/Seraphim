@@ -76,10 +76,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }, 150);
     }, []);
 
-    /**
-     * Add category icon images, the GeoJSON source, and all data layers.
-     * Called after every style load (initial + style changes).
-     */
+    // Initialize icons, sources, and layers on style load.
     const addSourcesAndLayers = useCallback(async (map: maplibregl.Map) => {
         // 1. Register category icons
         for (const cat of CATEGORIES) {
@@ -105,7 +102,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 3. Individual pins — inactive (Added first so they render UNDER clusters)
+        // 3. Individual pins - inactive
         if (!map.getLayer('unclustered-point')) {
             map.addLayer({
                 id: 'unclustered-point',
@@ -130,7 +127,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 4. Individual pins — active (selected)
+        // 4. Individual pins - active (selected)
         if (!map.getLayer('unclustered-point-active')) {
             map.addLayer({
                 id: 'unclustered-point-active',
@@ -224,7 +221,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
     }, []);
 
-    // ── Initialize map ────────────────────────────────────────────────────────
+    // Initialize map
     useEffect(() => {
         if (!containerRef.current || mapRef.current) return;
         
@@ -256,14 +253,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             }
         });
 
-        // This handler fires on initial load AND after every setStyle() call.
-        // It's the single place we set up data layers.
+        // Re-initialize layers after style load or setStyle calls.
         map.on('style.load', () => {
             addSourcesAndLayers(map).then(() => {
                 if (!eventsWiredRef.current) {
                     eventsWiredRef.current = true;
 
-                    // Wire up interactive events once (first load only)
                     map.on('click', 'unclustered-point', (e) => {
                         if (e.features?.[0]) onSelectItemRef.current(e.features[0].properties.id);
                     });
@@ -284,7 +279,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                                 zoom
                             });
                         } else {
-                            // Server-side cluster — just zoom in
+                            // Server-side cluster - just zoom in
                             map.easeTo({
                                 center: features[0].geometry.type === 'Point' ? features[0].geometry.coordinates as [number, number] : undefined,
                                 zoom: map.getZoom() + 2
@@ -292,7 +287,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         }
                     });
 
-                    // Pointer cursors
                     for (const layer of ['clusters-circle', 'unclustered-point', 'unclustered-point-active']) {
                         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
                         map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
@@ -313,34 +307,31 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Trigger initial fetch when pins toggled ───────────────────────────────
+    // Trigger initial fetch when pins toggled
     useEffect(() => {
         if (mapReady && mapRef.current) emitBounds(mapRef.current);
     }, [forceIndividualPins, mapReady, emitBounds]);
 
-    // ── Update tile style ─────────────────────────────────────────────────────
-    // setStyle() destroys all sources/layers. The 'style.load' handler above
-    // will re-add them automatically.
+    // Update tile style
+    // setStyle triggers a reload of all layers via style.load handler.
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
         mapRef.current.setStyle(getMapLibreStyle(currentStyle));
     }, [currentStyle, mapReady]);
 
-    // ── Toggle client-side clustering ─────────────────────────────────────────
-    // When forceIndividualPins changes, we need to recreate the source with
-    // a different cluster setting.
+    // Toggle client-side clustering
+    // Recreate source to toggle clustering state.
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
         const map = mapRef.current;
         const source = map.getSource('news-events') as maplibregl.GeoJSONSource;
         if (!source) return;
 
-        // MapLibre doesn't allow changing cluster on an existing source,
-        // so we force a style reload which will recreate everything via style.load.
+        // Force style reload to apply new clustering configuration.
         map.setStyle(getMapLibreStyle(currentStyle));
     }, [forceIndividualPins, mapReady, currentStyle]);
 
-    // ── Sync GeoJSON data ─────────────────────────────────────────────────────
+    // Sync GeoJSON data
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
 
@@ -370,7 +361,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         if (source) source.setData(geojson);
     }, [geoItems, mapReady]);
 
-    // ── Handle Selection & FlyTo & Popup ──────────────────────────────────────
+    // Handle Selection, FlyTo, and Popup
     useEffect(() => {
         if (!mapReady || !mapRef.current || !popupRef.current) return;
         const map = mapRef.current;
@@ -449,8 +440,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     const currentZoom = map.getZoom();
                     const targetZoom = Math.max(currentZoom, 11);
 
-                    // Remove popup temporarily during fly to prevent it from
-                    // being closed by autoPan or going off-screen.
+                    // Temporarily hide popup during camera transition.
                     isFlyingRef.current = true;
                     popupRef.current.remove();
 
@@ -481,7 +471,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
     }, [selectedItemId, selectionVersion, geoItems, mapReady]);
 
-    // ── Live-patch popup descriptions (lazy loaded) ───────────────────────────
+    // Live-patch popup descriptions
     useEffect(() => {
         if (!mapReady || !popupRef.current || !popupRef.current.isOpen()) return;
         const el = popupRef.current.getElement();
@@ -499,7 +489,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         });
     }, [geoItems, mapReady]);
 
-    // ── Settings panel close-on-click-outside ─────────────────────────────────
+    // Settings panel close-on-click-outside
     useEffect(() => {
         if (!settingsOpen) return;
         const handleClick = (e: MouseEvent) => {

@@ -1,16 +1,11 @@
+'use client';
+
 import { useState, useEffect, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
 import { applyNewsFilters } from '@/lib/filters';
 
 /*
-  Dan Sharan
-  
-  useNewsFilter — React hook for client-side news filtering.
-  Delegates pure filtering logic to applyNewsFilters() for testability.
-
-  timeRange is now owned by the parent (page.tsx) so it can be shared with
-  useNewsData, which forwards it to the API for server-side time filtering
-  during clustering queries.
+  useNewsFilter - React hook for client-side news filtering.
 */
 
 export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string) {
@@ -41,7 +36,7 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: 
             searchQuery: debouncedSearch,
             now,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now]);
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now]); // Re-filter whenever state or source data changes.
 
     return {
         sources, setSources,

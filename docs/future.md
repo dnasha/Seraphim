@@ -98,6 +98,25 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ---
 
+## ⏭️ Next-Up
+
+_Immediate priorities following recent engine upgrades._
+
+### Client-Side OSINT Drawing Tools
+
+- **Action**: Integrate `@maplibre/maplibre-gl-draw` or `terra-draw` to allow users to draw bounding polygons, measure distances, and annotate the map.
+- **Use case**: An analyst draws a rectangle around eastern Ukraine and gets an instant count/list of events within that area. Measurement tools show distances between two points.
+
+### Live Environmental Overlays
+
+- **Action**: Inject free third-party GeoJSON feeds as toggleable map layers:
+  - USGS earthquake feed (real-time GeoJSON).
+  - NOAA severe weather alerts.
+  - FIRMS fire/hotspot data.
+- **Benefit**: Contextualizes scraped news events with authoritative sensor data.
+
+---
+
 ## 🖥️ Phase 2.5: Advanced Visualization & Tiles
 
 _Goal: Fine-tune the new MapLibre engine for absolute visual perfection._
@@ -161,11 +180,6 @@ _Goal: Give analysts the tools to slice data logically. These are the features t
 - **Implementation**: Use `useSearchParams` or a custom hook that syncs state bidirectionally with `window.history.replaceState` (no page reloads).
 - **Benefit**: Users can share a link to a specific "view" of a crisis. Bookmarkable dashboards. Sets the foundation for OG previews (Phase 5.1).
 
-### 4.4 — Client-Side OSINT Drawing Tools
-
-- **Action**: Integrate `@maplibre/maplibre-gl-draw` or `terra-draw` to allow users to draw bounding polygons, measure distances, and annotate the map.
-- **Use case**: An analyst draws a rectangle around eastern Ukraine and gets an instant count/list of events within that area. Measurement tools show distances between two points.
-
 ---
 
 ## 🌐 Phase 5: Distribution, Monetization & Platform
@@ -208,15 +222,7 @@ _Goal: Turn Seraphim from a project into a product._
 - **Implementation**: Supabase Edge Function calls an LLM API (Gemini, Groq, or OpenAI) with retrieved context. Response is streamed to the client.
 - **Secondary use**: Auto-generate a daily "Intelligence Brief" email for Pro users — a 3-paragraph summary of the highest-impact events from the last 24 hours.
 
-### 5.7 — Live Environmental Overlays
-
-- **Action**: Inject free third-party GeoJSON feeds as toggleable map layers:
-  - USGS earthquake feed (real-time GeoJSON).
-  - NOAA severe weather alerts.
-  - FIRMS fire/hotspot data.
-- **Benefit**: Contextualizes scraped news events with authoritative sensor data.
-
-### 5.8 — Open Source Release
+### 5.7 — Open Source Release
 
 - **Action**: Clean up the repo, write a proper README with screenshots, add a `CONTRIBUTING.md`, and release under AGPLv3 (protects the hosted SaaS model while allowing self-hosting). This builds trust and brand awareness in the OSINT and infosec communities.
 

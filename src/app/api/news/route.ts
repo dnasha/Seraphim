@@ -4,19 +4,7 @@ import { NewsItem, NewsResponse } from '@/lib/types';
 import { DbEvent, dbEventToNewsItem } from '@/types';
 
 /*
-  Dan Sharan
   API Proxy Route: Fetches pre-processed events from Supabase.
-  This route handles in-memory caching and basic throttling to protect the database.
-  The scraper (src/scraper/index.ts) is responsible for data ingestion; this route is read-only.
-
-  Egress optimization: `description` is intentionally excluded from the SELECT.
-  It is fetched on-demand via /api/news/[id] only when a user expands a card.
-
-  Clustering: When zoom < CLUSTER_ZOOM_THRESHOLD, the API delegates to the
-  get_clustered_events RPC which returns aggregated cluster objects instead of
-  raw rows. This protects the client from receiving hundreds of DOM-heavy pins
-  at low zoom levels. The clustering toggle (forceRaw=true) allows power users
-  to override this behavior.
 */
 
 // Supabase client (read-only anon key, respects RLS)
@@ -43,7 +31,7 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 // Safety cap on raw event rows returned per request.
 const RAW_LIMIT = 2000;
 
-// Intentionally excluded from the SELECT — loaded via /api/news/[id] on demand.
+// Intentionally excluded from the SELECT - loaded via /api/news/[id] on demand.
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
 
 export async function GET(request: Request) {
@@ -52,7 +40,7 @@ export async function GET(request: Request) {
     let forceRefresh = searchParams.get('refresh') === 'true';
     const includeUnmapped = searchParams.get('include_unmapped') === 'true';
 
-    // Optional bounding box parameters — sent by the map after every moveend.
+    // Optional bounding box parameters - sent by the map after every moveend.
     const minLat = searchParams.get('minLat');
     const maxLat = searchParams.get('maxLat');
     const minLng = searchParams.get('minLng');
@@ -64,14 +52,14 @@ export async function GET(request: Request) {
     // If a global search query is active, we ignore the bounding box constraint to find events anywhere.
     const ignoreBBox = !!searchQuery;
 
-    // Zoom level — always provided alongside BBox. Used for auto-clustering decisions.
+    // Zoom level - always provided alongside BBox. Used for auto-clustering decisions.
     const zoomStr = searchParams.get('zoom');
     const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
     // Power-user override: skip server-side clustering even at low zoom.
     const forceRaw = searchParams.get('force_raw') === 'true';
 
-    // Time-window filter — ISO timestamp; events older than this are excluded.
+    // Time-window filter - ISO timestamp; events older than this are excluded.
     // Forwarded from the client's active timeRange so clustering respects the
     // same time window the sidebar filter uses.
     const sinceStr = searchParams.get('since');
