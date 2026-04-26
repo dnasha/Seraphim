@@ -143,3 +143,48 @@ a {
   text-decoration: underline;
   opacity: 0.8;
 }
+
+/* Virtuoso (react-virtuoso) creates its own internal scroll container.
+   Target it directly so the custom sidebar scrollbar styles apply.
+   (The .eventList CSS-module scrollbar rules don't reach into Virtuoso's DOM.) */
+[data-virtuoso-scroller="true"] {
+  scrollbar-width: thin;
+  scrollbar-color: #888 transparent;
+}
+
+/* More aggressive scrollbar styling for Chrome/Edge/Safari */
+[data-virtuoso-scroller="true"]::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+[data-virtuoso-scroller="true"]::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+[data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb {
+  background: #888 !important; /* slightly darker */
+  border-radius: 10px !important;
+  border: 2px solid transparent !important; /* padding effect */
+  background-clip: content-box !important;
+  min-height: 60px !important; /* force a larger minimum size */
+}
+
+[data-theme="dark"] [data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb {
+  background: #555 !important;
+}
+
+[data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb:hover {
+  background: #777 !important;
+}
+
+[data-theme="dark"] [data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb:hover {
+  background: #666 !important;
+}
+
+/* Ensure arrows are completely gone */
+[data-virtuoso-scroller="true"]::-webkit-scrollbar-button {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+

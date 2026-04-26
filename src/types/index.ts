@@ -27,6 +27,8 @@ export interface DbEvent {
   location_name?: string | null;
   tags?: string[] | null;       // stored as JSONB in Supabase
   created_at?: string;        // set by Supabase default
+  cluster_id?: number;
+  event_count?: number;
 }
 
 // helper: map a DbEvent row → NewsItem
@@ -49,5 +51,7 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     longitude: row.longitude ?? undefined,
     locationName: row.location_name ?? undefined,
     tags: row.tags ?? undefined,
+    clusterId: row.cluster_id ?? undefined,
+    eventCount: row.event_count ?? undefined,
   };
 }

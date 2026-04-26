@@ -15,13 +15,14 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 
 | Layer | Technology | Notes |
 |---|---|---|
-| **Framework** | Next.js 16 (App Router) | React 19, deployed to Vercel |
-| **Language** | TypeScript | Strict mode across frontend and scraper |
+| **Framework** | Next.js 16.2.4 (App Router) | React 19.2.5, deployed to Vercel |
+| **Language** | TypeScript | Strict mode, version 6.0.3 |
 | **Styling** | Vanilla CSS | CSS Modules for component isolation. Base tokens in `globals.css` |
 | **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
 | **Database** | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries |
 | **Scraper Runtime** | Bun | Native TS execution, 30x faster cold starts than Node |
 | **Map** | Leaflet 1.9 + react-leaflet 5 | OpenStreetMap tiles (Voyager/Dark). Canvas renderer |
+
 | **NLP** | compromise | Lightweight place-name extraction fallback |
 | **RSS** | rss-parser | Standard RSS/Atom feed parsing |
 | **Social Scraping** | Cheerio (Telegram), multi-strategy (X) | No API keys required |
@@ -145,16 +146,21 @@ SeraphimPreview/
 ┌─────────────────────────────────────────────────────────┐
 │  /api/news/route.ts  (Next.js Edge Route)               │
 │  ├── BBox Querying (minLat, maxLat, minLng, maxLng)
-│  ├── In-memory bbox-keyed cache (15 min TTL)
+│  ├── Server-Side Clustering (zoom parameter)
+│  ├── Synthetic Cluster IDs (cluster-[zoom]-[id])
+│  ├── Time filtering (since parameter)
+│  ├── In-memory bbox+time-keyed cache (15 min TTL)
 │  ├── Refresh throttle (1 min cooldown)
 │  ├── Egress Optimization (omits 'description')
-│  ├── LIMIT 500, ORDER BY published_at DESC
+│  ├── LIMIT 500 (per RPC group or raw query)
 │  └── Cache-Control: s-maxage=900
 └─────────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────────┐
 │  React Client                                           │
-│  ├── useNewsData — BBox fetch + Realtime subscription   │
+│  ├── useNewsData — Viewport-driven (BBox+Zoom+Since)    │
+│  ├── Sidebar Virtualization — react-virtuoso list       │
+│  ├── Native Clustering — renders server-side clusters   │
 │  ├── useNewsFilter — client-side useMemo filtering      │
 │  └── Lazy-Loading — fetch descriptions on card expand   │
 └─────────────────────────────────────────────────────────┘
@@ -242,30 +248,30 @@ Matches: `KYIV (Reuters) — ...`, `Albania: Femicide cases...`, `WASHINGTON - .
 
 ```
 page.tsx (client component)
-├── useNewsData()             → { news, isLoading, error, lastUpdated, fetchNews }
-├── useNewsFilter(news)       → { sources, categories, timeRange, ..., filteredNews }
+├── useNewsData()             → { news, isLoading, error, lastUpdated, fetchNews, onBoundsChange }
+├── useNewsFilter(news, timeRange) → { sources, categories, ..., filteredNews }
 │
 ├── EventSidebar
 │   ├── Logo + ThemeToggle + Collapse/Close buttons
-│   ├── Stats row (article count, mapped count, last-updated, refresh button)
+│   ├── Stats row (total event count [summed], last-updated, refresh button)
 │   ├── FilterBar (slotted in via prop)
 │   │   ├── Source toggles (News/Reddit/X/Telegram/GNews)
 │   │   ├── Category pills (World/Crisis/Nation/Business/Tech/Science/Health)
 │   │   ├── Time range (1D/3D/1W/1M/All)
 │   │   ├── "Mapped Only" toggle (default: ON)
 │   │   └── Debounced search input
-│   └── Card list (.map() over filteredNews)
+│   └── Card list (react-virtuoso virtualized list)
 │       ├── Mapped cards → click flies map to pin
 │       └── Unmapped cards → click expands inline detail
 │
 └── NewsMap (dynamic import, SSR disabled)
     ├── Leaflet map (canvas renderer)
     ├── smoothZoom.ts (lerp loop + sub-pixel patches)
-    ├── markerManager.ts (marker sync + icon caching)
+    ├── markerManager.ts (marker sync + server-cluster support)
     ├── MapSettings (gear icon → style selector + cluster toggle)
     ├── Marker layer (direct or clustered)
     ├── Popup layer (HTML-templated, not React-rendered)
-    └── Viewport events — emits debounced 'moveend' BBox
+    └── Viewport events — emits debounced BBox + Zoom (snapped to grid)
 ```
 
 ### Layout
@@ -451,9 +457,10 @@ DRY_RUN=true bun run src/scraper/index.ts
 
 ### Performance
 - `geonames.json` is ~4.7 MB. It's loaded at module init in `engine.ts`. This is fine server-side but must **never** be imported client-side.
-- The API hardcodes `LIMIT 500`. As the DB grows, older niche-category events will be pushed out. Pagination is not yet implemented.
-- `EventSidebar` renders all items via `.map()` with no virtualization. Performance degrades noticeably past ~300 cards.
+- The API applies a `LIMIT 500` safety cap. Cursor-based pagination has been removed in favor of a purely viewport-driven (BBox) data model — users explore by zooming/panning instead of "loading more".
+- **Resolved**: `EventSidebar` now uses `react-virtuoso` virtualization. Performance is stable even with thousands of cards.
 - `preferCanvas: true` is set on the Leaflet map but Leaflet still uses DOM elements for `DivIcon` markers. True canvas rendering only applies to vector shapes.
+
 
 ### Data Integrity
 - **Photon API fallback is permanently disabled** — all geocoding uses the local dictionary only. This is intentional; the API was causing rate-limit bottlenecks.
@@ -464,11 +471,15 @@ DRY_RUN=true bun run src/scraper/index.ts
 - **Server cache**: In-memory `Map` in `route.ts` with 15-min TTL. Keyed by BBox or "global".
 - **Edge cache**: `Cache-Control: public, s-maxage=900, stale-while-revalidate=59` for global; shorter TTLs for BBox.
 - **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown.
-- **Client-side BBox Cache**: `useNewsData` maintains a Map of previously fetched BBox areas to avoid redundant DB hits.
+- **Client-side BBox Cache**: `useNewsData` maintains a Map of previously fetched BBox areas. Uses a **Snapping Grid** (0.5 to 10 degrees) to maximize cache hits during panning and minimize redundant DB queries.
 - **Lazy-Load Cache**: Descriptions are cached client-side once fetched.
+- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below a tactical threshold. Clusters are assigned synthetic IDs to prevent marker reuse conflicts during zoom transitions.
+
 
 ### Realtime Updates
-- **Supabase Realtime**: Subscribed to `INSERT` events. Incoming rows are filtered against the current viewport BBox before being added to state.
+- **Supabase Realtime**: Subscribed to `INSERT` events. Incoming rows are filtered against the current viewport BBox and injected into the UI state.
+- **Cache Injection**: New events are automatically injected into all overlapping `bboxCache` entries to ensure they persist across map pans. Clustered views rely on periodic re-fetches or grid invalidation.
+
 
 ### Egress Optimization
 - **Lazy-Loading**: The `/api/news` route excludes the `description` field by default.
@@ -477,8 +488,10 @@ DRY_RUN=true bun run src/scraper/index.ts
 - **Loading State**: Sidebar cards and map popups use a CSS-only shimmer skeleton (`.popup-skeleton-line`) while fetching data.
 
 ### Navigation & Camera
-- **Manual Camera Only**: Automatic `fitBounds` or `flyTo` transitions on data refresh/filter change are **disabled**. This prevents infinite loops where a camera move triggers a BBox fetch, which updates the state, which would have triggered another camera move.
-- **Debounced BBox**: The map emits bounds changes 400ms after the `moveend` event to prevent API spam during continuous panning.
+- **Smart Camera behavior**: Automatic `fitBounds` on data refresh is disabled. Programmable camera moves (like selecting a card) call `onBeforeFly` to set a `suppressBoundsRef` flag, which prevents the resulting `moveend` event from triggering a redundant BBox re-fetch.
+- **One-Time Zoom**: MarkerManager tracks `lastFlewToId` to skip camera animations if the same event is selected again (e.g. after a re-render), preventing "rubber-banding" during exploration.
+- **Debounced BBox + Zoom + Since**: The map emits bounds changes 400ms after the `moveend` event to prevent API spam. The BBox includes the `since` timestamp derived from the active timeRange to ensure server-side clustering respects temporal filters.
+
 
 ### Known Duplications (technical debt)
 - **Resolved**: CSS monolithic styles split into modules.

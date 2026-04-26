@@ -16,7 +16,6 @@ import { MAP_STYLES } from './MapConstants';
 import MapSettings from './MapSettings';
 import styles from './NewsMap.module.css';
 
-
 import { setupSmoothZoom } from './smoothZoom';
 import { MarkerManager } from './markerManager';
 
@@ -44,6 +43,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     const [mapReady, setMapReady] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // Clustering toggle is a power-user override; automatic server clustering
+    // at low zoom handles the normal case without user intervention.
     const [clusteringEnabled, setClusteringEnabled] = useState(false);
     const [currentStyle, setCurrentStyle] = useState<string>(isDarkMode ? 'dark' : 'standard');
     
@@ -53,20 +54,47 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const onSelectItemRef = useRef(onSelectItem);
     const isDarkModeRef = useRef(isDarkMode);
     const onBoundsChangeRef = useRef(onBoundsChange);
+    const clusteringEnabledRef = useRef(clusteringEnabled);
 
     // Debounce timer for moveend
     const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    /**
+     * When true, the next moveend event (caused by a programmatic flyTo)
+     * will NOT trigger a BBox refetch. The MarkerManager sets this flag via
+     * the onBeforeFly callback before every camera animation.
+     * Cleared immediately after the suppressed moveend fires.
+     */
+    const suppressBoundsRef = useRef(false);
+
+    // Stable callback passed to MarkerManager — called before every flyTo so we
+    // can suppress the resulting moveend BBox emission.
+    const onBeforeFly = useCallback(() => {
+        suppressBoundsRef.current = true;
+    }, []);
+
     const emitBounds = useCallback((map: LeafletMap) => {
         if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
         boundsDebounceRef.current = setTimeout(() => {
+            // If a programmatic flyTo just fired this moveend, skip the fetch.
+            if (suppressBoundsRef.current) {
+                suppressBoundsRef.current = false;
+                return;
+            }
+
             const b = map.getBounds();
-            onBoundsChangeRef.current?.({
+            const bbox: BBox = {
                 minLat: b.getSouth(),
                 maxLat: b.getNorth(),
                 minLng: b.getWest(),
                 maxLng: b.getEast(),
-            });
+                // Always forward zoom — the API decides whether to cluster based on it.
+                zoom: map.getZoom(),
+                // If the user has force-enabled individual pins (power-user toggle),
+                // tell the API to skip server-side clustering even at low zoom.
+                forceRaw: clusteringEnabledRef.current,
+            };
+            onBoundsChangeRef.current?.(bbox);
         }, 400);
     }, []);
 
@@ -81,6 +109,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     useEffect(() => {
         onBoundsChangeRef.current = onBoundsChange;
     }, [onBoundsChange]);
+
+    useEffect(() => {
+        clusteringEnabledRef.current = clusteringEnabled;
+    }, [clusteringEnabled]);
 
     useEffect(() => {
         selectedIdRef.current = selectedItemId;
@@ -104,7 +136,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         };
     }, [settingsOpen]);
 
-    // initialize map with smooth zoom and marker management
+    // Initialize map with smooth zoom and marker management
     useEffect(() => {
         if (!containerRef.current) return;
 
@@ -119,15 +151,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             
             const L = LRef.current;
 
-            // check if map is still relevant before initializing
             if (aborted) return;
             if (initializedRef.current && mapRef.current) return;
 
-
-
             const container = containerRef.current!;
             
-            // clear leaflet internal state if it exists to allow re-initialization
+            // Clear leaflet internal state if it exists to allow re-initialization
             if ((container as unknown as Record<string, unknown>)._leaflet_id) {
                 delete (container as unknown as Record<string, unknown>)._leaflet_id;
             }
@@ -157,18 +186,18 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 onSelectItemRef.current(null);
             });
 
-
             markerManagerRef.current = new MarkerManager(
                 map, 
                 L, 
                 (id) => onSelectItemRef.current(id),
-                () => selectedIdRef.current
+                () => selectedIdRef.current,
+                onBeforeFly,  // <-- suppress flag setter
             );
 
             mapRef.current = map;
             initializedRef.current = true;
             
-            // delay helps Leaflet calculate container dimensions correctly after mount
+            // Delay helps Leaflet calculate container dimensions correctly after mount
             setTimeout(() => {
                 if (!aborted && mapRef.current) {
                     mapRef.current.invalidateSize();
@@ -199,14 +228,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 setMapReady(false);
             }
         };
-    }, []);
+    }, [onBeforeFly]);
 
-    // update style when isDarkMode prop changes
+    // Update style when isDarkMode prop changes
     useEffect(() => {
         setCurrentStyle(isDarkMode ? 'dark' : 'standard');
     }, [isDarkMode]);
 
-    // update tile layer when style changes
+    // Update tile layer when style changes
     useEffect(() => {
         if (!mapRef.current || !mapReady || !LRef.current) return;
         const L = LRef.current;
@@ -235,7 +264,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
     }, [currentStyle, mapReady]);
 
-    // handle container resizing
+    // Handle container resizing
     useEffect(() => {
         if (!mapReady || !mapRef.current || !containerRef.current) return;
         const resizeObserver = new ResizeObserver(() => {
@@ -245,9 +274,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         return () => resizeObserver.disconnect();
     }, [mapReady]);
 
-
     // Register the moveend → BBox emission listener.
-    // Must be its own effect so emitBounds is a stable dep (it's a useCallback).
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
         const map = mapRef.current;
@@ -262,7 +289,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
         // Patch any already-open popups whose descriptions have since been loaded
         geoItems.forEach(item => {
-            if (item.description) {
+            if (item.description !== undefined) {
                 markerManagerRef.current?.updatePopupDescription(item.id, item.description);
             }
         });

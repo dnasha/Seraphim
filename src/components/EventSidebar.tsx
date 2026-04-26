@@ -9,6 +9,7 @@ import { NewsItem } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
 import { ReactNode, useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import styles from './EventSidebar.module.css';
 
 // Category colors (pending extraction to shared lib/colors)
@@ -51,9 +52,6 @@ interface EventSidebarProps {
     selectionVersion: number;
     onSelectItem: (id: string | null) => void;
     isLoading: boolean;
-    hasMore?: boolean;
-    isLoadingMore?: boolean;
-    onLoadMore?: () => void;
     /** Called when a card is expanded to lazily fetch its description */
     onFetchDetails?: (id: string) => void;
     filterBar: ReactNode;
@@ -71,9 +69,6 @@ export default function EventSidebar({
     selectionVersion,
     onSelectItem,
     isLoading,
-    hasMore,
-    isLoadingMore,
-    onLoadMore,
     onFetchDetails,
     filterBar,
     isDarkMode,
@@ -83,10 +78,16 @@ export default function EventSidebar({
     onRefresh,
     mounted,
 }: EventSidebarProps) {
-    // References to card elements for auto-scrolling
-    const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    // Reference to Virtuoso for auto-scrolling
+    const virtuosoRef = useRef<VirtuosoHandle>(null);
     // track which card is expanded (for unmapped articles)
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    // Sum eventCount so server-side cluster rows contribute their full weight.
+    // Cluster rows have eventCount > 1; individual rows default to 1.
+    const totalEventCount = useMemo(() => {
+        return items.reduce((sum, item) => sum + (item.eventCount ?? 1), 0);
+    }, [items]);
 
     // Get timestamp of the newest event in the current list
     const newestEventTime = useMemo(() => {
@@ -98,11 +99,11 @@ export default function EventSidebar({
     // auto-scroll the selected card into view when selection changes
     useEffect(() => {
         if (!selectedItemId) return;
-        const el = cardRefs.current.get(selectedItemId);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const index = items.findIndex(i => i.id === selectedItemId);
+        if (index >= 0 && virtuosoRef.current) {
+            virtuosoRef.current.scrollToIndex({ index, align: 'start', behavior: 'smooth' });
         }
-    }, [selectedItemId, selectionVersion]);
+    }, [selectedItemId, selectionVersion, items]);
 
     const handleCardClick = useCallback((item: NewsItem) => {
         const hasGeo = item.latitude != null;
@@ -118,10 +119,6 @@ export default function EventSidebar({
             // if selecting a mapped item, collapse any unmapped expansion
             if (!isSelected) {
                 setExpandedId(null);
-                // Trigger description fetch so the popup can show it on open
-                if (!item.description) {
-                    onFetchDetails?.(item.id);
-                }
                 // on mobile, close the sidebar so the map is fully visible
                 if (isMobile()) {
                     onToggleSidebar();
@@ -134,7 +131,8 @@ export default function EventSidebar({
             setExpandedId(nextExpanded);
 
             // Trigger description fetch if expanding and description not yet loaded
-            if (nextExpanded && !item.description) {
+            // Use === undefined (not !item.description) — empty string means "loaded but blank"
+            if (nextExpanded && item.description === undefined) {
                 onFetchDetails?.(item.id);
             }
 
@@ -147,47 +145,29 @@ export default function EventSidebar({
 
 
 
-    const eventListContent = useMemo(() => {
-        if (isLoading && items.length === 0) {
-            return (
-                <div className={styles.eventListLoading}>
-                    <div className={styles.loadingSpinner} />
-                    <p>Scanning sources…</p>
-                </div>
-            );
+    const renderItem = useCallback((index: number, item: NewsItem) => {
+        const isSelected = item.id === selectedItemId;
+        const hasGeo = item.latitude != null;
+        const isExpanded = expandedId === item.id || item.id === selectedItemId;
+        const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
+        let timeAgo = '';
+        try {
+            timeAgo = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
+        } catch {
+            timeAgo = '';
         }
 
-        if (items.length === 0) {
-            return (
-                <div className={styles.eventListEmpty}>
-                    <h3>No events found</h3>
-                    <p>Try adjusting your filters</p>
-                </div>
-            );
-        }
-
-        return items.map(item => {
-            const isSelected = item.id === selectedItemId;
-            const hasGeo = item.latitude != null;
-            const isExpanded = expandedId === item.id || item.id === selectedItemId;
-            const catColor = CATEGORY_COLORS[item.category || 'general'] || CATEGORY_COLORS.general;
-            let timeAgo = '';
-            try {
-                timeAgo = formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true });
-            } catch {
-                timeAgo = '';
-            }
-
-            return (
+        return (
+            // wrapper div gives each Virtuoso item the gap and side padding
+            // we remove padding from the parent so the scrollbar sits at the very edge
+            <div style={{ 
+                paddingBottom: '6px', 
+                paddingLeft: '10px', 
+                paddingRight: '10px',
+                paddingTop: index === 0 ? '10px' : '0'
+            }}>
                 <div
                     key={item.id}
-                    ref={(el) => {
-                        if (el) {
-                            cardRefs.current.set(item.id, el);
-                        } else {
-                            cardRefs.current.delete(item.id);
-                        }
-                    }}
                     // Selection and layout state classes
                     className={[
                         styles.eventCard,
@@ -273,11 +253,14 @@ export default function EventSidebar({
                                     />
                                 </div>
                             )}
-                            {/* Show skeleton while description loads, then the text */}
-                            {item.description ? (
-                                <p className={styles.eventCardDetailDesc}>
-                                    {item.description}
-                                </p>
+                            {/* Show skeleton while description loads, then the text.
+                                Check != null (not falsy) so empty string '' means "loaded, no description" */}
+                            {item.description != null ? (
+                                item.description ? (
+                                    <p className={styles.eventCardDetailDesc}>
+                                        {item.description}
+                                    </p>
+                                ) : null
                             ) : (
                                 <div className={styles.descriptionSkeleton}>
                                     <div className={styles.skeletonLine} />
@@ -296,9 +279,9 @@ export default function EventSidebar({
                         </div>
                     )}
                 </div>
-            );
-        });
-    }, [items, selectedItemId, expandedId, isLoading, handleCardClick]);
+            </div>
+        );
+    }, [selectedItemId, expandedId, handleCardClick]);
 
     return (
         <aside className={[
@@ -364,7 +347,7 @@ export default function EventSidebar({
                     </span>
                 )}
                 <span className={styles.statPill}>
-                    {items.length} events found
+                    {totalEventCount.toLocaleString()} events found
                 </span>
                 <button
                     className={`${styles.refreshButton} ${isLoading ? styles.refreshButtonLoading : ''}`}
@@ -382,15 +365,24 @@ export default function EventSidebar({
             {filterBar}
 
             <div className={styles.eventList}>
-                {eventListContent}
-                {hasMore && items.length > 0 && (
-                    <button 
-                        className={styles.loadMoreButton} 
-                        onClick={onLoadMore}
-                        disabled={isLoadingMore}
-                    >
-                        {isLoadingMore ? 'Loading...' : 'Load More'}
-                    </button>
+                {(isLoading && items.length === 0) ? (
+                    <div className={styles.eventListLoading}>
+                        <div className={styles.loadingSpinner} />
+                        <p>Scanning sources…</p>
+                    </div>
+                ) : items.length === 0 ? (
+                    <div className={styles.eventListEmpty}>
+                        <h3>No events found</h3>
+                        <p>Try adjusting your filters</p>
+                    </div>
+                ) : (
+                    <Virtuoso
+                        ref={virtuosoRef}
+                        data={items}
+                        style={{ height: '100%', width: '100%' }}
+                        itemContent={(index, item) => renderItem(index, item)}
+                        overscan={200}
+                    />
                 )}
             </div>
         </aside>

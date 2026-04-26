@@ -47,6 +47,7 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Performance**: `preferCanvas: true`, `will-change` hints, `backface-visibility: hidden` isolation, aggressive memoization of the card list.
 - **Security**: URL protocol validation in scraper, RLS policies on Supabase, `SUPABASE_SERVICE_ROLE_KEY` never exposed to client (only anon key used in route.ts).
 - **Analytics**: `@vercel/analytics` and `@vercel/speed-insights` integrated.
+- **Dependency Upgrades**: Upgraded to **Next.js 16.2.4**, **React 19.2.5**, and **TypeScript 6.0.3**. Verified all peer dependencies and resolved PostCSS security vulnerabilities via `overrides`.
 
 ### Phase 0: Housekeeping & Foundations
 
@@ -56,11 +57,11 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Testing Infrastructure**: Installed Vitest with 127 tests across 6 suites covering utilities, data transforms, geocoding engine (50+ headline cases), enricher pipeline, filter logic, and accuracy regression. Achieved **96.5% accuracy** on a 256-sample graded corpus, significantly exceeding the initial <10% failure target. Extracted `cleanString`/`newsItemToDbEvent` to `src/scraper/utils/transforms.ts` and filter logic to `src/lib/filters.ts` for testability. Added CI workflow (`.github/workflows/test.yml`) and `npm test` / `npm run test:watch` / `npm run test:accuracy` scripts.
 - **Geocoding Accuracy (v2)**: Restored single-word scanning with strict population-based filtering (min 5,000 for standard cities) and type-based priority. Refined synonym matching and admin1 weighting to reduce false positives from actors (e.g., "U.S.") while prioritizing event locations.
 - **Infrastructure & DX**:
-    - Fixed Bun lockfile synchronization issues in GitHub Actions CI.
-    - Refactored `src/lib/rss.ts` to use standard ES module imports and replaced `@ts-ignore` with `@ts-expect-error`.
-    - Sanitized test files in `scripts/tests` by removing non-standard em-dash characters from comments for better cross-platform compatibility.
+  - Fixed Bun lockfile synchronization issues in GitHub Actions CI.
+  - Refactored `src/lib/rss.ts` to use standard ES module imports and replaced `@ts-ignore` with `@ts-expect-error`.
+  - Sanitized test files in `scripts/tests` by removing non-standard em-dash characters from comments for better cross-platform compatibility.
 - **Animation Restoration**: Fixed broken loading wheel and refresh animations caused by CSS modularization. Defined local `@keyframes spin` within `EventSidebar.module.css` to ensure self-contained, reliable UI feedback.
-- **API Route Hardening**: Implemented cursor-based pagination and a `?include_unmapped=true` flag in `/api/news/route.ts` to reduce payload sizes and support "load more" infinite scrolling in the UI. 
+- **API Route Hardening**: Implemented cursor-based pagination and a `?include_unmapped=true` flag in `/api/news/route.ts` to reduce payload sizes and support "load more" infinite scrolling in the UI.
 - **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Evaluated `EventSidebar` render performance (stable at current scales) and documented Leaflet `preferCanvas` limitations with `DivIcon` elements for future MapLibre migration context.
 
 ### Phase 1: API & Data Fetching (Scale Enablers)
@@ -69,27 +70,25 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Supabase Realtime**: Replaced 15-minute polling with a Supabase Realtime `INSERT` subscription. Implemented client-side viewport filtering so only events within the current bounding box are injected into the UI, reducing noise and re-render cycles.
 - **Database Egress Optimization**: Optimized initial list fetch by excluding the `description` field (~40% payload reduction). Implemented an on-demand detail endpoint (`/api/news/[id]`) that lazy-loads descriptions when a user expands a sidebar card or clicks a map pin.
 - **Live-Patching Map Popups**: Implemented a specialized `updatePopupDescription` mechanism in `MarkerManager` that patches live Leaflet popups and their internal `setContent` buffers when lazy-loaded data arrives, avoiding costly marker re-creations.
-- **Stability Fixes**: Removed automatic map panning/zooming on data refresh and filter changes to resolve "navigation loops" (where a pan triggers a fetch, which triggers a pan). Fixed React `useEffect` dependency warnings related to the `moveend` listener.
+- **Sidebar Virtualization**: Integrated `react-virtuoso` to replace the standard `.map()` card list. Reduced DOM node count from 500+ to ~15 constant nodes. Refactored auto-scroll logic to use `virtuosoRef.current.scrollToIndex` for perfect synchronization with map selection.
+- **Server-Side Clustering (ST_ClusterDBSCAN)**: Implemented support for the `public.get_clustered_events` Supabase RPC. The API now returns aggregated cluster objects (`clusterId`, `eventCount`) when zoomed out, drastically reducing JSON payload size.
+- **Native Cluster Rendering**: Updated `MarkerManager` to detect and render server-side clusters using custom `.cluster-icon` styles, providing a seamless visual transition from individual pins to grouped data.
+- **Frontend Event System Rethink**:
+  - **Viewport-Driven Fetching**: Removed manual pagination. The map BBox + current Zoom + active TimeRange is now the single source of truth for the data window.
+  - **Time-Aware Clustering**: Updated the Supabase RPC and API route to accept a `since` timestamp, ensuring server-side clusters respect the client's time filter.
+  - **Smart Camera Behavior**: Implemented a suppression system (`onBeforeFly`) to prevent selection-triggered zooms from causing redundant BBox re-fetches. Added `lastFlewToId` tracking to prevent jitter/rubber-banding.
+  - **Stability & Performance Fixes**:
+    - **BBox Snapping Grid**: Implemented a dynamic grid system (0.5 to 10 degrees) in `useNewsData.ts` to expand bounding box queries. This maximizes client-side cache hits during panning, drastically reducing database read volume and providing near-instant UI feedback.
+    - **Synthetic Cluster IDs**: Resolved the "stuck cluster" bug by assigning unique IDs (`cluster-[zoom]-[id]`) to server-side clusters in the API route. This ensures proper marker destruction when transitioning between zoom levels.
+    - **Realtime Cache Consistency**: Updated the Supabase Realtime handler to inject newly inserted events into the `bboxCache`. This prevents new items from disappearing when the user pans the map immediately after a data arrival.
+    - **Navigation Loop Resolution**: Removed automatic map panning/zooming on data refresh and filter changes. Fixed React `useEffect` dependency warnings and properly type-cast API query builders.
+- **Large Set Protection**: Integrated automatic server-side clustering at zoom < 5.
 
----
+## Phase 2: UI Rendering & Performance (Browser Savers)
 
+### Virtualize the Sidebar
 
-
----
-
-## 🚀 Phase 1: API & Data Fetching (Scale Enablers)
-
-_Goal: Make the browser download only what it needs. Required before the dataset exceeds ~1,000 events._
-
-- **Action**: Implement frontend support for the `ST_ClusterDBSCAN` Supabase RPC function (SQL defined in `artifacts/supabase_setup.md`).
-- **Response shape**: Modify API to return `{ cluster_id, event_count, center_lat, center_lng }` for clusters and full event objects for individual points when `zoom < threshold`.
-- **Benefit**: Instead of sending 200 pins for Kyiv, send 1 cluster object. Drastically reduces JSON payload and DOM element count.
-
-### 1.2 — Sidebar Virtualization (React Window)
-
-- **Action**: Integrate `react-window` or `virtuoso` into `EventSidebar.tsx`.
-- **Why**: Currently, rendering 500+ cards with images causes layout thrashing and slow scrolling. Virtualization ensures only ~10 cards are in the DOM at any time.
-
+- **Status**: Done via `react-virtuoso`. Sidebar now scales to 5,000+ items with zero impact on main-thread responsiveness. Auto-scroll logic synced with `scrollToIndex`.
 
 ---
 
@@ -105,16 +104,10 @@ _Goal: Handle 5,000+ events without the tab freezing._
   - Rewrite `NewsMap.tsx` to use `maplibre-gl` directly (or `react-map-gl` with MapLibre adapter).
   - The custom smooth zoom system (sub-pixel patching, `_move()` calls) becomes unnecessary — MapLibre's zoom is already fluid and GPU-accelerated.
   - Popup and marker styling moves from CSS/DOM to MapLibre's `Popup` class and symbol/circle layers.
-  - Map style tiles: switch to **Protomaps PMTiles** served from Cloudflare R2 for $0 egress. Or use MapTiler/Stadia free tiers initially.
+  - Map style tiles: Initially maintain existing **raster providers** (Voyager/Dark) to focus on the WebGL marker transition. Once stable, migrate to **Protomaps PMTiles** served from Cloudflare R2 for vector support and $0 egress.
 - **Risk**: This is the single largest refactor. Plan for a feature branch with 2–3 focused sessions.
 
-### 2.2 — Virtualize the Sidebar
-
-- **Why**: `EventSidebar.tsx` currently renders **every** card via `.map()` (line 142). With 500 items this is already borderline; with 5,000 it will freeze the tab for seconds.
-- **Action**: Install `react-virtuoso` (or `@tanstack/react-virtual`). Replace the `.event-list` div with a virtualized container that only renders the ~10–15 cards visible in the scroll viewport.
-- **Detail**: The auto-scroll-to-selected-card behavior (line 86–91) needs to use the virtualizer's `scrollToIndex` API instead of `el.scrollIntoView`.
-
-### 2.3 — Dynamic Layering (Zoom-Dependent Visualization)
+### 2.2 — Dynamic Layering (Zoom-Dependent Visualization)
 
 - **Action**: After the MapLibre migration, implement zoom-dependent rendering layers:
   - **Zoom 1–4 (Global)**: Heatmap layer or H3 hexbin aggregation. Show glowing hotspot regions.
@@ -238,13 +231,13 @@ _Goal: Turn Seraphim from a project into a product._
 
 ## Tech Stack Evolution
 
-| Component             | Current (v1)                      | Target (v2)                         | Why                                          |
-| --------------------- | --------------------------------- | ----------------------------------- | -------------------------------------------- |
-| **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)              | GPU rendering: 100K+ points vs. ~2K ceiling  |
-| **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2  | Vector tiles, $0 egress, custom styling      |
-| **Sidebar Rendering** | Raw `.map()` over all items       | `react-virtuoso` virtualized list   | Only renders ~15 visible cards vs. all 5,000 |
-| **Data Fetching**     | Fetch all 500, filter client-side | BBox + server-cluster queries       | 10× smaller payloads, no wasted bandwidth    |
-| **Realtime Updates**  | 15-minute polling                 | Supabase Realtime WebSocket         | Sub-second new event delivery                |
-| **Deduplication**     | URL unique constraint only        | `pgvector` semantic clustering      | "Stories" instead of 5 redundant pins        |
-| **Hosting**           | `localhost` / Vercel dev          | `seraphi.me` on Vercel + Cloudflare | Public-facing, CDN-cached, zero-downtime     |
-| **Auth**              | None                              | Supabase Auth + Stripe              | User accounts, saved views, Pro tier         |
+| Component             | Current (v1)                      | Target (v2)                        | Why                                          |
+| --------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------- |
+| **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | GPU rendering: 100K+ points vs. ~2K ceiling  |
+| **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
+| **Sidebar Rendering** | `react-virtuoso` virtualized list | (Completed)                        | Only renders ~15 visible cards vs. all 5,000 |
+| **Data Fetching**     | BBox + server-cluster queries     | (Completed)                        | 10× smaller payloads, no wasted bandwidth    |
+| **Realtime Updates**  | Supabase Realtime WebSocket       | (Completed)                        | Sub-second new event delivery                |
+| **Deduplication**     | URL unique constraint only        | `pgvector` semantic clustering     | "Stories" instead of 5 redundant pins        |
+| **Hosting**           | `seraphi.me` on Vercel            | (Completed)                        | Public-facing, CDN-cached, zero-downtime     |
+| **Auth**              | None                              | Supabase Auth + Stripe             | User accounts, saved views, Pro tier         |

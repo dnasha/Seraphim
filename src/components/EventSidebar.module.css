@@ -210,11 +210,9 @@
 /* Event list */
 .eventList {
   flex: 1;
-  overflow-y: auto;
-  padding: 8px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
   will-change: transform;
   backface-visibility: hidden;
 }

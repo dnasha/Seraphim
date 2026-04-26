@@ -19,19 +19,22 @@ const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap
 
 export default function Home() {
     const [mappedOnly, setMappedOnly] = useState(true);
+    // timeRange lives here so both useNewsData (server-side filtering)
+    // and useNewsFilter (client-side filtering) share the same value.
+    const [timeRange, setTimeRange] = useState('1d');
 
     // Data and Filter State
-    const { news, isLoading, isLoadingMore, hasMore, error, fetchNews, loadMore, onBoundsChange, fetchEventDetails } = useNewsData({ 
-        includeUnmapped: !mappedOnly 
+    const { news, isLoading, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+        includeUnmapped: !mappedOnly,
+        timeRange,
     });
     
     const {
         sources, setSources,
         categories, setCategories,
-        timeRange, setTimeRange,
         searchQuery, setSearchQuery,
         filteredNews
-    } = useNewsFilter(news, mappedOnly);
+    } = useNewsFilter(news, mappedOnly, timeRange);
 
     // UI State
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -69,6 +72,16 @@ export default function Home() {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
     }, []);
+
+    // Lazy load description whenever an item is selected (from sidebar or map)
+    useEffect(() => {
+        if (selectedItemId) {
+            const item = news.find(i => i.id === selectedItemId);
+            if (item && item.description === undefined) {
+                fetchEventDetails(selectedItemId);
+            }
+        }
+    }, [selectedItemId, news, fetchEventDetails]);
 
     // Reusable UI Slots
     const filterBarSlot = (
@@ -113,9 +126,6 @@ export default function Home() {
                 selectionVersion={selectionVersion}
                 onSelectItem={handleSelectItem}
                 isLoading={isLoading}
-                hasMore={hasMore}
-                isLoadingMore={isLoadingMore}
-                onLoadMore={loadMore}
                 onFetchDetails={fetchEventDetails}
                 onRefresh={() => fetchNews(true)}
                 isOpen={isSidebarOpen}

@@ -18,6 +18,8 @@ export interface NewsItem {
   locationName?: string;
   foundLocations?: string[];
   tags?: string[];
+  clusterId?: number;
+  eventCount?: number;
 }
 
 export interface NewsResponse {

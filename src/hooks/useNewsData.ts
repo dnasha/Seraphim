@@ -5,20 +5,27 @@ import { createClient } from '@supabase/supabase-js';
 /*
   Dan Sharan
 
-  useNewsData — React hook for fetching and polling news data.
+  useNewsData — React hook for fetching news data driven by the map viewport.
 
   Key behaviors:
-  - Initial fetch: all mapped events (no BBox, no description).
-  - BBox fetch: when the user pans the map, fetches events for that viewport.
-    Results are cached in a client-side Map keyed by bbox string so panning
-    back to a previously-seen area does not hit the server.
-  - On-demand detail: fetchEventDetails(id) hits /api/news/[id] and patches
-    the description into the existing item in place.
+  - Initial fetch: all mapped events (no BBox, no description) as a safe default
+    while the map initializes and emits its first bounds.
+  - BBox fetch: every time the user pans or zooms, the map calls onBoundsChange
+    with the new viewport. Results are cached client-side (bbox+timeRange key →
+    items) so panning back to a seen area skips the DB round-trip.
+  - Zoom-aware: zoom is always forwarded to the API. At zoom < 5 the API
+    automatically returns server-side cluster objects, protecting the client from
+    large DOM counts at global scale.
+  - Time-aware: the active timeRange is forwarded to the API so server-side
+    clustering respects the same time window the client uses. When timeRange
+    changes, the client cache is invalidated and the current view refetches.
+  - Force-raw: power users can enable the manual cluster toggle which sets
+    forceRaw=true, bypassing server-side clustering.
+  - On-demand detail: fetchEventDetails(id) hits /api/news/[id] and patches the
+    description into the existing item in place.
   - Realtime: subscribes to Supabase INSERT events. New rows within the current
-    bounding box are prepended to the list without a full refetch. Rows outside
-    the bbox are silently ignored (no stale data, no wasted re-renders).
-  - Fallback polling: 15-minute setInterval remains as a heartbeat in case
-    the WebSocket connection drops.
+    bounding box are prepended to the list without a full refetch.
+  - Fallback polling: 15-minute setInterval heartbeat in case the WebSocket drops.
 */
 
 export interface BBox {
@@ -26,14 +33,41 @@ export interface BBox {
     maxLat: number;
     minLng: number;
     maxLng: number;
+    zoom?: number;
+    forceRaw?: boolean;
+    /** ISO timestamp — events older than this are excluded server-side. */
+    since?: string;
+    /** Human-readable label used in the cache key (e.g. '1d', '1w'). */
+    timeRange?: string;
 }
 
 // Supabase client for Realtime only — read-only anon key
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+function snapBBox(b: BBox): BBox {
+    const z = b.zoom || 5;
+    const grid = z < 4 ? 10 : z < 7 ? 4 : z < 10 ? 1 : 0.5;
+    return {
+        ...b,
+        minLat: Math.floor(b.minLat / grid) * grid,
+        maxLat: Math.ceil(b.maxLat / grid) * grid,
+        minLng: Math.floor(b.minLng / grid) * grid,
+        maxLng: Math.ceil(b.maxLng / grid) * grid,
+        zoom: Math.round(z),
+    };
+}
+
 function bboxKey(b: BBox) {
-    return `${b.minLat.toFixed(4)},${b.maxLat.toFixed(4)},${b.minLng.toFixed(4)},${b.maxLng.toFixed(4)}`;
+    return [
+        b.minLat.toFixed(4),
+        b.maxLat.toFixed(4),
+        b.minLng.toFixed(4),
+        b.maxLng.toFixed(4),
+        b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
+        b.timeRange ? `tr:${b.timeRange}` : '',
+        b.forceRaw ? 'raw' : '',
+    ].filter(Boolean).join(',');
 }
 
 function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
@@ -46,40 +80,50 @@ function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
     );
 }
 
-// Client-side cache: bbox key → NewsItem array
-// Prevents duplicate DB hits when the user pans back to an area they've seen
-const bboxCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
+/** Convert a timeRange label to an ISO timestamp for server-side filtering. */
+function computeSince(timeRange: string): string | null {
+    const now = Date.now();
+    const ms: Record<string, number> = {
+        '1d': 24 * 60 * 60 * 1000,
+        '3d': 3 * 24 * 60 * 60 * 1000,
+        '1w': 7 * 24 * 60 * 60 * 1000,
+        '1m': 30 * 24 * 60 * 60 * 1000,
+    };
+    return ms[timeRange] ? new Date(now - ms[timeRange]).toISOString() : null;
+}
+
+// Client-side cache: bbox+timeRange key → NewsItem array
+const bboxCache = new Map<string, { bbox: BBox; data: NewsItem[]; timestamp: number }>();
 const BBOX_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
-export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
+export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: boolean; timeRange: string }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-    const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-    // Track the current bounding box so Realtime can filter incoming events
+    // Track the current bounding box so Realtime and heartbeat can filter/refetch correctly
     const currentBBoxRef = useRef<BBox | null>(null);
+    const timeRangeRef = useRef(timeRange);
 
     // Client-side description cache: id → description string
-    // Prevents re-fetching when a user collapses and re-expands a card
     const descriptionCache = useRef<Map<string, string>>(new Map());
 
     // -------------------------------------------------------------------------
     // Core list fetch (initial + BBox changes + manual refresh)
     // -------------------------------------------------------------------------
-    const fetchNews = useCallback(async (isRefresh = false, bbox?: BBox) => {
+    const fetchNews = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
         setIsLoading(true);
         setError(null);
 
-        // If a bbox is given, check the client-side cache first
+        const bbox = rawBBox ? snapBBox(rawBBox) : undefined;
+
+        // Check client-side cache first (skip on forced refresh)
         if (bbox && !isRefresh) {
             const key = bboxKey(bbox);
             const cached = bboxCache.get(key);
             if (cached && Date.now() - cached.timestamp < BBOX_CACHE_TTL) {
                 setNews(cached.data);
-                setNextCursor(null);
                 setIsLoading(false);
                 return;
             }
@@ -94,6 +138,9 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
                 params.append('maxLat', String(bbox.maxLat));
                 params.append('minLng', String(bbox.minLng));
                 params.append('maxLng', String(bbox.maxLng));
+                if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
+                if (bbox.forceRaw) params.append('force_raw', 'true');
+                if (bbox.since) params.append('since', bbox.since);
             }
 
             const res = await fetch(`/api/news?${params.toString()}`);
@@ -109,11 +156,10 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
 
             // Update client-side bbox cache
             if (bbox) {
-                bboxCache.set(bboxKey(bbox), { data: enriched, timestamp: Date.now() });
+                bboxCache.set(bboxKey(bbox), { bbox, data: enriched, timestamp: Date.now() });
             }
 
             setNews(enriched);
-            setNextCursor(data.nextCursor || null);
             setLastUpdated(new Date().toISOString());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -123,28 +169,43 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
     }, [includeUnmapped]);
 
     // -------------------------------------------------------------------------
+    // Re-fetch when timeRange changes — invalidate cache and reload current view
+    // -------------------------------------------------------------------------
+    useEffect(() => {
+        const prevTimeRange = timeRangeRef.current;
+        timeRangeRef.current = timeRange;
+
+        if (prevTimeRange === timeRange) return; // no actual change on mount
+
+        // Invalidate all cached results — they may span a different time window
+        bboxCache.clear();
+
+        const currentBBox = currentBBoxRef.current;
+        if (currentBBox) {
+            const since = computeSince(timeRange);
+            fetchNews(false, { ...currentBBox, since: since ?? undefined, timeRange });
+        } else {
+            fetchNews();
+        }
+    }, [timeRange, fetchNews]);
+
+    // -------------------------------------------------------------------------
     // On-demand detail fetch (description lazy-load)
     // -------------------------------------------------------------------------
     const fetchEventDetails = useCallback(async (id: string) => {
-        // Check client-side description cache first
-        if (descriptionCache.current.has(id)) {
-            return; // Already loaded; EventSidebar will read from `news` state
-        }
+        if (descriptionCache.current.has(id)) return;
 
         try {
             const res = await fetch(`/api/news/${id}`);
             if (!res.ok) return;
             const { description } = await res.json() as { description: string };
 
-            // Persist in client cache so collapsing and re-expanding is instant
             descriptionCache.current.set(id, description);
 
-            // Patch the description into the existing item in state
             setNews(prev =>
                 prev.map(item => (item.id === id ? { ...item, description } : item))
             );
 
-            // Also update the bbox cache so the description survives a bbox refetch
             bboxCache.forEach((entry, key) => {
                 const updated = entry.data.map(item =>
                     item.id === id ? { ...item, description } : item
@@ -157,51 +218,18 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
     }, []);
 
     // -------------------------------------------------------------------------
-    // Load more (cursor pagination)
-    // -------------------------------------------------------------------------
-    const lastLoadMoreTime = useRef(0);
-    const LOAD_MORE_COOLDOWN = 1500;
-
-    const loadMore = useCallback(async () => {
-        const now = Date.now();
-        if (!nextCursor || isLoadingMore) return;
-        if (now - lastLoadMoreTime.current < LOAD_MORE_COOLDOWN) {
-            console.warn('[useNewsData] Load more throttled');
-            return;
-        }
-
-        setIsLoadingMore(true);
-        lastLoadMoreTime.current = now;
-        setError(null);
-
-        try {
-            const params = new URLSearchParams();
-            if (includeUnmapped) params.append('include_unmapped', 'true');
-            params.append('cursor', nextCursor);
-
-            const res = await fetch(`/api/news?${params.toString()}`);
-            if (res.status === 429) {
-                const data = await res.json();
-                throw new Error(data.error || 'Too many requests');
-            }
-            if (!res.ok) throw new Error('Failed to load more news');
-
-            const data: NewsResponse = await res.json();
-            setNews(prev => [...prev, ...data.items]);
-            setNextCursor(data.nextCursor || null);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoadingMore(false);
-        }
-    }, [nextCursor, isLoadingMore, includeUnmapped]);
-
-    // -------------------------------------------------------------------------
     // Bounding-box change handler (called from NewsMap via page.tsx)
+    // Injects the current since timestamp so the server filters by time.
     // -------------------------------------------------------------------------
     const onBoundsChange = useCallback((bbox: BBox) => {
-        currentBBoxRef.current = bbox;
-        fetchNews(false, bbox);
+        const since = computeSince(timeRangeRef.current);
+        const enrichedBBox: BBox = {
+            ...bbox,
+            since: since ?? undefined,
+            timeRange: timeRangeRef.current,
+        };
+        currentBBoxRef.current = enrichedBBox;
+        fetchNews(false, enrichedBBox);
     }, [fetchNews]);
 
     // -------------------------------------------------------------------------
@@ -248,18 +276,23 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
                         longitude: row.longitude ?? undefined,
                         locationName: row.location_name ?? undefined,
                         tags: row.tags ?? undefined,
-                        // description intentionally omitted — loaded on demand
                     };
 
-                    // Only add the event if it falls within the user's current view.
-                    // If there is no bbox (global view), add everything.
                     const bbox = currentBBoxRef.current;
                     if (bbox && !isWithinBBox(newItem, bbox)) return;
 
                     setNews(prev => {
-                        // Guard against duplicate inserts (Realtime can replay)
                         if (prev.some(p => p.id === newItem.id)) return prev;
-                        return [newItem, ...prev];
+                        const updated = [newItem, ...prev];
+                        
+                        // Update all cache entries that contain this new item
+                        bboxCache.forEach((entry, key) => {
+                            if (isWithinBBox(newItem, entry.bbox)) {
+                                bboxCache.set(key, { ...entry, data: [newItem, ...entry.data] });
+                            }
+                        });
+                        
+                        return updated;
                     });
                     setLastUpdated(new Date().toISOString());
                 }
@@ -280,25 +313,23 @@ export function useNewsData({ includeUnmapped }: { includeUnmapped: boolean }) {
 
     useEffect(() => {
         const interval = setInterval(() => {
-            // Heartbeat: if we have an active bbox, refetch that view; otherwise global
-            if (currentBBoxRef.current) {
-                fetchNews(true, currentBBoxRef.current);
+            const bbox = currentBBoxRef.current;
+            if (bbox) {
+                const since = computeSince(timeRangeRef.current);
+                fetchNews(true, { ...bbox, since: since ?? undefined, timeRange: timeRangeRef.current });
             } else {
                 fetchNews(true);
             }
-        }, 15 * 60 * 1000); // 15 minutes
+        }, 15 * 60 * 1000);
         return () => clearInterval(interval);
     }, [fetchNews]);
 
     return {
         news,
         isLoading,
-        isLoadingMore,
-        hasMore: !!nextCursor,
         error,
         lastUpdated,
         fetchNews,
-        loadMore,
         onBoundsChange,
         fetchEventDetails,
     };

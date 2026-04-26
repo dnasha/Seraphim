@@ -7,12 +7,15 @@ import { applyNewsFilters } from '@/lib/filters';
   
   useNewsFilter — React hook for client-side news filtering.
   Delegates pure filtering logic to applyNewsFilters() for testability.
+
+  timeRange is now owned by the parent (page.tsx) so it can be shared with
+  useNewsData, which forwards it to the API for server-side time filtering
+  during clustering queries.
 */
 
-export function useNewsFilter(news: NewsItem[], mappedOnly: boolean) {
+export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
-    const [timeRange, setTimeRange] = useState<string>('1d');
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     
@@ -52,7 +55,6 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean) {
     return {
         sources, setSources,
         categories, setCategories,
-        timeRange, setTimeRange,
         searchQuery, setSearchQuery,
         filteredNews
     };
