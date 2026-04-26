@@ -1,21 +1,21 @@
-import type L from 'leaflet';
-
 /*
  * Map configuration constants including styles, icons, and categories.
  */
+import { CATEGORY_COLORS, DEFAULT_PIN_COLOR, getCategoryColor, getSourceBadgeColor } from '@/lib/colors';
+
 export const MAP_STYLES: Record<string, { url: string; labelsUrl?: string; attribution: string; label: string }> = {
     standard: {
-        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        url: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         label: 'Standard',
     },
     dark: {
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         label: 'Dark',
     },
     light: {
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        url: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         label: 'Light',
     },
@@ -25,13 +25,11 @@ export const MAP_STYLES: Record<string, { url: string; labelsUrl?: string; attri
         label: 'Satellite',
     },
     topographic: {
-        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
         attribution: '&copy; OpenStreetMap contributors, &copy; OpenTopoMap',
         label: 'Terrain',
     },
 };
-
-import { CATEGORY_COLORS, DEFAULT_PIN_COLOR, getCategoryColor, getSourceBadgeColor } from '@/lib/colors';
 
 export { CATEGORY_COLORS, DEFAULT_PIN_COLOR, getCategoryColor, getSourceBadgeColor };
 
@@ -46,41 +44,61 @@ export const CATEGORY_ICONS: Record<string, string> = {
     health: 'M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z',
 };
 
-// cache icons to improve performance and prevent re-rendering jitter
-const iconCache: Record<string, L.DivIcon> = {};
-
-export function createCategoryIcon(leaflet: typeof import('leaflet'), category?: string, isActive?: boolean): L.DivIcon {
-    const key = `${category || 'general'}_${isActive ? 'active' : 'inactive'}`;
-    if (iconCache[key]) return iconCache[key];
-
+// Generates an HTMLImageElement for MapLibre's addImage
+export async function generateCategoryIcon(category?: string, isActive?: boolean): Promise<HTMLImageElement> {
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
     
-    // stable container size prevents anchor jitter
-    const containerSize = 44;
-    const activeClass = isActive ? ' marker-icon-active' : '';
-
-    const html = `<div class="marker-container" style="width:${containerSize}px;height:${containerSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-        <div class="marker-icon${activeClass}" style="
-            background:${color};
-            --marker-color: ${color};
-        ">
-            <svg viewBox="0 0 24 24" fill="#fff">
-                <path d="${iconPath}"/>
-            </svg>
-        </div>
-    </div>`;
-
-    const icon = leaflet.divIcon({
-        html,
-        className: 'custom-marker-icon',
-        iconSize: [containerSize, containerSize],
-        iconAnchor: [containerSize / 2, containerSize / 2],
-        popupAnchor: [0, -12],
-    });
+    const containerSize = isActive ? 34 : 26;
+    const r = (containerSize / 2) - 2;
+    const cx = containerSize / 2;
+    const cy = containerSize / 2;
+    const iconScale = isActive ? 0.7 : 0.58;
+    const iconOffset = (containerSize - 24 * iconScale) / 2;
     
-    iconCache[key] = icon;
-    return icon;
+    const svgStr = `
+        <svg width="${containerSize}" height="${containerSize}" viewBox="0 0 ${containerSize} ${containerSize}" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="${cx}" cy="${cy}" r="${r + 1.5}" fill="#ffffff" />
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />
+            <g transform="translate(${iconOffset}, ${iconOffset}) scale(${iconScale})">
+                <path d="${iconPath}" fill="#ffffff" />
+            </g>
+        </svg>
+    `;
+    
+    return new Promise((resolve, reject) => {
+        const img = new Image(containerSize, containerSize);
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+    });
+}
+
+// Convert our standard MAP_STYLES to MapLibre style spec
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getMapLibreStyle(styleKey: string): any {
+    const style = MAP_STYLES[styleKey] || MAP_STYLES.standard;
+    
+    return {
+        version: 8,
+        sources: {
+            'raster-tiles': {
+                type: 'raster',
+                tiles: [style.url],
+                tileSize: 256,
+                attribution: style.attribution
+            }
+        },
+        layers: [
+            {
+                id: 'simple-tiles',
+                type: 'raster',
+                source: 'raster-tiles',
+                minzoom: 0,
+                maxzoom: 22
+            }
+        ]
+    };
 }
 
 export function formatTimeAgo(dateStr: string): string {
@@ -94,5 +112,4 @@ export function formatTimeAgo(dateStr: string): string {
     const days = Math.floor(hrs / 24);
     return `${days}d ago`;
 }
-
 

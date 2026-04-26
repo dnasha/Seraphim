@@ -281,7 +281,10 @@ export default function EventSidebar({
                 </div>
             </div>
         );
-    }, [selectedItemId, expandedId, handleCardClick]);
+        // items is intentionally included — the callback must re-create when
+        // lazy-loaded descriptions arrive so Virtuoso renders the updated text.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedItemId, expandedId, handleCardClick, items]);
 
     return (
         <aside className={[

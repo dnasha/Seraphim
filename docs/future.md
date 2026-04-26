@@ -84,36 +84,36 @@ Everything below is implemented, merged, and working in the current codebase.
     - **Navigation Loop Resolution**: Removed automatic map panning/zooming on data refresh and filter changes. Fixed React `useEffect` dependency warnings and properly type-cast API query builders.
 - **Large Set Protection**: Integrated automatic server-side clustering at zoom < 5.
 
-## Phase 2: UI Rendering & Performance (Browser Savers)
+### Phase 2: UI Rendering & Performance (Browser Savers)
 
-### Virtualize the Sidebar
-
-- **Status**: Done via `react-virtuoso`. Sidebar now scales to 5,000+ items with zero impact on main-thread responsiveness. Auto-scroll logic synced with `scrollToIndex`.
+- **MapLibre GL JS Migration**: Successfully transitioned from Leaflet to MapLibre GL JS. All rendering is now WebGL-accelerated on the GPU, supporting 100,000+ points with zero UI lag.
+- **Minimalist Visualization Architecture**:
+  - **Aggregated Circles**: Grouped events at all zoom levels with count badges and dynamic scaling.
+  - **WebGL Symbols**: Individual categorized pins with crisp, raw colors and no artificial glows.
+  - **Global View Optimization**: Decreased `minZoom` to `0.5` to allow viewing the entire world at once.
+- **Interaction Stability**:
+  - **FlyTo Breakthrough**: "Fly to" actions now zoom past the cluster boundary (target zoom 11) to focus directly on individual events.
+  - **Lazy-Loading Robustness**: Fixed a bug where popups would flicker or close during background data fetching. Sidebar and Map popups now handle lazy descriptions with seamless skeleton-to-content transitions.
+- **Visual Cleanup**: Completely removed pulse/glow animations and heatmap gradients to prioritize a "pro" look with high information density.
+- **Virtualize the Sidebar**: Integrated `react-virtuoso` for 100% smooth list performance at any scale. Auto-scroll logic perfectly synchronized with map selection.
+- **High-Performance Camera**: Leveraged native MapLibre `flyTo` with custom `isFlyingRef` guards for cinematic, jitter-free navigation.
 
 ---
 
-## 🖥️ Phase 2: UI Rendering & Performance (Browser Savers)
+## 🖥️ Phase 2.5: Advanced Visualization & Tiles
 
-_Goal: Handle 5,000+ events without the tab freezing._
+_Goal: Fine-tune the new MapLibre engine for absolute visual perfection._
 
-### 2.1 — Swap Rendering Engine: Leaflet → MapLibre GL JS
+### 2.5.1 — Protomaps / PMTiles Migration
 
-- **Why**: Leaflet creates a DOM element per marker (`DivIcon`). At 2,000+ markers, the browser's layout engine collapses. MapLibre renders everything via WebGL on the GPU — it can handle 100,000+ points as a `GeoJSON` source without creating any DOM elements.
-- **Migration scope**:
-  - Remove `leaflet`, `react-leaflet`, `leaflet.markercluster` dependencies.
-  - Rewrite `NewsMap.tsx` to use `maplibre-gl` directly (or `react-map-gl` with MapLibre adapter).
-  - The custom smooth zoom system (sub-pixel patching, `_move()` calls) becomes unnecessary — MapLibre's zoom is already fluid and GPU-accelerated.
-  - Popup and marker styling moves from CSS/DOM to MapLibre's `Popup` class and symbol/circle layers.
-  - Map style tiles: Initially maintain existing **raster providers** (Voyager/Dark) to focus on the WebGL marker transition. Once stable, migrate to **Protomaps PMTiles** served from Cloudflare R2 for vector support and $0 egress.
-- **Risk**: This is the single largest refactor. Plan for a feature branch with 2–3 focused sessions.
+- **Why**: Currently using raster tiles (Voyager/Dark). Vector tiles allow for dynamic labeling, infinite zoom clarity, and $0 egress via Cloudflare R2.
+- **Action**: Serve OSINT-specific vector tiles (OpenStreetMap-based) from R2. Update `MapConstants.tsx` to use the Protomaps MapLibre adapter.
+- **Benefit**: Labels will stay crisp at all zoom levels, and we can style the base map dynamically via JS.
 
-### 2.2 — Dynamic Layering (Zoom-Dependent Visualization)
+### 2.5.2 — H3 Hexbin Aggregation (Global View)
 
-- **Action**: After the MapLibre migration, implement zoom-dependent rendering layers:
-  - **Zoom 1–4 (Global)**: Heatmap layer or H3 hexbin aggregation. Show glowing hotspot regions.
-  - **Zoom 5–9 (Regional)**: Numbered cluster circles with count badges.
-  - **Zoom 10+ (Tactical)**: Individual categorized pins with the current icon design.
-- **Implementation**: MapLibre supports all three natively via `heatmap`, `circle`, and `symbol` layer types with `minzoom`/`maxzoom` properties. No external plugins needed.
+- **Action**: Replace the low-zoom heatmap with H3 hexbins (H3-JS) to show discrete event density counts at a continental scale.
+- **Implementation**: Calculate H3 indexes server-side or in a worker and render as MapLibre `fill` layers.
 
 ---
 
@@ -233,7 +233,7 @@ _Goal: Turn Seraphim from a project into a product._
 
 | Component             | Current (v1)                      | Target (v2)                        | Why                                          |
 | --------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------- |
-| **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | GPU rendering: 100K+ points vs. ~2K ceiling  |
+| **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | (Completed) GPU rendering: 100K+ points      |
 | **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
 | **Sidebar Rendering** | `react-virtuoso` virtualized list | (Completed)                        | Only renders ~15 visible cards vs. all 5,000 |
 | **Data Fetching**     | BBox + server-cluster queries     | (Completed)                        | 10× smaller payloads, no wasted bandwidth    |

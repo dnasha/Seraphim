@@ -1,4 +1,4 @@
-/* NewsMap.module.css — map wrapper, markers, clusters, Leaflet overrides, popups */
+/* NewsMap.module.css — map wrapper, MapLibre overrides, popups */
 
 /* ── Map wrapper ── */
 .mapWrapper {
@@ -13,185 +13,78 @@
   height: 100%;
 }
 
-/* ── Leaflet zoom controls — match settings button style ── */
-.leaflet-bar {
+/* ── MapLibre zoom controls — match settings button style ── */
+:global(.maplibregl-ctrl-group) {
   border: none !important;
   box-shadow: none !important;
   background: transparent !important;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-:global(.leaflet-bar) {
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-:global(.leaflet-control-zoom) {
-  border: none !important;
-  box-shadow: none !important;
-  margin-right: 12px !important;
-  background: transparent !important;
-}
-
-:global(.leaflet-control-zoom-in),
-:global(.leaflet-control-zoom-out) {
+:global(.maplibregl-ctrl-group button) {
   width: 38px !important;
   height: 38px !important;
-  line-height: 38px !important;
   background: var(--surface) !important;
   color: var(--text-primary) !important;
   border: 1px solid var(--border) !important;
   border-radius: 6px !important;
-  margin-bottom: 6px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 18px !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
   transition: background 0.15s, transform 0.15s !important;
+  cursor: pointer;
 }
 
-:global(.leaflet-control-zoom-in:hover),
-:global(.leaflet-control-zoom-out:hover) {
+:global(.maplibregl-ctrl-group button + button) {
+  margin-top: 0 !important;
+  border-top: none !important;
+}
+
+:global(.maplibregl-ctrl-group button:hover) {
   background: var(--surface-alt) !important;
   transform: scale(1.05);
 }
 
-:global(.leaflet-touch .leaflet-control-zoom-in),
-:global(.leaflet-touch .leaflet-control-zoom-out) {
-  width: 38px !important;
-  height: 38px !important;
+/* Position the zoom control group below the settings gear (which is 38px + 12px top) */
+:global(.maplibregl-ctrl-top-right) {
+  top: 0;
+  right: 0;
 }
 
-:global(.leaflet-top.leaflet-right .leaflet-control-zoom) {
-  margin-top: calc(44px + max(12px, env(safe-area-inset-top))) !important;
+:global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+  margin-top: calc(38px + max(12px, env(safe-area-inset-top)) + 8px) !important;
   margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
-/* ── Leaflet dark mode fixes ── */
-:global([data-theme="dark"] .leaflet-control-zoom a:hover) {
+/* ── Dark mode fixes ── */
+:global([data-theme="dark"] .maplibregl-ctrl-group button:hover) {
   background: var(--surface-alt) !important;
 }
 
-:global([data-theme="dark"] .leaflet-control-attribution) {
+:global([data-theme="dark"] .maplibregl-ctrl-attrib) {
   background: rgba(15, 17, 23, 0.7) !important;
   color: var(--text-muted) !important;
 }
 
-:global([data-theme="dark"] .leaflet-control-attribution a) {
+:global([data-theme="dark"] .maplibregl-ctrl-attrib a) {
   color: var(--text-secondary) !important;
 }
 
-/* ── Leaflet container background ── */
-:global(.leaflet-container) {
+/* ── Container background ── */
+:global(.maplibregl-map) {
   background: var(--surface-alt) !important;
 }
 
-/* ── Marker clustering — single authoritative definition ── */
-:global(.custom-cluster-icon) {
-  background: transparent !important;
+/* ── Popup overrides ── */
+:global(.news-popup-container) {
+  z-index: 900;
 }
 
-:global(.cluster-icon) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  width: 100%;
-  height: 100%;
-  border: 2px solid #fff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #fff;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-:global(.cluster-icon:hover) {
-  transform: scale(1.15);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-  z-index: 1000 !important;
-}
-
-/* small — light red */
-:global(.cluster-icon.cluster-small) {
-  background: rgba(239, 68, 68, 0.85) !important;
-  color: #fff !important;
-}
-
-/* medium — medium red */
-:global(.cluster-icon.cluster-medium) {
-  background: rgba(185, 28, 28, 0.9) !important;
-  color: #fff !important;
-}
-
-/* large — dark red */
-:global(.cluster-icon.cluster-large) {
-  background: rgba(127, 29, 29, 0.95) !important;
-  color: #fff !important;
-}
-
-:global([data-theme="dark"] .cluster-icon) {
-  border-color: #1e212c;
-}
-
-/* ── Custom marker icons ── */
-:global(.custom-marker-icon) {
-  background: transparent !important;
-  border: none !important;
-}
-
-:global(.marker-icon) {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-    box-shadow 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-    width 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-    height 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  cursor: pointer;
-  z-index: 10;
-  backface-visibility: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-:global(.marker-icon svg) {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  display: block;
-}
-
-:global(.marker-icon:hover) {
-  transform: scale(1.15);
-  z-index: 100 !important;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-:global(.marker-icon-active) {
-  width: 34px !important;
-  height: 34px !important;
-  transform: scale(1);
-  z-index: 1000 !important;
-  animation: marker-pulse-active 2s infinite;
-  box-shadow: 0 0 0 3px rgba(255,255,255,0.4), 0 4px 10px rgba(0,0,0,0.3);
-}
-
-:global(.marker-icon-active svg) {
-  width: 18px !important;
-  height: 18px !important;
-}
-
-/* ── Popup overrides (Leaflet injects DOM directly) ── */
-:global(.news-popup-container .leaflet-popup-content-wrapper) {
+:global(.news-popup-container .maplibregl-popup-content) {
   background: var(--surface);
   color: var(--text-primary);
   border-radius: 8px;
@@ -201,38 +94,35 @@
   border: 1px solid var(--border);
 }
 
-:global(.news-popup-container .leaflet-popup-content) {
-  margin: 0;
-  width: 100% !important;
+:global(.news-popup-container .maplibregl-popup-tip) {
+  border-top-color: var(--surface);
 }
 
-:global(.news-popup-container .leaflet-popup-tip-container) {
-  display: none;
-}
-
-:global(.news-popup-container a.leaflet-popup-close-button) {
+:global(.news-popup-container .maplibregl-popup-close-button) {
   color: #ef4444 !important;
-  width: 24px;
-  height: 24px;
-  line-height: 24px;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
   display: flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 18px !important;
-  right: 6px;
-  top: 6px;
+  font-size: 20px !important;
+  right: 4px;
+  top: 4px;
   transition: all 0.2s;
   background: transparent !important;
   border: none !important;
   z-index: 2000;
+  cursor: pointer;
+  padding: 0 !important;
 }
 
-:global(.news-popup-container a.leaflet-popup-close-button:hover) {
+:global(.news-popup-container .maplibregl-popup-close-button:hover) {
   color: #b91c1c !important;
   transform: scale(1.2);
 }
 
-/* inside popup */
+/* ── inside popup ── */
 :global(.news-popup) {
   display: flex;
   flex-direction: column;
@@ -393,12 +283,12 @@
     max-width: 320px;
   }
 
-  :global(.news-popup-container .leaflet-popup-content-wrapper) {
+  :global(.news-popup-container .maplibregl-popup-content) {
     max-width: calc(100vw - 32px);
     width: auto !important;
   }
 
-  :global(.leaflet-top.leaflet-right .leaflet-control-zoom) {
-    margin-top: 56px !important;
+  :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+    margin-top: calc(38px + 12px + 8px) !important;
   }
 }

@@ -21,7 +21,7 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 | **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
 | **Database** | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries |
 | **Scraper Runtime** | Bun | Native TS execution, 30x faster cold starts than Node |
-| **Map** | Leaflet 1.9 + react-leaflet 5 | OpenStreetMap tiles (Voyager/Dark). Canvas renderer |
+| **Map** | MapLibre GL JS 5.1 | WebGL-accelerated rendering. Replaces Leaflet 1.9 |
 
 | **NLP** | compromise | Lightweight place-name extraction fallback |
 | **RSS** | rss-parser | Standard RSS/Atom feed parsing |
@@ -60,12 +60,10 @@ SeraphimPreview/
 │   │   └── page.tsx                # Main page — orchestrates sidebar + map
 │   ├── components/
 │   │   ├── map/
-│   │   │   ├── NewsMap.tsx         # Leaflet map component shell
-│   │   │   ├── NewsMap.module.css  # Scoped map styles
-│   │   │   ├── MapConstants.tsx    # Icon cache, tile styles, formatters
-│   │   │   ├── MapSettings.tsx     # Settings panel UI
-│   │   │   ├── smoothZoom.ts       # Imperative Leaflet sub-pixel lerp system
-│   │   │   ├── markerManager.ts    # Marker creation & state synchronization
+│   │   │   ├── NewsMap.tsx         # MapLibre map component (main orchestrator)
+│   │   │   ├── NewsMap.module.css  # Scoped map styles (popups, controls)
+│   │   │   ├── MapConstants.tsx    # SVG icon generation, tile styles, formatters
+│   │   │   ├── MapSettings.tsx     # Settings panel UI (style picker, clustering toggle)
 │   │   │   └── index.tsx           # Barrel export
 │   │   ├── EventSidebar.tsx        # Sidebar + card list
 │   │   ├── EventSidebar.module.css # Scoped sidebar styles
@@ -160,7 +158,9 @@ SeraphimPreview/
 │  React Client                                           │
 │  ├── useNewsData — Viewport-driven (BBox+Zoom+Since)    │
 │  ├── Sidebar Virtualization — react-virtuoso list       │
-│  ├── Native Clustering — renders server-side clusters   │
+│  ├── MapLibre GL JS — WebGL Rendering Layer             │
+│  │   ├── Layer-based (heatmap, circles, symbols)        │
+│  │   └── High-performance camera (flyTo / easeTo)       │
 │  ├── useNewsFilter — client-side useMemo filtering      │
 │  └── Lazy-Loading — fetch descriptions on card expand   │
 └─────────────────────────────────────────────────────────┘
@@ -265,12 +265,16 @@ page.tsx (client component)
 │       └── Unmapped cards → click expands inline detail
 │
 └── NewsMap (dynamic import, SSR disabled)
-    ├── Leaflet map (canvas renderer)
-    ├── smoothZoom.ts (lerp loop + sub-pixel patches)
-    ├── markerManager.ts (marker sync + server-cluster support)
-    ├── MapSettings (gear icon → style selector + individual pin toggle)
-    ├── Marker layer (direct or clustered)
-    ├── Popup layer (HTML-templated, not React-rendered)
+    ├── MapLibre GL JS (WebGL renderer)
+    ├── addSourcesAndLayers() (persistence via style.load)
+    ├── MapSettings (gear icon → style selector + clustering toggle)
+    ├── Layer Stack:
+    │   ├── heatmap (zoom < 5)
+    │   ├── clusters-circle (zoom 5+)
+    │   ├── clusters-count (text labels)
+    │   ├── unclustered-point (inactive pins)
+    │   └── unclustered-point-active (selected pin)
+    ├── Popup layer (live-patched via description loader)
     └── Viewport events — emits debounced BBox + Zoom (snapped to grid)
 ```
 
@@ -301,30 +305,25 @@ page.tsx (client component)
 | Health | Purple | `#7c3aed` |
 | General | Gray | `#6b7280` |
 
-### Marker System
+### Marker & Layer System
 
-- **Normal state**: 26px circle with category color + white SVG glyph icon. 2px white border.
-- **Active state**: 36px with sonar pulse animation + color-matched glow. z-index boosted to 1000.
-- **Container**: Stable 44px `DivIcon` container for both states — prevents Leaflet anchor-point jumping during size transitions.
-- **Icon caching**: `IconCache` in `MapConstants.tsx` prevents redundant `DivIcon` creation.
-- **Highlighting**: Uses direct DOM class manipulation (`.marker-icon-active`) via element refs — bypasses React reconciliation for instant, flicker-free feedback.
+- **WebGL Symbols**: Individual pins are rendered as MapLibre `symbol` layers. Inactive pins use `unclustered-point`; the selected pin uses `unclustered-point-active`.
+- **SVG Generation**: Icons are generated as `HTMLImageElement` from SVG strings in `MapConstants.tsx`. No glow/stroke is used; active pins are simply larger with a white background circle.
+- **Heatmap**: At low zoom levels (world view), a heatmap layer provides a visual overview of event density.
+- **Clustered View**: Aggregated groups are rendered as `circle` layers with dynamic sizing and color steps based on `point_count`.
+- **Icon Caching**: Icons are registered with the map via `map.addImage` after every style load.
+- **Highlighting**: Selection updates trigger a `setFilter` on symbol layers, which is highly efficient in WebGL.
 
-### Smooth Zoom System
+### Camera & Navigation
 
-> **Location**: `src/components/map/smoothZoom.ts`
+Seraphim uses MapLibre's native high-performance camera system:
 
-Leaflet's default `scrollWheelZoom` is disabled. Replaced with a custom system:
+1. **Selection FlyTo**: When a card or pin is selected, `map.flyTo()` provides a smooth, cinematic transition to the target coordinates.
+2. **FlyTo Guards**: To prevent interaction loops, an `isFlyingRef` flag suppresses popup closing and bounding-box re-fetches during programmatic camera movements.
+3. **Popup Persistence**: Popups are temporarily removed during `flyTo` and re-added upon `moveend` to prevent auto-pan interference.
+4. **Zoom Bounds**: Map limits are set to min 2.3 (world) to 18 (street level).
 
-1. On `wheel` event: capture cursor position as anchor lat/lng, start `requestAnimationFrame` loop
-2. Each frame: lerp `currentZoom` toward `targetZoom` (factor: 0.18), call `map._move(center, zoom)`
-3. On settle (diff < 0.0005): call `map._moveEnd(true)`, restore rounding, release anchor
-
-**Anti-jitter patches** (applied during zoom, restored on settle):
-- `_getNewPixelOrigin` — remove `._round()` to prevent 1px wobble
-- `latLngToLayerPoint` — same
-- `GridLayer._setZoomTransform` — sub-pixel tile positioning
-
-Custom zoom buttons feed into the same loop (anchored to map center, delta ±1).
+Custom zoom buttons use MapLibre's `NavigationControl` with customized CSS to match the Seraphim aesthetic.
 
 ---
 
@@ -457,9 +456,10 @@ DRY_RUN=true bun run src/scraper/index.ts
 
 ### Performance
 - `geonames.json` is ~4.7 MB. It's loaded at module init in `engine.ts`. This is fine server-side but must **never** be imported client-side.
-- The API applies a `LIMIT 500` safety cap. Cursor-based pagination has been removed in favor of a purely viewport-driven (BBox) data model — users explore by zooming/panning instead of "loading more".
+- The API applies a `LIMIT 500` safety cap. Viewport-driven exploration allows users to discover data by zooming/panning.
 - **Resolved**: `EventSidebar` now uses `react-virtuoso` virtualization. Performance is stable even with thousands of cards.
-- `preferCanvas: true` is set on the Leaflet map but Leaflet still uses DOM elements for `DivIcon` markers. True canvas rendering only applies to vector shapes.
+- **WebGL Rendering**: Transitioned to MapLibre GL JS. The GPU now handles point rendering, allowing for 100,000+ points without DOM overhead.
+- **Layer Persistence**: `addSourcesAndLayers` ensures data layers survive `setStyle()` calls (theme/style changes) by listening to `style.load`.
 
 
 ### Data Integrity
@@ -484,7 +484,7 @@ DRY_RUN=true bun run src/scraper/index.ts
 ### Egress Optimization
 - **Lazy-Loading**: The `/api/news` route excludes the `description` field by default.
 - **On-Demand Fetching**: Descriptions are fetched via `/api/news/[id]` only when a card is expanded or a map pin is clicked.
-- **Live Patching**: `MarkerManager.updatePopupDescription()` handles updating the Leaflet popup content without recreating the marker. It patches both the live DOM (if open) and the marker's internal `setContent` buffer.
+- **Live Patching**: `NewsMap.tsx` handles updating the popup content without recreating the layer. It patches the DOM of the active popup when lazy-loaded data arrives.
 - **Loading State**: Sidebar cards and map popups use a CSS-only shimmer skeleton (`.popup-skeleton-line`) while fetching data.
 
 ### Navigation & Camera
