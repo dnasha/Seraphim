@@ -4,12 +4,13 @@
  * NewsMap component using Leaflet and markerclustering.
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { NewsItem } from '@/lib/types';
 import type { Map as LeafletMap, TileLayer, LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import { BBox } from '@/hooks/useNewsData';
 
 import { MAP_STYLES } from './MapConstants';
 import MapSettings from './MapSettings';
@@ -27,9 +28,10 @@ interface NewsMapProps {
     isDarkMode: boolean;
     mappedOnly: boolean;
     onMappedOnlyChange: (val: boolean) => void;
+    onBoundsChange?: (bbox: BBox) => void;
 }
 
-export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode, mappedOnly, onMappedOnlyChange }: NewsMapProps) {
+export default function NewsMap({ items, selectedItemId, selectionVersion, onSelectItem, isDarkMode, mappedOnly, onMappedOnlyChange, onBoundsChange }: NewsMapProps) {
     const mapRef = useRef<LeafletMap | null>(null);
     const tileLayerRef = useRef<TileLayer | null>(null);
     const labelLayerRef = useRef<TileLayer | null>(null);
@@ -50,6 +52,23 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     const onSelectItemRef = useRef(onSelectItem);
     const isDarkModeRef = useRef(isDarkMode);
+    const onBoundsChangeRef = useRef(onBoundsChange);
+
+    // Debounce timer for moveend
+    const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const emitBounds = useCallback((map: LeafletMap) => {
+        if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
+        boundsDebounceRef.current = setTimeout(() => {
+            const b = map.getBounds();
+            onBoundsChangeRef.current?.({
+                minLat: b.getSouth(),
+                maxLat: b.getNorth(),
+                minLng: b.getWest(),
+                maxLng: b.getEast(),
+            });
+        }, 400);
+    }, []);
 
     useEffect(() => {
         isDarkModeRef.current = isDarkMode;
@@ -58,6 +77,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     useEffect(() => {
         onSelectItemRef.current = onSelectItem;
     }, [onSelectItem]);
+
+    useEffect(() => {
+        onBoundsChangeRef.current = onBoundsChange;
+    }, [onBoundsChange]);
 
     useEffect(() => {
         selectedIdRef.current = selectedItemId;
@@ -223,15 +246,26 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     }, [mapReady]);
 
 
+    // Register the moveend → BBox emission listener.
+    // Must be its own effect so emitBounds is a stable dep (it's a useCallback).
     useEffect(() => {
-        // Only sync if map is ready AND we're not in the middle of initial mount 
-        // (which is handled in the main init effect above)
+        if (!mapReady || !mapRef.current) return;
+        const map = mapRef.current;
+        const handler = () => emitBounds(map);
+        map.on('moveend', handler);
+        return () => { map.off('moveend', handler); };
+    }, [mapReady, emitBounds]);
+
+    useEffect(() => {
         if (!mapReady || !markerManagerRef.current) return;
-        
-        // We only want this effect to handle updates to items or clustering, 
-        // not the very first sync which we did in the init effect.
-        // However, Leaflet handles redundant syncs gracefully, so we'll just let it run.
         markerManagerRef.current.syncMarkers(geoItems, clusteringEnabled, selectedIdRef.current);
+
+        // Patch any already-open popups whose descriptions have since been loaded
+        geoItems.forEach(item => {
+            if (item.description) {
+                markerManagerRef.current?.updatePopupDescription(item.id, item.description);
+            }
+        });
     }, [mapReady, clusteringEnabled, geoItems]);
 
 

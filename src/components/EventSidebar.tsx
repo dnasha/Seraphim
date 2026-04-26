@@ -54,6 +54,8 @@ interface EventSidebarProps {
     hasMore?: boolean;
     isLoadingMore?: boolean;
     onLoadMore?: () => void;
+    /** Called when a card is expanded to lazily fetch its description */
+    onFetchDetails?: (id: string) => void;
     filterBar: ReactNode;
     isDarkMode: boolean;
     onToggleTheme: () => void;
@@ -72,6 +74,7 @@ export default function EventSidebar({
     hasMore,
     isLoadingMore,
     onLoadMore,
+    onFetchDetails,
     filterBar,
     isDarkMode,
     onToggleTheme,
@@ -115,6 +118,10 @@ export default function EventSidebar({
             // if selecting a mapped item, collapse any unmapped expansion
             if (!isSelected) {
                 setExpandedId(null);
+                // Trigger description fetch so the popup can show it on open
+                if (!item.description) {
+                    onFetchDetails?.(item.id);
+                }
                 // on mobile, close the sidebar so the map is fully visible
                 if (isMobile()) {
                     onToggleSidebar();
@@ -123,14 +130,20 @@ export default function EventSidebar({
         } else {
             // unmapped article → toggle expanded detail inline
             const isCurrentlyExpanded = expandedId === item.id;
-            setExpandedId(isCurrentlyExpanded ? null : item.id);
-            
+            const nextExpanded = isCurrentlyExpanded ? null : item.id;
+            setExpandedId(nextExpanded);
+
+            // Trigger description fetch if expanding and description not yet loaded
+            if (nextExpanded && !item.description) {
+                onFetchDetails?.(item.id);
+            }
+
             // if expanding an unmapped item, deselect any mapped item
             if (!isCurrentlyExpanded) {
                 onSelectItem(null);
             }
         }
-    }, [selectedItemId, onSelectItem, expandedId, onToggleSidebar]);
+    }, [selectedItemId, onSelectItem, expandedId, onToggleSidebar, onFetchDetails]);
 
 
 
@@ -243,7 +256,7 @@ export default function EventSidebar({
                         </div>
                     </div>
 
-                    {/* expanded detail panel for unmapped articles */}
+                    {/* expanded detail panel */}
                     {isExpanded && (
                         <div className={styles.eventCardDetail}>
                             {item.imageUrl && (
@@ -260,10 +273,17 @@ export default function EventSidebar({
                                     />
                                 </div>
                             )}
-                            {item.description && (
+                            {/* Show skeleton while description loads, then the text */}
+                            {item.description ? (
                                 <p className={styles.eventCardDetailDesc}>
                                     {item.description}
                                 </p>
+                            ) : (
+                                <div className={styles.descriptionSkeleton}>
+                                    <div className={styles.skeletonLine} />
+                                    <div className={styles.skeletonLine} style={{ width: '90%' }} />
+                                    <div className={styles.skeletonLine} style={{ width: '75%' }} />
+                                </div>
                             )}
                             <a
                                 className={styles.eventCardDetailLink}

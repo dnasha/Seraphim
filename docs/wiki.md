@@ -141,22 +141,22 @@ SeraphimPreview/
 │  └── url = UNIQUE constraint (dedup key)                │
 │  └── RLS: public SELECT, service-role INSERT/UPDATE     │
 └─────────────────────────────────────────────────────────┘
-              ↓
+               ↓
 ┌─────────────────────────────────────────────────────────┐
 │  /api/news/route.ts  (Next.js Edge Route)               │
-│  ├── In-memory cache (15 min TTL)
+│  ├── BBox Querying (minLat, maxLat, minLng, maxLng)
+│  ├── In-memory bbox-keyed cache (15 min TTL)
 │  ├── Refresh throttle (1 min cooldown)
-│  ├── Selective SELECT (omits unused fields)
+│  ├── Egress Optimization (omits 'description')
 │  ├── LIMIT 500, ORDER BY published_at DESC
 │  └── Cache-Control: s-maxage=900
-│
 └─────────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────────┐
 │  React Client                                           │
-│  ├── useNewsData — fetch + 15-min polling               │
-│  └── useNewsFilter — client-side useMemo filtering      │
-│      └── Instant toggling, no network round-trip        │
+│  ├── useNewsData — BBox fetch + Realtime subscription   │
+│  ├── useNewsFilter — client-side useMemo filtering      │
+│  └── Lazy-Loading — fetch descriptions on card expand   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -264,7 +264,8 @@ page.tsx (client component)
     ├── markerManager.ts (marker sync + icon caching)
     ├── MapSettings (gear icon → style selector + cluster toggle)
     ├── Marker layer (direct or clustered)
-    └── Popup layer (HTML-templated, not React-rendered)
+    ├── Popup layer (HTML-templated, not React-rendered)
+    └── Viewport events — emits debounced 'moveend' BBox
 ```
 
 ### Layout
@@ -460,10 +461,24 @@ DRY_RUN=true bun run src/scraper/index.ts
 - **Map framing** ignores latitudes < -60° (Antarctica) when calculating auto-fit bounds to prevent the viewport from zooming out too far.
 
 ### Caching
-- **Server cache**: In-memory `Map` in `route.ts` with 15-min TTL. Wiped on server restart (Vercel cold starts).
-- **Edge cache**: `Cache-Control: public, s-maxage=900, stale-while-revalidate=59` — Vercel edge CDN caches responses for 15 min.
-- **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown to prevent abuse.
-- **Client polling**: `useNewsData` polls every 15 minutes via `setInterval`. The refresh button bypasses cache via `?refresh=true` query param.
+- **Server cache**: In-memory `Map` in `route.ts` with 15-min TTL. Keyed by BBox or "global".
+- **Edge cache**: `Cache-Control: public, s-maxage=900, stale-while-revalidate=59` for global; shorter TTLs for BBox.
+- **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown.
+- **Client-side BBox Cache**: `useNewsData` maintains a Map of previously fetched BBox areas to avoid redundant DB hits.
+- **Lazy-Load Cache**: Descriptions are cached client-side once fetched.
+
+### Realtime Updates
+- **Supabase Realtime**: Subscribed to `INSERT` events. Incoming rows are filtered against the current viewport BBox before being added to state.
+
+### Egress Optimization
+- **Lazy-Loading**: The `/api/news` route excludes the `description` field by default.
+- **On-Demand Fetching**: Descriptions are fetched via `/api/news/[id]` only when a card is expanded or a map pin is clicked.
+- **Live Patching**: `MarkerManager.updatePopupDescription()` handles updating the Leaflet popup content without recreating the marker. It patches both the live DOM (if open) and the marker's internal `setContent` buffer.
+- **Loading State**: Sidebar cards and map popups use a CSS-only shimmer skeleton (`.popup-skeleton-line`) while fetching data.
+
+### Navigation & Camera
+- **Manual Camera Only**: Automatic `fitBounds` or `flyTo` transitions on data refresh/filter change are **disabled**. This prevents infinite loops where a camera move triggers a BBox fetch, which updates the state, which would have triggered another camera move.
+- **Debounced BBox**: The map emits bounds changes 400ms after the `moveend` event to prevent API spam during continuous panning.
 
 ### Known Duplications (technical debt)
 - **Resolved**: CSS monolithic styles split into modules.

@@ -62,6 +62,15 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Animation Restoration**: Fixed broken loading wheel and refresh animations caused by CSS modularization. Defined local `@keyframes spin` within `EventSidebar.module.css` to ensure self-contained, reliable UI feedback.
 - **API Route Hardening**: Implemented cursor-based pagination and a `?include_unmapped=true` flag in `/api/news/route.ts` to reduce payload sizes and support "load more" infinite scrolling in the UI. 
 - **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Evaluated `EventSidebar` render performance (stable at current scales) and documented Leaflet `preferCanvas` limitations with `DivIcon` elements for future MapLibre migration context.
+
+### Phase 1: API & Data Fetching (Scale Enablers)
+
+- **Bounding Box (BBox) Querying**: Modified `/api/news` to accept `minLat/maxLat/minLng/maxLng`. Implemented debounced (400ms) viewport updates in `NewsMap.tsx` to trigger refetches. Added client-side bbox-keyed caching in `useNewsData.ts` to prevent redundant DB hits when panning back to previously viewed areas.
+- **Supabase Realtime**: Replaced 15-minute polling with a Supabase Realtime `INSERT` subscription. Implemented client-side viewport filtering so only events within the current bounding box are injected into the UI, reducing noise and re-render cycles.
+- **Database Egress Optimization**: Optimized initial list fetch by excluding the `description` field (~40% payload reduction). Implemented an on-demand detail endpoint (`/api/news/[id]`) that lazy-loads descriptions when a user expands a sidebar card or clicks a map pin.
+- **Live-Patching Map Popups**: Implemented a specialized `updatePopupDescription` mechanism in `MarkerManager` that patches live Leaflet popups and their internal `setContent` buffers when lazy-loaded data arrives, avoiding costly marker re-creations.
+- **Stability Fixes**: Removed automatic map panning/zooming on data refresh and filter changes to resolve "navigation loops" (where a pan triggers a fetch, which triggers a pan). Fixed React `useEffect` dependency warnings related to the `moveend` listener.
+
 ---
 
 
@@ -72,23 +81,15 @@ Everything below is implemented, merged, and working in the current codebase.
 
 _Goal: Make the browser download only what it needs. Required before the dataset exceeds ~1,000 events._
 
-### 1.1 — Bounding Box (BBox) Querying + Debounce
-
-- **Backend**: Modify `/api/news` to accept `minLat`, `maxLat`, `minLng`, `maxLng` query parameters. Write a Supabase RPC function using PostGIS `ST_MakeEnvelope` + `ST_Within` (or a simple `WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?` if PostGIS spatial indexing isn't needed yet).
-- **Frontend**: Hook into the map's `moveend` event. Capture `map.getBounds()` and pass the corners to the API. Add a **300–500ms debounce** so rapid panning doesn't spam the database.
-- **Fallback**: On initial load (before the map has settled), fetch without BBox to populate the sidebar's total count.
-
-### 1.2 — Server-Side Spatial Clustering (PostGIS)
-
-- **Action**: Use `ST_ClusterDBSCAN` in a Supabase RPC function to cluster nearby events on the server when the client zoom level is below a threshold (e.g., `zoom < 10`).
-- **Response shape**: Return `{ cluster_id, event_count, center_lat, center_lng }` for clusters and full event objects for individual points.
+- **Action**: Implement frontend support for the `ST_ClusterDBSCAN` Supabase RPC function (SQL defined in `artifacts/supabase_setup.md`).
+- **Response shape**: Modify API to return `{ cluster_id, event_count, center_lat, center_lng }` for clusters and full event objects for individual points when `zoom < threshold`.
 - **Benefit**: Instead of sending 200 pins for Kyiv, send 1 cluster object. Drastically reduces JSON payload and DOM element count.
 
-### 1.3 — Supabase Realtime (Selective Subscriptions)
+### 1.2 — Sidebar Virtualization (React Window)
 
-- **Action**: Replace the 15-minute polling interval in `useNewsData.ts` with a Supabase Realtime subscription on the `events` table (`INSERT` events only).
-- **Key detail**: Only trigger a re-fetch or UI update if the new row's coordinates fall within the user's current BBox. Otherwise, just increment a "new events available" badge without re-rendering the entire card list.
-- **Graceful fallback**: Keep the 15-minute poll as a heartbeat in case the WebSocket connection drops.
+- **Action**: Integrate `react-window` or `virtuoso` into `EventSidebar.tsx`.
+- **Why**: Currently, rendering 500+ cards with images causes layout thrashing and slow scrolling. Virtualization ensures only ~10 cards are in the DOM at any time.
+
 
 ---
 

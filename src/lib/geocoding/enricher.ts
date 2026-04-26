@@ -19,7 +19,7 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
             continue;
         }
 
-        const ext = extractLocation(item.title, item.description);
+        const ext = extractLocation(item.title, item.description ?? '');
         let placeName = ext.match;
         let candidates = ext.candidates;
 

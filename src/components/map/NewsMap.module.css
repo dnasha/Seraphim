@@ -274,6 +274,33 @@
   border-radius: 2px;
 }
 
+/* Skeleton shimmer for popup descriptions loading on demand */
+@keyframes popup-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+:global(.news-popup-summary--loading) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+:global(.popup-skeleton-line) {
+  height: 9px;
+  width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    var(--border)      50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: popup-shimmer 1.4s ease-in-out infinite;
+}
+
 :global(.news-popup-meta) {
   display: flex;
   align-items: center;

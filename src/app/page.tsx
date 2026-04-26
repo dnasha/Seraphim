@@ -21,7 +21,7 @@ export default function Home() {
     const [mappedOnly, setMappedOnly] = useState(true);
 
     // Data and Filter State
-    const { news, isLoading, isLoadingMore, hasMore, error, fetchNews, loadMore } = useNewsData({ 
+    const { news, isLoading, isLoadingMore, hasMore, error, fetchNews, loadMore, onBoundsChange, fetchEventDetails } = useNewsData({ 
         includeUnmapped: !mappedOnly 
     });
     
@@ -116,6 +116,7 @@ export default function Home() {
                 hasMore={hasMore}
                 isLoadingMore={isLoadingMore}
                 onLoadMore={loadMore}
+                onFetchDetails={fetchEventDetails}
                 onRefresh={() => fetchNews(true)}
                 isOpen={isSidebarOpen}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -134,6 +135,7 @@ export default function Home() {
                     isDarkMode={isDarkMode}
                     mappedOnly={mappedOnly}
                     onMappedOnlyChange={setMappedOnly}
+                    onBoundsChange={onBoundsChange}
                 />
             </main>
         </div>

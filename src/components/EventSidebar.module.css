@@ -456,6 +456,33 @@
   opacity: 0.8;
 }
 
+/* Skeleton loader for lazy-loaded descriptions */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.descriptionSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.skeletonLine {
+  height: 10px;
+  width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    var(--border) 50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
 /* shared location icon SVG */
 .locationIconSvg {
   display: inline-block;

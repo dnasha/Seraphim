@@ -10,6 +10,7 @@ export class MarkerManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private L: any;
     private markers: Map<string, Marker> = new Map();
+    private itemData: Map<string, NewsItem> = new Map();
     private clusterGroup: MarkerClusterGroup | null = null;
     private directGroup: LayerGroup | null = null;
     private clusteringEnabled: boolean = false;
@@ -32,12 +33,13 @@ export class MarkerManager {
         if (this.clusterGroup) this.map.removeLayer(this.clusterGroup);
         if (this.directGroup) this.map.removeLayer(this.directGroup);
         this.markers.clear();
+        this.itemData.clear();
     }
 
     /**
      * Updates map markers to match provided geo-items, handling clustering transitions.
      */
-    public syncMarkers(geoItems: NewsItem[], clusteringEnabled: boolean, initialSelectedId: string | null, animate: boolean = true) {
+    public syncMarkers(geoItems: NewsItem[], clusteringEnabled: boolean, initialSelectedId: string | null) {
         const L = this.L;
         const map = this.map;
 
@@ -89,6 +91,10 @@ export class MarkerManager {
             targetLayer = this.directGroup!;
         }
 
+        // Refresh item data map for all current items
+        this.itemData.clear();
+        geoItems.forEach(item => this.itemData.set(item.id, item));
+
         // diff marker sets to avoid unnecessary re-renders
         const currentMarkerIds = new Set(this.markers.keys());
         const nextItemMap = new Map(geoItems.map(i => [i.id, i]));
@@ -111,35 +117,7 @@ export class MarkerManager {
             const icon = createCategoryIcon(L, item.category, item.id === initialSelectedId);
             const marker = L.marker([item.latitude!, item.longitude!], { icon });
 
-            const pinColor = getCategoryColor(item.category);
-            const categoryLabel = item.category
-                ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
-                : '';
-
-            const popupHtml = `
-                <div class="news-popup">
-                ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
-                <div class="news-popup-body">
-                    <div class="news-popup-meta">
-                    <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
-                    ${categoryLabel}
-                    <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
-                    </div>
-                    <h3 class="news-popup-title">${item.title}</h3>
-                    ${item.locationName ? `
-                    <div class="news-popup-location">
-                        <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                        </svg>
-                        ${item.locationName}
-                    </div>` : ''}
-                    <div class="news-popup-summary">${item.description || ''}</div>
-                    <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
-                </div>
-                </div>
-            `;
-
-            marker.bindPopup(popupHtml, {
+            marker.bindPopup(this.getPopupHtml(item), {
                 maxWidth: 400,
                 minWidth: 320,
                 className: 'news-popup-container',
@@ -164,13 +142,79 @@ export class MarkerManager {
             }
         }
 
-        // auto-frame initial set of markers
-        if (geoItems.length > 0 && (added.length > 0 || removed.length > 0)) {
-            let itemsToFrame = geoItems.filter(i => i.latitude! > -60 && i.latitude! < 75);
-            if (itemsToFrame.length === 0) itemsToFrame = geoItems;
-            const bounds = L.latLngBounds(itemsToFrame.map(i => [i.latitude!, i.longitude!] as [number, number]));
-            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6, animate });
+        // NOTE: Auto-framing is intentionally removed — fitBounds triggers moveend which
+        // fires the BBox fetch, creating a pan→fetch→re-render→pan cycle.
+    }
+
+    /**
+     * Patches the description in an open popup (or any popup in the DOM) for a given event id.
+     * Also updates the marker's bound popup content so it persists on close/reopen.
+     */
+    public updatePopupDescription(eventId: string, description: string) {
+        const marker = this.markers.get(eventId);
+        if (!marker) return;
+
+        const item = this.itemData.get(eventId);
+        if (!item) return;
+
+        // Ensure the cached item has the description for getPopupHtml
+        item.description = description;
+
+        const newPopupHtml = this.getPopupHtml(item);
+
+        // Update stored popup content so close/reopen shows description
+        marker.setPopupContent(newPopupHtml);
+
+        // If the popup is currently open, also patch the live DOM directly
+        // (setPopupContent re-renders the Leaflet popup which may flicker if open)
+        const popupEl = marker.getPopup()?.getElement();
+        if (popupEl) {
+            const skeleton = popupEl.querySelector<HTMLElement>(`div[data-event-id="${eventId}"].news-popup-summary--loading`);
+            if (skeleton) {
+                skeleton.outerHTML = `<p class="news-popup-summary" data-event-id="${eventId}">${description}</p>`;
+            }
         }
+    }
+
+    /**
+     * Generates the full HTML string for a news item popup.
+     */
+    private getPopupHtml(item: NewsItem): string {
+        const pinColor = getCategoryColor(item.category);
+        const categoryLabel = item.category
+            ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
+            : '';
+
+        const descriptionHtml = item.description
+            ? `<p class="news-popup-summary" data-event-id="${item.id}">${item.description}</p>`
+            : `<div class="news-popup-summary news-popup-summary--loading" data-event-id="${item.id}">
+                <div class="popup-skeleton-line"></div>
+                <div class="popup-skeleton-line" style="width:85%"></div>
+                <div class="popup-skeleton-line" style="width:65%"></div>
+              </div>`;
+
+        return `
+            <div class="news-popup">
+            ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
+            <div class="news-popup-body">
+                <div class="news-popup-meta">
+                <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
+                ${categoryLabel}
+                <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                </div>
+                <h3 class="news-popup-title">${item.title}</h3>
+                ${item.locationName ? `
+                <div class="news-popup-location">
+                    <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                    ${item.locationName}
+                </div>` : ''}
+                ${descriptionHtml}
+                <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
+            </div>
+            </div>
+        `;
     }
 
     /**

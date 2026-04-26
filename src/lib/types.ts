@@ -5,7 +5,8 @@
 export interface NewsItem {
   id: string;
   title: string;
-  description: string;
+  /** Omitted on initial list fetch — loaded on demand when a card is expanded. */
+  description?: string;
   url: string;
   source: string;
   sourceType: 'gnews' | 'rss' | 'social';

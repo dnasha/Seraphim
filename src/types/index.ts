@@ -14,7 +14,8 @@ export * from '@/lib/types';
 export interface DbEvent {
   id?: string;                // auto-generated UUID primary key
   title: string;
-  description: string;
+  /** Present on detail fetch only — omitted from list queries to reduce egress. */
+  description?: string;
   url: string;                // Primary conflict key for upserts
   source: string;
   source_type: 'gnews' | 'rss' | 'social';
@@ -36,7 +37,8 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
   return {
     id: String(row.id ?? row.url),
     title: row.title,
-    description: row.description,
+    // description is optional — only populated by the detail endpoint
+    ...(row.description !== undefined ? { description: row.description } : {}),
     url: row.url,
     source: row.source,
     sourceType: row.source_type,
