@@ -27,8 +27,14 @@ export async function GET(
 ) {
     const { id } = await params;
 
-    if (!id) {
-        return NextResponse.json({ error: 'Missing event id' }, { status: 400 });
+    if (!id || id.startsWith('cluster-')) {
+        return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
+    }
+
+    // Basic UUID format check to prevent Supabase query errors
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+        return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400 });
     }
 
     // Check server-side detail cache first

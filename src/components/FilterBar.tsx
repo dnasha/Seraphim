@@ -8,7 +8,7 @@ import styles from './FilterBar.module.css';
 
 // Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
-    general: '#166534',
+    general: '#3b82f6',
     world: '#dc2626',
     crisis: '#b91c1c',
     nation: '#2563eb',
@@ -53,11 +53,11 @@ const categoryOptions = [
 ];
 
 const sourceOptions = [
-    { value: 'news', label: 'News', bg: '#166534', color: '#ffffff' },
+    { value: 'news', label: 'News', bg: '#3b82f6', color: '#ffffff' },
     { value: 'reddit', label: 'Reddit', bg: '#ff4500', color: '#ffffff' },
-    { value: 'x', label: 'X', bg: '#000000', color: '#ffffff' },
-    { value: 'telegram', label: 'Telegram', bg: '#006eff', color: '#ffffff' },
-    { value: 'extra', label: 'Bonus', bg: '#c528bdff', color: '#ffffff' },
+    { value: 'x', label: 'X', bg: '#0f1419', color: '#ffffff' },
+    { value: 'telegram', label: 'Telegram', bg: '#0088cc', color: '#ffffff' },
+    { value: 'extra', label: 'Bonus', bg: '#d946ef', color: '#ffffff' },
 ];
 
 const timeOptions = [

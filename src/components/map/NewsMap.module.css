@@ -100,35 +100,37 @@
   border-radius: 50%;
   width: 100%;
   height: 100%;
-  border: 2.5px solid #fff;
+  border: 2px solid #fff;
   font-weight: 700;
   font-size: 0.85rem;
   color: #fff;
-  transition: none;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
   will-change: transform;
   backface-visibility: hidden;
 }
 
 :global(.cluster-icon:hover) {
-  transform: scale(1.1);
-  z-index: 1000;
+  transform: scale(1.15);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+  z-index: 1000 !important;
 }
 
-/* small — amber */
+/* small — light red */
 :global(.cluster-icon.cluster-small) {
-  background: rgb(255, 187, 0) !important;
-  color: #000 !important;
+  background: rgba(239, 68, 68, 0.85) !important;
+  color: #fff !important;
 }
 
-/* medium — orange/red */
+/* medium — medium red */
 :global(.cluster-icon.cluster-medium) {
-  background: rgba(245, 17, 1, 0.95) !important;
+  background: rgba(185, 28, 28, 0.9) !important;
   color: #fff !important;
 }
 
 /* large — dark red */
 :global(.cluster-icon.cluster-large) {
-  background: rgba(129, 5, 5, 0.95) !important;
+  background: rgba(127, 29, 29, 0.95) !important;
   color: #fff !important;
 }
 
@@ -143,8 +145,8 @@
 }
 
 :global(.marker-icon) {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 2px solid #fff;
   display: flex;
@@ -158,31 +160,34 @@
   cursor: pointer;
   z-index: 10;
   backface-visibility: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 :global(.marker-icon svg) {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
   display: block;
 }
 
 :global(.marker-icon:hover) {
-  transform: scale(1.18);
+  transform: scale(1.15);
   z-index: 100 !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
 :global(.marker-icon-active) {
-  width: 36px !important;
-  height: 36px !important;
+  width: 34px !important;
+  height: 34px !important;
   transform: scale(1);
   z-index: 1000 !important;
   animation: marker-pulse-active 2s infinite;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.4), 0 4px 10px rgba(0,0,0,0.3);
 }
 
 :global(.marker-icon-active svg) {
-  width: 20px !important;
-  height: 20px !important;
+  width: 18px !important;
+  height: 18px !important;
 }
 
 /* ── Popup overrides (Leaflet injects DOM directly) ── */
@@ -206,108 +211,55 @@
 }
 
 :global(.news-popup-container a.leaflet-popup-close-button) {
-  color: #8b0000 !important;
-  padding: 8px;
-  width: 32px;
-  height: 32px;
-  display: flex;
+  color: #ef4444 !important;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
-  right: 4px;
-  top: 4px;
+  font-size: 18px !important;
+  right: 6px;
+  top: 6px;
+  transition: all 0.2s;
+  background: transparent !important;
+  border: none !important;
+  z-index: 2000;
 }
 
 :global(.news-popup-container a.leaflet-popup-close-button:hover) {
-  color: var(--text-primary);
-  background: var(--surface-alt);
-  border-radius: 4px;
+  color: #b91c1c !important;
+  transform: scale(1.2);
 }
 
 /* inside popup */
 :global(.news-popup) {
   display: flex;
   flex-direction: column;
-  width: 340px;
-  max-width: 400px;
+  width: 400px;
+  background: var(--surface);
 }
-
-:global(.news-popup-img) {
-  width: 100%;
-  height: 140px;
-  object-fit: cover;
-  background: var(--surface-alt);
-}
-
-:global(.news-popup-body) {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-:global(.news-popup-title) {
-  font-size: 0.875rem;
-  font-weight: 700;
-  line-height: 1.35;
-  margin: 0;
-  font-family: inherit;
-  color: var(--text-primary);
-}
-
-:global(.news-popup-summary) {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  line-height: 1.55;
-  margin: 0 0 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-:global(.news-popup-summary::-webkit-scrollbar) {
-  width: 4px;
-}
-
-:global(.news-popup-summary::-webkit-scrollbar-thumb) {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-/* Skeleton shimmer for popup descriptions loading on demand */
-@keyframes popup-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-
-:global(.news-popup-summary--loading) {
+:global(.news-popup-header) {
+  padding: 16px 32px 10px 18px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 0 8px;
 }
 
-:global(.popup-skeleton-line) {
-  height: 9px;
-  width: 100%;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--surface-alt) 25%,
-    var(--border)      50%,
-    var(--surface-alt) 75%
-  );
-  background-size: 200% 100%;
-  animation: popup-shimmer 1.4s ease-in-out infinite;
+:global(.news-popup-title) {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+  color: var(--text-primary);
 }
 
 :global(.news-popup-meta) {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 0.6875rem;
-  color: var(--text-muted);
-  margin-bottom: 4px;
 }
 
 :global(.news-popup-source) {
@@ -329,16 +281,108 @@
   text-transform: capitalize;
 }
 
+:global(.news-popup-time) {
+  color: var(--text-muted);
+}
+
 :global(.news-popup-location) {
-  font-size: 0.6875rem;
   color: var(--green);
-  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+:global(.news-popup-meta-sep) {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+:global(.news-popup-content) {
+  padding: 0 18px 16px;
+  border-top: none;
+}
+
+:global(.news-popup-img-container) {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 4px 0 4px;
+  background: var(--surface-alt);
+}
+
+:global(.news-popup-img) {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  display: block;
+}
+
+:global(.news-popup-summary) {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+:global(.news-popup-summary::-webkit-scrollbar) {
+  width: 4px;
+}
+
+:global(.news-popup-summary::-webkit-scrollbar-thumb) {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+:global(.news-popup-link) {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  text-align: right;
+  margin-top: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+:global(.news-popup-link:hover) {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+/* Skeleton shimmer for popup descriptions loading on demand */
+@keyframes popup-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+:global(.news-popup-summary--loading) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+
+:global(.popup-skeleton-line) {
+  height: 10px;
+  width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    var(--border)      50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: popup-shimmer 1.4s ease-in-out infinite;
 }
 
 :global(.location-icon-svg) {
   display: inline-block;
   vertical-align: middle;
-  margin-right: 4px;
+  margin-right: 2px;
   opacity: 0.8;
 }
 
@@ -351,6 +395,7 @@
 
   :global(.news-popup-container .leaflet-popup-content-wrapper) {
     max-width: calc(100vw - 32px);
+    width: auto !important;
   }
 
   :global(.leaflet-top.leaflet-right .leaflet-control-zoom) {

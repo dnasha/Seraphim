@@ -14,7 +14,7 @@ import styles from './EventSidebar.module.css';
 
 // Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
-    general: '#166534',
+    general: '#3b82f6',
     world: '#dc2626',
     crisis: '#b91c1c',
     nation: '#2563eb',
@@ -33,17 +33,17 @@ function getSourceStyle(sourceName: string): { bg: string; color: string } {
     if (s.includes('reddit'))
         return { bg: '#ff4500', color: '#ffffff' };
     if (s.includes('telegram'))
-        return { bg: '#006effff', color: '#ffffff' };
+        return { bg: '#0088cc', color: '#ffffff' };
     if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
-        return { bg: '#6d3100ff', color: '#ffffff' };
+        return { bg: '#9a3412', color: '#ffffff' };
     if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
-        return { bg: '#008fb3ff', color: '#ffffff' };
+        return { bg: '#0284c7', color: '#ffffff' };
     if (s.includes('nasa') || s.includes('nature'))
         return { bg: '#059669', color: '#ffffff' };
     if (s.includes('who '))
         return { bg: '#7c3aed', color: '#ffffff' };
     // mainstream media default
-    return { bg: '#818181ff', color: '#ffffff' };
+    return { bg: '#3b82f6', color: '#ffffff' };
 }
 
 interface EventSidebarProps {
@@ -274,7 +274,7 @@ export default function EventSidebar({
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                Read full article →
+                                View source →
                             </a>
                         </div>
                     )}

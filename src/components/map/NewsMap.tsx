@@ -43,9 +43,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     const [mapReady, setMapReady] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    // Clustering toggle is a power-user override; automatic server clustering
-    // at low zoom handles the normal case without user intervention.
-    const [clusteringEnabled, setClusteringEnabled] = useState(false);
+    // Power-user override: disables automatic server clustering at low zoom,
+    // forcing the map to render all individual pins.
+    const [forceIndividualPins, setForceIndividualPins] = useState(false);
     const [currentStyle, setCurrentStyle] = useState<string>(isDarkMode ? 'dark' : 'standard');
     
     const settingsPanelRef = useRef<HTMLDivElement>(null);
@@ -54,7 +54,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const onSelectItemRef = useRef(onSelectItem);
     const isDarkModeRef = useRef(isDarkMode);
     const onBoundsChangeRef = useRef(onBoundsChange);
-    const clusteringEnabledRef = useRef(clusteringEnabled);
+    const forceIndividualPinsRef = useRef(forceIndividualPins);
 
     // Debounce timer for moveend
     const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,7 +92,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 zoom: map.getZoom(),
                 // If the user has force-enabled individual pins (power-user toggle),
                 // tell the API to skip server-side clustering even at low zoom.
-                forceRaw: clusteringEnabledRef.current,
+                forceRaw: forceIndividualPinsRef.current,
             };
             onBoundsChangeRef.current?.(bbox);
         }, 400);
@@ -111,12 +111,19 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     }, [onBoundsChange]);
 
     useEffect(() => {
-        clusteringEnabledRef.current = clusteringEnabled;
-    }, [clusteringEnabled]);
+        forceIndividualPinsRef.current = forceIndividualPins;
+    }, [forceIndividualPins]);
 
     useEffect(() => {
         selectedIdRef.current = selectedItemId;
     }, [selectedItemId]);
+
+    // Trigger a BBox fetch immediately when the user toggles individual pins
+    useEffect(() => {
+        if (mapReady && mapRef.current) {
+            emitBounds(mapRef.current);
+        }
+    }, [forceIndividualPins, mapReady, emitBounds]);
 
     const geoItems = useMemo(() => items.filter(i => i.latitude != null && i.longitude != null), [items]);
 
@@ -285,7 +292,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     useEffect(() => {
         if (!mapReady || !markerManagerRef.current) return;
-        markerManagerRef.current.syncMarkers(geoItems, clusteringEnabled, selectedIdRef.current);
+        // Client-side clustering is permanently disabled. We rely entirely on 
+        // server-side clustering, unless forceIndividualPins is active.
+        markerManagerRef.current.syncMarkers(geoItems, false, selectedIdRef.current);
 
         // Patch any already-open popups whose descriptions have since been loaded
         geoItems.forEach(item => {
@@ -293,21 +302,21 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 markerManagerRef.current?.updatePopupDescription(item.id, item.description);
             }
         });
-    }, [mapReady, clusteringEnabled, geoItems]);
+    }, [mapReady, geoItems]);
 
 
     useEffect(() => {
         if (!mapReady || !markerManagerRef.current) return;
         markerManagerRef.current.highlightMarker(selectedItemId, geoItems);
-    }, [mapReady, selectedItemId, selectionVersion, clusteringEnabled, geoItems]);
+    }, [mapReady, selectedItemId, selectionVersion, geoItems]);
 
     return (
         <div className={styles.mapWrapper}>
             <MapSettings
                 mapStyle={currentStyle}
                 onStyleChange={setCurrentStyle}
-                clusteringEnabled={clusteringEnabled}
-                onClusteringToggle={() => setClusteringEnabled(v => !v)}
+                forceIndividualPins={forceIndividualPins}
+                onForceIndividualPinsToggle={() => setForceIndividualPins(v => !v)}
                 isOpen={settingsOpen}
                 onToggleOpen={() => setSettingsOpen(o => !o)}
                 panelRef={settingsPanelRef}

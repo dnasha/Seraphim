@@ -193,6 +193,7 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
     // On-demand detail fetch (description lazy-load)
     // -------------------------------------------------------------------------
     const fetchEventDetails = useCallback(async (id: string) => {
+        if (!id || id.startsWith('cluster-')) return;
         if (descriptionCache.current.has(id)) return;
 
         try {

@@ -9,8 +9,8 @@ import styles from './MapSettings.module.css';
 interface MapSettingsProps {
     mapStyle: string;
     onStyleChange: (style: string) => void;
-    clusteringEnabled: boolean;
-    onClusteringToggle: () => void;
+    forceIndividualPins: boolean;
+    onForceIndividualPinsToggle: () => void;
     isOpen: boolean;
     onToggleOpen: () => void;
     panelRef: React.RefObject<HTMLDivElement | null>;
@@ -21,8 +21,8 @@ interface MapSettingsProps {
 const MapSettings: React.FC<MapSettingsProps> = ({
     mapStyle,
     onStyleChange,
-    clusteringEnabled,
-    onClusteringToggle,
+    forceIndividualPins,
+    onForceIndividualPinsToggle,
     isOpen,
     onToggleOpen,
     panelRef,
@@ -63,12 +63,12 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                     <div className={styles.settingsDivider} />
 
                     <div className={styles.settingsSection}>
-                        <div className={styles.settingsLabel}>Clustering</div>
+                        <div className={styles.settingsLabel}>Display Mode</div>
                         <label className={styles.settingsToggle}>
-                            <span className={styles.settingsToggleLabel}>Group nearby markers</span>
+                            <span className={styles.settingsToggleLabel}>Force individual pins</span>
                             <div
-                                className={`${styles.toggleSwitch}${clusteringEnabled ? ` ${styles.toggleSwitchOn}` : ''}`}
-                                onClick={onClusteringToggle}
+                                className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}
+                                onClick={onForceIndividualPinsToggle}
                             >
                                 <div className={styles.toggleKnob} />
                             </div>

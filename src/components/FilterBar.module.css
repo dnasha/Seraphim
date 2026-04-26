@@ -93,12 +93,7 @@
   gap: 6px;
 }
 
-.sourceToggle:hover,
-.categoryToggle:hover,
-.timeToggle:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+/* Hover state removed to prevent sticky camouflage on mobile */
 
 .sourceToggleActive,
 .timeToggleActive {
@@ -156,9 +151,9 @@
   .sourceToggle,
   .categoryToggle,
   .timeToggle {
-    height: 26px;
-    padding: 0 9px;
-    font-size: 0.7rem;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 0.75rem;
     white-space: nowrap;
     flex-shrink: 0;
   }

@@ -151,7 +151,8 @@ export class MarkerManager {
                     className: 'custom-cluster-icon',
                     iconSize: [size, size],
                 });
-                const marker = L.marker([item.latitude!, item.longitude!], { icon });
+                const zIndexOffset = className === 'cluster-large' ? 1000 : (className === 'cluster-medium' ? 500 : 250);
+                const marker = L.marker([item.latitude!, item.longitude!], { icon, zIndexOffset });
 
                 // Clicking a server-side cluster zooms in — suppress the bounds refetch
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,8 +169,8 @@ export class MarkerManager {
                 const marker = L.marker([item.latitude!, item.longitude!], { icon });
 
                 marker.bindPopup(this.getPopupHtml(item), {
-                    maxWidth: 400,
-                    minWidth: 320,
+                    maxWidth: 500,
+                    minWidth: 400,
                     className: 'news-popup-container',
                 });
 
@@ -244,30 +245,40 @@ export class MarkerManager {
                 : '')
             : `<div class="news-popup-summary news-popup-summary--loading" data-event-id="${item.id}">
                 <div class="popup-skeleton-line"></div>
-                <div class="popup-skeleton-line" style="width:85%"></div>
-                <div class="popup-skeleton-line" style="width:65%"></div>
+                <div class="popup-skeleton-line" style="width:90%"></div>
+                <div class="popup-skeleton-line" style="width:75%"></div>
               </div>`;
 
         return `
             <div class="news-popup">
-            ${item.imageUrl ? `<img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ''}
-            <div class="news-popup-body">
-                <div class="news-popup-meta">
-                <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
-                ${categoryLabel}
-                <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                <div class="news-popup-header">
+                    <h3 class="news-popup-title">${item.title}</h3>
+                    <div class="news-popup-meta">
+                        <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
+                        ${categoryLabel}
+                        <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                        ${item.locationName ? `
+                            <span class="news-popup-meta-sep">•</span>
+                            <span class="news-popup-location">
+                                <svg class="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                </svg>
+                                ${item.locationName}
+                            </span>
+                        ` : ''}
+                    </div>
                 </div>
-                <h3 class="news-popup-title">${item.title}</h3>
-                ${item.locationName ? `
-                <div class="news-popup-location">
-                    <svg class="location-icon-svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                    </svg>
-                    ${item.locationName}
-                </div>` : ''}
-                ${descriptionHtml}
-                <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Read full article →</a>
-            </div>
+                
+                <div class="news-popup-content">
+                    ${item.imageUrl ? `
+                        <div class="news-popup-img-container">
+                            <img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                        </div>
+                    ` : ''}
+                    
+                    ${descriptionHtml}
+                    <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source →</a>
+                </div>
             </div>
         `;
     }
@@ -301,6 +312,7 @@ export class MarkerManager {
                 }
                 const item = geoItems.find(i => i.id === prevId);
                 prevMarker.setIcon(createCategoryIcon(L, item?.category, false));
+                prevMarker.setZIndexOffset(0);
             }
         }
         
@@ -315,6 +327,7 @@ export class MarkerManager {
                 }
                 const item = geoItems.find(i => i.id === nextId);
                 nextMarker.setIcon(createCategoryIcon(L, item?.category, true));
+                nextMarker.setZIndexOffset(2000);
 
                 const showPopup = () => {
                     nextMarker.openPopup();

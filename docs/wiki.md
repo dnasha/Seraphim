@@ -268,7 +268,7 @@ page.tsx (client component)
     ├── Leaflet map (canvas renderer)
     ├── smoothZoom.ts (lerp loop + sub-pixel patches)
     ├── markerManager.ts (marker sync + server-cluster support)
-    ├── MapSettings (gear icon → style selector + cluster toggle)
+    ├── MapSettings (gear icon → style selector + individual pin toggle)
     ├── Marker layer (direct or clustered)
     ├── Popup layer (HTML-templated, not React-rendered)
     └── Viewport events — emits debounced BBox + Zoom (snapped to grid)
@@ -473,7 +473,7 @@ DRY_RUN=true bun run src/scraper/index.ts
 - **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown.
 - **Client-side BBox Cache**: `useNewsData` maintains a Map of previously fetched BBox areas. Uses a **Snapping Grid** (0.5 to 10 degrees) to maximize cache hits during panning and minimize redundant DB queries.
 - **Lazy-Load Cache**: Descriptions are cached client-side once fetched.
-- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below a tactical threshold. Clusters are assigned synthetic IDs to prevent marker reuse conflicts during zoom transitions.
+- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below a tactical threshold. Clusters are assigned synthetic IDs to prevent marker reuse conflicts. Power users can bypass this via the **"Force individual pins"** toggle in the map settings.
 
 
 ### Realtime Updates
