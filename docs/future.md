@@ -86,17 +86,15 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ### Phase 2: UI Rendering & Performance (Browser Savers)
 
-- **MapLibre GL JS Migration**: Successfully transitioned from Leaflet to MapLibre GL JS. All rendering is now WebGL-accelerated on the GPU, supporting 100,000+ points with zero UI lag.
-- **Minimalist Visualization Architecture**:
-  - **Aggregated Circles**: Grouped events at all zoom levels with count badges and dynamic scaling.
-  - **WebGL Symbols**: Individual categorized pins with crisp, raw colors and no artificial glows.
-  - **Global View Optimization**: Decreased `minZoom` to `0.5` to allow viewing the entire world at once.
-- **Interaction Stability**:
-  - **FlyTo Breakthrough**: "Fly to" actions now zoom past the cluster boundary (target zoom 11) to focus directly on individual events.
-  - **Lazy-Loading Robustness**: Fixed a bug where popups would flicker or close during background data fetching. Sidebar and Map popups now handle lazy descriptions with seamless skeleton-to-content transitions.
-- **Visual Cleanup**: Completely removed pulse/glow animations and heatmap gradients to prioritize a "pro" look with high information density.
-- **Virtualize the Sidebar**: Integrated `react-virtuoso` for 100% smooth list performance at any scale. Auto-scroll logic perfectly synchronized with map selection.
-- **High-Performance Camera**: Leveraged native MapLibre `flyTo` with custom `isFlyingRef` guards for cinematic, jitter-free navigation.
+- [x] **Interaction Snappiness**: Optimized map viewport polling with a 150ms debounce (reduced from 400ms). The UI now feels instantaneous when moving the map.
+- [x] **Greedy Client-Side Caching**: Implemented an accumulation-based state manager in `useNewsData.ts`. Individual pins are now merged into a persistent client-side pool, preventing "empty map" flickering when panning back to previously loaded areas.
+- [x] **Dynamic BBox Grid Expansion**: Scaled the BBox snapping logic and increased the API `RAW_LIMIT` to 2000 events. This allows for massive, pre-cached data "tiles" that minimize database egress.
+- [x] **Advanced Cluster Visualization**:
+  - **Non-Linear Scaling**: Clusters scale logarithmically (14px to 36px) to maintain clarity without overcrowding.
+  - **Count-Based Sorting**: Implemented `symbol-sort-key` priority—larger clusters are always drawn on top of smaller ones.
+  - **Collision-Aware Labels**: Optimized collision detection and `text-padding` to hide redundant underlying labels, ensuring a clean "pro" look at all zoom levels.
+  - **Smooth Opacity Gradients**: Dynamic `circle-opacity` (0.65 to 0.95) based on event volume, providing a glassy, premium aesthetic.
+- [x] **Synchronized Cluster Break-Apart**: Aligned client-side MapLibre clustering with the server-side `CLUSTER_ZOOM_THRESHOLD` (5) for a seamless transition from global groups to individual pins.
 
 ---
 
@@ -109,11 +107,6 @@ _Goal: Fine-tune the new MapLibre engine for absolute visual perfection._
 - **Why**: Currently using raster tiles (Voyager/Dark). Vector tiles allow for dynamic labeling, infinite zoom clarity, and $0 egress via Cloudflare R2.
 - **Action**: Serve OSINT-specific vector tiles (OpenStreetMap-based) from R2. Update `MapConstants.tsx` to use the Protomaps MapLibre adapter.
 - **Benefit**: Labels will stay crisp at all zoom levels, and we can style the base map dynamically via JS.
-
-### 2.5.2 — H3 Hexbin Aggregation (Global View)
-
-- **Action**: Replace the low-zoom heatmap with H3 hexbins (H3-JS) to show discrete event density counts at a continental scale.
-- **Implementation**: Calculate H3 indexes server-side or in a worker and render as MapLibre `fill` layers.
 
 ---
 

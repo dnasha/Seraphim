@@ -41,7 +41,7 @@ const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
 const CLUSTER_ZOOM_THRESHOLD = 5;
 
 // Safety cap on raw event rows returned per request.
-const RAW_LIMIT = 500;
+const RAW_LIMIT = 2000;
 
 // Intentionally excluded from the SELECT — loaded via /api/news/[id] on demand.
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
@@ -59,6 +59,11 @@ export async function GET(request: Request) {
     const maxLng = searchParams.get('maxLng');
     const hasBBox = minLat !== null && maxLat !== null && minLng !== null && maxLng !== null;
 
+    // Search query parameter
+    const searchQuery = searchParams.get('query');
+    // If a global search query is active, we ignore the bounding box constraint to find events anywhere.
+    const ignoreBBox = !!searchQuery;
+
     // Zoom level — always provided alongside BBox. Used for auto-clustering decisions.
     const zoomStr = searchParams.get('zoom');
     const zoom = zoomStr ? parseFloat(zoomStr) : null;
@@ -72,11 +77,13 @@ export async function GET(request: Request) {
     const sinceStr = searchParams.get('since');
 
     // Decide whether to use server-side clustering:
-    const useServerClustering = hasBBox && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
+    // We still cluster global searches if we have a zoom level to base it on
+    const useServerClustering = (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
 
     // Cache key encodes the full query shape.
-    const cacheKey = hasBBox
-        ? `bbox:${minLat},${maxLat},${minLng},${maxLng}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}`
+    const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
+    const cacheKey = (hasBBox || ignoreBBox)
+        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}`
         : `events${sinceStr ? `,s:${sinceStr}` : ''}`;
     const canUseCache = !includeUnmapped;
 
@@ -100,24 +107,20 @@ export async function GET(request: Request) {
         } else {
             let rows, error;
 
-            if (useServerClustering) {
-                // Low zoom: delegate to the clustering RPC.
-                const rpcParams: Record<string, unknown> = {
-                    p_zoom_level: Math.floor(zoom!),
-                    p_min_lat: parseFloat(minLat!),
-                    p_max_lat: parseFloat(maxLat!),
-                    p_min_lng: parseFloat(minLng!),
-                    p_max_lng: parseFloat(maxLng!),
-                };
-                if (sinceStr) rpcParams.p_since = sinceStr;
+                if (useServerClustering) {
+                    // Low zoom: delegate to the clustering RPC.
+                    const rpcParams: Record<string, unknown> = {
+                        p_zoom_level: Math.floor(zoom!),
+                        p_min_lat: ignoreBBox ? null : parseFloat(minLat!),
+                        p_max_lat: ignoreBBox ? null : parseFloat(maxLat!),
+                        p_min_lng: ignoreBBox ? null : parseFloat(minLng!),
+                        p_max_lng: ignoreBBox ? null : parseFloat(maxLng!),
+                    };
+                    if (sinceStr) rpcParams.p_since = sinceStr;
+                    if (searchQuery) rpcParams.p_search_query = searchQuery;
 
                 const res = await supabase.rpc('get_clustered_events', rpcParams).limit(RAW_LIMIT);
-                rows = res.data ? res.data.map((row: DbEvent) => {
-                    if (row.event_count && row.event_count > 1) {
-                        row.id = `cluster-${Math.floor(zoom!)}-${row.cluster_id}`;
-                    }
-                    return row;
-                }) : null;
+                rows = res.data;
                 error = res.error;
             } else {
                 let query = supabase
@@ -126,7 +129,7 @@ export async function GET(request: Request) {
                     .order('published_at', { ascending: false })
                     .limit(RAW_LIMIT);
 
-                if (hasBBox) {
+                if (!ignoreBBox && hasBBox) {
                     query = query
                         .gte('latitude', parseFloat(minLat!))
                         .lte('latitude', parseFloat(maxLat!))
@@ -134,6 +137,10 @@ export async function GET(request: Request) {
                         .lte('longitude', parseFloat(maxLng!));
                 } else if (!includeUnmapped) {
                     query = query.not('latitude', 'is', null);
+                }
+
+                if (searchQuery) {
+                    query = query.or(`title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
                 }
 
                 // Apply server-side time filter when provided.

@@ -144,24 +144,25 @@ SeraphimPreview/
 ┌─────────────────────────────────────────────────────────┐
 │  /api/news/route.ts  (Next.js Edge Route)               │
 │  ├── BBox Querying (minLat, maxLat, minLng, maxLng)
-│  ├── Server-Side Clustering (zoom parameter)
+│  ├── Global Search Override (query parameter ignores BBox)
+│  ├── Server-Side Clustering (zoom + searchQuery support)
 │  ├── Synthetic Cluster IDs (cluster-[zoom]-[id])
 │  ├── Time filtering (since parameter)
-│  ├── In-memory bbox+time-keyed cache (15 min TTL)
+│  ├── In-memory global/bbox+time-keyed cache (15 min TTL)
 │  ├── Refresh throttle (1 min cooldown)
 │  ├── Egress Optimization (omits 'description')
-│  ├── LIMIT 500 (per RPC group or raw query)
-│  └── Cache-Control: s-maxage=900
+│  ├── LIMIT 2000 (RAW_LIMIT for event rows)
+│  └── Cache-Control: s-maxage=60 (Edge CDN)
 └─────────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────────┐
 │  React Client                                           │
-│  ├── useNewsData — Viewport-driven (BBox+Zoom+Since)    │
+│  ├── useNewsData — Viewport + Query driven              │
 │  ├── Sidebar Virtualization — react-virtuoso list       │
 │  ├── MapLibre GL JS — WebGL Rendering Layer             │
 │  │   ├── Layer-based (heatmap, circles, symbols)        │
 │  │   └── High-performance camera (flyTo / easeTo)       │
-│  ├── useNewsFilter — client-side useMemo filtering      │
+│  ├── useNewsFilter — pure UI filter logic               │
 │  └── Lazy-Loading — fetch descriptions on card expand   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -308,9 +309,10 @@ page.tsx (client component)
 ### Marker & Layer System
 
 - **WebGL Symbols**: Individual pins are rendered as MapLibre `symbol` layers. Inactive pins use `unclustered-point`; the selected pin uses `unclustered-point-active`.
-- **SVG Generation**: Icons are generated as `HTMLImageElement` from SVG strings in `MapConstants.tsx`. No glow/stroke is used; active pins are simply larger with a white background circle.
-- **Heatmap**: At low zoom levels (world view), a heatmap layer provides a visual overview of event density.
-- **Clustered View**: Aggregated groups are rendered as `circle` layers with dynamic sizing and color steps based on `point_count`.
+- **SVG Generation**: Icons are generated as `HTMLImageElement` from SVG strings in `MapConstants.tsx`.
+- **Clustered View**: Aggregated groups are rendered as `circle` layers with non-linear scaling (14px to 36px) and prioritized sorting (`symbol-sort-key`).
+- **Collision Detection**: `text-padding` and `text-allow-overlap: false` are used on the label layer to hide redundant text from underlying clusters.
+- **Opacity Gradient**: Smooth `circle-opacity` interpolation (0.80 to 0.95) based on event density.
 - **Icon Caching**: Icons are registered with the map via `map.addImage` after every style load.
 - **Highlighting**: Selection updates trigger a `setFilter` on symbol layers, which is highly efficient in WebGL.
 
@@ -469,16 +471,20 @@ DRY_RUN=true bun run src/scraper/index.ts
 
 ### Caching
 - **Server cache**: In-memory `Map` in `route.ts` with 15-min TTL. Keyed by BBox or "global".
-- **Edge cache**: `Cache-Control: public, s-maxage=900, stale-while-revalidate=59` for global; shorter TTLs for BBox.
+- **Edge cache**: `Cache-Control: public, s-maxage=60, stale-while-revalidate=59` for global; shorter TTLs for BBox.
 - **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown.
-- **Client-side BBox Cache**: `useNewsData` maintains a Map of previously fetched BBox areas. Uses a **Snapping Grid** (0.5 to 10 degrees) to maximize cache hits during panning and minimize redundant DB queries.
+- **Client-side Cache**: `useNewsData` maintains a Map of previously fetched areas.
+  - **Greedy Accumulation**: Individual pins are merged into a persistent pool, preventing "empty map" flickering when panning back to previously loaded areas.
+  - **Snapping Grid**: Uses a wide grid (2 to 20 degrees) to maximize cache hits during panning.
+  - **Search Optimization**: If a global search query is active, the cache key *ignores* BBox coordinates. This allows users to pan across search results with 100% instant cache hits.
 - **Lazy-Load Cache**: Descriptions are cached client-side once fetched.
-- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below a tactical threshold. Clusters are assigned synthetic IDs to prevent marker reuse conflicts. Power users can bypass this via the **"Force individual pins"** toggle in the map settings.
+- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below 5. Power users can bypass this via the **"Force individual pins"** toggle.
 
 
 ### Realtime Updates
-- **Supabase Realtime**: Subscribed to `INSERT` events. Incoming rows are filtered against the current viewport BBox and injected into the UI state.
-- **Cache Injection**: New events are automatically injected into all overlapping `bboxCache` entries to ensure they persist across map pans. Clustered views rely on periodic re-fetches or grid invalidation.
+- **Supabase Realtime**: Subscribed to `INSERT` events.
+  - **Search-Aware Filtering**: Incoming rows are filtered against the current viewport BBox OR the active search query, ensuring global search results update live.
+  - **Cache Injection**: New events are automatically injected into all overlapping `bboxCache` entries to ensure they persist across map pans.
 
 
 ### Egress Optimization
@@ -490,7 +496,7 @@ DRY_RUN=true bun run src/scraper/index.ts
 ### Navigation & Camera
 - **Smart Camera behavior**: Automatic `fitBounds` on data refresh is disabled. Programmable camera moves (like selecting a card) call `onBeforeFly` to set a `suppressBoundsRef` flag, which prevents the resulting `moveend` event from triggering a redundant BBox re-fetch.
 - **One-Time Zoom**: MarkerManager tracks `lastFlewToId` to skip camera animations if the same event is selected again (e.g. after a re-render), preventing "rubber-banding" during exploration.
-- **Debounced BBox + Zoom + Since**: The map emits bounds changes 400ms after the `moveend` event to prevent API spam. The BBox includes the `since` timestamp derived from the active timeRange to ensure server-side clustering respects temporal filters.
+- **Debounced BBox + Zoom + Since**: The map emits bounds changes 150ms after the `moveend` event to prevent API spam while maintaining high responsiveness. The BBox includes the `since` timestamp derived from the active timeRange to ensure server-side clusters respect temporal filters.
 
 
 ### Known Duplications (technical debt)

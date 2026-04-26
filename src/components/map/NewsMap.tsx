@@ -38,7 +38,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const onBoundsChangeRef = useRef(onBoundsChange);
     const onSelectItemRef = useRef(onSelectItem);
     const forceIndividualPinsRef = useRef(forceIndividualPins);
-    const suppressBoundsRef = useRef(false);
+
     const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Track the last selection we flew to, so re-renders from description loading
@@ -63,10 +63,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const emitBounds = useCallback((map: maplibregl.Map) => {
         if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
         boundsDebounceRef.current = setTimeout(() => {
-            if (suppressBoundsRef.current) {
-                suppressBoundsRef.current = false;
-                return;
-            }
             const bounds = map.getBounds();
             const bbox: BBox = {
                 minLat: bounds.getSouth(),
@@ -77,7 +73,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 forceRaw: forceIndividualPinsRef.current,
             };
             onBoundsChangeRef.current?.(bbox);
-        }, 400);
+        }, 150);
     }, []);
 
     /**
@@ -101,50 +97,15 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 type: 'geojson',
                 data: pendingGeoJsonRef.current || { type: 'FeatureCollection', features: [] },
                 cluster: !forceIndividualPinsRef.current,
-                clusterMaxZoom: 8,
-                clusterRadius: 30,
-            });
-        }
-
-        // 3. Cluster circles (visible at all zooms)
-        if (!map.getLayer('clusters-circle')) {
-            map.addLayer({
-                id: 'clusters-circle',
-                type: 'circle',
-                source: 'news-events',
-                filter: ['any', ['has', 'point_count'], ['>', ['coalesce', ['get', 'eventCount'], 0], 1]],
-                paint: {
-                    'circle-color': [
-                        'step', ['coalesce', ['get', 'point_count'], ['get', 'eventCount'], 0],
-                        '#ef4444', 10, '#b91c1c', 35, '#7f1d1d'
-                    ],
-                    'circle-radius': [
-                        'step', ['coalesce', ['get', 'point_count'], ['get', 'eventCount'], 0],
-                        18, 10, 21, 35, 25
-                    ],
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff'
+                clusterMaxZoom: 5,
+                clusterRadius: 20,
+                clusterProperties: {
+                    summedEventCount: ['+', ['coalesce', ['get', 'eventCount'], 1]]
                 }
             });
         }
 
-        // 5. Cluster count labels
-        if (!map.getLayer('clusters-count')) {
-            map.addLayer({
-                id: 'clusters-count',
-                type: 'symbol',
-                source: 'news-events',
-                filter: ['any', ['has', 'point_count'], ['>', ['coalesce', ['get', 'eventCount'], 0], 1]],
-                layout: {
-                    'text-field': ['to-string', ['coalesce', ['get', 'point_count'], ['get', 'eventCount']]],
-                    'text-size': 12,
-                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold']
-                },
-                paint: { 'text-color': '#ffffff' }
-            });
-        }
-
-        // 6. Individual pins — inactive
+        // 3. Individual pins — inactive (Added first so they render UNDER clusters)
         if (!map.getLayer('unclustered-point')) {
             map.addLayer({
                 id: 'unclustered-point',
@@ -158,11 +119,18 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     'icon-image': ['concat', ['coalesce', ['get', 'category'], 'general'], '_inactive'],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
+                },
+                paint: {
+                    'icon-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        4, 0.4,
+                        8, 1.0
+                    ]
                 }
             });
         }
 
-        // 7. Individual pins — active (selected)
+        // 4. Individual pins — active (selected)
         if (!map.getLayer('unclustered-point-active')) {
             map.addLayer({
                 id: 'unclustered-point-active',
@@ -176,6 +144,81 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     'icon-image': ['concat', ['coalesce', ['get', 'category'], 'general'], '_active'],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
+                },
+                paint: {
+                    'icon-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        4, 0.6,
+                        8, 1.0
+                    ]
+                }
+            });
+        }
+
+        // 5. Cluster circles (visible at all zooms, rendered ON TOP of individual pins)
+        if (!map.getLayer('clusters-circle')) {
+            map.addLayer({
+                id: 'clusters-circle',
+                type: 'circle',
+                source: 'news-events',
+                filter: ['any', ['has', 'point_count'], ['>', ['coalesce', ['get', 'eventCount'], 0], 1]],
+                layout: {
+                    'circle-sort-key': ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0]
+                },
+                paint: {
+                    'circle-color': [
+                        'step', ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0],
+                        '#fca5a5', 10,
+                        '#f87171', 25,
+                        '#ef4444', 50,
+                        '#dc2626', 100,
+                        '#b91c1c', 250,
+                        '#991b1b', 500,
+                        '#7f1d1d'
+                    ],
+                    'circle-radius': [
+                        'interpolate', ['linear'], ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0],
+                        2, 14,
+                        10, 18,
+                        50, 22,
+                        100, 26,
+                        250, 28,
+                        500, 32,
+                        1000, 36
+                    ],
+                    'circle-opacity': [
+                        'interpolate', ['linear'], ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0],
+                        2, 0.80,
+                        20, 0.85,
+                        100, 0.90,
+                        500, 0.93,
+                        1000, 0.95
+                    ],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff'
+                }
+            });
+        }
+
+        // 6. Cluster count labels
+        if (!map.getLayer('clusters-count')) {
+            map.addLayer({
+                id: 'clusters-count',
+                type: 'symbol',
+                source: 'news-events',
+                filter: ['any', ['has', 'point_count'], ['>', ['coalesce', ['get', 'eventCount'], 0], 1]],
+                layout: {
+                    // Lower sort key = higher priority. Negative count gives large clusters priority.
+                    'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0]],
+                    'text-field': ['to-string', ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount']]],
+                    'text-size': 12,
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-allow-overlap': false,
+                    'text-ignore-placement': false,
+                    'text-padding': 6
+                },
+                paint: { 
+                    'text-color': '#ffffff'
                 }
             });
         }
@@ -196,7 +239,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         });
         
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-        map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+        map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
 
         popupRef.current = new maplibregl.Popup({
             closeButton: true,
@@ -236,14 +279,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         if (clusterId) {
                             const source = map.getSource('news-events') as maplibregl.GeoJSONSource;
                             const zoom = await source.getClusterExpansionZoom(clusterId);
-                            suppressBoundsRef.current = true;
                             map.easeTo({
                                 center: features[0].geometry.type === 'Point' ? features[0].geometry.coordinates as [number, number] : undefined,
                                 zoom
                             });
                         } else {
                             // Server-side cluster — just zoom in
-                            suppressBoundsRef.current = true;
                             map.easeTo({
                                 center: features[0].geometry.type === 'Point' ? features[0].geometry.coordinates as [number, number] : undefined,
                                 zoom: map.getZoom() + 2
@@ -404,7 +445,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 if (isNewSelection) {
                     lastFlownSelectionRef.current = selectedItemId;
                     lastFlownVersionRef.current = selectionVersion;
-                    suppressBoundsRef.current = true;
 
                     const currentZoom = map.getZoom();
                     const targetZoom = Math.max(currentZoom, 11);

@@ -39,6 +39,8 @@ export interface BBox {
     since?: string;
     /** Human-readable label used in the cache key (e.g. '1d', '1w'). */
     timeRange?: string;
+    /** Global search query. */
+    query?: string;
 }
 
 // Supabase client for Realtime only — read-only anon key
@@ -47,7 +49,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 function snapBBox(b: BBox): BBox {
     const z = b.zoom || 5;
-    const grid = z < 4 ? 10 : z < 7 ? 4 : z < 10 ? 1 : 0.5;
+    const grid = z < 4 ? 20 : z < 7 ? 10 : z < 10 ? 5 : 2;
     return {
         ...b,
         minLat: Math.floor(b.minLat / grid) * grid,
@@ -59,6 +61,17 @@ function snapBBox(b: BBox): BBox {
 }
 
 function bboxKey(b: BBox) {
+    if (b.query) {
+        // If there's a global search query, the backend ignores BBox constraints.
+        // The cache key should therefore ignore coordinates to maximize cache hits while panning.
+        return [
+            `q:${b.query}`,
+            b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
+            b.timeRange ? `tr:${b.timeRange}` : '',
+            b.forceRaw ? 'raw' : '',
+        ].filter(Boolean).join(',');
+    }
+    
     return [
         b.minLat.toFixed(4),
         b.maxLat.toFixed(4),
@@ -71,6 +84,13 @@ function bboxKey(b: BBox) {
 }
 
 function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
+    if (bbox.query) {
+        const q = bbox.query.toLowerCase();
+        const matchesTitle = item.title.toLowerCase().includes(q);
+        const matchesLoc = item.locationName?.toLowerCase().includes(q);
+        return matchesTitle || !!matchesLoc;
+    }
+
     if (item.latitude == null || item.longitude == null) return false;
     return (
         item.latitude >= bbox.minLat &&
@@ -92,11 +112,42 @@ function computeSince(timeRange: string): string | null {
     return ms[timeRange] ? new Date(now - ms[timeRange]).toISOString() : null;
 }
 
+/** 
+ * Client-side jitter to prevent unclustered pins from stacking perfectly on top 
+ * of each other, which hides them in MapLibre.
+ */
+function applyClientJitter(items: NewsItem[]): NewsItem[] {
+    const usedCoords = new Map<string, number>();
+    return items.map(item => {
+        if (item.latitude == null || item.longitude == null) return item;
+        // Don't jitter server-side clusters
+        if (item.eventCount && item.eventCount > 1) return item;
+
+        // Group points that are within ~111 meters of each other
+        const coordKey = `${item.latitude.toFixed(3)},${item.longitude.toFixed(3)}`;
+        const count = usedCoords.get(coordKey) || 0;
+        usedCoords.set(coordKey, count + 1);
+
+        if (count === 0) return item;
+
+        // Golden-angle spiral
+        const angle = (count * 137.5 * Math.PI) / 180;
+        // Start at ~500m radius and expand
+        const radius = 0.005 + (count * 0.002);
+        
+        return {
+            ...item,
+            latitude: item.latitude + radius * Math.cos(angle),
+            longitude: item.longitude + radius * Math.sin(angle)
+        };
+    });
+}
+
 // Client-side cache: bbox+timeRange key → NewsItem array
 const bboxCache = new Map<string, { bbox: BBox; data: NewsItem[]; timestamp: number }>();
 const BBOX_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
-export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: boolean; timeRange: string }) {
+export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { includeUnmapped: boolean; timeRange: string; searchQuery?: string }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -105,6 +156,7 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
     // Track the current bounding box so Realtime and heartbeat can filter/refetch correctly
     const currentBBoxRef = useRef<BBox | null>(null);
     const timeRangeRef = useRef(timeRange);
+    const searchQueryRef = useRef(searchQuery);
 
     // Client-side description cache: id → description string
     const descriptionCache = useRef<Map<string, string>>(new Map());
@@ -141,6 +193,9 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
                 if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
                 if (bbox.forceRaw) params.append('force_raw', 'true');
                 if (bbox.since) params.append('since', bbox.since);
+                if (bbox.query) params.append('query', bbox.query);
+            } else if (searchQuery) {
+                params.append('query', searchQuery);
             }
 
             const res = await fetch(`/api/news?${params.toString()}`);
@@ -148,8 +203,10 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
 
             const data: NewsResponse = await res.json();
 
+            const jitteredItems = applyClientJitter(data.items);
+
             // Merge back any descriptions we've already fetched client-side
-            const enriched = data.items.map(item => {
+            const enriched = jitteredItems.map(item => {
                 const cachedDesc = descriptionCache.current.get(item.id);
                 return cachedDesc ? { ...item, description: cachedDesc } : item;
             });
@@ -159,41 +216,59 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
                 bboxCache.set(bboxKey(bbox), { bbox, data: enriched, timestamp: Date.now() });
             }
 
-            setNews(enriched);
+            const isServerCluster = bbox && bbox.zoom !== undefined && bbox.zoom < 5 && !bbox.forceRaw && !bbox.query;
+
+            if (isServerCluster) {
+                setNews(enriched);
+            } else {
+                setNews(prev => {
+                    // Accumulate individual pins, filtering out server clusters from prev view
+                    const prevIndividuals = prev.filter(p => !p.eventCount || p.eventCount <= 1);
+                    const prevMap = new Map(prevIndividuals.map(p => [p.id, p]));
+
+                    for (const item of enriched) {
+                        prevMap.set(item.id, item);
+                    }
+                    return Array.from(prevMap.values());
+                });
+            }
+
             setLastUpdated(new Date().toISOString());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
             setIsLoading(false);
         }
-    }, [includeUnmapped]);
+    }, [includeUnmapped, searchQuery]);
 
     // -------------------------------------------------------------------------
-    // Re-fetch when timeRange changes — invalidate cache and reload current view
+    // Re-fetch when timeRange or searchQuery changes — invalidate cache and reload
     // -------------------------------------------------------------------------
     useEffect(() => {
         const prevTimeRange = timeRangeRef.current;
+        const prevSearch = searchQueryRef.current;
         timeRangeRef.current = timeRange;
+        searchQueryRef.current = searchQuery;
 
-        if (prevTimeRange === timeRange) return; // no actual change on mount
+        if (prevTimeRange === timeRange && prevSearch === searchQuery) return; // no actual change on mount
 
-        // Invalidate all cached results — they may span a different time window
+        // Invalidate all cached results — they may span a different time window or query
         bboxCache.clear();
 
         const currentBBox = currentBBoxRef.current;
         if (currentBBox) {
             const since = computeSince(timeRange);
-            fetchNews(false, { ...currentBBox, since: since ?? undefined, timeRange });
+            fetchNews(false, { ...currentBBox, since: since ?? undefined, timeRange, query: searchQuery });
         } else {
             fetchNews();
         }
-    }, [timeRange, fetchNews]);
+    }, [timeRange, searchQuery, fetchNews]);
 
     // -------------------------------------------------------------------------
     // On-demand detail fetch (description lazy-load)
     // -------------------------------------------------------------------------
     const fetchEventDetails = useCallback(async (id: string) => {
-        if (!id || id.startsWith('cluster-')) return;
+        if (!id) return;
         if (descriptionCache.current.has(id)) return;
 
         try {
@@ -228,6 +303,7 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
             ...bbox,
             since: since ?? undefined,
             timeRange: timeRangeRef.current,
+            query: searchQueryRef.current,
         };
         currentBBoxRef.current = enrichedBBox;
         fetchNews(false, enrichedBBox);
@@ -317,7 +393,7 @@ export function useNewsData({ includeUnmapped, timeRange }: { includeUnmapped: b
             const bbox = currentBBoxRef.current;
             if (bbox) {
                 const since = computeSince(timeRangeRef.current);
-                fetchNews(true, { ...bbox, since: since ?? undefined, timeRange: timeRangeRef.current });
+                fetchNews(true, { ...bbox, since: since ?? undefined, timeRange: timeRangeRef.current, query: searchQueryRef.current });
             } else {
                 fetchNews(true);
             }

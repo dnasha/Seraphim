@@ -14,7 +14,7 @@ import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
 import styles from '@/components/Layout.module.css';
 
-// Dynamically import NewsMap to prevent SSR issues with Leaflet
+// Dynamically import NewsMap to prevent SSR issues with MapLibre
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export default function Home() {
@@ -22,19 +22,30 @@ export default function Home() {
     // timeRange lives here so both useNewsData (server-side filtering)
     // and useNewsFilter (client-side filtering) share the same value.
     const [timeRange, setTimeRange] = useState('1d');
+    
+    // Search query state lifted here to be shared with useNewsData for global search
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     // Data and Filter State
     const { news, isLoading, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         includeUnmapped: !mappedOnly,
         timeRange,
+        searchQuery: debouncedSearch,
     });
     
     const {
         sources, setSources,
         categories, setCategories,
-        searchQuery, setSearchQuery,
         filteredNews
-    } = useNewsFilter(news, mappedOnly, timeRange);
+    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch);
 
     // UI State
     const [isDarkMode, setIsDarkMode] = useState(false);

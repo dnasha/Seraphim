@@ -13,21 +13,12 @@ import { applyNewsFilters } from '@/lib/filters';
   during clustering queries.
 */
 
-export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string) {
+export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
     
     // track time in state to avoid impurity in useMemo
     const [now, setNow] = useState(0);
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(searchQuery);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [searchQuery]);
 
     // initialize time on mount and update every 5 minutes
     useEffect(() => {
@@ -55,7 +46,6 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: 
     return {
         sources, setSources,
         categories, setCategories,
-        searchQuery, setSearchQuery,
         filteredNews
     };
 }

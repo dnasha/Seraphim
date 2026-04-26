@@ -27,7 +27,7 @@ export async function GET(
 ) {
     const { id } = await params;
 
-    if (!id || id.startsWith('cluster-')) {
+    if (!id) {
         return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
     }
 

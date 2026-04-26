@@ -60,18 +60,58 @@
   margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
-/* ── Dark mode fixes ── */
-:global([data-theme="dark"] .maplibregl-ctrl-group button:hover) {
-  background: var(--surface-alt) !important;
-}
-
-:global([data-theme="dark"] .maplibregl-ctrl-attrib) {
-  background: rgba(15, 17, 23, 0.7) !important;
+/* ── Attribution control — Discrete string in bottom right ── */
+:global(.maplibregl-ctrl-attrib) {
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 4px 10px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
   color: var(--text-muted) !important;
+  opacity: 0.45;
+  /* Sharp text outline using 4 directional offsets */
+  text-shadow: 
+    -1px -1px 0 var(--surface),
+     1px -1px 0 var(--surface),
+    -1px  1px 0 var(--surface),
+     1px  1px 0 var(--surface);
+  transition: opacity 0.2s ease;
+  pointer-events: auto !important;
 }
 
-:global([data-theme="dark"] .maplibregl-ctrl-attrib a) {
-  color: var(--text-secondary) !important;
+:global(.maplibregl-ctrl-attrib:hover) {
+  opacity: 1;
+}
+
+:global(.maplibregl-ctrl-attrib a) {
+  color: inherit !important;
+  text-decoration: none !important;
+  transition: color 0.15s ease;
+}
+
+:global(.maplibregl-ctrl-attrib a:hover) {
+  text-decoration: underline !important;
+  color: var(--accent) !important;
+}
+
+:global(.maplibregl-ctrl-attrib-inner) {
+  padding: 0 !important;
+  display: inline-block !important;
+}
+
+/* Hide the button entirely since we are in non-compact mode */
+:global(.maplibregl-ctrl-attrib-button) {
+  display: none !important;
+}
+
+
+/* Remove default MapLibre focus rings */
+:global(.maplibregl-ctrl button:focus),
+:global(.maplibregl-ctrl button:active),
+:global(.maplibregl-ctrl-attrib button:focus) {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Container background ── */
