@@ -8,6 +8,7 @@ import { BBox } from '@/hooks/useNewsData';
 
 import { getMapLibreStyle, generateCategoryIcon, formatTimeAgo, getSourceBadgeColor, getCategoryColor } from './MapConstants';
 import MapSettings from './MapSettings';
+import MapActionTools from './MapActionTools';
 import styles from './NewsMap.module.css';
 
 interface NewsMapProps {
@@ -32,12 +33,18 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [forceIndividualPins, setForceIndividualPins] = useState(false);
     const [currentStyle, setCurrentStyle] = useState<string>(isDarkMode ? 'dark' : 'standard');
+    const [overlays, setOverlays] = useState<Record<string, boolean>>({
+        usgs: false,
+        noaa: false,
+        eonet: false
+    });
     
     const settingsPanelRef = useRef<HTMLDivElement>(null);
 
     const onBoundsChangeRef = useRef(onBoundsChange);
     const onSelectItemRef = useRef(onSelectItem);
     const forceIndividualPinsRef = useRef(forceIndividualPins);
+    const overlaysRef = useRef(overlays);
 
     const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,6 +63,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     useEffect(() => { onBoundsChangeRef.current = onBoundsChange; }, [onBoundsChange]);
     useEffect(() => { onSelectItemRef.current = onSelectItem; }, [onSelectItem]);
     useEffect(() => { forceIndividualPinsRef.current = forceIndividualPins; }, [forceIndividualPins]);
+    useEffect(() => { overlaysRef.current = overlays; }, [overlays]);
     useEffect(() => { setCurrentStyle(isDarkMode ? 'dark' : 'standard'); }, [isDarkMode]);
 
     const geoItems = useMemo(() => items.filter(i => i.latitude != null && i.longitude != null), [items]);
@@ -219,6 +227,74 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 }
             });
         }
+
+        // 7. Live Overlays
+        if (!map.getSource('overlay-usgs')) {
+            map.addSource('overlay-usgs', {
+                type: 'geojson',
+                data: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson'
+            });
+        }
+        if (!map.getLayer('overlay-usgs-point')) {
+            map.addLayer({
+                id: 'overlay-usgs-point',
+                type: 'circle',
+                source: 'overlay-usgs',
+                layout: { visibility: overlaysRef.current['usgs'] ? 'visible' : 'none' },
+                paint: {
+                    'circle-radius': [
+                        'interpolate', ['linear'], ['get', 'mag'],
+                        1, 4,
+                        5, 12,
+                        8, 24
+                    ],
+                    'circle-color': '#f59e0b',
+                    'circle-opacity': 0.6,
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#ffffff'
+                }
+            }, 'clusters-circle');
+        }
+
+        if (!map.getSource('overlay-noaa')) {
+            map.addSource('overlay-noaa', {
+                type: 'raster',
+                tiles: [
+                    'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'
+                ],
+                tileSize: 256
+            });
+        }
+        if (!map.getLayer('overlay-noaa-raster')) {
+            map.addLayer({
+                id: 'overlay-noaa-raster',
+                type: 'raster',
+                source: 'overlay-noaa',
+                layout: { visibility: overlaysRef.current['noaa'] ? 'visible' : 'none' },
+                paint: { 'raster-opacity': 0.6 }
+            }, 'clusters-circle');
+        }
+
+        if (!map.getSource('overlay-eonet')) {
+            map.addSource('overlay-eonet', {
+                type: 'geojson',
+                data: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods'
+            });
+        }
+        if (!map.getLayer('overlay-eonet-point')) {
+            map.addLayer({
+                id: 'overlay-eonet-point',
+                type: 'circle',
+                source: 'overlay-eonet',
+                layout: { visibility: overlaysRef.current['eonet'] ? 'visible' : 'none' },
+                paint: {
+                    'circle-color': '#ef4444',
+                    'circle-radius': 5,
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#ffffff'
+                }
+            }, 'clusters-circle');
+        }
     }, []);
 
     // Initialize map
@@ -315,9 +391,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // Update tile style
     // setStyle triggers a reload of all layers via style.load handler.
     useEffect(() => {
-        if (!mapReady || !mapRef.current) return;
+        if (!mapRef.current) return;
+        setMapReady(false); // Force re-initialization of layers/tools after style load
         mapRef.current.setStyle(getMapLibreStyle(currentStyle));
-    }, [currentStyle, mapReady]);
+    }, [currentStyle]);
 
     // Toggle client-side clustering
     // Recreate source to toggle clustering state.
@@ -503,6 +580,22 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         };
     }, [settingsOpen]);
 
+    // Toggle overlays visibility
+    useEffect(() => {
+        if (!mapReady || !mapRef.current) return;
+        const map = mapRef.current;
+        
+        const setVis = (layer: string, show: boolean) => {
+            if (map.getLayer(layer)) {
+                map.setLayoutProperty(layer, 'visibility', show ? 'visible' : 'none');
+            }
+        };
+
+        setVis('overlay-usgs-point', overlays['usgs']);
+        setVis('overlay-noaa-raster', overlays['noaa']);
+        setVis('overlay-eonet-point', overlays['eonet']);
+    }, [overlays, mapReady, currentStyle]);
+
     return (
         <div className={styles.mapWrapper}>
             <MapSettings
@@ -515,6 +608,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 panelRef={settingsPanelRef}
                 mappedOnly={mappedOnly}
                 onMappedOnlyChange={onMappedOnlyChange}
+            />
+            <MapActionTools
+                overlays={overlays}
+                onOverlayToggle={(overlay, active) => setOverlays(prev => ({ ...prev, [overlay]: active }))}
             />
             <div ref={containerRef} id="news-map" className={styles.newsMapContainer} />
         </div>

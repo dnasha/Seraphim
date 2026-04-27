@@ -86,34 +86,21 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ### Phase 2: UI Rendering & Performance (Browser Savers)
 
-- [x] **Interaction Snappiness**: Optimized map viewport polling with a 150ms debounce (reduced from 400ms). The UI now feels instantaneous when moving the map.
-- [x] **Greedy Client-Side Caching**: Implemented an accumulation-based state manager in `useNewsData.ts`. Individual pins are now merged into a persistent client-side pool, preventing "empty map" flickering when panning back to previously loaded areas.
-- [x] **Dynamic BBox Grid Expansion**: Scaled the BBox snapping logic and increased the API `RAW_LIMIT` to 2000 events. This allows for massive, pre-cached data "tiles" that minimize database egress.
-- [x] **Advanced Cluster Visualization**:
+- **Interaction Snappiness**: Optimized map viewport polling with a 150ms debounce (reduced from 400ms). The UI now feels instantaneous when moving the map.
+- **Greedy Client-Side Caching**: Implemented an accumulation-based state manager in `useNewsData.ts`. Individual pins are now merged into a persistent client-side pool, preventing "empty map" flickering when panning back to previously loaded areas.
+- **Dynamic BBox Grid Expansion**: Scaled the BBox snapping logic and increased the API `RAW_LIMIT` to 2000 events. This allows for massive, pre-cached data "tiles" that minimize database egress.
+- **Advanced Cluster Visualization**:
   - **Non-Linear Scaling**: Clusters scale logarithmically (14px to 36px) to maintain clarity without overcrowding.
   - **Count-Based Sorting**: Implemented `symbol-sort-key` priority—larger clusters are always drawn on top of smaller ones.
   - **Collision-Aware Labels**: Optimized collision detection and `text-padding` to hide redundant underlying labels, ensuring a clean "pro" look at all zoom levels.
   - **Smooth Opacity Gradients**: Dynamic `circle-opacity` (0.65 to 0.95) based on event volume, providing a glassy, premium aesthetic.
-- [x] **Synchronized Cluster Break-Apart**: Aligned client-side MapLibre clustering with the server-side `CLUSTER_ZOOM_THRESHOLD` (5) for a seamless transition from global groups to individual pins.
-
----
-
-## ⏭️ Next-Up
-
-_Immediate priorities following recent engine upgrades._
-
-### Client-Side OSINT Drawing Tools
-
-- **Action**: Integrate `@maplibre/maplibre-gl-draw` or `terra-draw` to allow users to draw bounding polygons, measure distances, and annotate the map.
-- **Use case**: An analyst draws a rectangle around eastern Ukraine and gets an instant count/list of events within that area. Measurement tools show distances between two points.
-
-### Live Environmental Overlays
-
-- **Action**: Inject free third-party GeoJSON feeds as toggleable map layers:
-  - USGS earthquake feed (real-time GeoJSON).
-  - NOAA severe weather alerts.
-  - FIRMS fire/hotspot data.
-- **Benefit**: Contextualizes scraped news events with authoritative sensor data.
+- **Synchronized Cluster Break-Apart**: Aligned client-side MapLibre clustering with the server-side `CLUSTER_ZOOM_THRESHOLD` (5) for a seamless transition from global groups to individual pins.
+- **Environmental Overlays & Map Tools**:
+  - **Action Menu**: Created a floating bottom-right action area with animated submenus.
+  - **Live Data Feeds**: Integrated real-time USGS Earthquake feed (24h), NOAA Weather Radar (Live NEXRAD tiles), and NASA EONET (Disaster events from past 30 days).
+  - **Deferred: Drawing Engine** (`temp_drawing/`): A custom native MapLibre GL drawing engine has been prototyped and moved to a temporary directory for future integration. It supports Polygon, Rectangle, Circle, Freehand, and Select modes with live GeoJSON preview rendering.
+  - **Mobile Accessibility**: Refactored the MapActionTools toolbar with increased touch targets (44px) and a responsive layout for improved mobile usability.
+  - **Stability Fixes**: Refactored Supabase client to a singleton to prevent Auth instances warnings.
 
 ---
 
@@ -230,10 +217,9 @@ _Goal: Turn Seraphim from a project into a product._
 
 ## Tech Stack Evolution
 
-| Component             | Current (v1)                      | Target (v2)                        | Why                                          |
-| --------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------- |
 | **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | (Completed) GPU rendering: 100K+ points      |
 | **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
+| **Map Action Tools**  | None                              | `MapActionTools.tsx`               | (Partial) Overlays enabled, Drawing Deferred |
 | **Sidebar Rendering** | `react-virtuoso` virtualized list | (Completed)                        | Only renders ~15 visible cards vs. all 5,000 |
 | **Data Fetching**     | BBox + server-cluster queries     | (Completed)                        | 10× smaller payloads, no wasted bandwidth    |
 | **Realtime Updates**  | Supabase Realtime WebSocket       | (Completed)                        | Sub-second new event delivery                |
