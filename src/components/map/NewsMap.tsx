@@ -101,7 +101,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             
             for (const { name, img } of loaded) {
                 if (!map.hasImage(name)) {
-                    try { map.addImage(name, img); } catch (e) { /* ignore race-condition errors */ }
+                    try { map.addImage(name, img); } catch { /* ignore race-condition errors */ }
                 }
             }
         }
