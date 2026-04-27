@@ -87,12 +87,22 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // Initialize icons, sources, and layers on style load.
     const addSourcesAndLayers = useCallback(async (map: maplibregl.Map) => {
         // 1. Register category icons
-        for (const cat of CATEGORIES) {
-            if (!map.hasImage(`${cat}_inactive`)) {
-                map.addImage(`${cat}_inactive`, await generateCategoryIcon(cat, false));
-            }
-            if (!map.hasImage(`${cat}_active`)) {
-                map.addImage(`${cat}_active`, await generateCategoryIcon(cat, true));
+        // 1. Register category icons (idempotent and async-safe)
+        const iconsToLoad = CATEGORIES.flatMap(cat => [
+            { name: `${cat}_inactive`, active: false, cat },
+            { name: `${cat}_active`, active: true, cat }
+        ]).filter(item => !map.hasImage(item.name));
+
+        if (iconsToLoad.length > 0) {
+            const loaded = await Promise.all(iconsToLoad.map(async (item) => ({
+                name: item.name,
+                img: await generateCategoryIcon(item.cat, item.active)
+            })));
+            
+            for (const { name, img } of loaded) {
+                if (!map.hasImage(name)) {
+                    try { map.addImage(name, img); } catch (e) { /* ignore race-condition errors */ }
+                }
             }
         }
 
@@ -304,9 +314,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         const map = new maplibregl.Map({
             container: containerRef.current,
             style: getMapLibreStyle(currentStyle),
-            center: [10, 40],
-            zoom: 2.6,
-            minZoom: 1.1,
+            center: [1.65, 28.0],
+            zoom: 1.3,
+            minZoom: 1.0,
             maxZoom: 18,
             attributionControl: false,
         });
@@ -388,25 +398,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         if (mapReady && mapRef.current) emitBounds(mapRef.current);
     }, [forceIndividualPins, mapReady, emitBounds]);
 
-    // Update tile style
-    // setStyle triggers a reload of all layers via style.load handler.
+    // Consolidated effect for style and clustering toggles.
+    // Toggling clustering currently requires a style reload to force source re-initialization.
     useEffect(() => {
         if (!mapRef.current) return;
-        setMapReady(false); // Force re-initialization of layers/tools after style load
-        mapRef.current.setStyle(getMapLibreStyle(currentStyle));
-    }, [currentStyle]);
-
-    // Toggle client-side clustering
-    // Recreate source to toggle clustering state.
-    useEffect(() => {
-        if (!mapReady || !mapRef.current) return;
-        const map = mapRef.current;
-        const source = map.getSource('news-events') as maplibregl.GeoJSONSource;
-        if (!source) return;
-
-        // Force style reload to apply new clustering configuration.
-        map.setStyle(getMapLibreStyle(currentStyle));
-    }, [forceIndividualPins, mapReady, currentStyle]);
+        setMapReady(false);
+        // Use diff: false to prevent "Unable to perform style diff" errors during rapid reloads.
+        mapRef.current.setStyle(getMapLibreStyle(currentStyle), { diff: false });
+    }, [currentStyle, forceIndividualPins]);
 
     // Sync GeoJSON data
     useEffect(() => {
@@ -515,7 +514,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     lastFlownVersionRef.current = selectionVersion;
 
                     const currentZoom = map.getZoom();
-                    const targetZoom = Math.max(currentZoom, 11);
+                    // Lowered zoom for better geographic context (from 11 to 8.5)
+                    const targetZoom = Math.max(currentZoom, 8.5);
 
                     // Temporarily hide popup during camera transition.
                     isFlyingRef.current = true;
@@ -536,6 +536,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         center: [item.longitude!, item.latitude!],
                         zoom: targetZoom,
                         duration: 800,
+                        // Offset the center downwards by adding top padding to the camera view
+                        padding: { top: 250, bottom: 0, left: 0, right: 0 }
                     });
                 }
             }

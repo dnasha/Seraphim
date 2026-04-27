@@ -56,7 +56,6 @@ interface EventSidebarProps {
     onToggleTheme: () => void;
     isOpen: boolean;
     onToggleSidebar: () => void;
-    onRefresh: () => void;
     mounted: boolean;
 }
 
@@ -72,7 +71,6 @@ export default function EventSidebar({
     onToggleTheme,
     isOpen,
     onToggleSidebar,
-    onRefresh,
     mounted,
 }: EventSidebarProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -333,23 +331,12 @@ export default function EventSidebar({
                 {/* Prevents hydration mismatch for time strings */}
                 {(newestEventTime || isLoading) && (
                     <span className={styles.lastUpdated} suppressHydrationWarning>
-                        LAST UPDATED: {newestEventTime && mounted ? new Date(newestEventTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : '--:-- --'}
+                        LAST UPDATED AT: {newestEventTime && mounted ? new Date(newestEventTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : '--:-- --'}
                     </span>
                 )}
                 <span className={styles.statPill}>
                     {totalEventCount.toLocaleString()} events found
                 </span>
-                <button
-                    className={`${styles.refreshButton} ${isLoading ? styles.refreshButtonLoading : ''}`}
-                    onClick={onRefresh}
-                    disabled={isLoading}
-                    title="Refresh news"
-                >
-                    <svg className={styles.refreshIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M21 12a9 9 0 1 1-9-9c4.52 0 8.21 3.33 8.88 7.67" />
-                        <path d="M21 3v6h-6" />
-                    </svg>
-                </button>
             </div>
 
             {filterBar}

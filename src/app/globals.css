@@ -124,45 +124,59 @@ a {
   opacity: 0.8;
 }
 
-/* Virtuoso scroll container overrides for consistent sidebar scrollbar styling */
-[data-virtuoso-scroller="true"] {
-  scrollbar-width: thin;
-  scrollbar-color: #888 transparent;
+/* Global Scrollbar Styles (Webkit) */
+::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
 }
 
-/* Webkit scrollbar styling */
-[data-virtuoso-scroller="true"]::-webkit-scrollbar {
-  width: 8px !important;
-}
-
-[data-virtuoso-scroller="true"]::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-[data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb {
-  background: #888 !important; /* slightly darker */
+::-webkit-scrollbar-thumb {
+  background: #ddd !important;
   border-radius: 10px !important;
   border: 2px solid transparent !important; /* padding effect */
   background-clip: content-box !important;
-  min-height: 60px !important; /* force a larger minimum size */
+  min-height: 120px !important;
 }
 
-[data-theme="dark"] [data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb {
-  background: #555 !important;
-}
-
-[data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb:hover {
-  background: #777 !important;
-}
-
-[data-theme="dark"] [data-virtuoso-scroller="true"]::-webkit-scrollbar-thumb:hover {
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
   background: #666 !important;
 }
 
-/* Removes scrollbar buttons */
-[data-virtuoso-scroller="true"]::-webkit-scrollbar-button {
+::-webkit-scrollbar-thumb:hover {
+  background: #ccc !important;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #777 !important;
+}
+
+/* Aggressively hide scrollbar buttons/arrows globally */
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:start,
+::-webkit-scrollbar-button:end,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:double-button,
+::-webkit-scrollbar-button:vertical:decrement,
+::-webkit-scrollbar-button:vertical:increment,
+::-webkit-scrollbar-button:horizontal:decrement,
+::-webkit-scrollbar-button:horizontal:increment {
   display: none !important;
-  height: 0 !important;
   width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ddd transparent;
+}
+
+[data-theme="dark"] * {
+  scrollbar-color: #666 transparent;
 }
 

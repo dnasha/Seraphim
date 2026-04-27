@@ -61,6 +61,7 @@
 .eventSidebarStats {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
@@ -166,46 +167,6 @@
   display: none;
 }
 
-/* Refresh button */
-.refreshButton {
-  background: var(--green);
-  border: 1px solid transparent;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: all 0.15s;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.refreshButton:hover {
-  background: #16a34a;
-}
-
-.refreshButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.refreshIcon {
-  width: 15px;
-  height: 15px;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-.refreshButtonLoading .refreshIcon {
-  animation: spin 1s linear infinite;
-}
 
 /* Event list */
 .eventList {
@@ -217,18 +178,6 @@
   backface-visibility: hidden;
 }
 
-.eventList::-webkit-scrollbar {
-  width: 5px;
-}
-
-.eventList::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.eventList::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
 
 .eventListLoading,
 .eventListEmpty {

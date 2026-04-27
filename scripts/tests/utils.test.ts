@@ -165,8 +165,8 @@ describe('getCategoryColor', () => {
 
 describe('getSourceStyle', () => {
     it('returns black bg for X/Twitter sources', () => {
-        expect(getSourceStyle('OSINTdefender (X)').bg).toBe('#000000');
-        expect(getSourceStyle('Some Twitter Account').bg).toBe('#000000');
+        expect(getSourceStyle('OSINTdefender (X)').bg).toBe('#0f1419');
+        expect(getSourceStyle('Some Twitter Account').bg).toBe('#0f1419');
     });
 
     it('returns Reddit orange for Reddit sources', () => {
@@ -174,15 +174,15 @@ describe('getSourceStyle', () => {
     });
 
     it('returns Telegram blue for Telegram sources', () => {
-        expect(getSourceStyle('Telegram - NEXTA').bg).toBe('#006effff');
+        expect(getSourceStyle('Telegram - NEXTA').bg).toBe('#0088cc');
     });
 
     it('returns tech teal for tech sources', () => {
-        expect(getSourceStyle('Ars Technica').bg).toBe('#008fb3ff');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#008fb3ff');
+        expect(getSourceStyle('Ars Technica').bg).toBe('#0284c7');
+        expect(getSourceStyle('BleepingComputer').bg).toBe('#0284c7');
     });
 
     it('returns fallback grey for unknown sources', () => {
-        expect(getSourceStyle('BBC News').bg).toBe('#818181ff');
+        expect(getSourceStyle('BBC News').bg).toBe('#3b82f6');
     });
 });

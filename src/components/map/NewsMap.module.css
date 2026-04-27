@@ -258,15 +258,6 @@
   padding-right: 4px;
 }
 
-:global(.news-popup-summary::-webkit-scrollbar) {
-  width: 4px;
-}
-
-:global(.news-popup-summary::-webkit-scrollbar-thumb) {
-  background: var(--border);
-  border-radius: 2px;
-}
-
 :global(.news-popup-link) {
   display: block;
   font-size: 0.75rem;

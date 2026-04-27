@@ -133,7 +133,6 @@ export default function Home() {
                 onSelectItem={handleSelectItem}
                 isLoading={isLoading}
                 onFetchDetails={fetchEventDetails}
-                onRefresh={() => fetchNews(true)}
                 isOpen={isSidebarOpen}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 filterBar={filterBarSlot}

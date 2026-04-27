@@ -72,5 +72,12 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         filtered = filtered.filter(n => n.latitude != null);
     }
 
+    // 6. Sort by latest
+    filtered.sort((a, b) => {
+        const timeA = new Date(a.publishedAt).getTime();
+        const timeB = new Date(b.publishedAt).getTime();
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+
     return filtered;
 }
