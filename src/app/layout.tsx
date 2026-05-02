@@ -8,6 +8,8 @@ import {
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 
+import { Providers } from "@/components/Providers";
+
 import "./globals.css";
 
 /*
@@ -15,6 +17,7 @@ import "./globals.css";
   Root layout defining typography, metadata, and viewport settings for the application.
   Integrates Vercel Speed Insights and Analytics.
 */
+// ... (font configs omitted for brevity in replace, but I'll provide full block below)
 // Font Configurations
 const inter = Inter({
   subsets: ["latin"],
@@ -103,12 +106,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-theme="light"
       suppressHydrationWarning
       className={`${inter.variable} ${playfair.variable} ${cinzel.variable} ${cinzelDecorative.variable}`}
     >
       <body suppressHydrationWarning>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <SpeedInsights />
         <Analytics />
       </body>

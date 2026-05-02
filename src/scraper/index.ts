@@ -82,9 +82,9 @@ async function run(): Promise<void> {
     const incomingUrls = itemsWithUrl.map(i => i.url);
 
     // Supabase in() generates a GET request, so large arrays exceed URI length limits.
-    // Batch into chunks of 50 to stay well under the limit.
+    // Batch into chunks of 20 to stay well under the limit (especially with long social media URLs).
     const knownUrls = new Set<string>();
-    const CHUNK_SIZE = 50;
+    const CHUNK_SIZE = 20;
     
     for (let i = 0; i < incomingUrls.length; i += CHUNK_SIZE) {
         const chunk = incomingUrls.slice(i, i + CHUNK_SIZE);

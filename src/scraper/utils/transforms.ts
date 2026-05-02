@@ -5,17 +5,20 @@
   Extracted from index.ts for testability.
 */
 
+import DOMPurify from 'isomorphic-dompurify';
 import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from './date';
 
 /**
- * Removes incomplete surrogate pairs and other characters that break Postgres UTF-8/JSON parsing.
+ * Removes incomplete surrogate pairs and sanitizes HTML to prevent XSS.
  */
 export function cleanString(str: string | undefined | null): string {
     if (!str) return '';
     // Removes standalone surrogates (D800-DFFF) while keeping valid pairs
-    return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+    const cleaned = str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+    // Sanitize HTML to prevent XSS
+    return DOMPurify.sanitize(cleaned);
 }
 
 /**

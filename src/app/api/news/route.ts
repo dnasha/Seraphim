@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { DbEvent, dbEventToNewsItem } from '@/types';
 
@@ -14,6 +16,30 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
+
+// Upstash Rate Limiting setup
+const redis = Redis.fromEnv();
+const ratelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(60, '1 m'),
+    analytics: true,
+    prefix: '@upstash/ratelimit/seraphim',
+});
+
+// Local L1 Rate Limiter (Memory) - minimizes Upstash calls for repetitive requests from same IP
+const localL1Limit = new Map<string, { count: number; reset: number }>();
+let lastL1Cleanup = Date.now();
+const L1_CLEANUP_INTERVAL = 60000; // 1 minute
+
+function performL1Cleanup() {
+    const now = Date.now();
+    if (now - lastL1Cleanup < L1_CLEANUP_INTERVAL) return;
+    
+    for (const [ip, data] of localL1Limit.entries()) {
+        if (now > data.reset) localL1Limit.delete(ip);
+    }
+    lastL1Cleanup = now;
+}
 
 // In-memory cache to reduce Supabase egress and improve response times.
 // Key format: "events" (default) or "bbox:{minLat},{maxLat},{minLng},{maxLng}[,z:{zoom}]"
@@ -35,7 +61,33 @@ const RAW_LIMIT = 2000;
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
 
 export async function GET(request: Request) {
+    // 1. Extract IP and Timestamp
+    const ip = request.headers.get('x-forwarded-for') ?? '127.0.0.1';
     const now = Date.now();
+
+    // 2. Hybrid Rate Limiting Logic (Optimized for Cost)
+    // Perform passive cleanup of stale local entries
+    performL1Cleanup();
+
+    // Tier 1: Local In-Memory Check (Zero Cost)
+    const l1 = localL1Limit.get(ip);
+    
+    // If we haven't seen this IP or L1 window (10s) expired, start new window
+    if (!l1 || now > l1.reset) {
+        localL1Limit.set(ip, { count: 1, reset: now + 10000 });
+    } else {
+        l1.count++;
+        
+        // Tier 2: Check Redis only if:
+        // a) IP is "spamming" (>10 reqs in 10s window)
+        // b) Every 5th request (sampling to sync with global state)
+        if (l1.count > 10 || l1.count % 5 === 0) {
+            const { success } = await ratelimit.limit(ip);
+            if (!success) {
+                return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+            }
+        }
+    }
     const { searchParams } = new URL(request.url);
     let forceRefresh = searchParams.get('refresh') === 'true';
     const includeUnmapped = searchParams.get('include_unmapped') === 'true';
@@ -46,6 +98,9 @@ export async function GET(request: Request) {
     const minLng = searchParams.get('minLng');
     const maxLng = searchParams.get('maxLng');
     const hasBBox = minLat !== null && maxLat !== null && minLng !== null && maxLng !== null;
+
+    // Small epsilon to stabilize floating point comparisons at the map edges
+    const EPSILON = 0.00001;
 
     // Search query parameter
     const searchQuery = searchParams.get('query');
@@ -119,10 +174,10 @@ export async function GET(request: Request) {
 
                 if (!ignoreBBox && hasBBox) {
                     query = query
-                        .gte('latitude', parseFloat(minLat!))
-                        .lte('latitude', parseFloat(maxLat!))
-                        .gte('longitude', parseFloat(minLng!))
-                        .lte('longitude', parseFloat(maxLng!));
+                        .gte('latitude', parseFloat(minLat!) - EPSILON)
+                        .lte('latitude', parseFloat(maxLat!) + EPSILON)
+                        .gte('longitude', parseFloat(minLng!) - EPSILON)
+                        .lte('longitude', parseFloat(maxLng!) + EPSILON);
                 } else if (!includeUnmapped) {
                     query = query.not('latitude', 'is', null);
                 }

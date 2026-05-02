@@ -3,7 +3,7 @@
  * core geocoding engine: NLP-based location extraction and disambiguation
  */
 
-
+import 'server-only';
 import nlp from 'compromise';
 import geoData from '../../../data/geonames.json';
 import {
@@ -17,6 +17,7 @@ import {
     CONTINENT_NAMES,
     SUPERPOWER_KEYS,
     NEWS_SOURCE_DEFAULTS,
+    OVERRIDE_LOCATIONS,
 } from './constants';
 import {
     DATELINE_PATTERN,
@@ -78,6 +79,11 @@ export function ensureInitialized() {
     for (const [name, data] of Object.entries(geoCountries)) {
         if (name.length <= 2) continue;
         KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country' };
+    }
+
+    // load manual overrides
+    for (const [name, data] of Object.entries(OVERRIDE_LOCATIONS)) {
+        KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: data.type };
     }
 
     // load hardcoded landmarks and conflict zones

@@ -310,12 +310,26 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // Initialize map
     useEffect(() => {
         if (!containerRef.current || mapRef.current) return;
+
+        // Calculate initial zoom to fit the world (Alaska to NZ) based on screen width.
+        const getInitialZoom = () => {
+            const width = window.innerWidth;
+            const isMobile = width <= 860;
+            const mapWidth = isMobile ? width : width - 360;
+            
+            // For desktop, scale dynamically. For mobile, use a fixed sane baseline.
+            if (isMobile) return 1.3;
+            
+            // Baseline: 1.6 zoom for a 1080p-ish map width (1560px).
+            // This formula ensures the geographic area covered remains consistent.
+            return Math.max(1.0, 1.6 + Math.log2(mapWidth / 1560));
+        };
         
         const map = new maplibregl.Map({
             container: containerRef.current,
             style: getMapLibreStyle(currentStyle),
             center: [1.65, 28.0],
-            zoom: 1.3,
+            zoom: getInitialZoom(),
             minZoom: 1.0,
             maxZoom: 18,
             attributionControl: false,

@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useTheme } from 'next-themes';
 import FilterBar from '@/components/FilterBar';
 import EventSidebar from '@/components/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
@@ -14,6 +15,9 @@ import styles from '@/components/Layout.module.css';
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export default function Home() {
+    const { resolvedTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+    
     const [mappedOnly, setMappedOnly] = useState(true);
     // timeRange shared between server-side and client-side filtering
     const [timeRange, setTimeRange] = useState('1d');
@@ -21,6 +25,11 @@ export default function Home() {
     // Search state for global data fetching
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -43,36 +52,11 @@ export default function Home() {
     } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch);
 
     // UI State
-    const [isDarkMode, setIsDarkMode] = useState(false);
-    const [mounted, setMounted] = useState(false);
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    
-    // Initialize mount state and synchronize theme from local storage
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark') {
-                setIsDarkMode(true);
-            }
-            setMounted(true);
-        }, 0);
-        return () => clearTimeout(timer);
-    }, []);
 
-    // Apply theme data attribute to the document element for global styling
-    useEffect(() => {
-        if (!mounted) return;
-        document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-    }, [isDarkMode, mounted]);
-
-
-    const toggleTheme = () => {
-        const newTheme = !isDarkMode;
-        setIsDarkMode(newTheme);
-        localStorage.setItem('theme', newTheme ? 'dark' : 'light');
-    };
+    const isDarkMode = resolvedTheme === 'dark';
 
     const handleSelectItem = useCallback((id: string | null) => {
         setSelectedItemId(id);
@@ -136,8 +120,6 @@ export default function Home() {
                 isOpen={isSidebarOpen}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 filterBar={filterBarSlot}
-                isDarkMode={isDarkMode}
-                onToggleTheme={toggleTheme}
                 mounted={mounted}
             />
 

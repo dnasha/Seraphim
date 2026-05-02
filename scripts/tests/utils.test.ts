@@ -178,8 +178,8 @@ describe('getSourceStyle', () => {
     });
 
     it('returns tech teal for tech sources', () => {
-        expect(getSourceStyle('Ars Technica').bg).toBe('#0284c7');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#0284c7');
+        expect(getSourceStyle('Ars Technica').bg).toBe('#0369a1');
+        expect(getSourceStyle('BleepingComputer').bg).toBe('#0369a1');
     });
 
     it('returns fallback grey for unknown sources', () => {

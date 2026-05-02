@@ -238,8 +238,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     ]).catch(() => null);
 
     if (!feed || !feed.items || feed.items.length === 0) {
-        console.warn(`all X feed strategies failed for ${source.name} (@${username})`);
-        return [];
+        throw new Error(`All X feed strategies failed for ${source.name} (@${username}). Systemic failure or IP block suspected.`);
     }
 
     return (feed.items || []).slice(0, 20).map((item, index) => ({

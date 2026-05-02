@@ -30,9 +30,9 @@ export function getSourceStyle(sourceName: string): { bg: string; color: string 
     if (s.includes('telegram'))
         return { bg: '#0088cc', color };
     if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
-        return { bg: '#9a3412', color };
+        return { bg: '#c2410c', color }; // Adjusted orange-red
     if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
-        return { bg: '#0284c7', color };
+        return { bg: '#0369a1', color }; // Adjusted blue
     if (s.includes('nasa') || s.includes('nature'))
         return { bg: '#059669', color };
     if (s.includes('who '))

@@ -226,3 +226,19 @@ _Goal: Turn Seraphim from a project into a product._
 | **Deduplication**     | URL unique constraint only        | `pgvector` semantic clustering     | "Stories" instead of 5 redundant pins        |
 | **Hosting**           | `seraphi.me` on Vercel            | (Completed)                        | Public-facing, CDN-cached, zero-downtime     |
 | **Auth**              | None                              | Supabase Auth + Stripe             | User accounts, saved views, Pro tier         |
+
+---
+
+## 🛠️ Engineering & Performance Backlog
+
+### Viewport-Aware State Eviction
+As users pan around the world, the client-side `news` state currently accumulates every pin retrieved from the API. For long-running sessions, this can lead to memory bloat and slow re-renders. A "Least Recently Viewed" or viewport-distance eviction policy should be implemented in `useNewsData.ts` to keep the active set under ~2,000 items.
+
+### Server-Side Realtime Filtering
+The application currently subscribes to all `INSERT` events in the `events` table and filters them client-side. Scaling to high-frequency feeds will cause unnecessary egress and client CPU usage. The Realtime subscription should be updated to use server-side filters (e.g., by category or source) matching the user's active UI state.
+
+### Geodata Runtime Optimization
+The geocoding engine currently rebuilds the `KNOWN_LOCATIONS` dictionary from raw JSON on every cold start. This process can be moved to the `build-geodata.mjs` script, pre-calculating the optimized Map/Record structure so the runtime only needs to perform a single `JSON.parse` call.
+
+### Geodata Leakage Protection
+Ensure that the `geonames.json` file (~4.7 MB) is never accidentally bundled in the client-side JS. While currently protected via `server-only` in the engine, additional build-time checks or moving geodata to a dedicated microservice/edge-function should be considered.
