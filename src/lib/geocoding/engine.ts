@@ -3,7 +3,7 @@
  * core geocoding engine: NLP-based location extraction and disambiguation
  */
 
-if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.env.IS_BENCHMARK) {
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.env.IS_BENCHMARK && !process.versions?.bun) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('server-only');
 }
