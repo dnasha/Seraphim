@@ -60,7 +60,7 @@ describe('geocoding accuracy regression', () => {
         for (const item of gradedResults) {
             const isApproved = item.graded_status === 'approved';
             const rawExpected = isApproved
-                ? (item.final_mapped_location?.displayName || null)
+                ? (item.final_mapped_location?.displayName || item.db_location?.displayName || null)
                 : item.expected_location;
 
             const normExpected = normalize(rawExpected);

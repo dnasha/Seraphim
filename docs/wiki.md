@@ -20,6 +20,9 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 | **Styling** | Vanilla CSS | CSS Modules for component isolation. Base tokens in `globals.css` |
 | **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
 | **Database** | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries |
+| **Rate Limiting** | @upstash/ratelimit | **Hybrid L1/L2**: Local in-memory cache + Global Redis sync |
+| **Theme** | next-themes | Flash-free theme hydration with `attribute="data-theme"` |
+| **Sanitization** | isomorphic-dompurify | Strips XSS payloads from scraped titles/descriptions |
 | **Scraper Runtime** | Bun | Native TS execution, 30x faster cold starts than Node |
 | **Map** | MapLibre GL JS 5.1 | WebGL-accelerated rendering. Replaces Leaflet 1.9 |
 
@@ -45,64 +48,35 @@ SeraphimPreview/
 │   ├── admin1CodesASCII.txt        # GeoNames admin1 regions
 │   └── geonames.json               # Compiled geodata (~4.7 MB) — DO NOT EDIT BY HAND
 ├── scripts/
-│   ├── benchmark-pipeline.mjs      # Pipeline performance benchmarking
 │   ├── build-geodata.mjs           # Compiles cities5000 + admin1 → geonames.json
 │   ├── evaluate-accuracy.mjs       # Geocoding regression test against graded samples
-│   ├── test-scrape.ts              # Visual diagnostic — prints all fetcher outputs
-│   ├── test-scraper.ts             # Full scraper dry-run diagnostic
-│   ├── test-supabase.ts            # Database connection + query test
-│   └── test-real-geocode.ts        # Live geocoding accuracy spot-check
+│   ├── test-real-geocode.ts        # Geocoding Benchmarker (generates 400-item set)
+│   └── results/
+│       └── geocode-benchmark-400.json # Current grading set for engine improvements
 ├── src/
 │   ├── app/
-│   │   ├── api/news/route.ts       # Supabase proxy with 15m cache & Edge CDN headers
+│   │   ├── api/news/route.ts       # Supabase proxy with Hybrid Rate Limiting
 │   │   ├── globals.css             # Base resets, design tokens, and global typography
-│   │   ├── layout.tsx              # Root layout — fonts, metadata, analytics
+│   │   ├── layout.tsx              # Root layout — Providers, fonts, analytics
 │   │   └── page.tsx                # Main page — orchestrates sidebar + map
 │   ├── components/
+│   │   ├── Providers.tsx           # next-themes ThemeProvider wrapper
+│   │   ├── ThemeToggle.tsx         # Refactored to use useTheme() hook
+│   │   ├── ThemeToggle.module.css  # Scoped toggle styles (icons, hover, shadows)
 │   │   ├── map/
-│   │   │   ├── NewsMap.tsx         # MapLibre map component (main orchestrator)
-│   │   │   ├── NewsMap.module.css  # Scoped map styles (popups, controls)
-│   │   │   ├── MapConstants.tsx    # SVG icon generation, tile styles, formatters
-│   │   │   ├── MapSettings.tsx     # Settings panel UI (style picker, clustering toggle)
+│   │   │   ├── NewsMap.tsx         # MapLibre map with Dynamic Zoom logic
+│   │   │   ├── MapConstants.tsx    # Centralized styling helper exports
 │   │   │   └── index.tsx           # Barrel export
-│   │   ├── EventSidebar.tsx        # Sidebar + card list
-│   │   ├── EventSidebar.module.css # Scoped sidebar styles
-│   │   ├── FilterBar.tsx           # Source/category/time/search controls
-│   │   ├── FilterBar.module.css    # Scoped filter styles
-│   │   └── ThemeToggle.tsx         # Dark/light mode switch button
+│   │   └── EventSidebar.tsx        # Sidebar (uses centralized colors)
 │   ├── scraper/
 │   │   ├── index.ts                # Bun worker entry — fetch → dedup → geocode → upsert
-│   │   ├── fetchers/
-│   │   │   ├── rss.ts              # RSS + Reddit feed fetchers
-│   │   │   ├── gnews.ts            # GNews API fetcher
-│   │   │   ├── social-feeds.ts     # Telegram HTML scraper + X multi-strategy fetcher
-│   │   │   └── geocoding.ts        # enrichItemsWithLocation wrapper for scraper
 │   │   └── utils/
-│   │       ├── date.ts             # ensureIsoDate() — robust date normalization
-│   │       └── transforms.ts       # cleanString() & DB mapping utilities
-│   ├── data/
-│   │   └── sources.ts              # Centralized source definitions (RSS URLs, Reddit subs)
-│   ├── hooks/
-│   │   ├── useNewsData.ts          # Data fetching + 15-minute polling
-│   │   └── useNewsFilter.ts        # Client-side useMemo filtering (source/category/time/search)
+│   │       └── transforms.ts       # HTML sanitization via DOMPurify
 │   ├── lib/
-│   │   ├── colors.ts               # Source of truth for category & source colors
-│   │   ├── filters.ts              # Pure functions for client-side news filtering
-│   │   ├── geocoding/
-│   │   │   ├── engine.ts           # Core extraction + dictionary lookup (~20KB)
-│   │   │   ├── constants.ts        # Landmarks, demonyms, stop words, scoring weights (~11KB)
-│   │   │   ├── patterns.ts         # Dateline regex, action-target patterns (~4.5KB)
-│   │   │   ├── enricher.ts         # High-level wrapper: geocode items + apply jitter
-│   │   │   ├── utils.ts            # String normalization (accents, title case)
-│   │   │   └── index.ts            # Barrel export
-│   │   └── types.ts                # NewsItem, NewsResponse, NewsCategory interfaces
-│   └── types/
-│       ├── index.ts                # DbEvent interface + dbEventToNewsItem() mapper
-│       └── css.d.ts                # Ambient CSS module declarations
-├── package.json                    # Dependencies + npm scripts
-├── tsconfig.json
-├── future.md                       # Project roadmap
-└── wiki.md                         # This file
+│   │   ├── colors.ts               # Source of truth for OSINT colors
+│   │   └── geocoding/
+│   │       ├── engine.ts           # Core logic (server-only protected)
+│   │       └── constants.ts        # Manual OVERRIDE_LOCATIONS (e.g. Georgia)
 ```
 
 ---
@@ -116,391 +90,85 @@ SeraphimPreview/
 │  Bun Scraper Worker  (src/scraper/index.ts)             │
 │                                                         │
 │  1. Fetch all sources concurrently (Promise.allSettled)  │
-│     ├── fetchAllRSSFeeds()        → NewsItem[]          │
-│     ├── fetchAllRedditFeeds()     → NewsItem[]          │
-│     ├── fetchGNews()              → NewsItem[]          │
-│     ├── fetchOSINTGNews()         → NewsItem[]          │
-│     └── fetchSocialFeeds()        → NewsItem[]          │
-│                                                         │
-│  2. Pre-fetch known URLs from DB (chunks of 50)         │
-│     └── Skip items already in Supabase                  │
+│  2. Pre-fetch known URLs from DB (chunks of 20)         │
+│     └── Reduced chunk size for URI length safety        │
 │                                                         │
 │  3. Geocode NEW items only                              │
-│     └── enrichItemsWithLocation(newItems)               │
 │                                                         │
 │  4. Sanitize & upsert (chunks of 50)                    │
-│     ├── ensureIsoDate() — normalize timestamps          │
-│     ├── cleanString() — strip orphaned surrogates       │
-│     └── Upsert with onConflict: 'url'                   │
-│         └── Per-row fallback on chunk failure            │
+│     ├── cleanString() — HTML sanitization via DOMPurify │
+│     └── Per-row fallback on chunk failure                │
 └─────────────────────────────────────────────────────────┘
               ↓ (Every 30 min via GitHub Actions)
 ┌─────────────────────────────────────────────────────────┐
 │  Supabase PostgreSQL  (events table)                    │
-│  └── url = UNIQUE constraint (dedup key)                │
-│  └── RLS: public SELECT, service-role INSERT/UPDATE     │
+│  └── Current: Single URL deduplication                  │
+│  └── Planned: Phase 3 "Story" model (pgvector)          │
 └─────────────────────────────────────────────────────────┘
                ↓
 ┌─────────────────────────────────────────────────────────┐
 │  /api/news/route.ts  (Next.js Edge Route)               │
-│  ├── BBox Querying (minLat, maxLat, minLng, maxLng)
-│  ├── Global Search Override (query parameter ignores BBox)
-│  ├── Server-Side Clustering (zoom + searchQuery support)
-│  ├── Synthetic Cluster IDs (cluster-[zoom]-[id])
-│  ├── Time filtering (since parameter)
-│  ├── In-memory global/bbox+time-keyed cache (15 min TTL)
-│  ├── Refresh throttle (1 min cooldown)
-│  ├── Egress Optimization (omits 'description')
-│  ├── LIMIT 2000 (RAW_LIMIT for event rows)
+│  ├── Hybrid Rate Limiting:
+│  │   ├── Tier 1: Local L1 (10 reqs/10s free burst)
+│  │   └── Tier 2: Upstash Redis (Global sync every 5th req)
+│  ├── BBox Epsilon (0.00001) for stable edge queries
 │  └── Cache-Control: s-maxage=60 (Edge CDN)
 └─────────────────────────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────────────────────────┐
-│  React Client                                           │
-│  ├── useNewsData — Viewport + Query driven              │
-│  ├── Sidebar Virtualization — react-virtuoso list       │
-│  ├── MapLibre GL JS — WebGL Rendering Layer             │
-│  │   ├── Layer-based (heatmap, circles, symbols)        │
-│  │   └── High-performance camera (flyTo / easeTo)       │
-│  ├── useNewsFilter — pure UI filter logic               │
-│  └── Lazy-Loading — fetch descriptions on card expand   │
-└─────────────────────────────────────────────────────────┘
 ```
-
-### Scraper Execution Modes
-
-| Mode | Command | Behavior |
-|---|---|---|
-| **Production** | GitHub Actions cron (`main.yml`) | Runs every 30 min, writes to Supabase |
-| **Local** | `bun run src/scraper/index.ts` | Same pipeline, uses `.env.local` secrets |
-| **Dry run** | `DRY_RUN=true bun run src/scraper/index.ts` | Prints payload, no DB writes |
 
 ---
 
 ## Geocoding System
 
-> **Location**: `src/lib/geocoding/` (6 files, ~40KB total)
-> **Accuracy**: 96.5% on 256-sample graded corpus (as of April 2026).
-> **⚠️ Server-only** — never import this module client-side.
+> **Location**: `src/lib/geocoding/`
+> **⚠️ Server-only** — Module protected via `require('server-only')`. 
+> **Bypass**: Set `IS_BENCHMARK="true"` or `NODE_ENV="test"` for CLI tools.
 
-### Extraction Pipeline
+### Disambiguation & Overrides
 
-Each headline + description is run through these strategies in order. The first match with the best score wins.
+The engine uses a tiered lookup strategy with manual overrides to resolve naming collisions:
 
-| Step | Strategy | Example Match | Priority Score |
-|---|---|---|---|
-| 1 | **Dateline regex** | `KYIV (Reuters) — ...` | 0 (high) |
-| 2 | **Comma-pair** | `Austin, Texas` | 2 |
-| 3 | **Action-target regex** | `strikes on Yemen` | -2 (highest) |
-| 4 | **Dictionary scan** | Multi-word cities & single-word fallback | 3 |
-| 5 | **compromise NLP** | Fallback entity extraction | 6 (low) |
-| 6 | **Country abbreviations**| `U.S.`, `U.K.` | 4 |
-| 7 | **Demonym fallback** | `Iranians` → Iran | 5 |
-| 8 | **Direct country scan** | Last-resort regex | 7 |
-
-### Dictionary Load Order
-
-The `KNOWN_LOCATIONS` map is built in a specific priority order — **later entries overwrite earlier ones**:
-
-1. **Cities** from `geonames.json` (population-weighted; largest city wins collisions)
-2. **Admin1 regions** (states/provinces) — won't overwrite cities with >500K population
-3. **Countries** (209 entries) — always overwrite to ensure "Georgia" = country, not US state
-4. **Landmarks** (hardcoded) — highest priority: Pentagon, Kremlin, Gaza City, Crimea, Strait of Hormuz, etc.
-
-### Candidate Scoring
-
-When multiple locations are found, they're ranked by combined score (lower = better):
-
-- **Source score**: action_target (-2) > dateline (0) > regex (1) > comma (2) > nlp (6)
-- **Type score**: landmark (0) > mega-city >1M pop (2) > country (4) > city (6) > admin1 (8)
-- **Filters & Weights**:
-  - **Population Filter**: Standard cities must have >5,000 population to trigger (prevents small-town false positives).
-  - **Admin1 Weights**: States/Provinces are penalized (+8) to prioritize cities, but rewarded if they match via specific patterns.
-  - **Superpowers**: U.S./U.K. penalized (+10) to prioritize strike locations over actors.
-  - **Continents**: Africa/Asia penalized (+20) as low-confidence fallbacks.
-
-### Normalization & Edge Cases
-
-| Feature | Details |
-|---|---|
-| **Accent normalization** | `São Paulo` → `Sao Paulo` for dictionary matching |
-| **Title casing** | `london` → `London`, `washington dc` → `Washington DC` |
-| **Hyphen splitting** | `U.S.-backed` correctly extracts `U.S.` |
-| **Plural demonyms** | `Iranians` → `Iranian` → `Iran` |
-| **False positive blocking** | `FALSE_POSITIVES` set: Arsenal, Amazon, Research roundup, etc. |
-| **Source defaults** | `NEWS_SOURCE_DEFAULTS`: NASA → Washington DC, etc. |
-| **Date normalization** | `ensureIsoDate()` handles `"Friday, April 10, 2026 - 16:35"` and similar |
-| **UTF-8 cleaning** | Strips orphaned surrogate pairs before Postgres insertion |
-| **Coordinate jitter** | Golden-angle spiral applied to prevent pin stacking at identical coords |
-
-### Dateline Regex
-
-```regex
-/^([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/
-```
-
-Matches: `KYIV (Reuters) — ...`, `Albania: Femicide cases...`, `WASHINGTON - ...`
+1. **OVERRIDE_LOCATIONS** (`constants.ts`): Highest priority. Explicitly maps "Georgia" → country centroid to avoid state shadowing.
+2. **Dictionary Priority**: Landmark > Mega-City (>1M) > Country > City > Admin1.
+3. **Accuracy Benchmarking**: `scripts/test-real-geocode.ts` generates a 400-item set from production data for manual grading and iterative NLP refinement.
 
 ---
 
 ## UI Architecture
 
-### Component Hierarchy
+### Theme System (next-themes)
 
-```
-page.tsx (client component)
-├── useNewsData()             → { news, isLoading, error, lastUpdated, fetchNews, onBoundsChange }
-├── useNewsFilter(news, timeRange) → { sources, categories, ..., filteredNews }
-│
-├── EventSidebar
-│   ├── Logo + ThemeToggle + Collapse/Close buttons
-│   ├── Stats row (total event count [summed], last-updated, refresh button)
-│   ├── FilterBar (slotted in via prop)
-│   │   ├── Source toggles (News/Reddit/X/Telegram/GNews)
-│   │   ├── Category pills (World/Crisis/Nation/Business/Tech/Science/Health)
-│   │   ├── Time range (1D/3D/1W/1M/All)
-│   │   ├── "Mapped Only" toggle (default: ON)
-│   │   └── Debounced search input
-│   └── Card list (react-virtuoso virtualized list)
-│       ├── Mapped cards → click flies map to pin
-│       └── Unmapped cards → click expands inline detail
-│
-└── NewsMap (dynamic import, SSR disabled)
-    ├── MapLibre GL JS (WebGL renderer)
-    ├── addSourcesAndLayers() (persistence via style.load)
-    ├── MapSettings (gear icon → style selector + clustering toggle)
-    ├── Layer Stack:
-    │   ├── heatmap (zoom < 5)
-    │   ├── clusters-circle (zoom 5+)
-    │   ├── clusters-count (text labels)
-    │   ├── unclustered-point (inactive pins)
-    │   └── unclustered-point-active (selected pin)
-    ├── Popup layer (live-patched via description loader)
-    └── Viewport events — emits debounced BBox + Zoom (snapped to grid)
-```
+- **Initialization**: Managed by `src/components/Providers.tsx`.
+- **Hydration**: Uses `suppressHydrationWarning` on `html` and `body` tags.
+- **Access**: Components use the `useTheme()` hook. 
+- **Persistence**: Automatically syncs with `localStorage` and prefers system settings if enabled.
+- **Elimination of FOUC**: The `attribute="data-theme"` injection on the server ensures no light-mode flash on dark-mode load.
 
-### Layout
+### Map Rendering (MapLibre)
 
-- **Desktop**: Fixed sidebar (400px) + full-bleed map. Sidebar collapses via arrow button.
-- **Mobile (≤860px)**: Map fills viewport. Sidebar becomes slide-in overlay from left. Hamburger button to open.
+- **Dynamic Zoom**: The initial zoom level is calculated via `getInitialZoom()` based on window width.
+  - **Desktop**: Scales logarithmically to keep the "Alaska to NZ" span consistent on high-res monitors.
+  - **Mobile**: Uses a fixed sane baseline (1.3) for legibility.
+- **Style Persistence**: Layers are re-added via `style.load` events, ensuring pins survive map style toggles.
 
-### Theme System
+### Styling & Colors
 
-- **Default**: Light mode (prevents flash-of-unstyled-content on load)
-- **Storage**: `localStorage.getItem('theme')` checked on mount via `setTimeout(0)` to avoid hydration mismatch
-- **CSS**: `[data-theme="dark"]` selector on `<html>` overrides CSS custom properties (`--surface`, `--border`, `--text-primary`, etc.)
-- **Map sync**: Theme change swaps tile layer between Voyager (light) and Dark Matter (dark)
-
-### Category Colors
-
-> **Location**: `src/lib/colors.ts` (Centralized source of truth)
-
-| Category | Color | Hex |
-|---|---|---|
-| World | Red | `#dc2626` |
-| Crisis | Dark Red | `#b91c1c` |
-| Nation | Blue | `#2563eb` |
-| Business | Amber | `#d97706` |
-| Technology | Cyan | `#0891b2` |
-| Science | Green | `#059669` |
-| Health | Purple | `#7c3aed` |
-| General | Gray | `#6b7280` |
-
-### Marker & Layer System
-
-- **WebGL Symbols**: Individual pins are rendered as MapLibre `symbol` layers. Inactive pins use `unclustered-point`; the selected pin uses `unclustered-point-active`.
-- **SVG Generation**: Icons are generated as `HTMLImageElement` from SVG strings in `MapConstants.tsx`.
-- **Clustered View**: Aggregated groups are rendered as `circle` layers with non-linear scaling (14px to 36px) and prioritized sorting (`symbol-sort-key`).
-- **Collision Detection**: `text-padding` and `text-allow-overlap: false` are used on the label layer to hide redundant text from underlying clusters.
-- **Opacity Gradient**: Smooth `circle-opacity` interpolation (0.80 to 0.95) based on event density.
-- **Icon Caching**: Icons are registered with the map via `map.addImage` after every style load.
-- **Highlighting**: Selection updates trigger a `setFilter` on symbol layers, which is highly efficient in WebGL.
-
-### Camera & Navigation
-
-Seraphim uses MapLibre's native high-performance camera system:
-
-1. **Selection FlyTo**: When a card or pin is selected, `map.flyTo()` provides a smooth, cinematic transition to the target coordinates.
-2. **FlyTo Guards**: To prevent interaction loops, an `isFlyingRef` flag suppresses popup closing and bounding-box re-fetches during programmatic camera movements.
-3. **Popup Persistence**: Popups are temporarily removed during `flyTo` and re-added upon `moveend` to prevent auto-pan interference.
-4. **Zoom Bounds**: Map limits are set to min 2.3 (world) to 18 (street level).
-
-Custom zoom buttons use MapLibre's `NavigationControl` with customized CSS to match the Seraphim aesthetic.
-
----
-
-## Source Registry
-
-### RSS Feeds (in `src/data/sources.ts`)
-
-| Category | Sources |
-|---|---|
-| **World** | BBC World, Al Jazeera, NYT World, DW News, France 24, SCMP, BBC Africa, BBC Middle East, CNA Asia, Times of Israel, Al Arabiya English, MercoPress LatAm, War on the Rocks, Foreign Affairs, CFR, Chatham House, ECFR, The Diplomat, Geopolitical Futures, RNZ World, The Hindu, Politico Europe, Middle East Eye, The Rio Times, AllAfrica News |
-| **Crisis** | USGS Earthquakes, ReliefWeb, ISW Daily Updates, ICG CrisisWatch, ACLED |
-| **Nation** | NPR US |
-| **Business** | CNBC, MarketWatch |
-| **Technology** | Ars Technica, The Verge, BleepingComputer, The Hacker News |
-| **Science** | NASA, Nature |
-| **Health** | WHO News |
-
-### Reddit (via RSS)
-
-CombatFootage, CredibleDefense, UkraineWarVideoReport, GlobalConflict → categorized as **Crisis**
-
-### Telegram (HTML scraping, no API key)
-
-LiveUkraine, bloomberg, War Translated, NEXTA, Kyiv Independent, Intel Slava Z, OSINTdefender, Middle East Eye
-
-Scraped via Cheerio against `t.me/s/<channel>`. Runs concurrently across all channels.
-
-### X / Twitter (multi-strategy, no API key)
-
-@GeoConfirmed, @OSINTtechnical, @Liveuamap, @IntelCrab, @AuroraIntel, @ELINTNews, @DefMon3, @RALee85, @clashreport, @OAlexanderDK, @KofmanMichael, @sentdefender, @IDF, @IsraelWarRoom, @GeoFront5
-
-Resolution order (via `Promise.any` — first success wins):
-1. Native Syndication API
-2. Nitter RSS mirrors
-3. RSSHub instances
-4. Google News RSS
-
-### GNews API (optional)
-
-Requires `GNEWS_API_KEY` in `.env.local`. `fetchOSINTGNews()` runs keyword-driven searches: "geolocated", "satellite imagery", "confirmed strike", etc.
-
----
-
-## Database Schema
-
-### `events` table
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `uuid` | Primary key (auto-generated) |
-| `title` | `text` | Sanitized (surrogate pairs stripped) |
-| `description` | `text` | Sanitized |
-| `url` | `text` | **UNIQUE** — upsert conflict key |
-| `source` | `text` | Human-readable source name |
-| `source_type` | `text` | `'rss'`, `'gnews'`, or `'social'` |
-| `category` | `text` | `'world'`, `'crisis'`, `'nation'`, etc. |
-| `image_url` | `text` | Nullable |
-| `published_at` | `timestamptz` | Normalized to ISO 8601 |
-| `latitude` | `float8` | Nullable — null = unmapped |
-| `longitude` | `float8` | Nullable |
-| `location_name` | `text` | Nullable — display name for the pin |
-| `tags` | `jsonb` | Array of strings (currently unused by frontend) |
-| `created_at` | `timestamptz` | Default: `now()` |
-
-### RLS Policies
-
-- **Public**: `SELECT` allowed (anonymous/anon key)
-- **Service role**: `INSERT`, `UPDATE` allowed (scraper uses service role key)
-- **No public writes**: Users cannot insert/modify events directly
-
----
-
-## Environment Variables
-
-| Variable | Required | Used By | Description |
-|---|---|---|---|
-| `SUPABASE_URL` | Yes | Scraper | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Scraper | Bypass-RLS key for writes. **Never expose client-side.** |
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Frontend (route.ts) | Same URL, public prefix for Next.js client bundling |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Frontend (route.ts) | Anon key for read-only queries (respects RLS) |
-| `GNEWS_API_KEY` | No | Scraper | GNews API key. App works without it. |
-
-> **Security note**: `route.ts` uses `NEXT_PUBLIC_SUPABASE_ANON_KEY` (read-only). The `SUPABASE_SERVICE_ROLE_KEY` is only used by the Bun scraper and GitHub Actions secrets. It is never bundled into the client.
-
----
-
-## Running Locally
-
-```bash
-# Install dependencies
-npm install
-
-# Start the Next.js dev server
-npm run dev
-
-# Run the scraper manually
-bun run src/scraper/index.ts
-
-# Dry-run the scraper (no DB writes)
-DRY_RUN=true bun run src/scraper/index.ts
-```
-
----
-
-## Common Tasks
-
-| Task | Command / Location |
-|---|---|
-| Run ingestion worker | `bun run src/scraper/index.ts` or `npm run scrape` |
-| Dry-run scraper | `$env:DRY_RUN="true"; bun run src/scraper/index.ts` (PowerShell) |
-| Test scraper diagnostics | `npm run test-scraper` or `bun run scripts/test-scraper.ts` |
-| Test Supabase connection | `bun run scripts/test-supabase.ts` |
-| Run geocoding accuracy test | `npx tsx scripts/evaluate-accuracy.mjs` |
-| Run pipeline benchmark | `npx tsx scripts/benchmark-pipeline.mjs` |
-| Run all tests | `npm test` |
-| Run tests in watch mode | `npm run test:watch` |
-| Run accuracy benchmark | `npm run test:accuracy` |
-| Add a new RSS/Reddit feed | Append to `src/data/sources.ts` |
-| Add a new Telegram channel | Add to `TELEGRAM_CHANNELS` in `src/lib/social-feeds.ts` |
-| Add a new X account | Add to `X_ACCOUNTS` in `src/lib/social-feeds.ts` |
-| Add a landmark | Add to `LANDMARKS` in `src/lib/geocoding/constants.ts` |
-| Add a false positive | Add to `FALSE_POSITIVES` in `src/lib/geocoding/constants.ts` |
-| Add a stop word | Add to `STOP_WORDS` in `src/lib/geocoding/constants.ts` |
-| Rebuild geodata dictionary | `node scripts/build-geodata.mjs` |
-| Adjust API cache TTL | Change `CACHE_TTL` in `src/app/api/news/route.ts` (default: 15 min) |
+- **Centralized Colors**: `src/lib/colors.ts` is the single source of truth for category and source colors.
+- **OSINT Palette**: High-contrast, standard tones for Bellingcat, ISW, and Telegram sources.
+- **CSS Modules**: All new components (`ThemeToggle`, etc.) use scoped `.module.css` files to prevent global namespace pollution.
 
 ---
 
 ## Known Gotchas & Constraints
 
-### Performance
-- `geonames.json` is ~4.7 MB. It's loaded at module init in `engine.ts`. This is fine server-side but must **never** be imported client-side.
-- The API applies a `LIMIT 500` safety cap. Viewport-driven exploration allows users to discover data by zooming/panning.
-- **Resolved**: `EventSidebar` now uses `react-virtuoso` virtualization. Performance is stable even with thousands of cards.
-- **WebGL Rendering**: Transitioned to MapLibre GL JS. The GPU now handles point rendering, allowing for 100,000+ points without DOM overhead.
-- **Layer Persistence**: `addSourcesAndLayers` ensures data layers survive `setStyle()` calls (theme/style changes) by listening to `style.load`.
+### Environment Limits
+- **Upstash Free Tier**: 10,000 commands/day. The hybrid L1/L2 strategy is designed to stay well within this limit by absorbing burst traffic locally.
+- **Supabase Egress**: Description fields are lazy-loaded to minimize data transfer costs.
 
+### Security
+- **Large Geodata**: `geonames.json` (~4.7 MB) must never reach the client. The `server-only` directive provides a build-time guardrail.
+- **XSS**: All scraped content must pass through `cleanString()` (DOMPurify) before database insertion.
 
-### Data Integrity
-- **Photon API fallback is permanently disabled** — all geocoding uses the local dictionary only. This is intentional; the API was causing rate-limit bottlenecks.
-- **Coordinate jitter** (golden-angle spiral) is applied to all items sharing the same coordinates. This prevents pin stacking but means pin positions are not exact for clustered events.
-- **Map framing** ignores latitudes < -60° (Antarctica) when calculating auto-fit bounds to prevent the viewport from zooming out too far.
-
-### Caching
-- **Server cache**: In-memory `Map` in `route.ts` with 15-min TTL. Keyed by BBox or "global".
-- **Edge cache**: `Cache-Control: public, s-maxage=60, stale-while-revalidate=59` for global; shorter TTLs for BBox.
-- **Refresh throttle**: Manual refresh button has a 1-minute server-side cooldown.
-- **Client-side Cache**: `useNewsData` maintains a Map of previously fetched areas.
-  - **Greedy Accumulation**: Individual pins are merged into a persistent pool, preventing "empty map" flickering when panning back to previously loaded areas.
-  - **Snapping Grid**: Uses a wide grid (2 to 20 degrees) to maximize cache hits during panning.
-  - **Search Optimization**: If a global search query is active, the cache key *ignores* BBox coordinates. This allows users to pan across search results with 100% instant cache hits.
-- **Lazy-Load Cache**: Descriptions are cached client-side once fetched.
-- **Server-Side Clustering**: API returns aggregated clusters when a `zoom` parameter is present and the zoom level is below 5. Power users can bypass this via the **"Force individual pins"** toggle.
-
-
-### Realtime Updates
-- **Supabase Realtime**: Subscribed to `INSERT` events.
-  - **Search-Aware Filtering**: Incoming rows are filtered against the current viewport BBox OR the active search query, ensuring global search results update live.
-  - **Cache Injection**: New events are automatically injected into all overlapping `bboxCache` entries to ensure they persist across map pans.
-
-
-### Egress Optimization
-- **Lazy-Loading**: The `/api/news` route excludes the `description` field by default.
-- **On-Demand Fetching**: Descriptions are fetched via `/api/news/[id]` only when a card is expanded or a map pin is clicked.
-- **Live Patching**: `NewsMap.tsx` handles updating the popup content without recreating the layer. It patches the DOM of the active popup when lazy-loaded data arrives.
-- **Loading State**: Sidebar cards and map popups use a CSS-only shimmer skeleton (`.popup-skeleton-line`) while fetching data.
-
-### Navigation & Camera
-- **Smart Camera behavior**: Automatic `fitBounds` on data refresh is disabled. Programmable camera moves (like selecting a card) call `onBeforeFly` to set a `suppressBoundsRef` flag, which prevents the resulting `moveend` event from triggering a redundant BBox re-fetch.
-- **One-Time Zoom**: MarkerManager tracks `lastFlewToId` to skip camera animations if the same event is selected again (e.g. after a re-render), preventing "rubber-banding" during exploration.
-- **Debounced BBox + Zoom + Since**: The map emits bounds changes 150ms after the `moveend` event to prevent API spam while maintaining high responsiveness. The BBox includes the `since` timestamp derived from the active timeRange to ensure server-side clusters respect temporal filters.
-
-
-### Known Duplications (technical debt)
-- **Resolved**: CSS monolithic styles split into modules.
-- **Resolved**: Filtering logic centralized in `src/lib/filters.ts`.
-- **Resolved**: Colors centralized in `src/lib/colors.ts`.
-- **Resolved**: `@tailwindcss/postcss` dependency removed.
+### Testing
+- **Vitest**: Server-only modules are mocked in `vitest.config.ts` using `scripts/tests/mocks/server-only.ts`.
+- **Mocking**: Styling tests must be updated in `utils.test.ts` whenever the central color palette is refined.

@@ -22,6 +22,7 @@
     "cheerio": "^1.2.0",
     "compromise": "^14.15.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.4.2",
     "isomorphic-dompurify": "^3.11.0",
     "maplibre-gl": "^5.24.0",
     "next": "^16.2.4",

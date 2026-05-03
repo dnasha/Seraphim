@@ -42,6 +42,10 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'south china sea': { lat: 12.00, lon: 113.00 },
     'black sea': { lat: 43.00, lon: 35.00 },
     'red sea': { lat: 20.00, lon: 38.50 },
+    'baltic sea': { lat: 57.00, lon: 19.00 },
+    'persian gulf': { lat: 26.00, lon: 51.00 },
+    'amazon rainforest': { lat: -3.46, lon: -62.21 },
+    'gaza': { lat: 31.5, lon: 34.45 },
     'golan heights': { lat: 33.00, lon: 35.75 },
     'arctic': { lat: 71.0, lon: 25.0 },
     'antarctic': { lat: -82.0, lon: 0.0 },
@@ -55,6 +59,8 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'northern gaza': { lat: 31.55, lon: 34.50 },
     'southern gaza': { lat: 31.30, lon: 34.30 },
     'dr congo': { lat: -4.04, lon: 21.76 },
+    'kiryat shmona': { lat: 33.21, lon: 35.57 },
+    'qiryat shemona': { lat: 33.21, lon: 35.57 },
     // conflict-relevant locations not in GeoNames cities5000
     'bint jbeil': { lat: 33.12, lon: 35.43 },
     'negev': { lat: 30.85, lon: 34.75 },
@@ -88,6 +94,19 @@ export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'mali': { lat: 17.57, lon: -3.99 },
     'burkina faso': { lat: 12.36, lon: -1.53 },
     'sahel': { lat: 15.00, lon: 2.00 },
+    // islands and overseas territories
+    'bermuda': { lat: 32.32, lon: -64.76 },
+    // bodies of water and straits
+    'gulf of oman': { lat: 24.50, lon: 58.50 },
+    // conflict-zone towns in Lebanon
+    'qantara': { lat: 33.27, lon: 35.45 },
+    'majdal zoun': { lat: 33.16, lon: 35.29 },
+    'taybeh': { lat: 33.18, lon: 35.46 },
+    'tiberias': { lat: 32.79, lon: 35.53 },
+    'kostyantynivka': { lat: 48.52, lon: 37.70 },
+    'cape verde': { lat: 16.53, lon: -23.04 },
+    // Northern Ireland towns
+    'dunmurry': { lat: 54.55, lon: -5.99 },
 };
 
 export const CONTINENT_FALLBACKS: Record<string, { lat: number; lon: number }> = {
@@ -149,14 +168,17 @@ export const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'u.a.e.': 'united arab emirates', 'uae': 'united arab emirates',
     'u.n.': '__skip__',
     'e.u.': '__skip__',
+    'eu': '__skip__',
     'd.c.': 'washington dc',
     'nk': 'north korea',
     'ca': 'california',
     'ny': 'new york',
+    'nyc': 'new york',
     'tx': 'texas',
     'ga': 'georgia',
     'va': 'virginia',
     'fl': 'florida',
+    'nj': 'new jersey',
 };
 
 export const DATELINE_NOISE_WORDS = new Set([
@@ -184,7 +206,7 @@ export const STOP_WORDS = new Set([
     'democrats', 'republicans', 'nato', 'opec', 'who', 'fbi', 'cia',
     'deal', 'record', 'back', 'first', 'second', 'third', 'over',
     'after', 'before', 'major', 'global', 'world', 'international',
-    'north', 'south', 'east', 'west', 'says', 'say', 'said',
+    'north', 'south', 'east', 'west', 'northern', 'southern', 'eastern', 'western', 'central', 'says', 'say', 'said',
     'each', 'every', 'both', 'other', 'another', 'such',
     'high', 'higher', 'low', 'lower', 'big', 'small', 'long',
     'war', 'peace', 'crisis', 'today', 'yesterday', 'tomorrow',
@@ -202,17 +224,16 @@ export const STOP_WORDS = new Set([
     'asteroid', 'comet', 'nebula', 'galaxy', 'orbit', 'spacecraft',
     'island', 'islands', 'peninsula', 'continent', 'region', 'area',
     'coast', 'mountain', 'river', 'lake', 'ocean', 'sea', 'bay', 'gulf',
-    'man', 'humble', 'bowen', 'country', 'source', 'category', 'theme', 'format', 'topic',
-    'et', 'pt', 'ct', 'mt', 'est', 'pst', 'cst', 'mst', 'gmt', 'utc',
-    'hong', 'kong', 'abu', 'san', 'los', 'las', 'das', 'del', 'der',
-    'jos', 'america', 'intel', 'defence', 'intelligence',
-    'university', 'college', 'school', 'center', 'centre', 'hospital',
-    'meta', 'buy', 'same', 'wake', 'next', 'bolton', 'graham', 'salem',
-    'heba', 'hit', 'can', 'strikes', 'attack', 'at', 'about',
-    'nigel', 'brent', 'nhs',
-    'toi', 'sanchez',
-    // common words that collide with city names
-    'union', 'leo', 'victor', 'corona', 'rio',
+    'morning', 'evening', 'daily', 'weekly', 'year', 'war', 'spring',
+    'ray', 'categorized', 'classified', 'unclassified', 'secret', 'top secret',
+    'confirmed', 'unconfirmed', 'verified', 'unverified',
+    'footage', 'video', 'photo', 'image', 'satellite',
+    'ambassador', 'envoy', 'diplomat', 'official', 'minister',
+    'talks', 'negotiations', 'ceasefire', 'truce', 'peace',
+    'deal', 'agreement', 'framework', 'outline',
+    'sirens', 'missile', 'rocket', 'drone', 'uav',
+    'interdicted', 'seized', 'captured', 'sunk', 'intercepted',
+    'university', 'student', 'students', 'professor', 'faculty', 'campus',
 ]);
 
 export const FALSE_POSITIVES = new Set([
@@ -234,20 +255,26 @@ export const FALSE_POSITIVES = new Set([
     // small cities that are common English words and cause false positives
     'nine', 'union', 'claudia', 'victor', 'corona', 'lima bean',
     'independence', 'liberty', 'justice', 'hope', 'faith', 'harmony',
-    'florence nightingale', 'victoria sponge',
+    'florence nightingale', 'victoria sponge', 'palm beaches',
+    'uss indianapolis', 'uss carney', 'uss gerald r ford', 'uss eisenhower',
+    'hms diamond', 'hms queen elizabeth', 'hms prince of wales',
+    'man', 'king', 'buy', 'poll', 'powell', 'blackrock', 'pentagon',
+    'nako', 'victoria', 'usa', 'real', 'charlotte', 'murphy', 'bar', 'ray', 'chamber',
+    // common English words / person names matching obscure cities
+    'can', 'meta', 'sam', 'post', 'battle', 'eagle', 'enterprise',
+    'nigel', 'kim', 'pacific', 'aung san', 'golders green',
+    'sanchez', 'harvard', 'irani',
 ]);
-
 export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
     'nasa': 'Washington DC',
     'nature': 'London',
     'ars technica': 'San Francisco',
     'the verge': 'New York',
-    'who': 'Geneva',
     // WHO-tagged articles are always about global health policy in Geneva
     'world health organization': 'Geneva',
 };
 
-export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'washington', 'washington dc']);
+export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'washington', 'washington dc', 'china', 'russia', 'iran', 'beijing', 'moscow', 'tehran']);
 
 /**
  * High-priority manual overrides for common geographic naming collisions.
@@ -259,6 +286,6 @@ export const OVERRIDE_LOCATIONS: Record<string, { lat: number; lon: number; type
 
 // Regex patterns for pre-processing: strip media attribution and social-media noise
 export const MEDIA_ATTRIBUTION_SUFFIX = /\s*[-–—|]\s*(?:BBC|CNN|Reuters|AP|AFP|Al Jazeera|Fox News|NBC|CBS|ABC|NPR|Guardian|Telegraph|NYT|New York Times|Washington Post|Wall Street Journal|WaPo|WSJ|Financial Times|FT|Bloomberg|Politico|The Hill|Axios|Vox|Vice|BuzzFeed|Daily Mail|Daily Mirror|The Sun|Sky News|DW|Deutsche Welle|France 24|RFI|SCMP|South China Morning Post|Haaretz|Times of Israel|Jerusalem Post|Arab News|Middle East Eye|Al Monitor|Al-Monitor|Bellingcat|Coda Story|RFERL|Radio Free Europe|Radio Liberty|War on the Rocks|Geopolitical Futures|OSINTdefender|IntelSlava|liveukraine_media|Defence One|Defense One|thecradle|Philenews|airlive|Marine Insight|BulgarianMilitary|Yahoo|MSN|Brucke|Ukrinform|Ukrainska Pravda|Kyiv Independent|UNIAN|Sky News Arabia|Al Arabiya English|Al Arabiya|Press TV|PressTV|Tasnim|IRNA|Mehr News|Newsweek|Time Magazine|The Atlantic|Foreign Policy|Foreign Affairs|Chatham House|ISW|Institute for the Study of War|War Monitor|Military Summary|The Drive|The Aviationist|Jane|Janes|PopularMechanics|Popular Mechanics|Wired|Ars Technica|The Verge|TechCrunch|Engadget|9to5Mac|MacRumors|[A-Za-z ]{3,40}?)\s*$/;
-export const SOCIAL_MEDIA_TRAILER = /(?:Subscribe to @\S+|Subscribe to Live:\s*\S+|Subscribe here:\s*\S+|🪐\s*Subscribe|Follow us|Join our|Telegram|t\.me|Links:\s|@\w+\s*Chat room).*/i;
+export const SOCIAL_MEDIA_TRAILER = /(?:Subscribe to @\S+|Subscribe to Live:\s*\S+|Subscribe here:\s*\S+|🪐\s*Subscribe|Follow us|Join our|Telegram|t\.me|Links:\s|@\w+\s*Chat room|appeared first on).*/i;
 export const HASHTAG_FUSED_PATTERN = /#([A-Z]{1,4})([A-Z][a-z])/g;  // matches #NKNorth Korea, #USAPresident
 export const ADMIN_SUFFIX_PATTERN = /\b(Oblast|Region|Province|District|Prefecture|County|Governorate|Emirate|Wilayah|Krai|Raion|Republic)\b/gi;

@@ -104,41 +104,31 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ---
 
-## 🖥️ Phase 2.5: Advanced Visualization & Tiles
-
-_Goal: Fine-tune the new MapLibre engine for absolute visual perfection._
-
-### 2.5.1 — Protomaps / PMTiles Migration
-
-- **Why**: Currently using raster tiles (Voyager/Dark). Vector tiles allow for dynamic labeling, infinite zoom clarity, and $0 egress via Cloudflare R2.
-- **Action**: Serve OSINT-specific vector tiles (OpenStreetMap-based) from R2. Update `MapConstants.tsx` to use the Protomaps MapLibre adapter.
-- **Benefit**: Labels will stay crisp at all zoom levels, and we can style the base map dynamically via JS.
-
----
-
 ## 📊 Phase 3: Data Architecture & Aggregation (Analyst Experience)
 
-_Goal: Shift from raw scrapes to coherent "stories." This is what separates a toy from a tool._
+_Goal: Shift from raw scraped links to coherent "stories" using semantic clustering, and future-proof the schema for advanced features without losing historical data._
 
-### 3.1 — Vector-Based Story Clustering (`pgvector`)
+### 3.1 — Schema Evolution (The "Story" Model)
+- **Action**: Create a safe Supabase migration to upgrade the `events` table without downtime.
+- **New Columns**:
+  - `embedding vector(384)`: Stores semantic embeddings of `title + description` using `pgvector`. Will include an HNSW index (`CREATE INDEX ON events USING hnsw (embedding vector_cosine_ops)`) for fast similarity matching.
+  - `sources JSONB`: Replaces the strict 1:1 event-to-url mapping. Stores an array of `{ name, url, source_type, discovered_at }`. The original `url` column remains as the "lead" deduplication key for raw upserts.
+  - `impact_score INTEGER DEFAULT 0`: A pre-calculated score based on source credibility, unique source count, and keyword triggers.
+  - `credibility_tier INTEGER DEFAULT 3`: Tracks the highest credibility tier (1: Wire, 2: Curated OSINT, 3: Raw Social) present in the `sources` array.
+- **Tags**: Ensure the existing `tags JSONB` column is indexed and actively populated by NER models.
+- **UI Impact**: One pin per story instead of overlapping pins. Sidebar "Story Cards" show a primary headline with nested source favicons. Pin sizes scale with `impact_score`.
 
-- **Action**: Enable the `pgvector` extension in Supabase. Add an `embedding` column (`vector(384)`) to the `events` table.
-- **In the Bun scraper**: Generate embeddings for `title + description` using a lightweight model (e.g., `all-MiniLM-L6-v2` via HuggingFace Inference API, or locally via `@xenova/transformers`).
-- **Merge logic**: When inserting a new event, query for existing events within 48 hours and a 50km radius (PostGIS) with cosine similarity > 0.85. If a match is found, append the new source to an `array` column on the existing row instead of creating a new event.
-- **Schema change**: Add `sources JSONB` column (array of `{ name, url, source_type, discovered_at }`) to replace the single `source`/`url` fields per event.
-- **UI impact**: One pin per story instead of 5 overlapping pins. Sidebar "Story Cards" show a primary headline with nested source favicons.
+### 3.2 — Zero-Cost Vectorization Pipeline
+- **Action**: Implement semantic embedding generation directly in the Bun ingestion worker using `@huggingface/transformers`.
+- **How it works**: Runs the `all-MiniLM-L6-v2` ONNX model natively in JS using the CPU/WASM backend. No external API keys (OpenAI/Pinecone) or usage costs required.
+- **CI/CD Integration**: The GitHub Actions runner handles this perfectly. Model weights (~22MB) are cached using `actions/cache` to ensure the 30-minute cron jobs remain fast and free.
+- **Merge Logic**: Before upserting a new item, the worker calculates cosine similarity against events from the last 48 hours. If similarity is `> 0.85`, it appends the new source to the existing event's `sources` array instead of creating a new pin.
 
-### 3.2 — Automated Importance Scoring
-
-- **Action**: Add an `impact_score INTEGER` column to the `events` table. Compute on upsert in the scraper.
-- **Formula**: `base_source_tier_score + (unique_source_count × 10) + keyword_bonuses`. Keywords: "confirmed" (+15), "casualty" (+20), "breaking" (+10), "satellite imagery" (+15). Source tiers: Reuters/AP = 30, BBC/NYT = 25, OSINT accounts = 15, raw Telegram = 5.
-- **UI impact**: Pin size scales with `impact_score`. Sidebar default sort becomes "Highest Impact" with a toggle for "Most Recent." High-impact events get a subtle glow or badge.
-
-### 3.3 — Named Entity Extraction (NER Tagging)
-
-- **Action**: Run a lightweight NER model in the Bun worker (e.g., `compromise` already handles some NER, or use a dedicated model via API). Extract structured tags: `[Weapons: HIMARS, S-300]`, `[Organizations: IDF, Hezbollah]`, `[Key Figures: Zelensky]`.
-- **Storage**: Populate the existing `tags JSONB` column (already in the schema but currently unused by the frontend).
-- **UI impact**: Render tags as clickable pill badges on sidebar cards. Clicking a tag filters the map to all events sharing that tag.
+### 3.3 — Data Renewal Tooling (`scripts/tools/`)
+- **Action**: Establish a suite of idempotent CLI scripts to safely re-process historical data when our algorithms improve.
+- **`re-geocode.ts`**: Re-runs `extractLocation` over all existing DB rows using the latest NLP dictionary, updating coordinates without destroying URLs or timestamps.
+- **`re-vectorize.ts`**: Runs locally to backfill embeddings for the historical archive. Essential for when the embedding model is first introduced or if we change dimensions in the future.
+- **`re-cluster.ts`**: Retroactively consolidates older, overlapping pre-Phase-3 events into the new `sources` JSONB array structure based on spatial/semantic distance.
 
 ---
 
@@ -147,76 +137,51 @@ _Goal: Shift from raw scrapes to coherent "stories." This is what separates a to
 _Goal: Give analysts the tools to slice data logically. These are the features that make people share the link._
 
 ### 4.1 — Temporal Scrubber (Time Slider)
-
 - **Action**: Add a horizontal range slider at the bottom of the map. Users drag a handle to scrub through the last 7 days hour-by-hour. The map animates pins appearing/disappearing based on `published_at`.
 - **Implementation**: A React component with a `<input type="range">` controlling a `maxTimestamp` state. The map layer filters its GeoJSON source by timestamp on each slider change. Include a "Play" button for auto-advance.
-- **Why it matters**: OSINT analysts need to see _flow_ — how a conflict escalates across geography over time. A static snapshot is far less useful.
 
 ### 4.2 — Source Credibility Tier Filtering
-
 - **Action**: Add a `credibility_tier` field to `src/data/sources.ts` for every source:
   - **Tier 1 (Verified)**: Reuters, AP, BBC, NYT — wire services and established editors.
   - **Tier 2 (Curated OSINT)**: Liveuamap, ISW, OSINTtechnical — respected analyst accounts.
   - **Tier 3 (Raw Social)**: Raw Telegram channels, unverified X accounts.
-- **Dynamic upgrade**: If a Tier 3 source reports something and a Tier 1 source later falls into the same story cluster (Phase 3.1), the event's displayed credibility automatically upgrades to "Confirmed."
-- **UI**: A 3-toggle filter row in the FilterBar. Default: all tiers on. Analysts can quickly toggle off Tier 3 to see only confirmed reporting.
+- **UI**: A 3-toggle filter row in the FilterBar. Analysts can quickly toggle off Tier 3 to see only confirmed reporting.
 
 ### 4.3 — View State Syncing (URL Deep Links)
-
-- **Action**: Encode the current map center, zoom level, active filters, selected time range, and search query into URL search parameters: `?lat=50.45&lng=30.52&z=8&time=24h&cat=crisis&src=news,telegram`.
-- **Implementation**: Use `useSearchParams` or a custom hook that syncs state bidirectionally with `window.history.replaceState` (no page reloads).
-- **Benefit**: Users can share a link to a specific "view" of a crisis. Bookmarkable dashboards. Sets the foundation for OG previews (Phase 5.1).
+- **Action**: Encode the current map center, zoom level, active filters, and search query into URL search parameters.
+- **Implementation**: Use `useSearchParams` or a custom hook that syncs state bidirectionally with `window.history.replaceState`.
 
 ---
 
 ## 🌐 Phase 5: Distribution, Monetization & Platform
 
-_Goal: Turn Seraphim from a project into a product._
+_Goal: Turn Seraphim from a project into a product with user accounts and usage tiers._
 
-### 5.1 — Dynamic Open Graph (OG) Previews
+### 5.1 — User Auth & Usage Tiers (Supabase Auth)
+- **Action**: Integrate Supabase Auth and execute a migration for user-specific data.
+- **New Tables**:
+  - `user_profiles`: Stores `tier` ('free', 'pro'), `stripe_customer_id`, and preferences.
+  - `user_bookmarks`: Stores `user_id`, `event_id`, and personal notes.
+  - `user_geofences`: Stores `user_id`, `polygon`, and `alerts_enabled`.
+- **Enforcement (API Tiering)**:
+  - **Free Tier**: Limited to 7 days of history (enforced via `p_since` in API). Standard rate limits.
+  - **Pro Tier**: Unlimited historical archive. High-frequency rate limits. Access to GeoJSON/KML exports.
 
-- **Action**: Use `@vercel/og` (Edge Image Generation) to render a map thumbnail card when a Seraphim URL is shared on X/Discord/Slack. The card shows a mini-map centered on the current view with event count badges.
-- **Dependency**: Requires URL state syncing (Phase 4.3) so the OG endpoint knows what to render.
-
-### 5.2 — User Auth & Accounts (Supabase Auth)
-
-- **Action**: Integrate Supabase Auth (email/password + OAuth). User accounts enable:
-  - Saved views / bookmarked events.
-  - Custom geofence polygons with email alerts (new event inside your saved polygon → notification).
-  - User-submitted pins (with Perspective API moderation).
-- **RLS update**: Add user-scoped RLS policies for saved data.
+### 5.2 — Dynamic Open Graph (OG) Previews
+- **Action**: Use `@vercel/og` to render map thumbnail cards when URLs are shared. Requires Phase 4.3.
 
 ### 5.3 — Automated Geofence Alerts
+- **Action**: Edge Function triggered by new inserts calls `ST_Within()` against `user_geofences`. Sends email/push notifications to Pro users.
 
-- **Action**: Let authenticated users save a bounding polygon. Use a Supabase Webhook + Edge Function that fires on new `events` inserts. If `ST_Within(new_event, saved_polygon)` is true, send a notification via the Resend API (3,000 free emails/month) or a browser push notification.
-
-### 5.4 — Data Export (GeoJSON / KML)
-
-- **Action**: Add a "Download" button that exports the currently filtered/visible events as GeoJSON or KML using lightweight browser libraries (`@tmcw/togeojson`, `tokml`). Analysts can import into QGIS, Google Earth, or ArcGIS.
-
-### 5.5 — Premium Tier & Stripe Integration
-
-- **Action**: Implement an open-core model. Free tier gets the full public map. Pro tier ($X/month via Stripe Checkout + Supabase RLS gating) unlocks:
-  - Extended historical archive (years instead of 30 days).
-  - Geofence email alerts (Phase 5.3).
-  - Bulk data export.
-  - Priority API access / higher rate limits.
-  - Live WebSocket streaming instead of polling.
-
-### 5.6 — AI-Powered Summarization & RAG
-
-- **Action**: Use `pgvector` embeddings (Phase 3.1) as the retrieval layer for a RAG pipeline. Users type natural language queries ("What happened in the Red Sea this week?") and receive an LLM-generated summary citing the relevant events.
-- **Implementation**: Supabase Edge Function calls an LLM API (Gemini, Groq, or OpenAI) with retrieved context. Response is streamed to the client.
-- **Secondary use**: Auto-generate a daily "Intelligence Brief" email for Pro users — a 3-paragraph summary of the highest-impact events from the last 24 hours.
-
-### 5.7 — Open Source Release
-
-- **Action**: Clean up the repo, write a proper README with screenshots, add a `CONTRIBUTING.md`, and release under AGPLv3 (protects the hosted SaaS model while allowing self-hosting). This builds trust and brand awareness in the OSINT and infosec communities.
+### 5.4 — AI-Powered Summarization & RAG
+- **Action**: Use `pgvector` embeddings as the retrieval layer for a RAG pipeline. Users type natural language queries and receive LLM-generated summaries citing relevant events.
 
 ---
 
 ## Tech Stack Evolution
 
+| Feature               | Past (Leaflet)                    | Present (MapLibre)                 | Notes                                        |
+|-----------------------|-----------------------------------|------------------------------------|----------------------------------------------|
 | **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | (Completed) GPU rendering: 100K+ points      |
 | **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
 | **Map Action Tools**  | None                              | `MapActionTools.tsx`               | (Partial) Overlays enabled, Drawing Deferred |
@@ -232,13 +197,13 @@ _Goal: Turn Seraphim from a project into a product._
 ## 🛠️ Engineering & Performance Backlog
 
 ### Viewport-Aware State Eviction
-As users pan around the world, the client-side `news` state currently accumulates every pin retrieved from the API. For long-running sessions, this can lead to memory bloat and slow re-renders. A "Least Recently Viewed" or viewport-distance eviction policy should be implemented in `useNewsData.ts` to keep the active set under ~2,000 items.
+As users pan around the world, the client-side `news` state currently accumulates every pin retrieved from the API. Implement an eviction policy in `useNewsData.ts` to keep the active set under ~2,000 items.
 
 ### Server-Side Realtime Filtering
-The application currently subscribes to all `INSERT` events in the `events` table and filters them client-side. Scaling to high-frequency feeds will cause unnecessary egress and client CPU usage. The Realtime subscription should be updated to use server-side filters (e.g., by category or source) matching the user's active UI state.
+Update the Realtime subscription to use server-side filters (e.g., by category or source) matching the user's active UI state, reducing unnecessary egress and client CPU usage.
 
 ### Geodata Runtime Optimization
-The geocoding engine currently rebuilds the `KNOWN_LOCATIONS` dictionary from raw JSON on every cold start. This process can be moved to the `build-geodata.mjs` script, pre-calculating the optimized Map/Record structure so the runtime only needs to perform a single `JSON.parse` call.
+Move the `KNOWN_LOCATIONS` dictionary build to `build-geodata.mjs`, pre-calculating the optimized structure so the runtime only needs to perform a single `JSON.parse` call.
 
-### Geodata Leakage Protection
-Ensure that the `geonames.json` file (~4.7 MB) is never accidentally bundled in the client-side JS. While currently protected via `server-only` in the engine, additional build-time checks or moving geodata to a dedicated microservice/edge-function should be considered.
+### Phase 2.5: Advanced Visualization & Tiles (Deferred)
+Fine-tune the new MapLibre engine for absolute visual perfection. Serve OSINT-specific vector tiles (OpenStreetMap-based) from Cloudflare R2 via Protomaps PMTiles to achieve crisp labels at all zoom levels and $0 egress.

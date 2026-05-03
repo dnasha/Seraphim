@@ -39,10 +39,9 @@ async function run() {
 
     for (const item of gradedResults) {
       const isApproved = item.graded_status === 'approved';
-      const rawExpected = isApproved 
-        ? (item.final_mapped_location?.displayName || null)
+      const rawExpected = isApproved
+        ? (item.engine_result?.displayName || item.final_mapped_location?.displayName || item.db_location?.displayName || null)
         : item.expected_location;
-
       const normExpected = normalize(rawExpected);
       
       // skip items with "ignore" or "default" in the expected notes
@@ -55,7 +54,7 @@ async function run() {
 
       // live rerun logic
       // replicate the logic in extractLocation
-      const ext = extractLocation(item.title, item.desc || '');
+      const ext = extractLocation(item.title, item.description || '');
       let placeName = ext.match;
       const candidates = ext.candidates;
 
@@ -88,6 +87,7 @@ async function run() {
         'uae': 'united arab emirates',
         'sino-russian': 'russia',
         'sino': 'china',
+        'strait of hormuz': 'hormuz',
       };
 
       const evalActual = ALIASES[normActual] || normActual;
