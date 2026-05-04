@@ -21,6 +21,7 @@ export interface NewsItem {
   tags?: string[];
   clusterId?: number;
   eventCount?: number;
+  originalId?: string;
 }
 
 export interface NewsResponse {

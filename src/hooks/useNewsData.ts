@@ -146,6 +146,10 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
+    // Keep a synchronous ref of the current news items for callbacks
+    const newsRef = useRef<NewsItem[]>([]);
+    useEffect(() => { newsRef.current = news; }, [news]);
+
     // Track the current bounding box so Realtime can filter/refetch correctly
     const currentBBoxRef = useRef<BBox | null>(null);
     const timeRangeRef = useRef(timeRange);
@@ -273,8 +277,28 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
         if (!id) return;
         if (descriptionCache.current.has(id)) return;
 
+        // Resolve the actual UUID to fetch from the DB. 
+        // For clusters, the id is a hybrid string (e.g. cluster-z3...), 
+        // so we must look up its original representative UUID.
+        let fetchId = id;
+        
+        // Find the item synchronously to check for originalId
+        const item = newsRef.current.find(i => i.id === id);
+        if (item && item.originalId) {
+            fetchId = item.originalId;
+        } else {
+            // Fallback to cache if not found in current view
+            for (const entry of bboxCache.values()) {
+                const cachedItem = entry.data.find(i => i.id === id);
+                if (cachedItem && cachedItem.originalId) {
+                    fetchId = cachedItem.originalId;
+                    break;
+                }
+            }
+        }
+
         try {
-            const res = await fetch(`/api/news/${id}`);
+            const res = await fetch(`/api/news/${fetchId}`);
             if (!res.ok) return;
             const { description } = await res.json() as { description: string };
 
