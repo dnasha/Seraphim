@@ -73,8 +73,12 @@ export default function Home() {
             // Default to last 24 hours if no dates set yet
             const now = new Date();
             const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            setCustomStartDate(yesterday.toISOString().split('T')[0]);
-            setCustomEndDate(now.toISOString().split('T')[0]);
+            const toLocalISO = (d: Date) => {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            };
+            setCustomStartDate(toLocalISO(yesterday));
+            setCustomEndDate(toLocalISO(now));
         }
     }, [customStartDate, customEndDate]);
 

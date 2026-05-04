@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse } from '@/lib/types';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 /*
   useNewsData - React hook for fetching news data driven by the map viewport.
@@ -25,13 +25,7 @@ export interface BBox {
     query?: string;
 }
 
-// Supabase client for Realtime only - read-only anon key
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-});
 
 function snapBBox(b: BBox): BBox {
     const z = b.zoom || 5;
@@ -104,10 +98,7 @@ function computeSince(timeRange: string, customStartDate?: string): string | nul
 
 function computeUntil(timeRange: string, customEndDate?: string): string | null {
     if (timeRange === 'custom' && customEndDate) {
-        // Include the entire end date by setting it to 23:59:59.999
-        const d = new Date(customEndDate);
-        d.setUTCHours(23, 59, 59, 999);
-        return d.toISOString();
+        return new Date(customEndDate).toISOString();
     }
     return null;
 }
@@ -324,8 +315,6 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
     // Supabase Realtime - INSERT subscription
     // -------------------------------------------------------------------------
     useEffect(() => {
-        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
-
         const channel = supabase
             .channel('events-inserts')
             .on(

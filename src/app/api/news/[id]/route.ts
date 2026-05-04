@@ -1,17 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { DbEvent } from '@/types';
 
 /*
   Detail Endpoint: Fetches the full description of a single event by UUID.
 */
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-});
 
 // Simple in-memory cache so expanding/collapsing a card doesn't re-fetch
 const detailCache = new Map<string, { description: string; timestamp: number }>();

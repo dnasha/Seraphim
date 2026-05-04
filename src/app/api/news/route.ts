@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { NewsItem, NewsResponse } from '@/lib/types';
@@ -9,13 +9,7 @@ import { DbEvent, dbEventToNewsItem } from '@/types';
   API Proxy Route: Fetches pre-processed events from Supabase.
 */
 
-// Supabase client (read-only anon key, respects RLS)
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-});
 
 // Upstash Rate Limiting setup
 const redis = Redis.fromEnv();

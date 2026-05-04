@@ -85,6 +85,18 @@ export default function FilterBar({
 }: FilterBarProps) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
 
+    const toLocalISO = (d: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    const resetTo24h = () => {
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        onCustomStartDateChange?.(toLocalISO(yesterday));
+        onCustomEndDateChange?.(toLocalISO(now));
+    };
+
     const handleTimeToggleClick = (value: string) => {
         if (value === 'custom') {
             if (timeRange === 'custom') {
@@ -135,16 +147,30 @@ export default function FilterBar({
                         <label className={styles.filterLabel}>Time</label>
                     </div>
                     <div className={styles.timeFilterContainer}>
-                        <div className={styles.sourceToggles}>
-                            {timeOptions.map((option) => (
-                                <button
-                                    key={option.value}
-                                    className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
-                                    onClick={() => handleTimeToggleClick(option.value)}
-                                >
-                                    {option.label}
-                                </button>
-                            ))}
+                        <div className={styles.scrollWrapper}>
+                            <div className={styles.sourceToggles}>
+                                {timeOptions.map((option) => (
+                                    <button
+                                        key={option.value}
+                                        className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
+                                        onClick={() => handleTimeToggleClick(option.value)}
+                                    >
+                                        {option.value === 'custom' && (
+                                            <svg 
+                                                viewBox="0 0 1024 1024" 
+                                                width="14" 
+                                                height="14" 
+                                                fill="currentColor"
+                                                style={{ flexShrink: 0 }}
+                                            >
+                                                <path d="M790.811 120.124h-56.047V64.133h-55.99v55.99H342.837v-55.99h-55.989v55.99h-56.047c-61.556 0-111.921 50.366-111.921 111.92v616.004c0 61.555 50.364 111.919 111.92 111.919h560.011c61.556 0 111.921-50.364 111.921-111.92V232.044c0-61.554-50.365-111.92-111.921-111.92z m-560.01 55.99h56.047v55.987h55.99v-55.987h335.936v55.987h55.99v-55.987h56.047c30.841 0 55.932 25.09 55.932 55.93V344.08H174.869V232.043c0-30.84 25.09-55.929 55.932-55.929z m560.01 727.862h-560.01c-30.842 0-55.932-25.09-55.932-55.93V400.07h671.873v447.978c0 30.839-25.09 55.928-55.931 55.928z" />
+                                                <path d="M286.848 512.048h447.916v55.99H286.848v-55.99zM286.848 681.766h447.916v55.99H286.848v-55.99z" />
+                                            </svg>
+                                        )}
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         {isPickerOpen && timeRange === 'custom' && (
                             <div className={styles.customDateContainer}>
@@ -158,26 +184,46 @@ export default function FilterBar({
                                     </svg>
                                 </button>
                                 <div className={styles.customDateRow}>
-                                    <div className={styles.dateInputGroup}>
-                                        <label>Start</label>
-                                        <input
-                                            type="date"
-                                            className={styles.dateInput}
-                                            value={customStartDate || ''}
-                                            min="2026-04-11"
-                                            onChange={(e) => onCustomStartDateChange?.(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className={styles.dateInputGroup}>
-                                        <label>End</label>
-                                        <input
-                                            type="date"
-                                            className={styles.dateInput}
-                                            value={customEndDate || ''}
-                                            min="2026-04-11"
-                                            onChange={(e) => onCustomEndDateChange?.(e.target.value)}
-                                        />
-                                    </div>
+                                    {(() => {
+                                        const nowStr = toLocalISO(new Date());
+                                        return (
+                                            <>
+                                                <div className={styles.dateInputGroup}>
+                                                    <label>Start</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        className={styles.dateInput}
+                                                        value={customStartDate || ''}
+                                                        min="2026-04-11T00:00"
+                                                        max={customEndDate || nowStr}
+                                                        onChange={(e) => onCustomStartDateChange?.(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className={styles.dateInputGroup}>
+                                                    <label>End</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        className={styles.dateInput}
+                                                        value={customEndDate || ''}
+                                                        min={customStartDate || "2026-04-11T00:00"}
+                                                        max={nowStr}
+                                                        onChange={(e) => onCustomEndDateChange?.(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className={styles.pickerFooter}>
+                                                    <button 
+                                                        className={styles.resetBtn} 
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            resetTo24h();
+                                                        }}
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
@@ -186,7 +232,7 @@ export default function FilterBar({
 
                 <div className={styles.filterSection}>
                     <label className={styles.filterLabel}>Sources</label>
-                    <div className={styles.sourceRow}>
+                    <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {sourceOptions.map((option) => {
                                 const isActive = sources.includes(option.value);
@@ -211,35 +257,37 @@ export default function FilterBar({
 
                 <div className={styles.filterSection}>
                     <label className={styles.filterLabel}>Categories</label>
-                    <div className={styles.categoryToggles}>
-                        {categoryOptions.map((cat) => {
-                            const isActive = categories.includes(cat.value);
-                            const color = CATEGORY_COLORS[cat.value] || '#6b7280';
-                            const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
-                            return (
-                                <button
-                                    key={cat.value}
-                                    className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
-                                    onClick={() => toggleCategory(cat.value)}
-                                    style={{
-                                        borderColor: isActive ? color : undefined,
-                                        background: isActive ? color : undefined,
-                                    }}
-                                >
-                                    <svg
-                                        className={styles.categoryIconSvg}
-                                        viewBox="0 0 24 24"
-                                        width="15"
-                                        height="15"
-                                        fill={isActive ? '#fff' : color}
-                                        style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
+                    <div className={styles.scrollWrapper}>
+                        <div className={styles.categoryToggles}>
+                            {categoryOptions.map((cat) => {
+                                const isActive = categories.includes(cat.value);
+                                const color = CATEGORY_COLORS[cat.value] || '#6b7280';
+                                const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
+                                return (
+                                    <button
+                                        key={cat.value}
+                                        className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
+                                        onClick={() => toggleCategory(cat.value)}
+                                        style={{
+                                            borderColor: isActive ? color : undefined,
+                                            background: isActive ? color : undefined,
+                                        }}
                                     >
-                                        <path d={iconPath} />
-                                    </svg>
-                                    {cat.label}
-                                </button>
-                            );
-                        })}
+                                        <svg
+                                            className={styles.categoryIconSvg}
+                                            viewBox="0 0 24 24"
+                                            width="15"
+                                            height="15"
+                                            fill={isActive ? '#fff' : color}
+                                            style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
+                                        >
+                                            <path d={iconPath} />
+                                        </svg>
+                                        {cat.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>

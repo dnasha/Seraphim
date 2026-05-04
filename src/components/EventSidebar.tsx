@@ -414,16 +414,19 @@ export default function EventSidebar({
         <div className={styles.statsInfo}>
           {/* Prevents hydration mismatch for time strings */}
           {(newestEventTime || isLoading) && (
-            <span className={styles.lastUpdated} suppressHydrationWarning>
-              LAST UPDATED AT:{" "}
-              {newestEventTime && mounted
-                ? new Date(newestEventTime).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  })
-                : "--:-- --"}
-            </span>
+            <div className={styles.liveStatusWrapper}>
+              <span className={styles.pulseDot} />
+              <span className={styles.lastUpdated} suppressHydrationWarning>
+                LAST UPDATED AT:{" "}
+                {newestEventTime && mounted
+                  ? new Date(newestEventTime).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                    })
+                  : "--:-- --"}
+              </span>
+            </div>
           )}
           <span className={styles.statPill}>
             {totalEventCount.toLocaleString()} events
