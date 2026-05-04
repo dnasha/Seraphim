@@ -143,18 +143,35 @@ export async function GET(request: Request) {
         } else {
             let rows, error;
 
-                if (useServerClustering) {
-                    // Execute server-side clustering RPC for low zoom levels
-                    const rpcParams: Record<string, unknown> = {
-                        p_zoom_level: Math.floor(zoom!),
-                        p_min_lat: ignoreBBox ? null : parseFloat(minLat!),
-                        p_max_lat: ignoreBBox ? null : parseFloat(maxLat!),
-                        p_min_lng: ignoreBBox ? null : parseFloat(minLng!),
-                        p_max_lng: ignoreBBox ? null : parseFloat(maxLng!),
-                    };
-                    if (sinceStr) rpcParams.p_since = sinceStr;
-                    if (untilStr) rpcParams.p_until = untilStr;
-                    if (searchQuery) rpcParams.p_search_query = searchQuery;
+            const normalizeLng = (lng: number) => ((lng + 180) % 360 + 360) % 360 - 180;
+            let normMinLng: number | null = null;
+            let normMaxLng: number | null = null;
+            let crossesAntimeridian = false;
+
+            if (!ignoreBBox && hasBBox) {
+                const minL = parseFloat(minLng!) - EPSILON;
+                const maxL = parseFloat(maxLng!) + EPSILON;
+                if (maxL - minL < 360) {
+                    normMinLng = normalizeLng(minL);
+                    normMaxLng = normalizeLng(maxL);
+                    crossesAntimeridian = normMinLng > normMaxLng;
+                }
+            }
+
+            if (useServerClustering) {
+                // Execute server-side clustering RPC for low zoom levels
+                const rpcParams: Record<string, unknown> = {
+                    p_zoom_level: Math.floor(zoom!),
+                    p_min_lat: ignoreBBox ? null : parseFloat(minLat!) - EPSILON,
+                    p_max_lat: ignoreBBox ? null : parseFloat(maxLat!) + EPSILON,
+                    // If it crosses the antimeridian, passing unwrapped bounds to a simple RPC will fail.
+                    // Omit longitude filtering for the RPC in this case.
+                    p_min_lng: crossesAntimeridian || normMinLng === null ? null : normMinLng,
+                    p_max_lng: crossesAntimeridian || normMaxLng === null ? null : normMaxLng,
+                };
+                if (sinceStr) rpcParams.p_since = sinceStr;
+                if (untilStr) rpcParams.p_until = untilStr;
+                if (searchQuery) rpcParams.p_search_query = searchQuery;
 
                 const res = await supabase.rpc('get_clustered_events', rpcParams).limit(RAW_LIMIT);
                 rows = res.data;
@@ -170,9 +187,17 @@ export async function GET(request: Request) {
                 if (!ignoreBBox && hasBBox) {
                     query = query
                         .gte('latitude', parseFloat(minLat!) - EPSILON)
-                        .lte('latitude', parseFloat(maxLat!) + EPSILON)
-                        .gte('longitude', parseFloat(minLng!) - EPSILON)
-                        .lte('longitude', parseFloat(maxLng!) + EPSILON);
+                        .lte('latitude', parseFloat(maxLat!) + EPSILON);
+
+                    if (normMinLng !== null && normMaxLng !== null) {
+                        if (crossesAntimeridian) {
+                            // Crosses the antimeridian
+                            query = query.or(`longitude.gte.${normMinLng},longitude.lte.${normMaxLng}`);
+                        } else {
+                            // Normal bbox
+                            query = query.gte('longitude', normMinLng).lte('longitude', normMaxLng);
+                        }
+                    }
                 } else if (!includeUnmapped) {
                     query = query.not('latitude', 'is', null);
                 }
@@ -201,8 +226,13 @@ export async function GET(request: Request) {
 
             allItems = (rows as DbEvent[]).map((row) => {
                 const item = dbEventToNewsItem(row);
-                // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes
-                if (useServerClustering && item.clusterId) {
+                // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes.
+                // We store the original UUID so the frontend can still fetch the description 
+                // of the representative event for this cluster.
+                // ONLY apply to aggregated clusters (eventCount > 1). Individual items MUST
+                // retain their UUIDs directly to avoid duplicate keys during zoom transitions.
+                if (useServerClustering && item.clusterId && item.eventCount && item.eventCount > 1) {
+                    item.originalId = item.id;
                     item.id = `cluster-z${Math.floor(zoom!)}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.eventCount}`;
                 }
                 return item;
