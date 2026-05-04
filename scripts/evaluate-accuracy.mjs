@@ -20,6 +20,7 @@ function normalize(val) {
 async function run() {
   const startTime = performance.now();
   try {
+    process.env.IS_BENCHMARK = 'true';
     const { extractLocation, geocodeLocation } = await import('../src/lib/geocoding');
 
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {

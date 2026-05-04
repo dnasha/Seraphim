@@ -1,20 +1,20 @@
-# Seraphim — Project Roadmap
+# Seraphim Project Roadmap
 
-> A living document. Tracks what's been built, what needs hardening, and what's next — in order.
+> A living document. Tracks what's been built, what needs hardening, and what's next in order.
 
 ---
 
-## ✅ What Is Already Done
+## What Is Already Done
 
 Everything below is implemented, merged, and working in the current codebase.
 
 ### Database & Backend Architecture
 
 - **Supabase (PostgreSQL + PostGIS)** replaces the old in-memory/file-based system. The `events` table uses `url` as a unique constraint for upsert deduplication.
-- **Decoupled Bun scraper worker** (`src/scraper/index.ts`) — runs independently of the Next.js process. Fetches all sources concurrently via `Promise.allSettled`, geocodes new items only (pre-filters against known DB URLs), and upserts in batches of 50 with per-row fallback on chunk failure.
+- **Decoupled Bun scraper worker** (`src/scraper/index.ts`) runs independently of the Next.js process. Fetches all sources concurrently via `Promise.allSettled`, geocodes new items only (pre-filters against known DB URLs), and upserts in batches of 50 with per-row fallback on chunk failure.
 - **GitHub Actions cron** (`.github/workflows/main.yml`) triggers the scraper every 30 minutes.
-- **Pre-fetch deduplication** — before geocoding, the scraper queries Supabase for existing URLs in chunks of 50 to skip redundant NLP work. The DB unique constraint acts as a second safety net.
-- **Data sanitization pipeline** — `ensureIsoDate()` normalizes non-standard RSS date formats (e.g., ICG CrisisWatch's `"Friday, April 10, 2026 - 16:35"`). `cleanString()` strips orphaned UTF-16 surrogate pairs to prevent Postgres JSONB encoding failures.
+- **Pre-fetch deduplication** before geocoding, the scraper queries Supabase for existing URLs in chunks of 50 to skip redundant NLP work. The DB unique constraint acts as a second safety net.
+- **Data sanitization pipeline** `ensureIsoDate()` normalizes non-standard RSS date formats (e.g., ICG CrisisWatch's `"Friday, April 10, 2026 - 16:35"`). `cleanString()` strips orphaned UTF-16 surrogate pairs to prevent Postgres JSONB encoding failures.
 
 ### Geocoding Engine (`src/lib/geocoding/`, ~40KB across 6 files)
 
@@ -28,18 +28,18 @@ Everything below is implemented, merged, and working in the current codebase.
 
 - **RSS** (~30 feeds): BBC, Al Jazeera, NYT, DW, France 24, SCMP, ISW, ReliefWeb, USGS Earthquakes, ICG CrisisWatch, Ars Technica, BleepingComputer, NASA, Nature, WHO, and more. Centralized in `src/data/sources.ts`.
 - **Reddit** (4 subreddits): CombatFootage, CredibleDefense, UkraineWarVideoReport, GlobalConflict.
-- **Telegram** (8 channels): HTML-scraped via Cheerio — Kyiv Independent, NEXTA, Intel Slava Z, OSINTdefender, War Translated, bloomberg, LiveUkraine, Middle East Eye.
-- **X / Twitter** (15 accounts): Multi-strategy resolution via `Promise.any` — Native Syndication API → Nitter mirrors → RSSHub → Google News RSS.
+- **Telegram** (8 channels): HTML-scraped via Cheerio Kyiv Independent, NEXTA, Intel Slava Z, OSINTdefender, War Translated, bloomberg, LiveUkraine, Middle East Eye.
+- **X / Twitter** (15 accounts): Multi-strategy resolution via `Promise.any` Native Syndication API → Nitter mirrors → RSSHub → Google News RSS.
 - **GNews API** (optional): Keyword-driven OSINT searches.
 
 ### Frontend & UI
 
 - **Next.js 16** (App Router) with **React 19**. Single `page.tsx` orchestrating `EventSidebar`, `FilterBar`, and `NewsMap` via two custom hooks (`useNewsData`, `useNewsFilter`).
 - **API route** (`/api/news/route.ts`): Supabase proxy with 15-minute in-memory cache, Edge CDN `Cache-Control` headers, and a 1-minute refresh throttle. Fetches top 500 events ordered by `published_at`.
-- **Leaflet 1.9 map** with custom smooth zoom system — replaces Leaflet's default `scrollWheelZoom` with a `requestAnimationFrame` lerp loop calling `_move()` per frame and `_moveEnd()` on settle. Sub-pixel rendering via monkey-patching `_getNewPixelOrigin`, `latLngToLayerPoint`, and `GridLayer._setZoomTransform` to remove `._round()` calls during animation.
+- **Leaflet 1.9 map** with custom smooth zoom system replaces Leaflet's default `scrollWheelZoom` with a `requestAnimationFrame` lerp loop calling `_move()` per frame and `_moveEnd()` on settle. Sub-pixel rendering via monkey-patching `_getNewPixelOrigin`, `latLngToLayerPoint`, and `GridLayer._setZoomTransform` to remove `._round()` calls during animation.
 - **Marker system**: `DivIcon`-based category markers (26px normal / 36px active) with `IconCache` to prevent redundant object creation. Selected markers get a CSS "sonar pulse" animation and glow. Highlighting uses direct DOM class manipulation (Ref-based) to avoid React reconciliation.
 - **Clustering**: Server-side clustering (zoom < 5) enabled by default. Client-side `leaflet.markercluster` is disabled. Power users can toggle "Force individual pins" to bypass server-side grouping.
-- **Map styles**: Standard (Voyager), Dark — auto-switching with theme. Settings panel with gear icon toggle.
+- **Map styles**: Standard (Voyager), Dark auto-switching with theme. Settings panel with gear icon toggle.
 - **Sidebar**: Fixed 400px width, collapsible. Logo (Cinzel Decorative font), stat pills (article count, mapped count, last-updated timestamp), filter bar, scrollable card list. Cards show 88×66px thumbnails, source badge, time-ago, location pin. Unmapped articles expand inline; mapped articles fly the map to the pin.
 - **Filtering**: Source toggles (News/Reddit/X/Telegram/GNews), category pills, time range (1D/3D/1W/1M/All), "Mapped Only" toggle, debounced search. Client-side `useMemo` filtering for instant toggling.
 - **Theme**: Light mode default (prevents FOUC). Persistent via `localStorage`. Dark mode overrides via `[data-theme="dark"]` CSS custom properties.
@@ -101,7 +101,7 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Dynamic BBox Grid Expansion**: Scaled the BBox snapping logic and increased the API `RAW_LIMIT` to 2000 events. This allows for massive, pre-cached data "tiles" that minimize database egress.
 - **Advanced Cluster Visualization**:
   - **Non-Linear Scaling**: Clusters scale logarithmically (14px to 36px) to maintain clarity without overcrowding.
-  - **Count-Based Sorting**: Implemented `symbol-sort-key` priority—larger clusters are always drawn on top of smaller ones.
+  - **Count-Based Sorting**: Implemented `symbol-sort-key` prioritylarger clusters are always drawn on top of smaller ones.
   - **Collision-Aware Labels**: Optimized collision detection and `text-padding` to hide redundant underlying labels, ensuring a clean "pro" look at all zoom levels.
   - **Smooth Opacity Gradients**: Dynamic `circle-opacity` (0.65 to 0.95) based on event volume, providing a glassy, premium aesthetic.
 - **Synchronized Cluster Break-Apart**: Aligned client-side MapLibre clustering with the server-side `CLUSTER_ZOOM_THRESHOLD` (5) for a seamless transition from global groups to individual pins.
@@ -115,11 +115,12 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ---
 
-## 📊 Phase 3: Data Architecture & Aggregation (Analyst Experience)
+## Phase 3: Data Architecture & Aggregation (Analyst Experience)
 
 _Goal: Shift from raw scraped links to coherent "stories" using semantic clustering, and future-proof the schema for advanced features without losing historical data._
 
-### 3.1 — Schema Evolution (The "Story" Model)
+### 3.1 Schema Evolution (The "Story" Model)
+
 - **Action**: Create a safe Supabase migration to upgrade the `events` table without downtime.
 - **New Columns**:
   - `embedding vector(384)`: Stores semantic embeddings of `title + description` using `pgvector`. Will include an HNSW index (`CREATE INDEX ON events USING hnsw (embedding vector_cosine_ops)`) for fast similarity matching.
@@ -129,13 +130,15 @@ _Goal: Shift from raw scraped links to coherent "stories" using semantic cluster
 - **Tags**: Ensure the existing `tags JSONB` column is indexed and actively populated by NER models.
 - **UI Impact**: One pin per story instead of overlapping pins. Sidebar "Story Cards" show a primary headline with nested source favicons. Pin sizes scale with `impact_score`.
 
-### 3.2 — Zero-Cost Vectorization Pipeline
+### 3.2 Zero-Cost Vectorization Pipeline
+
 - **Action**: Implement semantic embedding generation directly in the Bun ingestion worker using `@huggingface/transformers`.
 - **How it works**: Runs the `all-MiniLM-L6-v2` ONNX model natively in JS using the CPU/WASM backend. No external API keys (OpenAI/Pinecone) or usage costs required.
 - **CI/CD Integration**: The GitHub Actions runner handles this perfectly. Model weights (~22MB) are cached using `actions/cache` to ensure the 30-minute cron jobs remain fast and free.
 - **Merge Logic**: Before upserting a new item, the worker calculates cosine similarity against events from the last 48 hours. If similarity is `> 0.85`, it appends the new source to the existing event's `sources` array instead of creating a new pin.
 
-### 3.3 — Data Renewal Tooling (`scripts/tools/`)
+### 3.3 Data Renewal Tooling (`scripts/tools/`)
+
 - **Action**: Establish a suite of idempotent CLI scripts to safely re-process historical data when our algorithms improve.
 - **`re-geocode.ts`**: Re-runs `extractLocation` over all existing DB rows using the latest NLP dictionary, updating coordinates without destroying URLs or timestamps.
 - **`re-vectorize.ts`**: Runs locally to backfill embeddings for the historical archive. Essential for when the embedding model is first introduced or if we change dimensions in the future.
@@ -143,32 +146,36 @@ _Goal: Shift from raw scraped links to coherent "stories" using semantic cluster
 
 ---
 
-## 🎯 Phase 4: Advanced OSINT Controls (The "Wow" Factor)
+## Phase 4: Advanced OSINT Controls (The "Wow" Factor)
 
 _Goal: Give analysts the tools to slice data logically. These are the features that make people share the link._
 
-### 4.1 — Temporal Scrubber (Time Slider)
+### 4.1 Temporal Scrubber (Time Slider)
+
 - **Action**: Add a horizontal range slider at the bottom of the map. Users drag a handle to scrub through the last 7 days hour-by-hour. The map animates pins appearing/disappearing based on `published_at`.
 - **Implementation**: A React component with a `<input type="range">` controlling a `maxTimestamp` state. The map layer filters its GeoJSON source by timestamp on each slider change. Include a "Play" button for auto-advance.
 
-### 4.2 — Source Credibility Tier Filtering
+### 4.2 Source Credibility Tier Filtering
+
 - **Action**: Add a `credibility_tier` field to `src/data/sources.ts` for every source:
-  - **Tier 1 (Verified)**: Reuters, AP, BBC, NYT — wire services and established editors.
-  - **Tier 2 (Curated OSINT)**: Liveuamap, ISW, OSINTtechnical — respected analyst accounts.
+  - **Tier 1 (Verified)**: Reuters, AP, BBC, NYT wire services and established editors.
+  - **Tier 2 (Curated OSINT)**: Liveuamap, ISW, OSINTtechnical respected analyst accounts.
   - **Tier 3 (Raw Social)**: Raw Telegram channels, unverified X accounts.
 - **UI**: A 3-toggle filter row in the FilterBar. Analysts can quickly toggle off Tier 3 to see only confirmed reporting.
 
-### 4.3 — View State Syncing (URL Deep Links)
+### 4.3 View State Syncing (URL Deep Links)
+
 - **Action**: Encode the current map center, zoom level, active filters, and search query into URL search parameters.
 - **Implementation**: Use `useSearchParams` or a custom hook that syncs state bidirectionally with `window.history.replaceState`.
 
 ---
 
-## 🌐 Phase 5: Distribution, Monetization & Platform
+## Phase 5: Distribution, Monetization & Platform
 
 _Goal: Turn Seraphim from a project into a product with user accounts and usage tiers._
 
-### 5.1 — User Auth & Usage Tiers (Supabase Auth)
+### 5.1 User Auth & Usage Tiers (Supabase Auth)
+
 - **Action**: Integrate Supabase Auth and execute a migration for user-specific data.
 - **New Tables**:
   - `user_profiles`: Stores `tier` ('free', 'pro'), `stripe_customer_id`, and preferences.
@@ -178,13 +185,16 @@ _Goal: Turn Seraphim from a project into a product with user accounts and usage 
   - **Free Tier**: Limited to 7 days of history (enforced via `p_since` in API). Standard rate limits.
   - **Pro Tier**: Unlimited historical archive. High-frequency rate limits. Access to GeoJSON/KML exports.
 
-### 5.2 — Dynamic Open Graph (OG) Previews
+### 5.2 Dynamic Open Graph (OG) Previews
+
 - **Action**: Use `@vercel/og` to render map thumbnail cards when URLs are shared. Requires Phase 4.3.
 
-### 5.3 — Automated Geofence Alerts
+### 5.3 Automated Geofence Alerts
+
 - **Action**: Edge Function triggered by new inserts calls `ST_Within()` against `user_geofences`. Sends email/push notifications to Pro users.
 
-### 5.4 — AI-Powered Summarization & RAG
+### 5.4 AI-Powered Summarization & RAG
+
 - **Action**: Use `pgvector` embeddings as the retrieval layer for a RAG pipeline. Users type natural language queries and receive LLM-generated summaries citing relevant events.
 
 ---
@@ -192,7 +202,7 @@ _Goal: Turn Seraphim from a project into a product with user accounts and usage 
 ## Tech Stack Evolution
 
 | Feature               | Past (Leaflet)                    | Present (MapLibre)                 | Notes                                        |
-|-----------------------|-----------------------------------|------------------------------------|----------------------------------------------|
+| --------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------- |
 | **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | (Completed) GPU rendering: 100K+ points      |
 | **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
 | **Map Action Tools**  | None                              | `MapActionTools.tsx`               | (Partial) Overlays enabled, Drawing Deferred |
@@ -205,16 +215,20 @@ _Goal: Turn Seraphim from a project into a product with user accounts and usage 
 
 ---
 
-## 🛠️ Engineering & Performance Backlog
+## Engineering & Performance Backlog
 
 ### Viewport-Aware State Eviction
+
 As users pan around the world, the client-side `news` state currently accumulates every pin retrieved from the API. Implement an eviction policy in `useNewsData.ts` to keep the active set under ~2,000 items.
 
 ### Server-Side Realtime Filtering
+
 Update the Realtime subscription to use server-side filters (e.g., by category or source) matching the user's active UI state, reducing unnecessary egress and client CPU usage.
 
 ### Geodata Runtime Optimization
+
 Move the `KNOWN_LOCATIONS` dictionary build to `build-geodata.mjs`, pre-calculating the optimized structure so the runtime only needs to perform a single `JSON.parse` call.
 
 ### Phase 2.5: Advanced Visualization & Tiles (Deferred)
+
 Fine-tune the new MapLibre engine for absolute visual perfection. Serve OSINT-specific vector tiles (OpenStreetMap-based) from Cloudflare R2 via Protomaps PMTiles to achieve crisp labels at all zoom levels and $0 egress.
