@@ -4,6 +4,7 @@
 Dan Sharan
 FilterBar component provides interface for filtering news by source, category, and time.
 */
+import { useState } from 'react';
 import styles from './FilterBar.module.css';
 
 // Category colors (pending extraction to shared lib/colors)
@@ -37,8 +38,10 @@ interface FilterBarProps {
     onCategoriesChange: (categories: string[]) => void;
     timeRange: string;
     onTimeRangeChange: (time: string) => void;
-    searchQuery: string;
-    onSearchChange: (query: string) => void;
+    customStartDate?: string;
+    onCustomStartDateChange?: (date: string) => void;
+    customEndDate?: string;
+    onCustomEndDateChange?: (date: string) => void;
 }
 
 const categoryOptions = [
@@ -65,7 +68,7 @@ const timeOptions = [
     { value: '3d', label: '3 Days' },
     { value: '1w', label: '1 Week' },
     { value: '1m', label: '1 Month' },
-    { value: 'all', label: 'All Time' },
+    { value: 'custom', label: 'Custom' },
 ];
 
 export default function FilterBar({
@@ -75,9 +78,27 @@ export default function FilterBar({
     onCategoriesChange,
     timeRange,
     onTimeRangeChange,
-    searchQuery,
-    onSearchChange,
+    customStartDate,
+    onCustomStartDateChange,
+    customEndDate,
+    onCustomEndDateChange,
 }: FilterBarProps) {
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+    const handleTimeToggleClick = (value: string) => {
+        if (value === 'custom') {
+            if (timeRange === 'custom') {
+                setIsPickerOpen(!isPickerOpen);
+            } else {
+                onTimeRangeChange(value);
+                setIsPickerOpen(true);
+            }
+        } else {
+            onTimeRangeChange(value);
+            setIsPickerOpen(false);
+        }
+    };
+
     const toggleSource = (source: string) => {
         // Ensure at least one source remains selected
         if (sources.includes(source)) {
@@ -108,97 +129,118 @@ export default function FilterBar({
 
     return (
         <div className={styles.filterBar}>
-            <div className={styles.filterSection}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className={styles.filterLabel}>Time</label>
-                </div>
-                <div className={styles.sourceRow}>
-                    <div className={styles.sourceToggles}>
-                        {timeOptions.map((option) => (
-                            <button
-                                key={option.value}
-                                className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
-                                onClick={() => onTimeRangeChange(option.value)}
-                            >
-                                {option.label}
-                            </button>
-                        ))}
+            <div className={styles.scrollableFilters}>
+                <div className={styles.filterSection}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label className={styles.filterLabel}>Time</label>
                     </div>
-                </div>
-            </div>
-
-            <div className={styles.filterSection}>
-                <label className={styles.filterLabel}>Sources</label>
-                <div className={styles.sourceRow}>
-                    <div className={styles.sourceToggles}>
-                        {sourceOptions.map((option) => {
-                            const isActive = sources.includes(option.value);
-                            return (
+                    <div className={styles.timeFilterContainer}>
+                        <div className={styles.sourceToggles}>
+                            {timeOptions.map((option) => (
                                 <button
                                     key={option.value}
-                                    className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
-                                    onClick={() => toggleSource(option.value)}
-                                    style={{
-                                        backgroundColor: isActive ? option.bg : undefined,
-                                        borderColor: isActive ? option.bg : undefined,
-                                        color: isActive ? option.color : undefined,
-                                    }}
+                                    className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
+                                    onClick={() => handleTimeToggleClick(option.value)}
                                 >
                                     {option.label}
+                                </button>
+                            ))}
+                        </div>
+                        {isPickerOpen && timeRange === 'custom' && (
+                            <div className={styles.customDateContainer}>
+                                <button 
+                                    className={styles.closePickerBtn} 
+                                    onClick={() => setIsPickerOpen(false)}
+                                    aria-label="Close picker"
+                                >
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                                    </svg>
+                                </button>
+                                <div className={styles.customDateRow}>
+                                    <div className={styles.dateInputGroup}>
+                                        <label>Start</label>
+                                        <input
+                                            type="date"
+                                            className={styles.dateInput}
+                                            value={customStartDate || ''}
+                                            min="2026-04-11"
+                                            onChange={(e) => onCustomStartDateChange?.(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className={styles.dateInputGroup}>
+                                        <label>End</label>
+                                        <input
+                                            type="date"
+                                            className={styles.dateInput}
+                                            value={customEndDate || ''}
+                                            min="2026-04-11"
+                                            onChange={(e) => onCustomEndDateChange?.(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className={styles.filterSection}>
+                    <label className={styles.filterLabel}>Sources</label>
+                    <div className={styles.sourceRow}>
+                        <div className={styles.sourceToggles}>
+                            {sourceOptions.map((option) => {
+                                const isActive = sources.includes(option.value);
+                                return (
+                                    <button
+                                        key={option.value}
+                                        className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
+                                        onClick={() => toggleSource(option.value)}
+                                        style={{
+                                            backgroundColor: isActive ? option.bg : undefined,
+                                            borderColor: isActive ? option.bg : undefined,
+                                            color: isActive ? option.color : undefined,
+                                        }}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.filterSection}>
+                    <label className={styles.filterLabel}>Categories</label>
+                    <div className={styles.categoryToggles}>
+                        {categoryOptions.map((cat) => {
+                            const isActive = categories.includes(cat.value);
+                            const color = CATEGORY_COLORS[cat.value] || '#6b7280';
+                            const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
+                            return (
+                                <button
+                                    key={cat.value}
+                                    className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
+                                    onClick={() => toggleCategory(cat.value)}
+                                    style={{
+                                        borderColor: isActive ? color : undefined,
+                                        background: isActive ? color : undefined,
+                                    }}
+                                >
+                                    <svg
+                                        className={styles.categoryIconSvg}
+                                        viewBox="0 0 24 24"
+                                        width="15"
+                                        height="15"
+                                        fill={isActive ? '#fff' : color}
+                                        style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
+                                    >
+                                        <path d={iconPath} />
+                                    </svg>
+                                    {cat.label}
                                 </button>
                             );
                         })}
                     </div>
-                </div>
-            </div>
-
-            <div className={styles.filterSection}>
-                <label className={styles.filterLabel}>Categories</label>
-                <div className={styles.categoryToggles}>
-                    {categoryOptions.map((cat) => {
-                        const isActive = categories.includes(cat.value);
-                        const color = CATEGORY_COLORS[cat.value] || '#6b7280';
-                        const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
-                        return (
-                            <button
-                                key={cat.value}
-                                className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
-                                onClick={() => toggleCategory(cat.value)}
-                                style={{
-                                    borderColor: isActive ? color : undefined,
-                                    background: isActive ? color : undefined,
-                                }}
-                            >
-                                <svg
-                                    className={styles.categoryIconSvg}
-                                    viewBox="0 0 24 24"
-                                    width="15"
-                                    height="15"
-                                    fill={isActive ? '#fff' : color}
-                                    style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
-                                >
-                                    <path d={iconPath} />
-                                </svg>
-                                {cat.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            <div className={styles.filterSection} style={{ marginTop: '4px' }}>
-                <div className={styles.searchInputContainer}>
-                    <svg className={styles.searchIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.35-4.35" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Search events..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        className={styles.searchInput}
-                    />
                 </div>
             </div>
         </div>

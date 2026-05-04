@@ -21,6 +21,8 @@ export default function Home() {
     const [mappedOnly, setMappedOnly] = useState(true);
     // timeRange shared between server-side and client-side filtering
     const [timeRange, setTimeRange] = useState('1d');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
     
     // Search state for global data fetching
     const [searchQuery, setSearchQuery] = useState('');
@@ -43,13 +45,15 @@ export default function Home() {
         includeUnmapped: !mappedOnly,
         timeRange,
         searchQuery: debouncedSearch,
+        customStartDate,
+        customEndDate,
     });
     
     const {
         sources, setSources,
         categories, setCategories,
         filteredNews
-    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch);
+    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate);
 
     // UI State
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -62,6 +66,17 @@ export default function Home() {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
     }, []);
+
+    const handleTimeRangeChange = useCallback((range: string) => {
+        setTimeRange(range);
+        if (range === 'custom' && (!customStartDate || !customEndDate)) {
+            // Default to last 24 hours if no dates set yet
+            const now = new Date();
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            setCustomStartDate(yesterday.toISOString().split('T')[0]);
+            setCustomEndDate(now.toISOString().split('T')[0]);
+        }
+    }, [customStartDate, customEndDate]);
 
     // Lazy load description whenever an item is selected (from sidebar or map)
     useEffect(() => {
@@ -82,9 +97,11 @@ export default function Home() {
                 categories={categories}
                 onCategoriesChange={setCategories}
                 timeRange={timeRange}
-                onTimeRangeChange={setTimeRange}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
+                onTimeRangeChange={handleTimeRangeChange}
+                customStartDate={customStartDate}
+                onCustomStartDateChange={setCustomStartDate}
+                customEndDate={customEndDate}
+                onCustomEndDateChange={setCustomEndDate}
             />
             {error && (
                 <div className="error-banner">
@@ -121,6 +138,8 @@ export default function Home() {
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 filterBar={filterBarSlot}
                 mounted={mounted}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>

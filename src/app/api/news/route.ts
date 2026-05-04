@@ -118,6 +118,7 @@ export async function GET(request: Request) {
     // Forwarded from the client's active timeRange so clustering respects the
     // same time window the sidebar filter uses.
     const sinceStr = searchParams.get('since');
+    const untilStr = searchParams.get('until');
 
     // Decide whether to use server-side clustering:
     // We still cluster global searches if we have a zoom level to base it on
@@ -126,8 +127,8 @@ export async function GET(request: Request) {
     // Cache key encodes the full query shape.
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
     const cacheKey = (hasBBox || ignoreBBox)
-        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}`
-        : `events${sinceStr ? `,s:${sinceStr}` : ''}`;
+        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}`
+        : `events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}`;
     const canUseCache = !includeUnmapped;
 
     // Throttle refresh attempts
@@ -160,6 +161,7 @@ export async function GET(request: Request) {
                         p_max_lng: ignoreBBox ? null : parseFloat(maxLng!),
                     };
                     if (sinceStr) rpcParams.p_since = sinceStr;
+                    if (untilStr) rpcParams.p_until = untilStr;
                     if (searchQuery) rpcParams.p_search_query = searchQuery;
 
                 const res = await supabase.rpc('get_clustered_events', rpcParams).limit(RAW_LIMIT);
@@ -191,6 +193,9 @@ export async function GET(request: Request) {
                 // reduces egress on large bbox queries.
                 if (sinceStr) {
                     query = query.gte('published_at', sinceStr);
+                }
+                if (untilStr) {
+                    query = query.lte('published_at', untilStr);
                 }
 
                 const res = await query;

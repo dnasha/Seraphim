@@ -8,7 +8,7 @@ import { applyNewsFilters } from '@/lib/filters';
   useNewsFilter - React hook for client-side news filtering.
 */
 
-export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string) {
+export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string, customStartDate?: string, customEndDate?: string) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
     
@@ -32,11 +32,13 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: 
             sources,
             categories,
             timeRange,
+            customStartDate,
+            customEndDate,
             mappedOnly,
             searchQuery: debouncedSearch,
             now,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now]); // Re-filter whenever state or source data changes.
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now, customStartDate, customEndDate]); // Re-filter whenever state or source data changes.
 
     return {
         sources, setSources,

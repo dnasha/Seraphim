@@ -17,7 +17,9 @@ export interface BBox {
     forceRaw?: boolean;
     /** ISO timestamp - events older than this are excluded server-side. */
     since?: string;
-    /** Human-readable label used in the cache key (e.g. '1d', '1w'). */
+    /** ISO timestamp - events newer than this are excluded server-side. */
+    until?: string;
+    /** Human-readable label used in the cache key (e.g. '1d', '1w', 'custom'). */
     timeRange?: string;
     /** Global search query. */
     query?: string;
@@ -52,7 +54,7 @@ function bboxKey(b: BBox) {
         return [
             `q:${b.query}`,
             b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
-            b.timeRange ? `tr:${b.timeRange}` : '',
+            b.timeRange === 'custom' ? `tr:${b.timeRange},s:${b.since || ''},u:${b.until || ''}` : b.timeRange ? `tr:${b.timeRange}` : '',
             b.forceRaw ? 'raw' : '',
         ].filter(Boolean).join(',');
     }
@@ -63,7 +65,7 @@ function bboxKey(b: BBox) {
         b.minLng.toFixed(4),
         b.maxLng.toFixed(4),
         b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
-        b.timeRange ? `tr:${b.timeRange}` : '',
+        b.timeRange === 'custom' ? `tr:${b.timeRange},s:${b.since || ''},u:${b.until || ''}` : b.timeRange ? `tr:${b.timeRange}` : '',
         b.forceRaw ? 'raw' : '',
     ].filter(Boolean).join(',');
 }
@@ -85,8 +87,11 @@ function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
     );
 }
 
-/** Convert a timeRange label to an ISO timestamp for server-side filtering. */
-function computeSince(timeRange: string): string | null {
+/** Convert a timeRange label or custom date to an ISO timestamp for server-side filtering. */
+function computeSince(timeRange: string, customStartDate?: string): string | null {
+    if (timeRange === 'custom') {
+        return customStartDate ? new Date(customStartDate).toISOString() : null;
+    }
     const now = Date.now();
     const ms: Record<string, number> = {
         '1d': 24 * 60 * 60 * 1000,
@@ -95,6 +100,16 @@ function computeSince(timeRange: string): string | null {
         '1m': 30 * 24 * 60 * 60 * 1000,
     };
     return ms[timeRange] ? new Date(now - ms[timeRange]).toISOString() : null;
+}
+
+function computeUntil(timeRange: string, customEndDate?: string): string | null {
+    if (timeRange === 'custom' && customEndDate) {
+        // Include the entire end date by setting it to 23:59:59.999
+        const d = new Date(customEndDate);
+        d.setUTCHours(23, 59, 59, 999);
+        return d.toISOString();
+    }
+    return null;
 }
 
 /** 
@@ -132,7 +147,7 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
 const bboxCache = new Map<string, { bbox: BBox; data: NewsItem[]; timestamp: number }>();
 const BBOX_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
-export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { includeUnmapped: boolean; timeRange: string; searchQuery?: string }) {
+export function useNewsData({ includeUnmapped, timeRange, searchQuery, customStartDate, customEndDate }: { includeUnmapped: boolean; timeRange: string; searchQuery?: string; customStartDate?: string; customEndDate?: string; }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -142,6 +157,8 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     const currentBBoxRef = useRef<BBox | null>(null);
     const timeRangeRef = useRef(timeRange);
     const searchQueryRef = useRef(searchQuery);
+    const customStartDateRef = useRef(customStartDate);
+    const customEndDateRef = useRef(customEndDate);
 
     // Client-side description cache: id - description string
     const descriptionCache = useRef<Map<string, string>>(new Map());
@@ -178,6 +195,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
                 if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
                 if (bbox.forceRaw) params.append('force_raw', 'true');
                 if (bbox.since) params.append('since', bbox.since);
+                if (bbox.until) params.append('until', bbox.until);
                 if (bbox.query) params.append('query', bbox.query);
             } else if (searchQuery) {
                 params.append('query', searchQuery);
@@ -232,22 +250,28 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     useEffect(() => {
         const prevTimeRange = timeRangeRef.current;
         const prevSearch = searchQueryRef.current;
+        const prevStartDate = customStartDateRef.current;
+        const prevEndDate = customEndDateRef.current;
+
         timeRangeRef.current = timeRange;
         searchQueryRef.current = searchQuery;
+        customStartDateRef.current = customStartDate;
+        customEndDateRef.current = customEndDate;
 
-        if (prevTimeRange === timeRange && prevSearch === searchQuery) return; // no actual change on mount
+        if (prevTimeRange === timeRange && prevSearch === searchQuery && prevStartDate === customStartDate && prevEndDate === customEndDate) return; // no actual change on mount
 
         // Invalidate all cached results - they may span a different time window or query
         bboxCache.clear();
 
         const currentBBox = currentBBoxRef.current;
         if (currentBBox) {
-            const since = computeSince(timeRange);
-            fetchNews(false, { ...currentBBox, since: since ?? undefined, timeRange, query: searchQuery });
+            const since = computeSince(timeRange, customStartDate);
+            const until = computeUntil(timeRange, customEndDate);
+            fetchNews(false, { ...currentBBox, since: since ?? undefined, until: until ?? undefined, timeRange, query: searchQuery });
         } else {
             fetchNews();
         }
-    }, [timeRange, searchQuery, fetchNews]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, fetchNews]);
 
     // -------------------------------------------------------------------------
     // On-demand detail fetch (description lazy-load)
@@ -283,10 +307,12 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery }: { inclu
     // Injects the current since timestamp so the server filters by time.
     // -------------------------------------------------------------------------
     const onBoundsChange = useCallback((bbox: BBox) => {
-        const since = computeSince(timeRangeRef.current);
+        const since = computeSince(timeRangeRef.current, customStartDateRef.current);
+        const until = computeUntil(timeRangeRef.current, customEndDateRef.current);
         const enrichedBBox: BBox = {
             ...bbox,
             since: since ?? undefined,
+            until: until ?? undefined,
             timeRange: timeRangeRef.current,
             query: searchQueryRef.current,
         };

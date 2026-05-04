@@ -11,6 +11,8 @@ export interface FilterOptions {
     sources: string[];
     categories: string[];
     timeRange: string;
+    customStartDate?: string;
+    customEndDate?: string;
     mappedOnly: boolean;
     searchQuery: string;
     now: number;
@@ -21,7 +23,7 @@ export interface FilterOptions {
  * Pure function — no React dependencies, no side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, mappedOnly, searchQuery, now } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, searchQuery, now } = options;
 
     let filtered = items;
     if (now === 0) return filtered;
@@ -47,15 +49,30 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
     }
 
     // 3. Time range filtering
-    const rangeMs = {
-        '1d': 24 * 60 * 60 * 1000,
-        '3d': 3 * 24 * 60 * 60 * 1000,
-        '1w': 7 * 24 * 60 * 60 * 1000,
-        '1m': 30 * 24 * 60 * 60 * 1000,
-        'all': Infinity,
-    }[timeRange] || Infinity;
+    if (timeRange === 'custom') {
+        const sinceTime = customStartDate ? new Date(customStartDate).getTime() : -Infinity;
+        // End date should include the full day
+        const untilDate = customEndDate ? new Date(customEndDate) : null;
+        if (untilDate) {
+            untilDate.setUTCHours(23, 59, 59, 999);
+        }
+        const untilTime = untilDate ? untilDate.getTime() : Infinity;
+        
+        filtered = filtered.filter(item => {
+            const time = new Date(item.publishedAt).getTime();
+            return time >= sinceTime && time <= untilTime;
+        });
+    } else {
+        const rangeMs = {
+            '1d': 24 * 60 * 60 * 1000,
+            '3d': 3 * 24 * 60 * 60 * 1000,
+            '1w': 7 * 24 * 60 * 60 * 1000,
+            '1m': 30 * 24 * 60 * 60 * 1000,
+            'all': Infinity,
+        }[timeRange] || Infinity;
 
-    filtered = filtered.filter(item => (now - new Date(item.publishedAt).getTime()) <= rangeMs);
+        filtered = filtered.filter(item => (now - new Date(item.publishedAt).getTime()) <= rangeMs);
+    }
 
     // 4. Search query filtering (title, description, location)
     if (searchQuery) {
