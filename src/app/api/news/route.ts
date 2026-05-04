@@ -201,8 +201,10 @@ export async function GET(request: Request) {
 
             allItems = (rows as DbEvent[]).map((row) => {
                 const item = dbEventToNewsItem(row);
-                // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes
-                if (useServerClustering && item.clusterId) {
+                // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes.
+                // ONLY apply to aggregated clusters (eventCount > 1). Individual items MUST
+                // retain their UUIDs for description fetching and sidebar consistency.
+                if (useServerClustering && item.clusterId && item.eventCount && item.eventCount > 1) {
                     item.id = `cluster-z${Math.floor(zoom!)}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.eventCount}`;
                 }
                 return item;
