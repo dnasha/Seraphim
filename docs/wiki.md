@@ -20,7 +20,7 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 | **Styling** | Vanilla CSS | CSS Modules for component isolation. Base tokens in `globals.css` |
 | **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
 | **Database** | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries |
-| **Rate Limiting** | @upstash/ratelimit | **Hybrid L1/L2**: Local in-memory cache + Global Redis sync |
+| **Rate Limiting** | @upstash/ratelimit | **Hybrid L1/L2**: Local in-memory cache + Global Redis sync. Includes fail-open stability and timeout protection. |
 | **Theme** | next-themes | Flash-free theme hydration with `attribute="data-theme"` |
 | **Sanitization** | isomorphic-dompurify | Strips XSS payloads from scraped titles/descriptions |
 | **Scraper Runtime** | Bun | Native TS execution, 30x faster cold starts than Node |
@@ -52,7 +52,8 @@ SeraphimPreview/
 │   ├── evaluate-accuracy.mjs       # Geocoding regression test against graded samples
 │   ├── test-real-geocode.ts        # Geocoding Benchmarker (generates 400-item set)
 │   └── results/
-│       └── geocode-benchmark-400.json # Current grading set for engine improvements
+│       ├── geocode-benchmark-400.json # Current 400-item grading set for engine improvements
+│       └── re-map-locations.ts        # Utility to retroactively update DB entries with improved NLP logic
 ├── src/
 │   ├── app/
 │   │   ├── api/news/route.ts       # Supabase proxy with Hybrid Rate Limiting
@@ -111,6 +112,7 @@ SeraphimPreview/
 │  ├── Hybrid Rate Limiting:
 │  │   ├── Tier 1: Local L1 (10 reqs/10s free burst)
 │  │   └── Tier 2: Upstash Redis (Global sync every 5th req)
+│  │   └── Fail-Open: Graceful recovery if Redis connection times out or fails
 │  ├── BBox Epsilon (0.00001) for stable edge queries
 │  └── Cache-Control: s-maxage=60 (Edge CDN)
 └─────────────────────────────────────────────────────────┘
@@ -130,7 +132,8 @@ The engine uses a tiered lookup strategy with manual overrides to resolve naming
 
 1. **OVERRIDE_LOCATIONS** (`constants.ts`): Highest priority. Explicitly maps "Georgia" → country centroid to avoid state shadowing.
 2. **Dictionary Priority**: Landmark > Mega-City (>1M) > Country > City > Admin1.
-3. **Accuracy Benchmarking**: `scripts/test-real-geocode.ts` generates a 400-item set from production data for manual grading and iterative NLP refinement.
+3. **Accuracy Benchmarking**: `scripts/evaluate-accuracy.mjs` runs regressions against a 400-item "ground truth" set (`geocode-benchmark-400.json`).
+4. **NLP Refinement**: Dedicated heuristics to handle common false positives (e.g., "Ray" extraction bug) and improved disambiguation via placement penalties.
 
 ---
 
@@ -155,7 +158,11 @@ The engine uses a tiered lookup strategy with manual overrides to resolve naming
 
 - **Centralized Colors**: `src/lib/colors.ts` is the single source of truth for category and source colors.
 - **OSINT Palette**: High-contrast, standard tones for Bellingcat, ISW, and Telegram sources.
-- **CSS Modules**: All new components (`ThemeToggle`, etc.) use scoped `.module.css` files to prevent global namespace pollution.
+- **CSS Modules**: All new components (`ThemeToggle`, `FilterBar`, etc.) use scoped `.module.css` files to prevent global namespace pollution.
+- **Mobile UX**:
+  - **Swipe-to-Collapse**: Sidebar supports gesture-based interaction on mobile.
+  - **Horizontal Filters**: Filter bar uses a touch-friendly scrolling layout with a persistent search input.
+  - **Custom Datetime Picker**: A robust, timezone-aware date filter for precise OSINT time-windowing.
 
 ---
 

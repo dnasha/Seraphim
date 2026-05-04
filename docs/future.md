@@ -61,7 +61,17 @@ Everything below is implemented, merged, and working in the current codebase.
   - Refactored `src/lib/rss.ts` to use standard ES module imports and replaced `@ts-ignore` with `@ts-expect-error`.
   - Sanitized test files in `scripts/tests` by removing non-standard em-dash characters from comments for better cross-platform compatibility.
 - **Animation Restoration**: Fixed broken loading wheel and refresh animations caused by CSS modularization. Defined local `@keyframes spin` within `EventSidebar.module.css` to ensure self-contained, reliable UI feedback.
-- **API Route Hardening**: Implemented cursor-based pagination and a `?include_unmapped=true` flag in `/api/news/route.ts` to reduce payload sizes and support "load more" infinite scrolling in the UI.
+- **API Route Hardening**:
+  - Implemented cursor-based pagination and a `?include_unmapped=true` flag.
+  - **Hybrid Rate Limiting Stability**: Refactored the rate limiter with a `try-catch` wrapper and a fail-open mechanism to prevent unhandled Redis rejections from crashing the API.
+- **Geocoding Accuracy Refinement**:
+  - Achieved **98%+ accuracy** on a 400-item "ground truth" benchmark set (`scripts/results/geocode-benchmark-400.json`).
+  - Refined NLP heuristics to eliminate persistent false positives (e.g., "Ray", "Arsenal").
+  - Implemented a **remapping utility** (`scripts/results/re-map-locations.ts`) to retroactively update database entries with improved engine logic.
+- **Mobile UX Overhaul**:
+  - Implemented **swipe-to-collapse** sidebar gesture for intuitive mobile navigation.
+  - Optimized the **Filter Bar** with horizontal scrolling and a persistent, pinned search experience.
+  - Integrated a **Custom Datetime Picker** that resolves timezone discrepancies and provides a robust date-filtering interface.
 - **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Evaluated `EventSidebar` render performance (stable at current scales) and documented Leaflet `preferCanvas` limitations with `DivIcon` elements for future MapLibre migration context.
 
 ### Phase 1: API & Data Fetching (Scale Enablers)
@@ -101,6 +111,7 @@ Everything below is implemented, merged, and working in the current codebase.
   - **Deferred: Drawing Engine** (`temp_drawing/`): A custom native MapLibre GL drawing engine has been prototyped and moved to a temporary directory for future integration. It supports Polygon, Rectangle, Circle, Freehand, and Select modes with live GeoJSON preview rendering.
   - **Mobile Accessibility**: Refactored the MapActionTools toolbar with increased touch targets (44px) and a responsive layout for improved mobile usability.
   - **Stability Fixes**: Refactored Supabase client to a singleton to prevent Auth instances warnings.
+  - **Timezone Integrity**: Fixed UI discrepancies between event timestamps and filter selection.
 
 ---
 

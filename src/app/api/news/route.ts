@@ -15,7 +15,7 @@ import { DbEvent, dbEventToNewsItem } from '@/types';
 const redis = Redis.fromEnv();
 const ratelimit = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(60, '1 m'),
+    limiter: Ratelimit.slidingWindow(120, '1 m'),
     analytics: true,
     prefix: '@upstash/ratelimit/seraphim',
 });
@@ -121,15 +121,14 @@ export async function GET(request: Request) {
             localL1Limit.set(ip, { count: 1, reset: now + 10000 });
         } else {
             l1.count++;
-            // Tier 2: Check Redis only if spamming or periodic sync
-            if (l1.count > 10 || l1.count % 5 === 0) {
+            // Tier 2: Check Redis only if spamming (>15 reqs in 10s) or periodic sync
+            if (l1.count > 15 || l1.count % 5 === 0) {
                 try {
                     const { success } = await ratelimit.limit(ip);
                     if (!success) {
                         return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
                     }
                 } catch (ratelimitError) {
-                    // Fail-open: If Upstash is down, log it but don't crash the request
                     console.error('[api/news] Rate limiter error (failing open):', ratelimitError);
                 }
             }
