@@ -274,7 +274,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             map.addSource('overlay-noaa', {
                 type: 'raster',
                 tiles: [
-                    'https://mesonet.agron.iastate. Iowa State.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'
+                    'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png',
+                    'https://mesonet1.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png',
+                    'https://mesonet2.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png',
+                    'https://mesonet3.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'
                 ],
                 tileSize: 256
             });
