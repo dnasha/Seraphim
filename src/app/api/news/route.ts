@@ -55,33 +55,7 @@ const RAW_LIMIT = 2000;
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
 
 export async function GET(request: Request) {
-    // 1. Extract IP and Timestamp
-    const ip = request.headers.get('x-forwarded-for') ?? '127.0.0.1';
     const now = Date.now();
-
-    // 2. Hybrid Rate Limiting Logic (Optimized for Cost)
-    // Perform passive cleanup of stale local entries
-    performL1Cleanup();
-
-    // Tier 1: Local In-Memory Check (Zero Cost)
-    const l1 = localL1Limit.get(ip);
-    
-    // If we haven't seen this IP or L1 window (10s) expired, start new window
-    if (!l1 || now > l1.reset) {
-        localL1Limit.set(ip, { count: 1, reset: now + 10000 });
-    } else {
-        l1.count++;
-        
-        // Tier 2: Check Redis only if:
-        // a) IP is "spamming" (>10 reqs in 10s window)
-        // b) Every 5th request (sampling to sync with global state)
-        if (l1.count > 10 || l1.count % 5 === 0) {
-            const { success } = await ratelimit.limit(ip);
-            if (!success) {
-                return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-            }
-        }
-    }
     const { searchParams } = new URL(request.url);
     let forceRefresh = searchParams.get('refresh') === 'true';
     const includeUnmapped = searchParams.get('include_unmapped') === 'true';
@@ -136,8 +110,32 @@ export async function GET(request: Request) {
     }
 
     try {
-        let allItems: NewsItem[];
+        // 1. Rate Limiting Logic (Inside try-catch to avoid unhandled rejections)
+        const ipHeader = request.headers.get('x-forwarded-for');
+        const ip = ipHeader ? ipHeader.split(',')[0].trim() : '127.0.0.1';
 
+        performL1Cleanup();
+
+        const l1 = localL1Limit.get(ip);
+        if (!l1 || now > l1.reset) {
+            localL1Limit.set(ip, { count: 1, reset: now + 10000 });
+        } else {
+            l1.count++;
+            // Tier 2: Check Redis only if spamming or periodic sync
+            if (l1.count > 10 || l1.count % 5 === 0) {
+                try {
+                    const { success } = await ratelimit.limit(ip);
+                    if (!success) {
+                        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+                    }
+                } catch (ratelimitError) {
+                    // Fail-open: If Upstash is down, log it but don't crash the request
+                    console.error('[api/news] Rate limiter error (failing open):', ratelimitError);
+                }
+            }
+        }
+
+        let allItems: NewsItem[];
         const cached = sourceCache.get(cacheKey);
 
         if (canUseCache && !forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
