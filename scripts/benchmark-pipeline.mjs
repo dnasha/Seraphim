@@ -1,6 +1,7 @@
 /*
-Seraphim Pipeline Benchmark
+Seraphim Pipeline Benchmark (Modernized)
 Profiles actual production code stages to identify performance bottlenecks.
+Updated to align with the current Bun-based ingestion architecture.
 
 Usage: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews] [--quick]
 */
@@ -15,13 +16,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 
+// Terminal output formatting
+const c = {
+  cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  white: '\x1b[37m',
+  dim: '\x1b[2m',
+  bold: '\x1b[1m',
+  reset: '\x1b[0m',
+  bgRed: '\x1b[41m'
+};
+
 // Parse command line arguments
 const args = new Set(process.argv.slice(2).map(a => a.toLowerCase()));
 const SKIP_SOCIAL = args.has('--skip-social');
 const SKIP_GNEWS  = args.has('--skip-gnews');
 const QUICK_MODE  = args.has('--quick');
 
-// Terminal output formatting
 function banner(text) {
   const line = '='.repeat(70);
   console.log(`\n${c.cyan}${line}${c.reset}`);
@@ -34,17 +48,14 @@ function sectionHeader(text) {
   console.log(`${c.dim}${'-'.repeat(60)}${c.reset}`);
 }
 
-// Format milliseconds into human readable strings
 function formatMs(ms) {
   if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-// Helper to format percentage strings
 function pct(part, total) { return total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '0%'; }
 
-// Lightweight performance tracking utility
 class Timer {
   constructor() { this.marks = {}; this.starts = {}; }
   start(label) { this.starts[label] = performance.now(); }
@@ -67,8 +78,8 @@ async function benchmarkGeodataLoad(timer) {
   const stats = statSync(jsonPath);
   const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
 
-  // Measure time to import and initialize known locations dictionary
   timer.start('geodata_total');
+  // Use the production geocoding index which handles dictionary initialization
   const { KNOWN_LOCATIONS, ensureInitialized } = await import('../src/lib/geocoding/index.ts');
   ensureInitialized();
   timer.stop('geodata_total');
@@ -87,64 +98,36 @@ async function benchmarkGeodataLoad(timer) {
 }
 
 /*
-Stage 2: RSS Sourcing
-Measures retrieval performance for standard RSS and Reddit feeds.
+Stage 2: RSS & Reddit Sourcing
+Measures retrieval performance using the production scraper fetchers.
 */
-async function benchmarkRSS(timer) {
-  sectionHeader('Stage 2 RSS Feed Sourcing');
+async function benchmarkSourcing(timer) {
+  sectionHeader('Stage 2 Sourcing (RSS & Reddit)');
 
-  const { fetchSingleFeed, fetchRedditFeed } = await import('../src/lib/rss.ts');
-  const { RSS_SOURCES, REDDIT_SOURCES } = await import('../src/data/sources.ts');
+  const { fetchAllRSSFeeds, fetchAllRedditFeeds } = await import('../src/scraper/fetchers/rss.ts');
 
-  const sources = QUICK_MODE ? RSS_SOURCES.slice(0, 3) : RSS_SOURCES;
-  const redditSources = QUICK_MODE ? [] : REDDIT_SOURCES;
-  const feedResults = [];
-  const allItems = [];
+  timer.start('sourcing_total');
 
-  timer.start('rss_total');
+  timer.start('rss_fetch');
+  const rssItems = await fetchAllRSSFeeds();
+  timer.stop('rss_fetch');
 
-  const rssPromises = sources.map(async (source) => {
-    const t0 = performance.now();
-    const items = await fetchSingleFeed(source);
-    const elapsed = performance.now() - t0;
-    feedResults.push({ name: source.name, status: items.length > 0 ? 'ok' : 'error', elapsed, items: items.length });
-    allItems.push(...items);
-  });
+  timer.start('reddit_fetch');
+  const redditItems = await fetchAllRedditFeeds();
+  timer.stop('reddit_fetch');
 
-  const redditPromises = redditSources.map(async (source) => {
-    const t0 = performance.now();
-    const items = await fetchRedditFeed(source);
-    const elapsed = performance.now() - t0;
-    feedResults.push({ name: source.name, status: items.length > 0 ? 'ok' : 'error', elapsed, items: items.length });
-    allItems.push(...items);
-  });
+  timer.stop('sourcing_total');
 
-  await Promise.all([...rssPromises, ...redditPromises]);
-  timer.stop('rss_total');
+  console.log(`  RSS Items:       ${c.green}${rssItems.length}${c.reset} (Time: ${formatMs(timer.get('rss_fetch'))})`);
+  console.log(`  Reddit Items:    ${c.green}${redditItems.length}${c.reset} (Time: ${formatMs(timer.get('reddit_fetch'))})`);
+  console.log(`  Total Time:      ${c.white}${formatMs(timer.get('sourcing_total'))}${c.reset}`);
 
-  feedResults.sort((a, b) => b.elapsed - a.elapsed);
-
-  const ok = feedResults.filter(r => r.status === 'ok').length;
-  const failed = feedResults.filter(r => r.status === 'error').length;
-
-  console.log(`  Feeds fetched:   ${c.green}${ok} ok${c.reset}, ${c.red}${failed} failed / empty${c.reset}  (${feedResults.length} total)`);
-  console.log(`  Articles:        ${c.white}${allItems.length}${c.reset}`);
-  console.log(`  Wall time:       ${c.white}${formatMs(timer.get('rss_total'))}${c.reset}`);
-  console.log();
-
-  console.log(`  ${'Feed'.padEnd(28)} ${'Status'.padEnd(10)} ${'Time'.padStart(10)} ${'Items'.padStart(6)}`);
-  console.log(`  ${'-'.repeat(28)} ${'-'.repeat(10)} ${'-'.repeat(10)} ${'-'.repeat(6)}`);
-  for (const r of feedResults) {
-    const statusColor = r.status === 'ok' ? c.green : c.red;
-    console.log(`  ${r.name.padEnd(28)} ${statusColor}${r.status.padEnd(10)}${c.reset} ${formatMs(r.elapsed).padStart(10)} ${String(r.items).padStart(6)}`);
-  }
-
-  return allItems;
+  return [...rssItems, ...redditItems];
 }
 
 /*
 Stage 3: GNews Sourcing
-Measures API latency for GNews headlines and OSINT queries.
+Profiles API performance for headlines and OSINT queries.
 */
 async function benchmarkGNews(timer) {
   sectionHeader('Stage 3 GNews API');
@@ -154,33 +137,30 @@ async function benchmarkGNews(timer) {
     return [];
   }
 
-  const { fetchGNews, fetchOSINTGNews } = await import('../src/lib/gnews.ts');
-  const items = [];
+  const { fetchGNews, fetchOSINTGNews } = await import('../src/scraper/fetchers/gnews.ts');
   
   timer.start('gnews_total');
 
   timer.start('gnews_headlines');
   const headlines = await fetchGNews('general', 20);
-  items.push(...headlines);
   timer.stop('gnews_headlines');
 
   timer.start('gnews_osint');
-  const osint = await fetchOSINTGNews(5);
-  items.push(...osint);
+  const osint = await fetchOSINTGNews();
   timer.stop('gnews_osint');
 
   timer.stop('gnews_total');
 
   console.log(`  Headlines:       ${c.white}${formatMs(timer.get('gnews_headlines'))}${c.reset}`);
   console.log(`  OSINT queries:   ${c.white}${formatMs(timer.get('gnews_osint'))}${c.reset}`);
-  console.log(`  Articles:        ${c.green}${items.length}${c.reset}`);
+  console.log(`  Total Items:     ${c.green}${headlines.length + osint.length}${c.reset}`);
 
-  return items;
+  return [...headlines, ...osint];
 }
 
 /*
 Stage 4: Social Feeds
-Measures scraping and retrieval time for Telegram and X sources.
+Measures multi-strategy resolution performance for Telegram and X sources.
 */
 async function benchmarkSocial(timer) {
   sectionHeader('Stage 4 Social Feeds');
@@ -190,139 +170,52 @@ async function benchmarkSocial(timer) {
     return [];
   }
 
-  const { TELEGRAM_CHANNELS, X_ACCOUNTS, scrapeTelegramChannel, fetchXFeed } = await import('../src/lib/social-feeds.ts');
-
-  const results = [];
-  const allItems = [];
+  const { fetchSocialFeeds } = await import('../src/scraper/fetchers/social-feeds.ts');
 
   timer.start('social_total');
-
-  timer.start('social_telegram');
-  const tgPromises = TELEGRAM_CHANNELS.map(async (ch) => {
-    const t0 = performance.now();
-    const items = await scrapeTelegramChannel(ch);
-    const elapsed = performance.now() - t0;
-    results.push({ name: ch.name, status: items.length > 0 ? 'ok' : 'error', elapsed, items: items.length });
-    allItems.push(...items);
-  });
-  await Promise.all(tgPromises);
-  timer.stop('social_telegram');
-
-  timer.start('social_x');
-  const xSources = QUICK_MODE ? X_ACCOUNTS.slice(0, 2) : X_ACCOUNTS;
-  const xPromises = xSources.map(async (ch) => {
-    const t0 = performance.now();
-    const items = await fetchXFeed(ch);
-    const elapsed = performance.now() - t0;
-    results.push({ name: ch.name, status: items.length > 0 ? 'ok' : 'error', elapsed, items: items.length });
-    allItems.push(...items);
-  });
-  await Promise.all(xPromises);
-  timer.stop('social_x');
-
+  const items = await fetchSocialFeeds();
   timer.stop('social_total');
 
-  console.log(`  Telegram:        ${c.white}${formatMs(timer.get('social_telegram'))}${c.reset}`);
-  console.log(`  X/Twitter:       ${c.white}${formatMs(timer.get('social_x'))}${c.reset}`);
-  console.log(`  Articles:        ${c.green}${allItems.length}${c.reset}`);
-  console.log();
+  console.log(`  Social Items:    ${c.green}${items.length}${c.reset}`);
+  console.log(`  Total Time:      ${c.white}${formatMs(timer.get('social_total'))}${c.reset}`);
 
-  console.log(`  ${'Source'.padEnd(28)} ${'Status'.padEnd(10)} ${'Time'.padStart(10)} ${'Items'.padStart(6)}`);
-  console.log(`  ${'-'.repeat(28)} ${'-'.repeat(10)} ${'-'.repeat(10)} ${'-'.repeat(6)}`);
-  for (const r of results) {
-    const sc = r.status === 'ok' ? c.green : c.red;
-    console.log(`  ${r.name.padEnd(28)} ${sc}${r.status.padEnd(10)}${c.reset} ${formatMs(r.elapsed).padStart(10)} ${String(r.items).padStart(6)}`);
-  }
-
-  return allItems;
+  return items;
 }
 
 /*
 Stage 5: Location Extraction
-Profiles the NLP heuristics used to identify place names in text.
+Profiles the production enrichment pipeline.
 */
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 Location Extraction');
 
-  const { extractLocation } = await import('../src/lib/geocoding');
+  const { enrichItemsWithLocation } = await import('../src/scraper/fetchers/geocoding.ts');
 
-  let located = 0;
-  let noLocation = 0;
-  
   timer.start('extraction_total');
-
-  const results = items.map(item => {
-    const { match, candidates } = extractLocation(item.title, item.description);
-    if (match) located++;
-    else noLocation++;
-    return { title: item.title, match, candidates };
-  });
-
+  const enriched = await enrichItemsWithLocation(items);
   timer.stop('extraction_total');
 
+  const located = enriched.filter(i => i.latitude != null).length;
   const total = items.length;
+
   console.log(`  Total items:     ${c.white}${total}${c.reset}`);
   console.log(`  Located:         ${c.green}${located}${c.reset} (${pct(located, total)})`);
-  console.log(`  No location:     ${c.yellow}${noLocation}${c.reset} (${pct(noLocation, total)})`);
+  console.log(`  No location:     ${c.yellow}${total - located}${c.reset} (${pct(total - located, total)})`);
   console.log(`  Total Time:      ${c.white}${formatMs(timer.get('extraction_total'))}${c.reset}`);
   console.log(`  Avg Time:        ${c.white}${formatMs(timer.get('extraction_total') / Math.max(total, 1))}${c.reset} / article`);
 
-  return results;
+  return enriched;
 }
 
-/*
-Stage 6: Geocoding
-Profiles coordinate resolution for identified place names.
-*/
-async function benchmarkGeocoding(timer, extractionResults) {
-  sectionHeader('Stage 6 Geocoding');
-
-  const { geocodeLocation } = await import('../src/lib/geocoding');
-
-  let hits = 0;
-  let fails = 0;
-  let totalTime = 0;
-
-  timer.start('geocoding_total');
-
-  // Filter for unique matches to simulate geocoding cache dynamics
-  const uniqueLocations = [...new Set(extractionResults.map(r => r.match).filter(Boolean))];
-
-  const geocodeFails = [];
-  for (const loc of uniqueLocations) {
-    const t0 = performance.now();
-    const result = await geocodeLocation(loc);
-    totalTime += performance.now() - t0;
-    if (result) hits++;
-    else {
-      fails++;
-      geocodeFails.push(loc);
-    }
-  }
-
-  timer.stop('geocoding_total');
-
-  console.log(`  Unique locations: ${c.white}${uniqueLocations.length}${c.reset}`);
-  console.log(`  Dict Hits:        ${c.green}${hits}${c.reset} (${pct(hits, uniqueLocations.length)})`);
-  console.log(`  Fails:            ${c.red}${fails}${c.reset}`);
-  if (geocodeFails.length > 0) {
-    console.log(`  ${c.dim}Missed: ${geocodeFails.join(', ')}${c.reset}`);
-  }
-  console.log(`  Total Time:       ${c.white}${formatMs(timer.get('geocoding_total'))}${c.reset}`);
-  console.log(`  Avg Time:         ${c.white}${formatMs(totalTime / Math.max(uniqueLocations.length, 1))}${c.reset} / lookup`);
-}
-
-// Display a performance summary table
 function printSummary(timer) {
   banner('BENCHMARK SUMMARY');
 
   const stages = [
     { name: 'Geodata Load', key: 'geodata_total' },
-    { name: 'RSS Sourcing', key: 'rss_total' },
+    { name: 'Sourcing (RSS/R)', key: 'sourcing_total' },
     { name: 'GNews API', key: 'gnews_total' },
     { name: 'Social Feeds', key: 'social_total' },
     { name: 'Extraction', key: 'extraction_total' },
-    { name: 'Geocoding', key: 'geocoding_total' },
   ];
 
   const totalPipeline = stages.reduce((sum, s) => sum + timer.get(s.key), 0);
@@ -349,38 +242,40 @@ function printSummary(timer) {
 }
 
 async function main() {
+  // Bypass 'server-only' protection for the benchmark script
+  process.env.IS_BENCHMARK = 'true';
+
   banner('SERAPHIM PIPELINE BENCHMARK');
   console.log(`  ${c.dim}Timestamp:  ${new Date().toISOString()}${c.reset}`);
   console.log(`  ${c.dim}Flags:      ${SKIP_SOCIAL ? '--skip-social ' : ''}${SKIP_GNEWS ? '--skip-gnews ' : ''}${QUICK_MODE ? '--quick' : 'full'}${c.reset}`);
 
   const timer = new Timer();
 
-  // stage 1
+  // Stage 1
   await benchmarkGeodataLoad(timer);
 
-  // stage 2
-  const rssItems = await benchmarkRSS(timer);
+  // Stage 2
+  const sourceItems = await benchmarkSourcing(timer);
 
-  // stage 3
+  // Stage 3
   const gnewsItems = await benchmarkGNews(timer);
 
-  // stage 4
+  // Stage 4
   const socialItems = await benchmarkSocial(timer);
 
-  // merge items
-  const allItems = [...rssItems, ...gnewsItems, ...socialItems];
+  // Merge items
+  const allItems = [...sourceItems, ...gnewsItems, ...socialItems];
   console.log(`\n  ${c.bold}Total articles collected: ${c.cyan}${allItems.length}${c.reset}`);
 
-  // stage 5
+  // Stage 5
   if (allItems.length > 0) {
-    const extractionResults = await benchmarkExtraction(timer, allItems);
-    // stage 6
-    await benchmarkGeocoding(timer, extractionResults);
+    const itemsToProcess = QUICK_MODE ? allItems.slice(0, 50) : allItems;
+    if (QUICK_MODE) console.log(`  ${c.dim}Quick mode: benchmarking extraction on first 50 items only${c.reset}`);
+    await benchmarkExtraction(timer, itemsToProcess);
   } else {
-    console.log(`\n  ${c.yellow}No articles collected, skipping extraction and geocoding ${c.reset}`);
+    console.log(`\n  ${c.yellow}No articles collected, skipping extraction benchmark ${c.reset}`);
   }
 
-  // generate and print final stats
   printSummary(timer);
 }
 
@@ -388,4 +283,3 @@ main().catch(err => {
   console.error(`${c.red}Fatal error:${c.reset}`, err);
   process.exit(1);
 });
-

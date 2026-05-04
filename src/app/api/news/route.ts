@@ -199,7 +199,14 @@ export async function GET(request: Request) {
                 return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
             }
 
-            allItems = (rows as DbEvent[]).map(dbEventToNewsItem);
+            allItems = (rows as DbEvent[]).map((row) => {
+                const item = dbEventToNewsItem(row);
+                // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes
+                if (useServerClustering && item.clusterId) {
+                    item.id = `cluster-z${Math.floor(zoom!)}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.eventCount}`;
+                }
+                return item;
+            });
 
             if (canUseCache) {
                 sourceCache.set(cacheKey, { data: allItems, timestamp: now });
