@@ -2,8 +2,9 @@
 Seraphim Geodata Builder
 Processes GeoNames datasets and custom country/location mappings
 to produce a compact JSON database for the extraction pipeline.
+Specifically uses cities5000.txt and admin1CodesASCII.txt.
 
-Run: node scripts/build-geodata.mjs
+Usage: node scripts/build-geodata.mjs
 */
 
 import { readFileSync, writeFileSync } from 'fs';

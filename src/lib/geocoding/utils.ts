@@ -1,10 +1,9 @@
 /*
- * Dan Sharan
- * geocoding utilities for normalization and cleaning
- */
+  Geocoding utilities for string normalization, cleaning, and formatting.
+  Includes functions for accent normalization and title case conversion.
+*/
 
-// converts unicode diacritics to ascii (e.g., "Irán" -> "Iran")
-
+// converts unicode diacritics to ascii (e.g., "Irán" to "Iran")
 export function normalizeAccents(s: string): string {
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -27,7 +26,7 @@ export function toTitleCase(s: string): string {
 // strips possessives ("'s"), trailing punctuation, and leading/trailing dashes
 export function cleanCandidate(raw: string): string {
     let s = raw.trim();
-    s = s.replace(/['\u2019]s\b/g, '');      // "Canada's" → "Canada"
+    s = s.replace(/['\u2019]s\b/g, '');      // "Canada's" to "Canada"
     s = s.replace(/['\u2019]s$/g, '');        // trailing possessive at end of string
     s = s.replace(/[.,;:!?"')]+$/, '');       // trailing punctuation
     s = s.replace(/^["'(\u2014\u2013\-]+/, ''); // leading punctuation + em-dash/en-dash/hyphen

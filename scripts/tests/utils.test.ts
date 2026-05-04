@@ -1,8 +1,9 @@
 /*
-  Seraphim Unit Tests - Pure Utility Functions
+  Seraphim Utility Function Tests
 
-  Tests for geocoding utilities, date normalization, string cleaning, and color helpers.
-  Run: npm test
+  This suite verifies the core utility functions used for data normalization,
+  string cleaning, date parsing, and UI color mapping. These utilities are
+  foundational to the geocoding and scraping pipelines.
 */
 
 import { describe, it, expect } from 'vitest';
@@ -10,8 +11,11 @@ import { normalizeAccents, toTitleCase, cleanCandidate } from '../../src/lib/geo
 import { ensureIsoDate } from '../../src/scraper/utils/date';
 import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } from '../../src/lib/colors';
 
-// --- normalizeAccents ---
-
+/*
+  normalizeAccents
+  Tests the removal of diacritics from strings to ensure consistent
+  dictionary matching regardless of regional spelling variations.
+*/
 describe('normalizeAccents', () => {
     it('strips diacritics from accented characters', () => {
         expect(normalizeAccents('Irán')).toBe('Iran');
@@ -33,8 +37,11 @@ describe('normalizeAccents', () => {
     });
 });
 
-// --- toTitleCase ---
-
+/*
+  toTitleCase
+  Verifies proper capitalization of location names, including
+  handling of specific abbreviations like DC and hyphenated names.
+*/
 describe('toTitleCase', () => {
     it('capitalizes each word', () => {
         expect(toTitleCase('new york')).toBe('New York');
@@ -59,8 +66,11 @@ describe('toTitleCase', () => {
     });
 });
 
-// --- cleanCandidate ---
-
+/*
+  cleanCandidate
+  Tests the sanitization of potential location strings extracted from text,
+  ensuring punctuation and possessives are removed before geocoding.
+*/
 describe('cleanCandidate', () => {
     it('strips possessives', () => {
         expect(cleanCandidate("Canada's")).toBe('Canada');
@@ -95,8 +105,11 @@ describe('cleanCandidate', () => {
     });
 });
 
-// --- ensureIsoDate ---
-
+/*
+  ensureIsoDate
+  Validates the normalization of various date formats into a standard
+  ISO string for database storage.
+*/
 describe('ensureIsoDate', () => {
     it('returns valid ISO for a standard ISO string', () => {
         const iso = '2026-04-10T16:35:00.000Z';
@@ -142,8 +155,10 @@ describe('ensureIsoDate', () => {
     });
 });
 
-// --- getCategoryColor ---
-
+/*
+  getCategoryColor
+  Tests the mapping of news categories to their respective UI colors.
+*/
 describe('getCategoryColor', () => {
     it('returns correct hex for known categories', () => {
         expect(getCategoryColor('crisis')).toBe(CATEGORY_COLORS['crisis']);
@@ -161,8 +176,11 @@ describe('getCategoryColor', () => {
     });
 });
 
-// --- getSourceStyle ---
-
+/*
+  getSourceStyle
+  Verifies consistent styling (colors and backgrounds) for known news
+  sources to aid in visual identification on the map.
+*/
 describe('getSourceStyle', () => {
     it('returns black bg for X/Twitter sources', () => {
         expect(getSourceStyle('OSINTdefender (X)').bg).toBe('#0f1419');
@@ -186,3 +204,4 @@ describe('getSourceStyle', () => {
         expect(getSourceStyle('BBC News').bg).toBe('#3b82f6');
     });
 });
+

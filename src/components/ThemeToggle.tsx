@@ -1,8 +1,8 @@
 'use client';
 
 /*
-Dan Sharan
-ThemeToggle component provides a switch for light and dark modes.
+ThemeToggle component provides a user interface for switching between light and dark themes.
+It utilizes next-themes for theme management and handles client-side hydration.
 */
 
 import React, { useEffect, useState } from 'react';
@@ -14,11 +14,13 @@ const ThemeToggle: React.FC = () => {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        /* Set mounted state to true to handle hydration mismatch with next-themes */
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setMounted(true);
     }, []);
 
     if (!mounted) {
+        /* Return placeholder during SSR and initial hydration to prevent flicker */
         return <div className={styles.themeToggle} style={{ border: 'none', boxShadow: 'none' }} />;
     }
 

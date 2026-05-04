@@ -1,3 +1,10 @@
+/*
+  Primary news feed API route.
+  Handles fetching news events from Supabase with support for bounding box filtering,
+  server-side clustering, search queries, and time-window filtering.
+  Implements a multi-tier rate limiting strategy and in-memory caching.
+*/
+
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -5,13 +12,7 @@ import { Redis } from '@upstash/redis';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { DbEvent, dbEventToNewsItem } from '@/types';
 
-/*
-  API Proxy Route: Fetches pre-processed events from Supabase.
-*/
-
-
-
-// Upstash Rate Limiting setup
+// Global rate limiter using Upstash Redis
 const redis = Redis.fromEnv();
 const ratelimit = new Ratelimit({
     redis,
@@ -20,11 +21,14 @@ const ratelimit = new Ratelimit({
     prefix: '@upstash/ratelimit/seraphim',
 });
 
-// Local L1 Rate Limiter (Memory) - minimizes Upstash calls for repetitive requests from same IP
+// Local L1 Rate Limiter (Memory) to minimize Upstash overhead for frequent requests
 const localL1Limit = new Map<string, { count: number; reset: number }>();
 let lastL1Cleanup = Date.now();
 const L1_CLEANUP_INTERVAL = 60000; // 1 minute
 
+/* 
+  Periodically clears expired entries from the local rate limit map.
+*/
 function performL1Cleanup() {
     const now = Date.now();
     if (now - lastL1Cleanup < L1_CLEANUP_INTERVAL) return;
@@ -35,23 +39,21 @@ function performL1Cleanup() {
     lastL1Cleanup = now;
 }
 
-// In-memory cache to reduce Supabase egress and improve response times.
-// Key format: "events" (default) or "bbox:{minLat},{maxLat},{minLng},{maxLng}[,z:{zoom}]"
+// Server-side cache for news items to reduce database load
+// Key format: "events" or "bbox:{coords}[,cluster][,z:{zoom}][,s:{since}][,u:{until}][,q:{query}]"
 const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
 
-// Zoom level below which we automatically switch to server-side clustering.
-// At zoom < 5 (country/continent scale), individual pins are not useful and
-// the event count can be very large.
+// Threshold for switching to server-side clustering (zoom levels < 5)
 const CLUSTER_ZOOM_THRESHOLD = 5;
 
-// Safety cap on raw event rows returned per request.
+// Maximum number of raw event rows to return in a single request
 const RAW_LIMIT = 2000;
 
-// Intentionally excluded from the SELECT - loaded via /api/news/[id] on demand.
+// Fields selected for list view. Description is excluded and fetched per-item.
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
 
 export async function GET(request: Request) {
@@ -60,46 +62,44 @@ export async function GET(request: Request) {
     let forceRefresh = searchParams.get('refresh') === 'true';
     const includeUnmapped = searchParams.get('include_unmapped') === 'true';
 
-    // Optional bounding box parameters - sent by the map after every moveend.
+    // Bounding box parameters for geographic filtering
     const minLat = searchParams.get('minLat');
     const maxLat = searchParams.get('maxLat');
     const minLng = searchParams.get('minLng');
     const maxLng = searchParams.get('maxLng');
     const hasBBox = minLat !== null && maxLat !== null && minLng !== null && maxLng !== null;
 
-    // Small epsilon to stabilize floating point comparisons at the map edges
+    // Numerical stability epsilon for coordinate comparisons
     const EPSILON = 0.00001;
 
-    // Search query parameter
+    // Search query for text-based filtering
     const searchQuery = searchParams.get('query');
-    // If a global search query is active, we ignore the bounding box constraint to find events anywhere.
+    
+    // Global search overrides bounding box constraints
     const ignoreBBox = !!searchQuery;
 
-    // Zoom level - always provided alongside BBox. Used for auto-clustering decisions.
+    // Zoom level used to determine whether to apply server-side clustering
     const zoomStr = searchParams.get('zoom');
     const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
-    // Power-user override: skip server-side clustering even at low zoom.
+    // Optional override to skip clustering regardless of zoom level
     const forceRaw = searchParams.get('force_raw') === 'true';
 
-    // Time-window filter - ISO timestamp; events older than this are excluded.
-    // Forwarded from the client's active timeRange so clustering respects the
-    // same time window the sidebar filter uses.
+    // Time window parameters (ISO timestamps)
     const sinceStr = searchParams.get('since');
     const untilStr = searchParams.get('until');
 
-    // Decide whether to use server-side clustering:
-    // We still cluster global searches if we have a zoom level to base it on
+    // Logic to determine if server-side clustering should be performed
     const useServerClustering = (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
 
-    // Cache key encodes the full query shape.
+    // Construct a cache key that captures all query parameters
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
     const cacheKey = (hasBBox || ignoreBBox)
         ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}`
         : `events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}`;
     const canUseCache = !includeUnmapped;
 
-    // Throttle refresh attempts
+    // Prevent excessive refresh attempts
     if (forceRefresh) {
         const lastRefresh = refreshThrottle.get('global') || 0;
         if (now - lastRefresh < REFRESH_COOLDOWN) {
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        // 1. Rate Limiting Logic (Inside try-catch to avoid unhandled rejections)
+        // Multi-tier rate limiting
         const ipHeader = request.headers.get('x-forwarded-for');
         const ip = ipHeader ? ipHeader.split(',')[0].trim() : '127.0.0.1';
 
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
             localL1Limit.set(ip, { count: 1, reset: now + 10000 });
         } else {
             l1.count++;
-            // Tier 2: Check Redis only if spamming (>15 reqs in 10s) or periodic sync
+            // Check Redis if local threshold is exceeded or periodically to sync state
             if (l1.count > 15 || l1.count % 5 === 0) {
                 try {
                     const { success } = await ratelimit.limit(ip);
@@ -129,6 +129,7 @@ export async function GET(request: Request) {
                         return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
                     }
                 } catch (ratelimitError) {
+                    // Fail open on rate limiter connectivity issues
                     console.error('[api/news] Rate limiter error (failing open):', ratelimitError);
                 }
             }
@@ -143,7 +144,7 @@ export async function GET(request: Request) {
             let rows, error;
 
                 if (useServerClustering) {
-                    // Low zoom: delegate to the clustering RPC.
+                    // Execute server-side clustering RPC for low zoom levels
                     const rpcParams: Record<string, unknown> = {
                         p_zoom_level: Math.floor(zoom!),
                         p_min_lat: ignoreBBox ? null : parseFloat(minLat!),
@@ -159,6 +160,7 @@ export async function GET(request: Request) {
                 rows = res.data;
                 error = res.error;
             } else {
+                // Standard query for individual event markers
                 let query = supabase
                     .from('events')
                     .select(LIST_SELECT)
@@ -179,9 +181,7 @@ export async function GET(request: Request) {
                     query = query.or(`title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
                 }
 
-                // Apply server-side time filter when provided.
-                // Client-side applyNewsFilters will still run, but this
-                // reduces egress on large bbox queries.
+                // Server-side time filtering to reduce data transfer
                 if (sinceStr) {
                     query = query.gte('published_at', sinceStr);
                 }
@@ -228,3 +228,4 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
     }
 }
+

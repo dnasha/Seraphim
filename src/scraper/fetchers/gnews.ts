@@ -1,11 +1,10 @@
-import { NewsItem } from '@/lib/types';
-
 /*
-Dan Sharan
-
 GNews API integration for the scraper worker.
-Designed to run standalone via Bun.
+Provides functions for fetching top headlines, performing general searches,
+and specialized OSINT keyword-driven searches.
 */
+
+import { NewsItem } from '@/lib/types';
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
@@ -25,6 +24,7 @@ interface GNewsResponse {
     articles: GNewsArticle[];
 }
 
+/* Fetches top headlines from GNews by category */
 export async function fetchGNews(
     category: string = 'general',
     maxResults: number = 10
@@ -45,6 +45,7 @@ export async function fetchGNews(
         const res = await fetch(`${GNEWS_BASE_URL}/top-headlines?${params}`, {
             signal: AbortSignal.timeout(15000),
         });
+
         // Handle specific quota or rate limiting errors
         if (res.status === 403 || res.status === 429) {
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
@@ -72,6 +73,7 @@ export async function fetchGNews(
     }
 }
 
+/* Searches GNews articles using a specific query string */
 export async function searchGNews(query: string, maxResults: number = 10): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) {
         console.warn('GNEWS_API_KEY not set, skipping gnews search');
@@ -114,7 +116,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
     }
 }
 
-// OSINT keyword-driven search (OSINT_QUERIES)
+/* OSINT keyword-driven search configuration */
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -122,10 +124,11 @@ const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"cyber attack" OR "critical infrastructure"', tags: ['OSINT', 'cyber'] },
 ];
 
+/* Specialized search for OSINT-related content using combined queries to optimize API quota */
 export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) return [];
 
-    // Combine queries into one call to minimize quota usage (typically 100 req/day)
+    // Combine queries to minimize API calls
     const combinedQuery = OSINT_QUERIES.map(q => q.query).join(' OR ');
 
     try {
@@ -135,7 +138,7 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
             const matchedTags = new Set<string>(['OSINT']);
             const text = (item.title + ' ' + item.description).toLowerCase();
 
-            // Run sub-query matching to re-apply specific tags to the combined results
+            // Re-apply specific tags by matching against the original queries
             for (const { query, tags } of OSINT_QUERIES) {
                 const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
                 if (keywords.some(k => text.includes(k.trim()))) {
@@ -154,3 +157,4 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
         return [];
     }
 }
+

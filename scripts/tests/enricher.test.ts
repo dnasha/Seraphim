@@ -1,9 +1,10 @@
 /*
-  Seraphim Unit Tests - Enricher Pipeline
+  Seraphim Enricher Pipeline Tests
 
-  Integration tests for enrichItemsWithLocation():
-  coordinate attachment, jitter, source defaults, and passthrough.
-  Run: npm test
+  This suite verifies the enrichItemsWithLocation function, which handles
+  the bulk geocoding of news items. It tests coordinate attachment,
+  source-based defaults, and the jitter logic used to prevent pin
+  stacking on the map.
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -15,6 +16,11 @@ beforeAll(() => {
     ensureInitialized();
 });
 
+/*
+  makeItem
+  Helper factory for creating mock NewsItem objects with random IDs
+  to ensure test isolation.
+*/
 function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
     return {
         id: 'test-' + Math.random().toString(36).slice(2),
@@ -28,8 +34,11 @@ function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
     };
 }
 
-// --- Coordinate Attachment ---
-
+/*
+  Coordinate Attachment
+  Tests the core functionality of extracting and attaching lat/lon
+  coordinates to a news item based on its title.
+*/
 describe('enrichItemsWithLocation - coordinate attachment', () => {
     it('attaches lat/lon for a clear location in title', async () => {
         const items = [makeItem({ title: 'KYIV (Reuters) - Explosions reported across capital' })];
@@ -44,12 +53,14 @@ describe('enrichItemsWithLocation - coordinate attachment', () => {
         const items = [makeItem({ title: 'Scientists develop new quantum algorithm' })];
         const result = await enrichItemsWithLocation(items);
         expect(result).toHaveLength(1);
-        // may or may not have a location - but shouldn't crash
     });
 });
 
-// --- Pre-Geocoded Passthrough ---
-
+/*
+  Pre-Geocoded Passthrough
+  Ensures that items already containing coordinate data are not
+  re-geocoded, preserving existing location precision.
+*/
 describe('enrichItemsWithLocation - passthrough', () => {
     it('preserves pre-existing coordinates without re-geocoding', async () => {
         const items = [makeItem({
@@ -63,8 +74,11 @@ describe('enrichItemsWithLocation - passthrough', () => {
     });
 });
 
-// --- Source Default Fallback ---
-
+/*
+  Source Default Fallback
+  Verifies that items from specific sources (e.g., NASA) default to
+  their headquarters location if no specific location is found in the text.
+*/
 describe('enrichItemsWithLocation - source defaults', () => {
     it('falls back to NASA source default (Washington DC)', async () => {
         const items = [makeItem({
@@ -75,16 +89,19 @@ describe('enrichItemsWithLocation - source defaults', () => {
         const result = await enrichItemsWithLocation(items);
         expect(result[0].latitude).toBeDefined();
         expect(result[0].longitude).toBeDefined();
-        // NASA default: Washington DC (~38.91, -77.04)
+        // NASA default coordinates roughly correspond to Washington DC
         expect(result[0].latitude).toBeCloseTo(38.91, 0);
     });
 });
 
-// --- Golden-Angle Spiral Jitter ---
-
+/*
+  Golden-Angle Spiral Jitter
+  Tests the mathematical jitter applied to items at the same
+  location, ensuring they are visually distinct on the map.
+*/
 describe('enrichItemsWithLocation - jitter', () => {
     it('applies jitter to prevent coordinate stacking', async () => {
-        // Two items mapping to the same location
+        // Create two items that map to the exact same city
         const items = [
             makeItem({ title: 'KYIV (Reuters) - First event in capital' }),
             makeItem({ title: 'KYIV (AP) - Second event in capital' }),
@@ -95,7 +112,7 @@ describe('enrichItemsWithLocation - jitter', () => {
         expect(geocoded.length).toBeGreaterThanOrEqual(2);
 
         if (geocoded.length >= 2) {
-            // Coordinates should differ due to jitter
+            // Coordinates must differ slightly due to jitter logic
             const coordsMatch =
                 geocoded[0].latitude === geocoded[1].latitude &&
                 geocoded[0].longitude === geocoded[1].longitude;
@@ -104,11 +121,14 @@ describe('enrichItemsWithLocation - jitter', () => {
     });
 });
 
-// --- Empty Input ---
-
+/*
+  Edge Cases
+  Handles scenarios like empty input arrays to ensure pipeline stability.
+*/
 describe('enrichItemsWithLocation - edge cases', () => {
     it('returns empty array for empty input', async () => {
         const result = await enrichItemsWithLocation([]);
         expect(result).toEqual([]);
     });
 });
+

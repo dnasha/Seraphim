@@ -1,7 +1,8 @@
 /*
- * Dan Sharan
- * core geocoding engine: NLP-based location extraction and disambiguation
- */
+  Core geocoding engine for NLP-based location extraction and disambiguation.
+  Processes news titles and descriptions to identify geographic entities
+  using a dictionary-based approach combined with heuristic scoring.
+*/
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.env.IS_BENCHMARK && !process.versions?.bun) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -114,7 +115,7 @@ function disambiguate(candidate: string): string {
     ensureInitialized();
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
-    // try accent-normalized form (e.g. "Irán" -> "iran")
+    // try accent-normalized form (e.g. "Irán" to "iran")
     const normalized = normalizeAccents(key);
     if (normalized !== key && KNOWN_LOCATIONS[normalized]) {
         // return the display name that matches the dictionary key
@@ -123,7 +124,7 @@ function disambiguate(candidate: string): string {
     return candidate;
 }
 
-// try to resolve a demonym ("chinese" -> "china")
+// try to resolve a demonym ("chinese" to "china")
 function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
     for (const word of words) {
@@ -138,7 +139,7 @@ function extractDemonym(text: string): string | null {
     return null;
 }
 
-// try to resolve country abbreviations in text ("u.s." -> "united states")
+// try to resolve country abbreviations in text ("u.s." to "united states")
 // keeps periods so we can match "u.s." properly, unlike demonyms which strip punctuation
 function extractCountryAbbrev(text: string): string | null {
     // split on whitespace and hyphens
@@ -178,13 +179,13 @@ interface Candidate {
 function preprocessText(text: string): string {
     // strip social media trailers first (longer matches)
     text = text.replace(SOCIAL_MEDIA_TRAILER, '');
-    // strip "GeoConfirmed [Country]." OSINT prefix (e.g., "GeoConfirmed Iran.\n" → "")
+    // strip "GeoConfirmed [Country]." OSINT prefix (e.g., "GeoConfirmed Iran.\n" to "")
     text = text.replace(/^GeoConfirmed\s+\w+\.?\s*/i, '');
     // normalize smart/curly quotes to straight quotes for consistent tokenization
     text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
-    // extract abbreviation before possessive eats it: "UK's" -> "UK ", "U.S.'s" -> U.S. etc.
+    // extract abbreviation before possessive eats it: "UK's" to "UK ", "U.S.'s" to "U.S." etc.
     text = text.replace(/\b(U\.S\.|U\.K\.|U\.A\.E\.|NK|EU|NATO|UK|US|UAE)['\u2019]s\b/gi, '$1 ');
-    // split fused hashtag+text: "#NKNorth Korea" → "North Korea", "#USAPresident" → "President"
+    // split fused hashtag+text: "#NKNorth Korea" to "North Korea", "#USAPresident" to "President"
     text = text.replace(HASHTAG_FUSED_PATTERN, '$2');
     // remove remaining hashtags
     text = text.replace(/#\w+/g, '');
@@ -325,7 +326,7 @@ export function extractLocation(title: string, description: string): { match: st
         }
     }
 
-    // pass 4b: possessive-linked location extraction: "Indonesia's Bali" → extract Bali
+    // pass 4b: possessive-linked location extraction: "Indonesia's Bali" to extract Bali
     // pattern: [Word]'s [Title-cased word(s)] that exist in the dictionary
     const POSSESSIVE_LOC = /(?:[A-Za-z]+)['\u2019]s\s+([A-Z][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u024F]+){0,2})/g;
     const scanPossessive = (text: string, placement: 'title' | 'description') => {
@@ -335,7 +336,7 @@ export function extractLocation(title: string, description: string): { match: st
             const inner = cleanCandidate(m[1]);
             const key = normalizeAccents(inner.toLowerCase());
             if (key.length > 2 && KNOWN_LOCATIONS[key] && !STOP_WORDS.has(key) && !FALSE_POSITIVES.has(key)) {
-                // give it a high priority source — it's a directly named location inside a possessive
+                // give it a high priority source: it is a directly named location inside a possessive
                 candidates.push({ name: inner, source: 'possessive_focus', placement });
             }
         }
@@ -394,7 +395,7 @@ export function extractLocation(title: string, description: string): { match: st
             const loc = disambiguate(candidate);
             let key = normalizeAccents(loc.toLowerCase());
 
-            // strip administrative suffixes to resolve "Belgorod Oblast" → "Belgorod"
+            // strip administrative suffixes to resolve "Belgorod Oblast" to "Belgorod"
             if (!KNOWN_LOCATIONS[key]) {
                 const stripped = key.replace(ADMIN_SUFFIX_PATTERN, '').trim();
                 if (stripped !== key && stripped.length > 2 && KNOWN_LOCATIONS[stripped]) {
@@ -408,7 +409,10 @@ export function extractLocation(title: string, description: string): { match: st
                 const rawWords = raw.split(/\s+/);
                 let found = false;
                 
-                // handle multi-word candidates: verify prefix matches and avoid surname collisions
+                /*
+                  Handle multi-word candidates: verify prefix matches and avoid surname collisions.
+                  Check if a sub-phrase of the candidate exists in the dictionary.
+                */
                 for (let len = words.length - 1; len >= 1; len--) {
                     const sub = words.slice(0, len).join(' ');
                     if (sub.length > 2 && !STOP_WORDS.has(sub) && !FALSE_POSITIVES.has(sub) && KNOWN_LOCATIONS[sub]) {
@@ -475,7 +479,10 @@ export function extractLocation(title: string, description: string): { match: st
             });
         }
 
-        // second pass: boost specific locations (cities/landmarks) if their parent country is also present
+        /*
+          Second pass: boost specific locations (cities/landmarks) if their parent country
+          is also present in the text.
+        */
         const foundCountries = new Set(scored.filter(s => KNOWN_LOCATIONS[s.key]?.type === 'country').map(s => s.cc));
         const foundAdmin1CCs = new Set(scored.filter(s => KNOWN_LOCATIONS[s.key]?.type === 'admin1').map(s => KNOWN_LOCATIONS[s.key]?.cc));
         for (const s of scored) {
@@ -491,9 +498,11 @@ export function extractLocation(title: string, description: string): { match: st
             }
         }
 
-        // third pass: title-country priority
-        // if a superpower country appears in the title but would lose to a description-only country,
-        // reduce its penalty to prevent description noise from overshadowing the headline's subject
+        /*
+          Third pass: title-country priority.
+          If a superpower country appears in the title but would lose to a description-only country,
+          reduce its penalty to prevent description noise from overshadowing the headline subject.
+        */
         const titleCountries = scored.filter(s =>
             s.placement === 'title' && KNOWN_LOCATIONS[s.key]?.type === 'country' && SUPERPOWER_KEYS.has(s.key)
         );
@@ -505,7 +514,7 @@ export function extractLocation(title: string, description: string): { match: st
             );
             for (const descC of descOnlyCountries) {
                 if (descC.score < bestTitleCountry.score) {
-                    // a description-only country is beating a title superpower — boost the title one
+                    // a description-only country is beating a title superpower: boost the title one
                     bestTitleCountry.score -= 15;
                     break;
                 }

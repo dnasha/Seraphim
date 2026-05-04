@@ -1,12 +1,12 @@
+/*
+  Geocoding enricher: attaches geographic coordinates to news items.
+  Implements golden-angle spiral jitter to prevent pin stacking on the map
+  when multiple items share the same location coordinates.
+*/
+
 import { NewsItem } from '../types';
 import { extractLocation, geocodeLocation } from './engine';
 import { NEWS_SOURCE_DEFAULTS } from './constants';
-
-/*
- * Dan Sharan
- * geocoding enricher: attaches coordinates to news items
- * implements golden-angle spiral jitter to prevent pin stacking
- */
 
 
 export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsItem[]> {

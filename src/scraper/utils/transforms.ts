@@ -1,8 +1,7 @@
 /*
-  Dan Sharan
-
-  Scraper data transforms — converts scraped NewsItems into Supabase-ready DbEvent rows.
-  Extracted from index.ts for testability.
+Scraper data transformations.
+Converts scraped NewsItems into Supabase-compatible DbEvent rows.
+Provides string sanitization and validation for database integrity.
 */
 
 import DOMPurify from 'isomorphic-dompurify';
@@ -10,9 +9,10 @@ import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from './date';
 
-/**
- * Removes incomplete surrogate pairs and sanitizes HTML to prevent XSS.
- */
+/*
+Removes incomplete surrogate pairs and sanitizes HTML content.
+Prevents database insertion errors and XSS vulnerabilities.
+*/
 export function cleanString(str: string | undefined | null): string {
     if (!str) return '';
     // Removes standalone surrogates (D800-DFFF) while keeping valid pairs
@@ -21,14 +21,14 @@ export function cleanString(str: string | undefined | null): string {
     return DOMPurify.sanitize(cleaned);
 }
 
-/**
- * Convert a scraped NewsItem into a Supabase-ready DbEvent row.
- * Items without a URL are dropped (URL is the UNIQUE conflict key).
- */
+/*
+Converts a scraped NewsItem into a Supabase-ready DbEvent row.
+Items without a valid HTTP/HTTPS URL are rejected as the URL is the unique conflict key.
+*/
 export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     if (!item.url) return null;
 
-    // Security: Validate URL protocol to prevent javascript: or other injections
+    // Validate URL protocol to prevent injection
     if (!item.url.startsWith('http://') && !item.url.startsWith('https://')) {
         return null;
     }
@@ -54,3 +54,4 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         tags: tags,
     };
 }
+

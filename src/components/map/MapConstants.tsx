@@ -1,6 +1,11 @@
-// Map configuration constants including styles, icons, and categories.
+/*
+Map configuration constants and utilities.
+Provides map styles, category icons, and helper functions for formatting and icon generation.
+*/
+
 import { getCategoryColor, getSourceBadgeColor } from '@/lib/colors';
 
+// Definitions for available map base layers and their attributions.
 export const MAP_STYLES: Record<string, { url: string; labelsUrl?: string; attribution: string; label: string }> = {
     standard: {
         url: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -31,6 +36,7 @@ export const MAP_STYLES: Record<string, { url: string; labelsUrl?: string; attri
 
 export { getCategoryColor, getSourceBadgeColor };
 
+// SVG path data for news category icons.
 export const CATEGORY_ICONS: Record<string, string> = {
     general: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
     world: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
@@ -42,6 +48,10 @@ export const CATEGORY_ICONS: Record<string, string> = {
     health: 'M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z',
 };
 
+/*
+Generates a category icon as an HTMLImageElement by wrapping an SVG path in a circle.
+Returns a Promise that resolves with the generated image.
+*/
 export async function generateCategoryIcon(category?: string, isActive?: boolean): Promise<HTMLImageElement> {
     const color = getCategoryColor(category);
     const iconPath = CATEGORY_ICONS[category || 'general'] || CATEGORY_ICONS.general;
@@ -71,6 +81,10 @@ export async function generateCategoryIcon(category?: string, isActive?: boolean
     });
 }
 
+/*
+Returns a MapLibre style object for the requested style key.
+Fallback to standard style if the key is not recognized.
+*/
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getMapLibreStyle(styleKey: string): any {
     const style = MAP_STYLES[styleKey] || MAP_STYLES.standard;
@@ -97,6 +111,7 @@ export function getMapLibreStyle(styleKey: string): any {
     };
 }
 
+// Formats a date string into a relative time string (e.g., "5m ago", "2h ago").
 export function formatTimeAgo(dateStr: string): string {
     const now = Date.now();
     const then = new Date(dateStr).getTime();
@@ -108,4 +123,5 @@ export function formatTimeAgo(dateStr: string): string {
     const days = Math.floor(hrs / 24);
     return `${days}d ago`;
 }
+
 

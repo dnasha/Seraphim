@@ -3,7 +3,7 @@ Seraphim Benchmark Generator
 Consolidated utility to pull latest events from the database and run them through
 the current production geocoding engine to generate a grading/benchmark file.
 
-Run: npx tsx scripts/generate-benchmark.ts --limit 100 --out scripts/results/new-grading-100.json
+Usage: npx tsx scripts/generate-benchmark.ts --limit 100 --out scripts/results/new-grading-100.json
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
-// Load env vars for Supabase access
+// Load environment variables for Supabase access
 dotenv.config({ path: '.env.local' });
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,7 +28,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// basic argument parser
+// Basic argument parser for CLI flags
 const args = process.argv.slice(2);
 const limitArg = args.indexOf('--limit');
 const LIMIT = limitArg !== -1 ? parseInt(args[limitArg + 1], 10) : 100;
@@ -41,7 +41,7 @@ async function run() {
     console.log("Initializing Geocoding Engine...");
     ensureInitialized();
 
-    console.log(`📥 Pulling latest ${LIMIT} events from Supabase...`);
+    console.log(`Pulling latest ${LIMIT} events from Supabase...`);
     
     const { data: events, error } = await supabase
         .from('events')
@@ -59,10 +59,10 @@ async function run() {
         return;
     }
 
-    console.log(`✅ Retrieved ${events.length} events.`);
-    console.log(`\n🧠 Re-running geocoding engine on fresh data...`);
+    console.log(`Retrieved ${events.length} events.`);
+    console.log(`\nRe-running geocoding engine on fresh data...`);
 
-    // We map DB events back to NewsItem format for the enricher
+    // Map database events back to NewsItem format for the enricher
     const newsItems: NewsItem[] = events.map((e) => ({
         id: e.id,
         title: e.title,
@@ -73,7 +73,7 @@ async function run() {
         url: e.url
     }));
 
-    // run items through the production geocoding pipeline
+    // Run items through the production geocoding pipeline
     const enrichedItems = await enrichItemsWithLocation(newsItems);
 
     const results = enrichedItems.map((item, idx) => {
@@ -81,7 +81,7 @@ async function run() {
         
         const found_locations = item.foundLocations || [];
 
-        // format geocoded results for comparison
+        // Format geocoded results for comparison
         const current_engine_result = (item.locationName) 
             ? {
                 lat: item.latitude,
@@ -101,7 +101,7 @@ async function run() {
                 lon: original.longitude,
                 displayName: original.location_name
             } : null,
-            // What the engine produces RIGHT NOW
+            // What the engine produces at this moment
             engine_result: current_engine_result,
             found_candidates: found_locations
         };
@@ -116,12 +116,13 @@ async function run() {
 
     fs.writeFileSync(absoluteOutPath, JSON.stringify(results, null, 2), 'utf-8');
     
-    console.log(`\n✨ DONE`);
-    console.log(`📂 Wrote benchmark set to ${absoluteOutPath}`);
-    console.log(`📊 Mapped by current engine: ${results.filter(r => r.engine_result).length} / ${results.length}`);
+    console.log(`\nDONE`);
+    console.log(`Wrote benchmark set to ${absoluteOutPath}`);
+    console.log(`Mapped by current engine: ${results.filter(r => r.engine_result).length} / ${results.length}`);
 }
 
 run().catch(err => {
     console.error("Benchmark generation failed:", err);
     process.exit(1);
 });
+

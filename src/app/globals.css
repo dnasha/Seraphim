@@ -1,4 +1,8 @@
-/* Global styles: resets, theme tokens, and typography. Component-specific styles are in *.module.css. */
+/*
+globals.css
+Global styles including resets, theme tokens, and core typography.
+Component-specific styles are managed via CSS Modules.
+*/
 
 *,
 *::before,

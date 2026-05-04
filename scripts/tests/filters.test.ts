@@ -1,16 +1,20 @@
 /*
-  Seraphim Unit Tests - Filter Logic
+  Seraphim News Filtering Tests
 
-  Tests for applyNewsFilters() - the pure filtering function extracted from useNewsFilter.
-  Run: npm test
+  This suite verifies the applyNewsFilters function, which is responsible
+  for client-side filtering of news items based on source, category,
+  time range, and search queries.
 */
 
 import { describe, it, expect } from 'vitest';
 import { applyNewsFilters, FilterOptions } from '../../src/lib/filters';
 import type { NewsItem } from '../../src/lib/types';
 
-// --- Test Data Factory ---
-
+/*
+  Test Data Factory
+  Provides a consistent way to generate mock news items for testing
+  various filter combinations.
+*/
 const NOW = new Date('2026-04-15T12:00:00Z').getTime();
 
 function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
@@ -41,8 +45,11 @@ function defaultOpts(overrides: Partial<FilterOptions> = {}): FilterOptions {
     };
 }
 
-// --- Source Filtering ---
-
+/*
+  Source Filtering
+  Validates that items are correctly filtered based on their source
+  type (RSS, GNews, Social Media).
+*/
 describe('applyNewsFilters - source filtering', () => {
     const rssItem = makeItem({ sourceType: 'rss' });
     const gnewsItem = makeItem({ sourceType: 'gnews' });
@@ -93,8 +100,11 @@ describe('applyNewsFilters - source filtering', () => {
     });
 });
 
-// --- Category Filtering ---
-
+/*
+  Category Filtering
+  Verifies that items are correctly categorized and filtered based
+  on their assigned category or lack thereof.
+*/
 describe('applyNewsFilters - category filtering', () => {
     const crisisItem = makeItem({ category: 'crisis' });
     const worldItem = makeItem({ category: 'world' });
@@ -121,8 +131,11 @@ describe('applyNewsFilters - category filtering', () => {
     });
 });
 
-// --- Time Range Filtering ---
-
+/*
+  Time Range Filtering
+  Tests the temporal filtering of items, ensuring only news within
+  the specified window (1d, 3d, 1w) is displayed.
+*/
 describe('applyNewsFilters - time range filtering', () => {
     const recentItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60).toISOString() }); // 1h ago
     const oldItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60 * 48).toISOString() }); // 48h ago
@@ -154,8 +167,11 @@ describe('applyNewsFilters - time range filtering', () => {
     });
 });
 
-// --- Search Query Filtering ---
-
+/*
+  Search Query Filtering
+  Validates the text-based search functionality across titles,
+  descriptions, and location names.
+*/
 describe('applyNewsFilters - search query', () => {
     const item1 = makeItem({ title: 'Ukraine war update: Kyiv defenses hold' });
     const item2 = makeItem({ title: 'Stock market crashes', description: 'Nasdaq drops 5%' });
@@ -187,8 +203,11 @@ describe('applyNewsFilters - search query', () => {
     });
 });
 
-// --- Mapped Only Filter ---
-
+/*
+  Mapped Only Filter
+  Ensures that users can toggle the visibility of items that lack
+  geographic coordinates.
+*/
 describe('applyNewsFilters - mapped only', () => {
     const mappedItem = makeItem({ latitude: 50.45, longitude: 30.52 });
     const unmappedItem = makeItem({ latitude: undefined, longitude: undefined });
@@ -204,8 +223,11 @@ describe('applyNewsFilters - mapped only', () => {
     });
 });
 
-// --- Combined Filters ---
-
+/*
+  Combined Filters
+  Tests the intersection logic when multiple filters are applied
+  simultaneously.
+*/
 describe('applyNewsFilters - combined', () => {
     it('applies multiple filters as intersection', () => {
         const items = [
@@ -223,8 +245,10 @@ describe('applyNewsFilters - combined', () => {
     });
 });
 
-// --- Edge Cases ---
-
+/*
+  Edge Cases
+  Verifies robustness against empty inputs and pre-hydration states.
+*/
 describe('applyNewsFilters - edge cases', () => {
     it('returns unfiltered items when now=0 (pre-hydration)', () => {
         const items = [makeItem(), makeItem()];
@@ -237,3 +261,4 @@ describe('applyNewsFilters - edge cases', () => {
         expect(result).toEqual([]);
     });
 });
+

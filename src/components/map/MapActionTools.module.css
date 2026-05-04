@@ -1,4 +1,4 @@
-/* MapActionTools.module.css — bottom-right action buttons and overlay menu */
+/* MapActionTools.module.css - Bottom-right action buttons and overlay menu styling */
 
 .mapActionArea {
   position: absolute;
@@ -43,7 +43,7 @@
   background: var(--accent);
 }
 
-/* ── Overlay menu ── */
+/* Overlay menu layout */
 .overlayMenu {
   position: absolute;
   right: 46px; /* Width of button + gap */
@@ -104,7 +104,7 @@
   font-weight: 500;
 }
 
-/* ── Toggle switch ── */
+/* Toggle switch styling */
 .toggleSwitch {
   width: 38px;
   height: 20px;
@@ -135,7 +135,7 @@
   transform: translateX(18px);
 }
 
-/* ── Responsive ── */
+/* Responsive adjustments */
 @media (max-width: 860px) {
   .actionBtn {
     width: 44px;
@@ -146,3 +146,4 @@
     width: min(240px, 75vw);
   }
 }
+

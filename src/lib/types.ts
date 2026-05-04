@@ -1,11 +1,12 @@
-/**
- * Core type definitions for the news aggregation pipeline.
- */
+/*
+Core type definitions for the news aggregation pipeline.
+Used across the frontend to represent news items and API responses.
+*/
 
 export interface NewsItem {
   id: string;
   title: string;
-  /** Omitted on initial list fetch — loaded on demand when a card is expanded. */
+  /* Omitted on initial list fetch. Loaded on demand when a card is expanded. */
   description?: string;
   url: string;
   source: string;

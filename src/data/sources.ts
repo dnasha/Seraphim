@@ -1,9 +1,6 @@
 /*
-Dan Sharan
-
-data sources file
-
-contains rss and reddit sources
+  Data sources configuration for news aggregation.
+  Contains definitions for RSS feeds, Reddit subreddits, Telegram channels, and X accounts.
 */
 
 export interface RSSSource {
@@ -134,7 +131,10 @@ export const TELEGRAM_CHANNELS: SocialSource[] = [
     { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business' },
     // Ukraine conflict
 { name: 'War Translated (Telegram)', url: 'https://t.me/s/wartranslated', platform: 'telegram', category: 'crisis' },
-// Translates Russian milbloggers in near real-time — essential for understanding the Russian side without going to pro-Kremlin channels directly
+/*
+  Translates Russian milbloggers in near real-time: essential for understanding
+  the Russian side without going to pro-Kremlin channels directly.
+*/
 
 //{ name: 'NEXTA (Telegram)', url: 'https://t.me/s/nexta_live', platform: 'telegram', category: 'crisis' },
 // Belarusian opposition outlet, fast Ukraine/Belarus breaking news
@@ -144,7 +144,10 @@ export const TELEGRAM_CHANNELS: SocialSource[] = [
 
 // Global/OSINT
 { name: 'Intel Slava Z (Telegram)', url: 'https://t.me/s/intelslava', platform: 'telegram', category: 'crisis' },
-// ⚠️ Pro-Russian lean — treat as primary source intelligence, not editorial truth. Useful for what Russia wants amplified.
+/*
+  Pro-Russian lean: treat as primary source intelligence, not editorial truth.
+  Useful for what Russia wants amplified.
+*/
 
 { name: 'OSINTdefender (Telegram)', url: 'https://t.me/s/osintdefender', platform: 'telegram', category: 'crisis' },
 // Mirror of the @sentdefender X account, global conflict

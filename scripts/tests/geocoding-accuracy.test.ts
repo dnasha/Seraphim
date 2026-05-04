@@ -1,9 +1,9 @@
 /*
-  Seraphim Accuracy Regression Suite
+  Seraphim Geocoding Accuracy Regression Suite
 
-  Converts the graded-results.json dataset into a Vitest suite.
-  Fails if accuracy drops below the configured threshold.
-  Run: npm run test:accuracy
+  This suite benchmarks the geocoding pipeline against a manually graded
+  dataset (ground truth). It ensures that changes to NLP heuristics or
+  the GeoNames dictionary do not regress the overall accuracy.
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -11,7 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import { extractLocation, geocodeLocation, ensureInitialized } from '../../src/lib/geocoding';
 
-// Minimum accuracy percentage to pass the suite
+/*
+  ACCURACY_THRESHOLD
+  The minimum percentage of correctly geocoded items required for the
+  test suite to pass.
+*/
 const ACCURACY_THRESHOLD = 70;
 
 const GRADED_RESULTS_PATH = path.resolve(__dirname, '../results/graded-results.json');
@@ -24,8 +28,16 @@ interface GradedResult {
     final_mapped_location?: {
         displayName?: string;
     };
+    db_location?: {
+        displayName?: string;
+    };
 }
 
+/*
+  normalize
+  Standardizes strings for comparison by trimming, lowercasing,
+  and handling 'null' string literals.
+*/
 function normalize(val: unknown): string | null {
     if (val === null || val === undefined) return null;
     if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
@@ -51,6 +63,11 @@ describe('geocoding accuracy regression', () => {
         expect(gradedResults.length).toBeGreaterThan(0);
     });
 
+    /*
+      Accuracy Benchmark
+      Iterates through the graded dataset, executes the live geocoding
+      pipeline, and compares the results against the expected locations.
+    */
     it(`maintains accuracy above ${ACCURACY_THRESHOLD}%`, async () => {
         let passCount = 0;
         let totalCount = 0;
@@ -59,13 +76,19 @@ describe('geocoding accuracy regression', () => {
 
         for (const item of gradedResults) {
             const isApproved = item.graded_status === 'approved';
+            
+            /*
+              Determine the expected location from the graded item.
+              Approved items use the final mapped location; otherwise,
+              we use the manually specified expected location.
+            */
             const rawExpected = isApproved
                 ? (item.final_mapped_location?.displayName || item.db_location?.displayName || null)
                 : item.expected_location;
 
             const normExpected = normalize(rawExpected);
 
-            // Skip items with "ignore" or "default" notes
+            // Skip items flagged for exclusion
             if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
                 skipCount++;
                 continue;
@@ -86,6 +109,11 @@ describe('geocoding accuracy regression', () => {
 
             const normActual = normalize(actualLocationFullName);
 
+            /*
+              Verification Logic
+              For approved items, we accept either a perfect match or a
+              graceful null (if the location is intentionally not geocoded).
+            */
             let isCorrect = false;
             if (isApproved) {
                 if (normActual === null || normActual === normExpected) {
@@ -114,7 +142,7 @@ describe('geocoding accuracy regression', () => {
 
         const percentage = totalCount > 0 ? (passCount / totalCount) * 100 : 0;
 
-        // Print summary
+        // Print accuracy summary to console for CI visibility
         const failures = testResults.filter(r => !r.correct);
         const misses = failures.filter(f => f.type === 'MISS').length;
         const wrongs = failures.filter(f => f.type === 'WRONG').length;
@@ -140,3 +168,4 @@ describe('geocoding accuracy regression', () => {
         expect(percentage).toBeGreaterThanOrEqual(ACCURACY_THRESHOLD);
     });
 });
+

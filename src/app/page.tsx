@@ -1,6 +1,10 @@
-'use client';
+/*
+  Main application entry point.
+  Coordinates the layout, data fetching, filtering logic, and state management
+  between the map, sidebar, and filter components.
+*/
 
-/** Application entry point coordinating layout, data filtering, and theme management. */
+'use client';
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
@@ -11,20 +15,20 @@ import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
 import styles from '@/components/Layout.module.css';
 
-// Dynamically import NewsMap to prevent SSR issues with MapLibre
+// Dynamically import NewsMap to prevent SSR issues with MapLibre library
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export default function Home() {
     const { resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
     
+    // Filtering and time range state
     const [mappedOnly, setMappedOnly] = useState(true);
-    // timeRange shared between server-side and client-side filtering
     const [timeRange, setTimeRange] = useState('1d');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     
-    // Search state for global data fetching
+    // Search and debounce state
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -33,6 +37,7 @@ export default function Home() {
         setMounted(true);
     }, []);
 
+    // Effect to debounce search input to minimize API calls
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchQuery);
@@ -40,7 +45,7 @@ export default function Home() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Data and Filter State
+    // Data fetching and filtering hooks
     const { news, isLoading, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         includeUnmapped: !mappedOnly,
         timeRange,
@@ -55,22 +60,24 @@ export default function Home() {
         filteredNews
     } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate);
 
-    // UI State
+    // UI and interaction state
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     const isDarkMode = resolvedTheme === 'dark';
 
+    // Callback to handle item selection from map or sidebar
     const handleSelectItem = useCallback((id: string | null) => {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
     }, []);
 
+    // Handles changes to the time range filter, including custom date initialization
     const handleTimeRangeChange = useCallback((range: string) => {
         setTimeRange(range);
         if (range === 'custom' && (!customStartDate || !customEndDate)) {
-            // Default to last 24 hours if no dates set yet
+            // Default custom range to the last 24 hours
             const now = new Date();
             const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
             const toLocalISO = (d: Date) => {
@@ -82,7 +89,7 @@ export default function Home() {
         }
     }, [customStartDate, customEndDate]);
 
-    // Lazy load description whenever an item is selected (from sidebar or map)
+    // Fetch full description when an item is selected if not already present
     useEffect(() => {
         if (selectedItemId) {
             const item = news.find(i => i.id === selectedItemId);
@@ -92,7 +99,7 @@ export default function Home() {
         }
     }, [selectedItemId, news, fetchEventDetails]);
 
-    // Reusable UI Slots
+    // Component slot for the filter bar and error notifications
     const filterBarSlot = (
         <>
             <FilterBar
@@ -161,3 +168,4 @@ export default function Home() {
         </div>
     );
 }
+

@@ -1,14 +1,16 @@
+/*
+  News detail API route.
+  Fetches the full description for a specific news event identified by its UUID.
+  Implements server-side caching to optimize performance for repetitive detail requests.
+*/
+
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { DbEvent } from '@/types';
 
-/*
-  Detail Endpoint: Fetches the full description of a single event by UUID.
-*/
-
-// Simple in-memory cache so expanding/collapsing a card doesn't re-fetch
+// In-memory cache for event descriptions to reduce database load
 const detailCache = new Map<string, { description: string; timestamp: number }>();
-const DETAIL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes - descriptions rarely change
+const DETAIL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 export async function GET(
     _request: Request,
@@ -20,13 +22,13 @@ export async function GET(
         return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
     }
 
-    // Basic UUID format check to prevent Supabase query errors
+    // Validate UUID format to prevent malformed queries to Supabase
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
         return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400 });
     }
 
-    // Check server-side detail cache first
+    // Return cached description if available and within TTL
     const cached = detailCache.get(id);
     if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
         return NextResponse.json(
@@ -53,3 +55,4 @@ export async function GET(
         { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
     );
 }
+

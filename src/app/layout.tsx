@@ -1,3 +1,9 @@
+/*
+  Root layout component.
+  Defines the core structure of the application, including typography, global styles,
+  metadata for SEO, and viewport settings. Integrates providers and performance analytics.
+*/
+
 import type { Metadata, Viewport } from "next";
 import {
   Inter,
@@ -12,13 +18,7 @@ import { Providers } from "@/components/Providers";
 
 import "./globals.css";
 
-/*
-  Dan Sharan
-  Root layout defining typography, metadata, and viewport settings for the application.
-  Integrates Vercel Speed Insights and Analytics.
-*/
-// ... (font configs omitted for brevity in replace, but I'll provide full block below)
-// Font Configurations
+// Font configurations for the application
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -48,7 +48,7 @@ const cinzelDecorative = Cinzel_Decorative({
   display: "swap",
 });
 
-// Viewport and Device Settings
+// Viewport and device-specific settings
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -57,7 +57,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Site Metadata (SEO & Social)
+// Global metadata for SEO and social sharing
 export const metadata: Metadata = {
   metadataBase: new URL("https://seraphi.me"),
   title: "Seraphim",
@@ -119,3 +119,4 @@ export default function RootLayout({
     </html>
   );
 }
+

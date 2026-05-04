@@ -1,14 +1,13 @@
+/*
+RSS feed integration for the scraper worker.
+Supports standard RSS feeds and Reddit RSS endpoints, providing 
+robust parsing and image extraction capabilities.
+*/
+
 import Parser from 'rss-parser';
 import { NewsItem } from '@/lib/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '../utils/date';
-
-/*
-Dan Sharan
-
-RSS feed integration for the scraper worker.
-Supports standard RSS feeds and Reddit's RSS endpoints.
-*/
 
 const parser = new Parser({
     timeout: 15000,
@@ -21,6 +20,7 @@ const parser = new Parser({
     },
 });
 
+/* Fetches and parses a Reddit subreddit RSS feed */
 export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
@@ -53,6 +53,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
     }
 }
 
+/* Fetches all configured Reddit feeds concurrently */
 export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     // Concurrent fetch with Promise.allSettled to handle individual failures gracefully
     const results = await Promise.allSettled(
@@ -65,9 +66,10 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     return items;
 }
 
-/**
- * Extracts the first available image URL from various standard RSS media fields.
- */
+/*
+Extracts the first available image URL from various standard RSS media fields
+including MediaRSS content, thumbnails, and enclosures.
+*/
 function extractImageUrl(item: Record<string, unknown>): string | undefined {
     // Check MediaRSS content tags
     if (item['media:content'] && typeof item['media:content'] === 'object') {
@@ -93,8 +95,9 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 10000; // 10s — standard for server-side runners
+const FEED_TIMEOUT_MS = 10000;
 
+/* Fetches and parses a single standard RSS feed */
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
@@ -130,6 +133,7 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     }
 }
 
+/* Fetches all configured RSS feeds concurrently */
 export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
     const rssResults = await Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source)));
 
@@ -144,3 +148,4 @@ export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 }
+

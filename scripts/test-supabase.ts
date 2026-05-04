@@ -2,7 +2,7 @@
 Seraphim Supabase Bridge Test
 Verifies read/write connectivity to the database using mock events.
 
-Run: bun run scripts/test-supabase.ts
+Usage: bun run scripts/test-supabase.ts
 */
 
 import { createClient } from "@supabase/supabase-js";
@@ -21,7 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// prepare mock events for testing (uses URL as unique identifier)
+// Prepare mock events for testing (uses URL as unique identifier)
 const mockEvents = [
   {
     title: "[TEST] Drone activity reported near Kyiv infrastructure",
@@ -106,3 +106,4 @@ async function run() {
 }
 
 run();
+

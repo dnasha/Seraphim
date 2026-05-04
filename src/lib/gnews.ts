@@ -1,8 +1,10 @@
-import { NewsItem } from './types';
+/*
+GNews API client library.
+Provides functions for fetching top headlines and performing searches,
+including specialized OSINT keyword-driven queries.
+*/
 
-/**
- * gnews API integration for top headlines and OSINT-specific searches.
- */
+import { NewsItem } from './types';
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
@@ -22,6 +24,7 @@ interface GNewsResponse {
     articles: GNewsArticle[];
 }
 
+/* Fetches top headlines from GNews by category */
 export async function fetchGNews(
     category: string = 'general',
     maxResults: number = 10
@@ -68,6 +71,7 @@ export async function fetchGNews(
     }
 }
 
+/* Searches GNews articles using a specific query string */
 export async function searchGNews(query: string, maxResults: number = 10): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) {
         console.warn('GNEWS_API_KEY not set, skipping gnews search');
@@ -110,7 +114,7 @@ export async function searchGNews(query: string, maxResults: number = 10): Promi
     }
 }
 
-// OSINT-specific keyword search queries
+/* OSINT-specific keyword search queries */
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -118,10 +122,11 @@ const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"cyber attack" OR "critical infrastructure"', tags: ['OSINT', 'cyber'] },
 ];
 
+/* Specialized search for OSINT-related content using combined queries to optimize API quota usage */
 export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) return [];
 
-    // combine queries into one call to save quota (100 req/day limit)
+    // Combine queries to minimize API calls
     const combinedQuery = OSINT_QUERIES.map(q => q.query).join(' OR ');
     
     try {
@@ -132,7 +137,7 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
             const text = (item.title + ' ' + item.description).toLowerCase();
             
             for (const { query, tags } of OSINT_QUERIES) {
-                // simple check for keywords within title or description
+                // Check for keywords within title or description
                 const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
                 if (keywords.some(k => text.includes(k.trim()))) {
                     tags.forEach(t => matchedTags.add(t));
@@ -150,3 +155,4 @@ export async function fetchOSINTGNews(maxResults: number = 20): Promise<NewsItem
         return [];
     }
 }
+

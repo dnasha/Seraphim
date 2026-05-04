@@ -1,4 +1,4 @@
-/* MapSettings.module.css — settings gear button, panel, style grid, toggle switch */
+/* MapSettings.module.css - Settings gear button, panel, style grid, and toggle switch styling */
 
 .mapSettingsArea {
   position: absolute;
@@ -42,7 +42,7 @@
   box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
 }
 
-/* ── Settings panel ── */
+/* Settings panel layout and animation */
 .mapSettingsPanel {
   position: absolute;
   z-index: 1100;
@@ -133,7 +133,7 @@
   color: var(--text-primary);
 }
 
-/* ── Toggle switch ── */
+/* Toggle switch styling */
 .toggleSwitch {
   width: 38px;
   height: 20px;
@@ -164,10 +164,11 @@
   transform: translateX(18px);
 }
 
-/* ── Responsive ── */
+/* Responsive adjustments */
 @media (max-width: 860px) {
   .mapSettingsPanel {
     right: 46px;
     width: min(220px, 65vw);
   }
 }
+

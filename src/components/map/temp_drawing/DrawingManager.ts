@@ -1,12 +1,12 @@
-/**
- * DrawingManager — Native MapLibre GL drawing engine.
- *
- * Replaces terra-draw with direct MapLibre event handlers and GeoJSON
- * source/layer management. No third-party adapter conflicts.
- */
+/*
+DrawingManager — Native MapLibre GL drawing engine.
+Handles geometric drawing (polygons, rectangles, circles, freehand) directly on the map
+using MapLibre event handlers and GeoJSON source/layer management.
+*/
+
 import maplibregl from 'maplibre-gl';
 
-// ─── Types ───────────────────────────────────────────────────────────
+// Types for drawing modes and features.
 export type DrawMode = 'polygon' | 'rectangle' | 'circle' | 'freehand' | 'select' | null;
 
 interface DrawnFeature {
@@ -16,7 +16,7 @@ interface DrawnFeature {
     color: string;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────
+// Map source and layer identifiers.
 const SOURCE_COMPLETED = 'drawing-completed';
 const SOURCE_PREVIEW = 'drawing-preview';
 const LAYER_FILLS = 'drawing-fills';
@@ -28,11 +28,12 @@ const LAYER_SELECT_HIGHLIGHT = 'drawing-select-highlight';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// Generates a unique ID for drawn features.
 function uid(): string {
     return 'draw-' + Math.random().toString(36).slice(2, 10);
 }
 
+// Approximates a circle with a polygon given center and radius.
 function makeCirclePolygon(center: [number, number], radiusKm: number, steps = 64): GeoJSON.Position[] {
     const coords: GeoJSON.Position[] = [];
     for (let i = 0; i <= steps; i++) {
@@ -44,6 +45,7 @@ function makeCirclePolygon(center: [number, number], radiusKm: number, steps = 6
     return coords;
 }
 
+// Calculates distance between two points in kilometers using the Haversine formula.
 function haversineKm(a: [number, number], b: [number, number]): number {
     const toRad = (d: number) => (d * Math.PI) / 180;
     const dLat = toRad(b[1] - a[1]);
@@ -54,22 +56,21 @@ function haversineKm(a: [number, number], b: [number, number]): number {
     return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
-// ─── Drawing Manager ─────────────────────────────────────────────────
 export class DrawingManager {
     private map: maplibregl.Map;
     private features: Map<string, DrawnFeature> = new Map();
     private mode: DrawMode = null;
     private color: string = '#ef4444';
 
-    // In-progress state
+    // In-progress drawing state
     private vertices: GeoJSON.Position[] = [];
     private isDragging = false;
     private dragOrigin: [number, number] | null = null;
 
-    // Selected feature
+    // Currently selected feature
     private selectedId: string | null = null;
 
-    // Bound handlers (for removal)
+    // Bound event handlers for lifecycle management
     private _onClick: (e: maplibregl.MapMouseEvent) => void;
     private _onMouseMove: (e: maplibregl.MapMouseEvent) => void;
     private _onMouseDown: (e: maplibregl.MapMouseEvent) => void;
@@ -83,7 +84,6 @@ export class DrawingManager {
     constructor(map: maplibregl.Map) {
         this.map = map;
 
-        // Bind handlers
         this._onClick = this.handleClick.bind(this);
         this._onMouseMove = this.handleMouseMove.bind(this);
         this._onMouseDown = this.handleMouseDown.bind(this);
@@ -93,7 +93,7 @@ export class DrawingManager {
         this._onContextMenu = this.handleContextMenu.bind(this);
     }
 
-    // ─── Lifecycle ───────────────────────────────────────────────────
+    // Lifecycle methods to attach and detach map event listeners.
     attach(): void {
         if (this._attached) return;
         this._attached = true;
@@ -125,7 +125,7 @@ export class DrawingManager {
         this.removeSources();
     }
 
-    // ─── Public API ──────────────────────────────────────────────────
+    // Public API for controlling the drawing state.
     setMode(newMode: DrawMode): void {
         // Finish any in-progress drawing before switching
         if (this.vertices.length > 0) {
@@ -170,7 +170,7 @@ export class DrawingManager {
         }
     }
 
-    /** Re-create sources/layers after a style reload */
+    // Re-creates sources and layers, useful after a map style change.
     reattachLayers(): void {
         this.ensureSources();
         this.renderCompleted();
@@ -178,7 +178,7 @@ export class DrawingManager {
         this.updateHighlight();
     }
 
-    // ─── Source / Layer Setup ─────────────────────────────────────────
+    // Internal methods for managing MapLibre sources and layers.
     private ensureSources(): void {
         const map = this.map;
 
@@ -189,7 +189,6 @@ export class DrawingManager {
             map.addSource(SOURCE_PREVIEW, { type: 'geojson', data: EMPTY_FC });
         }
 
-        // Completed fills
         if (!map.getLayer(LAYER_FILLS)) {
             map.addLayer({
                 id: LAYER_FILLS,
@@ -202,7 +201,6 @@ export class DrawingManager {
             });
         }
 
-        // Completed outlines
         if (!map.getLayer(LAYER_OUTLINES)) {
             map.addLayer({
                 id: LAYER_OUTLINES,
@@ -216,7 +214,6 @@ export class DrawingManager {
             });
         }
 
-        // Selection highlight
         if (!map.getLayer(LAYER_SELECT_HIGHLIGHT)) {
             map.addLayer({
                 id: LAYER_SELECT_HIGHLIGHT,
@@ -232,7 +229,6 @@ export class DrawingManager {
             });
         }
 
-        // Preview fill
         if (!map.getLayer(LAYER_PREVIEW_FILL)) {
             map.addLayer({
                 id: LAYER_PREVIEW_FILL,
@@ -245,7 +241,6 @@ export class DrawingManager {
             });
         }
 
-        // Preview line
         if (!map.getLayer(LAYER_PREVIEW_LINE)) {
             map.addLayer({
                 id: LAYER_PREVIEW_LINE,
@@ -260,7 +255,6 @@ export class DrawingManager {
             });
         }
 
-        // Vertices dots
         if (!map.getLayer(LAYER_VERTICES)) {
             map.addLayer({
                 id: LAYER_VERTICES,
@@ -287,7 +281,7 @@ export class DrawingManager {
         if (map.getSource(SOURCE_PREVIEW)) map.removeSource(SOURCE_PREVIEW);
     }
 
-    // ─── Rendering ───────────────────────────────────────────────────
+    // Methods for updating the map data based on current state.
     private renderCompleted(): void {
         const src = this.map.getSource(SOURCE_COMPLETED) as maplibregl.GeoJSONSource;
         if (!src) return;
@@ -318,7 +312,7 @@ export class DrawingManager {
                 geometry: { type: 'Polygon', coordinates: [ring] },
             });
         } else if (this.vertices.length === 1) {
-            // Just a line segment if we have cursor position
+            // Just a line segment if we only have one point
             features.push({
                 type: 'Feature',
                 properties: { color: this.color },
@@ -326,7 +320,7 @@ export class DrawingManager {
             });
         }
 
-        // Vertex points
+        // Add point features for each vertex
         for (const v of this.vertices) {
             features.push({
                 type: 'Feature',
@@ -344,7 +338,7 @@ export class DrawingManager {
         }
     }
 
-    // ─── In-progress helpers ─────────────────────────────────────────
+    // Helper methods for managing in-progress drawing state.
     private resetInProgress(): void {
         this.vertices = [];
         this.isDragging = false;
@@ -358,7 +352,6 @@ export class DrawingManager {
             return;
         }
 
-        // Close the ring
         const ring = [...this.vertices, this.vertices[0]];
         const id = uid();
         this.features.set(id, {
@@ -371,7 +364,7 @@ export class DrawingManager {
         this.renderCompleted();
     }
 
-    // ─── Event Handlers ──────────────────────────────────────────────
+    // Event handlers for mouse and keyboard interactions.
     private handleClick(e: maplibregl.MapMouseEvent): void {
         if (!this.mode) return;
 
@@ -396,7 +389,6 @@ export class DrawingManager {
     private handleMouseDown(e: maplibregl.MapMouseEvent): void {
         if (!this.mode || this.mode === 'polygon' || this.mode === 'select') return;
 
-        // Rectangle, Circle, Freehand all start on mousedown
         this.isDragging = true;
         this.dragOrigin = [e.lngLat.lng, e.lngLat.lat];
 
@@ -404,7 +396,6 @@ export class DrawingManager {
             this.vertices = [[e.lngLat.lng, e.lngLat.lat]];
         }
 
-        // Prevent map pan
         e.preventDefault();
     }
 
@@ -413,9 +404,7 @@ export class DrawingManager {
 
         const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
 
-        // Polygon: show preview line from last vertex to cursor
         if (this.mode === 'polygon' && this.vertices.length > 0) {
-            // Temporarily add cursor position for preview
             const previewVerts = [...this.vertices, lngLat];
             const src = this.map.getSource(SOURCE_PREVIEW) as maplibregl.GeoJSONSource;
             if (!src) return;
@@ -477,7 +466,6 @@ export class DrawingManager {
     }
 
     private handleSelectClick(e: maplibregl.MapMouseEvent): void {
-        // Query the completed fills layer for a feature under the click
         const features = this.map.queryRenderedFeatures(e.point, { layers: [LAYER_FILLS] });
         if (features.length > 0) {
             const id = features[0].properties?.id as string;
@@ -508,9 +496,9 @@ export class DrawingManager {
     private handleContextMenu(e: maplibregl.MapMouseEvent): void {
         if (this.mode === 'polygon' && this.vertices.length > 0) {
             e.preventDefault();
-            // Right-click removes last vertex
             this.vertices.pop();
             this.renderPreview();
         }
     }
 }
+

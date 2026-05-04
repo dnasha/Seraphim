@@ -176,6 +176,35 @@ The engine uses a tiered lookup strategy with manual overrides to resolve naming
 - **Large Geodata**: `geonames.json` (~4.7 MB) must never reach the client. The `server-only` directive provides a build-time guardrail.
 - **XSS**: All scraped content must pass through `cleanString()` (DOMPurify) before database insertion.
 
-### Testing
+---
+
+## Technical Findings & Quirks
+
+During a full codebase documentation audit, the following technical patterns and quirks were identified:
+
+### Ingestion & Data Handling
+- **SSL Bypass**: `src/lib/rss.ts` explicitly disables SSL certificate validation (`rejectUnauthorized: false`) for certain legacy or problematic news sources.
+- **Surrogate Pair Sanitization**: `src/scraper/utils/transforms.ts` includes specialized regex to strip incomplete UTF-16 surrogate pairs, preventing database serialization errors.
+- **URI Length Protection**: `src/scraper/index.ts` uses small chunk sizes (20) for Supabase filters to avoid hitting GET request URI length limits.
+- **CrisisWatch Normalization**: `src/scraper/utils/date.ts` handles the non-standard date formats used by ICG CrisisWatch via dedicated regex.
+
+### Social Media Resolution
+- **Multi-Tier Fallback**: X (Twitter) resolution uses a four-tier strategy: Native Syndication -> Nitter -> RSSHub -> Google News RSS.
+- **Emoji-Safe Truncation**: `safeSlice` in `social-feeds.ts` uses `Array.from()` to ensure string truncation doesn't break multi-byte characters (emojis).
+
+### Geocoding & Map Engine
+- **Disambiguation Bias**: The engine prioritizes certain geographic entities based on OSINT context (e.g., favoring Georgia the country over the US state).
+- **Log2 Zoom Scaling**: Initial map zoom is calculated using a log2 scale based on the window's bounding box dimensions.
+- **Golden-Angle Jitter**: Overlapping pins are distributed using a golden-angle spiral to maintain visibility.
+- **Server-Side Clustering**: Server-side `ST_ClusterDBSCAN` logic in Supabase is used for zoom levels < 5, with unique synthetic IDs generated to prevent "stuck" markers.
+
+### API & Performance
+- **Fail-Open Rate Limiting**: The Upstash Redis rate limiter is wrapped in a fail-open mechanism, ensuring API availability if the Redis service times out.
+- **BBox Snapping Grid**: Uses a dynamic snapping grid (0.5 to 10 degrees) to maximize client-side cache hits when panning the map.
+- **Lazy Description Loading**: Descriptions are excluded from the main list fetch and loaded on-demand to reduce initial payload size by ~40%.
+
+---
+
+## Testing
 - **Vitest**: Server-only modules are mocked in `vitest.config.ts` using `scripts/tests/mocks/server-only.ts`.
 - **Mocking**: Styling tests must be updated in `utils.test.ts` whenever the central color palette is refined.

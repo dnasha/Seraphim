@@ -1,8 +1,7 @@
 /*
- * Dan Sharan
- * regex patterns for geographic location extraction
- */
-
+  Regex patterns for geographic location extraction and event detection.
+  Contains patterns for datelines, emojis, metadata, and spatial context verbs.
+*/
 
 // regex for standard datelines (e.g. "WASHINGTON (Reuters) - ")
 export const DATELINE_PATTERN = /^(?:\[[^\]]+\]\s*)?([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
@@ -94,9 +93,10 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b(?:protests?|demonstrations?|unrest|clashes)\\s+in\\s+(${LOC})`, 'g'),
 ];
 
-
-
-// specific event-target relationship patterns (higher confidence than LOCATION_PATTERNS)
+/*
+  Specific event-target relationship patterns.
+  These have higher confidence than general spatial patterns.
+*/
 export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
@@ -121,6 +121,9 @@ export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:hits?|struck)\\s+(?:\\w+\\s+)?(?:in|central|southern|northern|eastern|western)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:blockade|blockaded|blockading)\\s+(?:of|on)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:reopen(?:s|ed|ing)?)\\s+(?:the\\s+)?(${LOC})`, 'g'),
-    // "X country attacks/strikes/bombs Y" — capture Y (prevents actor from winning over target)
+    /*
+      Actor-action-target patterns.
+      Example: "Russian forces strike Kyiv" - capture Kyiv to prevent actor from winning over target.
+    */
     new RegExp(`(?:[A-Z]\\w+(?:i|an|ese|ish)\\s+)?(?:forces?|troops|military|army|navy|jets?)\\s+(?:attack(?:s|ed)?|bomb(?:s|ed)?|strike(?:s)?|struck|shell(?:s|ed)?)\\s+(?:\\w+\\s+)?(?:in|near)?\\s*(${LOC})`, 'g'),
 ];

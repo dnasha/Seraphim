@@ -1,8 +1,10 @@
 /*
-  Seraphim Unit Tests - Data Transform Functions
+  Seraphim Data Transformation Tests
 
-  Tests for newsItemToDbEvent, cleanString, and dbEventToNewsItem.
-  Run: npm test
+  This suite verifies the bi-directional mapping between NewsItem objects
+  (used in the frontend) and DbEvent objects (used in the database). It
+  also tests string cleaning logic for handling invalid characters and
+  orphaned surrogates.
 */
 
 import { describe, it, expect } from 'vitest';
@@ -11,8 +13,10 @@ import { dbEventToNewsItem } from '../../src/types';
 import type { NewsItem } from '../../src/lib/types';
 import type { DbEvent } from '../../src/types';
 
-// --- Helper: minimal valid NewsItem ---
-
+/*
+  makeNewsItem
+  Helper factory for creating minimal valid NewsItem objects for tests.
+*/
 function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     return {
         id: 'test-1',
@@ -27,8 +31,11 @@ function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     };
 }
 
-// --- cleanString ---
-
+/*
+  cleanString
+  Validates the sanitization of strings, specifically ensuring that
+  orphaned UTF-16 surrogates are removed to prevent database errors.
+*/
 describe('cleanString', () => {
     it('returns empty string for null/undefined', () => {
         expect(cleanString(null)).toBe('');
@@ -59,8 +66,12 @@ describe('cleanString', () => {
     });
 });
 
-// --- newsItemToDbEvent ---
-
+/*
+  newsItemToDbEvent
+  Verifies the transformation of frontend-ready news items into
+  database-compatible event records. Includes validation for URLs,
+  tags, and coordinate normalization.
+*/
 describe('newsItemToDbEvent', () => {
     it('converts a valid NewsItem to DbEvent', () => {
         const item = makeNewsItem();
@@ -154,8 +165,11 @@ describe('newsItemToDbEvent', () => {
     });
 });
 
-// --- dbEventToNewsItem ---
-
+/*
+  dbEventToNewsItem
+  Verifies the conversion of database event records back into
+  NewsItem objects for use in the frontend UI.
+*/
 describe('dbEventToNewsItem', () => {
     function makeDbEvent(overrides: Partial<DbEvent> = {}): DbEvent {
         return {
@@ -215,3 +229,4 @@ describe('dbEventToNewsItem', () => {
         expect(item.locationName).toBeUndefined();
     });
 });
+

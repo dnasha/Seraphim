@@ -229,6 +229,13 @@ Update the Realtime subscription to use server-side filters (e.g., by category o
 
 Move the `KNOWN_LOCATIONS` dictionary build to `build-geodata.mjs`, pre-calculating the optimized structure so the runtime only needs to perform a single `JSON.parse` call.
 
+### 🚩 Engineering Anomalies to Investigate
+- **ReferenceError in Benchmark**: `scripts/benchmark-pipeline.mjs` contains an undefined `c` object used for terminal colors. Needs fixing to prevent runtime crashes during benchmarking.
+- **Geodata Divergence**: Hardcoded aliases in `scripts/evaluate-accuracy.mjs` may diverge from the core geocoding engine logic, leading to inconsistent accuracy results.
+- **Monolithic Geodata**: `COUNTRY_DATA` in `scripts/build-geodata.mjs` is a very large hardcoded object that should ideally be moved to an external JSON for better maintainability.
+- **Stale Data Preservation**: `remap-db-locations.ts` prevents nulling out locations. Investigate if this causes the system to "stick" to old, incorrect geocoding results when the engine is refined.
+- **Hybrid ID Brittleness**: Investigate the stability of the hybrid ID generation logic in `src/app/api/news/route.ts` to ensure cluster IDs remain consistent across client-side refreshes.
+
 ### Phase 2.5: Advanced Visualization & Tiles (Deferred)
 
 Fine-tune the new MapLibre engine for absolute visual perfection. Serve OSINT-specific vector tiles (OpenStreetMap-based) from Cloudflare R2 via Protomaps PMTiles to achieve crisp labels at all zoom levels and $0 egress.

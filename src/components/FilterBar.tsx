@@ -90,6 +90,7 @@ export default function FilterBar({
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
+    /* Resets custom date range to the last 24 hours */
     const resetTo24h = () => {
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -112,7 +113,7 @@ export default function FilterBar({
     };
 
     const toggleSource = (source: string) => {
-        // Ensure at least one source remains selected
+        /* Ensure at least one source remains selected */
         if (sources.includes(source)) {
             if (sources.length > 1) {
                 onSourcesChange(sources.filter(s => s !== source));
@@ -123,7 +124,11 @@ export default function FilterBar({
     };
 
     const toggleCategory = (category: string) => {
-        // 'all' resets selection, specific categories toggle individually
+        /*
+          The 'all' category resets selection. 
+          Specific categories toggle individually.
+          If all categories are deselected, it defaults back to 'all'.
+        */
         if (category === 'all') {
             onCategoriesChange(['all']);
             return;

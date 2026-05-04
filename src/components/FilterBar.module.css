@@ -1,4 +1,8 @@
-/* FilterBar.module.css — filter bar, source/category/time toggles, search input */
+/* 
+FilterBar.module.css
+Styles for the filter bar, including source, category, and time range toggles,
+along with the custom date picker interface.
+*/
 
 .filterBar {
   background: var(--surface-alt);

@@ -1,15 +1,14 @@
+/*
+Social media feed integration for Telegram and X (Twitter).
+Provides scraping and multiple fallback strategies to bypass platform restrictions
+and ensure reliable data ingestion for the scraper worker.
+*/
+
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { NewsItem } from '@/lib/types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { ensureIsoDate } from '../utils/date';
-
-/*
-Dan Sharan
-
-Social media feed integration (Telegram & X/Twitter) for the scraper worker.
-Uses scraping and multiple fallback strategies to bypass platform restrictions.
-*/
 
 const parser = new Parser({
     customFields: {
@@ -21,7 +20,7 @@ const parser = new Parser({
     },
 });
 
-// nitter instances to try — user reports these worked previously
+/* Nitter instances for X/Twitter fallback */
 const NITTER_INSTANCES = [
     'https://nitter.privacydev.net',
     'https://nitter.poast.org',
@@ -30,14 +29,13 @@ const NITTER_INSTANCES = [
     'https://nitter.cz',
 ];
 
-// RSSHub instances as secondary fallback
+/* RSSHub instances as secondary fallback */
 const RSSHUB_INSTANCES = [
     'https://rsshub.app',
     'https://rsshub.rssforever.com',
     'https://rsshub.moeyy.cn',
 ];
 
-// Telegram scraper (HTML-based via Cheerio)
 interface TelegramPost {
     text: string;
     date: string;
@@ -45,6 +43,7 @@ interface TelegramPost {
     links: string[];
 }
 
+/* HTML-based scraper for Telegram channels via Cheerio */
 export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
@@ -65,7 +64,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
         const $ = cheerio.load(html);
         const posts: TelegramPost[] = [];
 
-        // Each message is contained within a .tgme_widget_message element
+        // Messages are contained within .tgme_widget_message elements
         $('.tgme_widget_message').each((_i, el) => {
             const $msg = $(el);
             const postId = $msg.attr('data-post') || '';
@@ -110,7 +109,7 @@ export async function scrapeTelegramChannel(source: SocialSource): Promise<NewsI
     }
 }
 
-// X/Twitter feed fetching using a multi-strategy fallback system to ensure reliability
+/* Helper to fetch feed with timeout and instance validation */
 async function fetchInstanceTimeout(url: string, timeoutMs = 10000): Promise<ReturnType<typeof parser.parseURL>> {
     const res = await fetch(url, {
         headers: {
@@ -134,7 +133,7 @@ async function fetchInstanceTimeout(url: string, timeoutMs = 10000): Promise<Ret
     return feed;
 }
 
-// Strategy 1: Attempt to use the native Twitter syndication endpoint
+/* Strategy 1: Attempt to use the native Twitter syndication endpoint */
 async function trySyndicationFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const res = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${username}`, {
@@ -172,7 +171,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
     }
 }
 
-// Strategy 2: Nitter RSS (races multiple healthy instances for the first success)
+/* Strategy 2: Nitter RSS fallback using multiple instances */
 let bestNitterInstance: string | null = null;
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -195,7 +194,7 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-// strategy 3: RSSHub RSS
+/* Strategy 3: RSSHub fallback */
 let bestRSSHubInstance: string | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
@@ -218,7 +217,7 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-// strategy 4: Google News RSS as last resort
+/* Strategy 4: Google News RSS as final resort */
 async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`@${username} OR from:${username}`)}&hl=en`;
@@ -228,6 +227,7 @@ async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof pa
     }
 }
 
+/* Multi-strategy X/Twitter feed fetcher */
 export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const username = source.url;
     const feed = await Promise.any([
@@ -254,19 +254,18 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     }));
 }
 
-/**
- * Performs a safe string slice that respects multi-byte characters (like emojis).
- * Prevents invalid UTF-8 sequences that could cause database insertion errors.
- */
+/*
+Safe string slicing that respects multi-byte characters.
+Prevents invalid UTF-8 sequences.
+*/
 function safeSlice(str: string, limit: number): string {
     if (!str) return '';
-    // Use Array.from to correctly handle multi-byte characters
     const chars = Array.from(str);
     if (chars.length <= limit) return str;
     return chars.slice(0, limit).join('');
 }
 
-// main entry point
+/* Main entry point for social media feed ingestion */
 export async function fetchSocialFeeds(): Promise<NewsItem[]> {
     const telegramPromises = TELEGRAM_CHANNELS.map(source => scrapeTelegramChannel(source));
     const xPromises = X_ACCOUNTS.map(source => fetchXFeed(source));
@@ -284,3 +283,4 @@ export async function fetchSocialFeeds(): Promise<NewsItem[]> {
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 }
+

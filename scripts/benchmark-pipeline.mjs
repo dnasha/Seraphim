@@ -1,53 +1,50 @@
-/* Dan Sharan
-
+/*
 Seraphim Pipeline Benchmark
+Profiles actual production code stages to identify performance bottlenecks.
 
-profiles actual production code stages to find bottlenecks
-
-run: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews]
-*/ 
- 
+Usage: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews] [--quick]
+*/
 
 import { performance } from 'node:perf_hooks';
 import { statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// dynamically resolve project root
+// Dynamically resolve project root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 
-// parse command line arguments
+// Parse command line arguments
 const args = new Set(process.argv.slice(2).map(a => a.toLowerCase()));
 const SKIP_SOCIAL = args.has('--skip-social');
 const SKIP_GNEWS  = args.has('--skip-gnews');
 const QUICK_MODE  = args.has('--quick');
 
-// terminal output formatting
+// Terminal output formatting
 function banner(text) {
-  const line = '═'.repeat(70);
+  const line = '='.repeat(70);
   console.log(`\n${c.cyan}${line}${c.reset}`);
   console.log(`${c.bold}${c.cyan}  ${text}${c.reset}`);
   console.log(`${c.cyan}${line}${c.reset}\n`);
 }
 
 function sectionHeader(text) {
-  console.log(`\n${c.bold}${c.magenta}▸ ${text}${c.reset}`);
-  console.log(`${c.dim}${'─'.repeat(60)}${c.reset}`);
+  console.log(`\n${c.bold}${c.magenta}> ${text}${c.reset}`);
+  console.log(`${c.dim}${'-'.repeat(60)}${c.reset}`);
 }
 
-// format milliseconds
+// Format milliseconds into human readable strings
 function formatMs(ms) {
   if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-// helper to format percentage strings
+// Helper to format percentage strings
 function pct(part, total) { return total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '0%'; }
 
-// lightweight performance tracking utility
+// Lightweight performance tracking utility
 class Timer {
   constructor() { this.marks = {}; this.starts = {}; }
   start(label) { this.starts[label] = performance.now(); }
@@ -59,7 +56,10 @@ class Timer {
   get(label) { return this.marks[label] || 0; }
 }
 
-// stage 1: Geodata Loading (via geocode.ts)
+/*
+Stage 1: Geodata Loading
+Measures the time required to import and initialize the geocoding dictionary.
+*/
 async function benchmarkGeodataLoad(timer) {
   sectionHeader('Stage 1 Geodata Loading');
 
@@ -86,7 +86,10 @@ async function benchmarkGeodataLoad(timer) {
   return KNOWN_LOCATIONS;
 }
 
-// stage 2: RSS Sourcing (via rss.ts)
+/*
+Stage 2: RSS Sourcing
+Measures retrieval performance for standard RSS and Reddit feeds.
+*/
 async function benchmarkRSS(timer) {
   sectionHeader('Stage 2 RSS Feed Sourcing');
 
@@ -130,7 +133,7 @@ async function benchmarkRSS(timer) {
   console.log();
 
   console.log(`  ${'Feed'.padEnd(28)} ${'Status'.padEnd(10)} ${'Time'.padStart(10)} ${'Items'.padStart(6)}`);
-  console.log(`  ${'─'.repeat(28)} ${'─'.repeat(10)} ${'─'.repeat(10)} ${'─'.repeat(6)}`);
+  console.log(`  ${'-'.repeat(28)} ${'-'.repeat(10)} ${'-'.repeat(10)} ${'-'.repeat(6)}`);
   for (const r of feedResults) {
     const statusColor = r.status === 'ok' ? c.green : c.red;
     console.log(`  ${r.name.padEnd(28)} ${statusColor}${r.status.padEnd(10)}${c.reset} ${formatMs(r.elapsed).padStart(10)} ${String(r.items).padStart(6)}`);
@@ -139,12 +142,15 @@ async function benchmarkRSS(timer) {
   return allItems;
 }
 
-// stage 3: GNews Sourcing (via gnews.ts)
+/*
+Stage 3: GNews Sourcing
+Measures API latency for GNews headlines and OSINT queries.
+*/
 async function benchmarkGNews(timer) {
-  sectionHeader('Stage 3 · GNews API');
+  sectionHeader('Stage 3 GNews API');
 
   if (!process.env.GNEWS_API_KEY || SKIP_GNEWS) {
-    console.log(`  ${c.yellow}⚠ Skipped${c.reset} (${!process.env.GNEWS_API_KEY ? 'no GNEWS_API_KEY in env' : '--skip-gnews flag'})`);
+    console.log(`  ${c.yellow}! Skipped${c.reset} (${!process.env.GNEWS_API_KEY ? 'no GNEWS_API_KEY in env' : '--skip-gnews flag'})`);
     return [];
   }
 
@@ -172,9 +178,12 @@ async function benchmarkGNews(timer) {
   return items;
 }
 
-// stage 4: Social Feeds (via social-feeds.ts)
+/*
+Stage 4: Social Feeds
+Measures scraping and retrieval time for Telegram and X sources.
+*/
 async function benchmarkSocial(timer) {
-  sectionHeader('Stage 4 Social Feeds (Telegram + X)');
+  sectionHeader('Stage 4 Social Feeds');
 
   if (SKIP_SOCIAL) {
     console.log(`  ${c.yellow}! Skipped${c.reset} (--skip-social flag)`);
@@ -219,7 +228,7 @@ async function benchmarkSocial(timer) {
   console.log();
 
   console.log(`  ${'Source'.padEnd(28)} ${'Status'.padEnd(10)} ${'Time'.padStart(10)} ${'Items'.padStart(6)}`);
-  console.log(`  ${'─'.repeat(28)} ${'─'.repeat(10)} ${'─'.repeat(10)} ${'─'.repeat(6)}`);
+  console.log(`  ${'-'.repeat(28)} ${'-'.repeat(10)} ${'-'.repeat(10)} ${'-'.repeat(6)}`);
   for (const r of results) {
     const sc = r.status === 'ok' ? c.green : c.red;
     console.log(`  ${r.name.padEnd(28)} ${sc}${r.status.padEnd(10)}${c.reset} ${formatMs(r.elapsed).padStart(10)} ${String(r.items).padStart(6)}`);
@@ -228,7 +237,10 @@ async function benchmarkSocial(timer) {
   return allItems;
 }
 
-// stage 5: Location Extraction (via geocode.ts)
+/*
+Stage 5: Location Extraction
+Profiles the NLP heuristics used to identify place names in text.
+*/
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 Location Extraction');
 
@@ -258,7 +270,10 @@ async function benchmarkExtraction(timer, items) {
   return results;
 }
 
-// stage 6: Geocoding (via geocode.ts)
+/*
+Stage 6: Geocoding
+Profiles coordinate resolution for identified place names.
+*/
 async function benchmarkGeocoding(timer, extractionResults) {
   sectionHeader('Stage 6 Geocoding');
 
@@ -270,7 +285,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
 
   timer.start('geocoding_total');
 
-  // filter for unique matches to simulate geocoding cache dynamics
+  // Filter for unique matches to simulate geocoding cache dynamics
   const uniqueLocations = [...new Set(extractionResults.map(r => r.match).filter(Boolean))];
 
   const geocodeFails = [];
@@ -297,7 +312,7 @@ async function benchmarkGeocoding(timer, extractionResults) {
   console.log(`  Avg Time:         ${c.white}${formatMs(totalTime / Math.max(uniqueLocations.length, 1))}${c.reset} / lookup`);
 }
 
-// display a performance summary table
+// Display a performance summary table
 function printSummary(timer) {
   banner('BENCHMARK SUMMARY');
 
@@ -314,26 +329,25 @@ function printSummary(timer) {
   let slowest = { name: '', ms: 0 };
 
   console.log(`  ${'Stage'.padEnd(22)} ${'Duration'.padStart(12)} ${'% of Total'.padStart(12)}  ${'Bar'}`);
-  console.log(`  ${'═'.repeat(22)} ${'═'.repeat(12)} ${'═'.repeat(12)}  ${'═'.repeat(30)}`);
+  console.log(`  ${'='.repeat(22)} ${'='.repeat(12)} ${'='.repeat(12)}  ${'='.repeat(30)}`);
 
   for (const stage of stages) {
     const ms = timer.get(stage.key);
     const p = (ms / totalPipeline) * 100;
     const barLen = Math.round(p / 100 * 30);
-    const bar = '█'.repeat(barLen) + '░'.repeat(30 - barLen);
+    const bar = '#'.repeat(barLen) + '.'.repeat(30 - barLen);
     const color = p > 40 ? c.red : p > 20 ? c.yellow : c.green;
     console.log(`  ${stage.name.padEnd(22)} ${formatMs(ms).padStart(12)} ${pct(ms, totalPipeline).padStart(12)}  ${color}${bar}${c.reset}`);
     if (ms > slowest.ms) slowest = { name: stage.name, ms };
   }
 
-  console.log(`  ${'─'.repeat(22)} ${'─'.repeat(12)} ${'─'.repeat(12)}`);
+  console.log(`  ${'-'.repeat(22)} ${'-'.repeat(12)} ${'-'.repeat(12)}`);
   console.log(`  ${'TOTAL'.padEnd(22)} ${c.bold}${formatMs(totalPipeline).padStart(12)}${c.reset} ${'100.0%'.padStart(12)}`);
   console.log();
   console.log(`  ${c.bgRed}${c.white}${c.bold} BOTTLENECK ${c.reset} ${c.bold}${slowest.name}${c.reset} at ${c.red}${formatMs(slowest.ms)}${c.reset} (${pct(slowest.ms, totalPipeline)} of total pipeline)`);
   console.log();
 }
 
-// main
 async function main() {
   banner('SERAPHIM PIPELINE BENCHMARK');
   console.log(`  ${c.dim}Timestamp:  ${new Date().toISOString()}${c.reset}`);
@@ -374,3 +388,4 @@ main().catch(err => {
   console.error(`${c.red}Fatal error:${c.reset}`, err);
   process.exit(1);
 });
+

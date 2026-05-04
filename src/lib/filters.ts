@@ -1,8 +1,7 @@
 /*
-  Dan Sharan
-
   Pure filtering logic for news items.
   Extracted from useNewsFilter hook for testability.
+  Handles source, category, time range, and search query filtering.
 */
 
 import { NewsItem } from './types';
@@ -20,7 +19,7 @@ export interface FilterOptions {
 
 /**
  * Applies all filter criteria to a list of news items.
- * Pure function — no React dependencies, no side effects.
+ * Pure function: no React dependencies, no side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
     const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, searchQuery, now } = options;

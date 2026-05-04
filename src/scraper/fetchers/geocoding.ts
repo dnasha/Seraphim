@@ -1,7 +1,5 @@
 /*
-Dan Sharan
-
-Geocoding engine re-export for the scraper worker.
-Allows the standalone scraper to use the shared geocoding library directly.
+Geocoding engine integration for the scraper worker.
+Provides a centralized export for the shared geocoding library to be used by the standalone scraper.
 */
 export * from '@/lib/geocoding';

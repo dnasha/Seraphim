@@ -1,25 +1,23 @@
 /*
-Dan Sharan
+Seraphim Scraper - Main ingestion worker
 
-Seraphim Scraper — main ingestion worker
+Local execution:
+bun run src/scraper/index.ts
 
-run locally:
-    bun run src/scraper/index.ts
+Dry run (no database writes, prints payload):
+DRY_RUN=true bun run src/scraper/index.ts
 
-dry-run (no db writes, prints payload instead):
-    DRY_RUN=true bun run src/scraper/index.ts
+Environment variables:
+SUPABASE_URL: Supabase project URL
+SUPABASE_SERVICE_ROLE_KEY: Service-role key for bypassing RLS
+GNEWS_API_KEY: Optional API key for GNews.io
 
-environment variables (loaded from .env.local by bun automatically):
-    SUPABASE_URL               – Supabase project URL
-    SUPABASE_SERVICE_ROLE_KEY  – Service-role key (bypasses RLS for writes)
-    GNEWS_API_KEY              – GNews.io API key (optional; skipped when absent)
-
-pipeline:
-    1. fetch raw items from RSS feeds, GNews, Reddit, and social channels.
-    2. pre-fetch recent event URLs from Supabase to avoid redundant NLP/geocoding.
-    3. filter out already-ingested URLs (deduplication guard).
-    4. geocode remaining items using the local NLP engine.
-    5. upsert events into Supabase (conflict key: `url`).
+Pipeline:
+1. Fetch raw items from RSS, GNews, Reddit, and social channels.
+2. Pre-fetch known URLs from database to avoid redundant processing.
+3. Filter out existing items.
+4. Geocode new items via the local NLP engine.
+5. Upsert events into Supabase using the URL as a conflict key.
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -31,7 +29,7 @@ import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
 import { newsItemToDbEvent } from './utils/transforms';
 
-// config
+/* Configuration */
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -46,13 +44,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// main pipeline
+/* Main pipeline execution */
 
 async function run(): Promise<void> {
     const startMs = Date.now();
     console.log(`[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`);
 
-    // step 1: fetch raw items from all sources
+    // Step 1: Fetch raw items from all configured sources
     console.log('[scraper] Fetching raw items from all sources...');
     const [rssItems, redditItems, gnewsItems, osintItems, socialItems] = await Promise.allSettled([
         fetchAllRSSFeeds(),
@@ -74,15 +72,17 @@ async function run(): Promise<void> {
 
     console.log(`[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length + osintItems.length}, social=${socialItems.length})`);
 
-    // Drop items with no URL (can't upsert without the conflict key)
+    // Validate that items have URLs as they are required for the conflict key
     const itemsWithUrl = rawItems.filter(item => !!item.url);
 
-    // step 2: pre-fetch known URLs from DB to skip redundant geocoding
+    // Step 2: Pre-fetch known URLs from database to skip redundant processing
     console.log('[scraper] Fetching recent known URLs from Supabase...');
     const incomingUrls = itemsWithUrl.map(i => i.url);
 
-    // Supabase in() generates a GET request, so large arrays exceed URI length limits.
-    // Batch into chunks of 20 to stay well under the limit (especially with long social media URLs).
+    /*
+    Supabase in() filter generates GET requests, which can exceed URI length limits.
+    Items are processed in chunks of 20 to maintain safe request lengths.
+    */
     const knownUrls = new Set<string>();
     const CHUNK_SIZE = 20;
     
@@ -95,8 +95,7 @@ async function run(): Promise<void> {
             
         if (error) {
             console.error(`[scraper] Failed to pre-fetch chunk ${i / CHUNK_SIZE + 1}:`, error.message);
-            // Non-fatal: if this fails, we just don't dedupe this chunk here
-            // (the database unique constraint will still protect during upsert)
+            // Non-fatal: failures here mean the unique constraint will handle deduplication during upsert
         } else if (data) {
             data.forEach((r: { url: string }) => knownUrls.add(r.url));
         }
@@ -104,7 +103,7 @@ async function run(): Promise<void> {
     
     console.log(`[scraper] Known URLs in DB: ${knownUrls.size}`);
 
-    // step 3: filter out already-processed items
+    // Step 3: Filter for new items only
     const newItems = itemsWithUrl.filter(item => !knownUrls.has(item.url));
     console.log(`[scraper] New items to process: ${newItems.length}`);
 
@@ -113,14 +112,14 @@ async function run(): Promise<void> {
         return;
     }
 
-    // step 4: geocode new items using NLP engine
+    // Step 4: Extract geographic data from new items
     console.log('[scraper] Running NLP geocoding on new items...');
     const enrichedItems = await enrichItemsWithLocation(newItems);
 
     const geocodedCount = enrichedItems.filter(i => i.latitude != null).length;
     console.log(`[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`);
 
-    // step 5: build db rows and upsert
+    // Step 5: Convert items to database schema and upsert
     const dbEvents: DbEvent[] = enrichedItems
         .map(newsItemToDbEvent)
         .filter((e): e is DbEvent => e !== null);
@@ -128,8 +127,8 @@ async function run(): Promise<void> {
     if (DRY_RUN) {
         console.log('[scraper] DRY RUN — would upsert the following events:');
         for (const event of dbEvents) {
-            console.log(`  • [${event.source_type}] ${event.title.slice(0, 80)}`);
-            if (event.latitude) console.log(`    📍 ${event.location_name} (${event.latitude.toFixed(3)}, ${event.longitude!.toFixed(3)})`);
+            console.log(`  * [${event.source_type}] ${event.title.slice(0, 80)}`);
+            if (event.latitude) console.log(`    Location: ${event.location_name} (${event.latitude.toFixed(3)}, ${event.longitude!.toFixed(3)})`);
         }
         console.log(`[scraper] DRY RUN complete — ${dbEvents.length} events would have been upserted.`);
         return;
@@ -137,7 +136,7 @@ async function run(): Promise<void> {
 
     console.log(`[scraper] Upserting ${dbEvents.length} events into Supabase...`);
 
-    // Chunk upserts to stay under request size limits and provide better error isolation
+    // Chunks are upserted sequentially to prevent request size issues and allow error isolation
     const UPSERT_CHUNK_SIZE = 50;
     let totalUpserted = 0;
 
@@ -151,7 +150,7 @@ async function run(): Promise<void> {
         if (upsertError) {
             console.error(`[scraper] Chunk upsert failed at index ${i}:`, upsertError.message);
             
-            // If the chunk failed, try individual rows to find the offender
+            // On chunk failure, retry individual rows to isolate the problematic record
             console.log(`[scraper] Attempting individual upserts for failed chunk to isolate error...`);
             for (const event of chunk) {
                 const { error: singleError } = await supabase
@@ -174,11 +173,12 @@ async function run(): Promise<void> {
     }
 
     const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    console.log(`[scraper] ✓ Finished ingestion in ${elapsed}s. Total events successfully handled: ${totalUpserted}`);
+    console.log(`[scraper] Finished ingestion in ${elapsed}s. Total events successfully handled: ${totalUpserted}`);
 }
 
-// entry point
+// Process entry point
 run().catch(err => {
     console.error('[scraper] Unhandled error:', err);
     process.exit(1);
 });
+

@@ -1,8 +1,7 @@
 /*
- * Dan Sharan
- * geocoding lookup maps: landmarks, demonyms, and stop words
- */
-
+  Geocoding lookup maps and configuration constants.
+  Contains definitions for landmarks, demonyms, stop words, and false positives.
+*/
 
 export const LANDMARKS: Record<string, { lat: number; lon: number }> = {
     'pentagon': { lat: 38.87, lon: -77.06 }, 'white house': { lat: 38.90, lon: -77.04 },
@@ -276,10 +275,10 @@ export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
 
 export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'washington', 'washington dc', 'china', 'russia', 'iran', 'beijing', 'moscow', 'tehran']);
 
-/**
- * High-priority manual overrides for common geographic naming collisions.
- * Checked before general dictionary lookup.
- */
+/*
+  High-priority manual overrides for common geographic naming collisions.
+  Checked before general dictionary lookup.
+*/
 export const OVERRIDE_LOCATIONS: Record<string, { lat: number; lon: number; type: 'country' | 'admin1' | 'city' }> = {
     'georgia': { lat: 42.3154, lon: 43.3569, type: 'country' }, // Prioritize the country Georgia over US state
 };

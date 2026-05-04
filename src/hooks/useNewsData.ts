@@ -1,12 +1,14 @@
 'use client';
 
+/*
+useNewsData hook manages the fetching and caching of news events.
+It handles bounding box snap logic, client-side jitter for overlapping pins,
+and integrates with Supabase Realtime for live updates.
+*/
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
-
-/*
-  useNewsData - React hook for fetching news data driven by the map viewport.
-*/
 
 export interface BBox {
     minLat: number;

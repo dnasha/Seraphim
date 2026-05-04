@@ -1,4 +1,8 @@
-/* EventSidebar.module.css — sidebar, header, stats pills, card list, cards, expand detail */
+/* 
+EventSidebar.module.css
+Styles for the sidebar shell, header, stats pills, and the event card list.
+Includes card expansion details and responsive mobile layouts.
+*/
 
 /* Sidebar shell */
 .eventSidebar {

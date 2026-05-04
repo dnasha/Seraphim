@@ -1,6 +1,6 @@
-/* NewsMap.module.css - map wrapper, MapLibre overrides, popups */
+/* NewsMap.module.css - Map wrapper, MapLibre overrides, and popup styling */
 
-/* Map wrapper */
+/* Map container and wrapper styles */
 .mapWrapper {
   flex: 1;
   position: relative;
@@ -13,7 +13,7 @@
   height: 100%;
 }
 
-/* MapLibre zoom controls - match settings button style */
+/* MapLibre zoom control overrides to match application theme */
 :global(.maplibregl-ctrl-group) {
   border: none !important;
   box-shadow: none !important;
@@ -49,7 +49,7 @@
   transform: scale(1.05);
 }
 
-/* Position zoom controls below settings gear */
+/* Positioning for zoom controls */
 :global(.maplibregl-ctrl-top-right) {
   top: 0;
   right: 0;
@@ -60,7 +60,7 @@
   margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
-/* Attribution control - Discrete string in bottom right */
+/* Discrete attribution control in the bottom right */
 :global(.maplibregl-ctrl-attrib) {
   background: transparent !important;
   border: none !important;
@@ -70,7 +70,6 @@
   line-height: 1.2 !important;
   color: var(--text-muted) !important;
   opacity: 0.45;
-  /* Sharp text outline */
   text-shadow: 
     -1px -1px 0 var(--surface),
      1px -1px 0 var(--surface),
@@ -100,13 +99,12 @@
   display: inline-block !important;
 }
 
-/* Hide button in non-compact mode */
 :global(.maplibregl-ctrl-attrib-button) {
   display: none !important;
 }
 
 
-/* Remove default MapLibre focus rings */
+/* Clean up default MapLibre focus states */
 :global(.maplibregl-ctrl button:focus),
 :global(.maplibregl-ctrl button:active),
 :global(.maplibregl-ctrl-attrib button:focus) {
@@ -114,12 +112,11 @@
   box-shadow: none !important;
 }
 
-/* Container background */
 :global(.maplibregl-map) {
   background: var(--surface-alt) !important;
 }
 
-/* Popup overrides */
+/* Custom popup container styles */
 :global(.news-popup-container) {
   z-index: 900;
 }
@@ -162,7 +159,7 @@
   transform: scale(1.2);
 }
 
-/* Inside popup */
+/* News popup internal layout */
 :global(.news-popup) {
   display: flex;
   flex-direction: column;
@@ -226,7 +223,7 @@
   opacity: 0.5;
 }
 
-/* Popup content */
+/* News popup content area */
 :global(.news-popup-content) {
   padding: 0 18px 16px;
   border-top: none;
@@ -274,7 +271,7 @@
   opacity: 0.8;
 }
 
-/* Skeleton shimmer */
+/* Skeleton shimmer animation for loading states */
 @keyframes popup-shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
@@ -308,7 +305,7 @@
   opacity: 0.8;
 }
 
-/* Responsive */
+/* Responsive adjustments for mobile devices */
 @media (max-width: 860px) {
   :global(.news-popup) {
     width: calc(100vw - 48px);
@@ -324,3 +321,4 @@
     margin-top: calc(38px + 12px + 8px) !important;
   }
 }
+

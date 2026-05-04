@@ -1,10 +1,12 @@
+/*
+RSS feed integration for news sources and Reddit subreddits.
+Provides concurrent fetching and parsing of feeds with robust
+image extraction and SSL tolerance for legacy sources.
+*/
+
 import Parser from 'rss-parser';
 import { Agent } from 'undici';
 import { NewsItem } from './types';
-
-/**
- * RSS feed integration for news sources and Reddit subreddits.
- */
 
 const parser = new Parser({
     timeout: 5000,
@@ -19,6 +21,7 @@ const parser = new Parser({
 
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 
+/* Fetches and parses a Reddit subreddit RSS feed */
 export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
@@ -51,6 +54,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
     }
 }
 
+/* Fetches all configured Reddit feeds concurrently */
 export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     const results = await Promise.allSettled(
         REDDIT_SOURCES.map(source => fetchRedditFeed(source))
@@ -62,9 +66,10 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
     return items;
 }
 
-/**
- * Extracts the first available image URL from various common RSS/MediaRSS fields.
- */
+/*
+Extracts the first available image URL from various common RSS/MediaRSS fields
+including content, thumbnails, and enclosures.
+*/
 function extractImageUrl(item: Record<string, unknown>): string | undefined {
     if (item['media:content'] && typeof item['media:content'] === 'object') {
         const media = item['media:content'] as Record<string, unknown>;
@@ -88,8 +93,12 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 2500; // 2.5 seconds to prevent bottlenecks
+const FEED_TIMEOUT_MS = 2500;
 
+/*
+Fetches and parses a single standard RSS feed.
+Uses a custom dispatcher to allow insecure connections for legacy news sources.
+*/
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
@@ -127,6 +136,7 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     }
 }
 
+/* Fetches all configured RSS feeds concurrently */
 export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
     const rssResults = await Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source)));
 
@@ -142,6 +152,7 @@ export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
     );
 }
 
+/* Fetches RSS feeds for a specific category */
 export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
     const sources = RSS_SOURCES.filter(s => s.category === category);
 
@@ -160,3 +171,4 @@ export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> 
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 }
+

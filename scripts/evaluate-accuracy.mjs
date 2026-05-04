@@ -1,8 +1,9 @@
 /*
 Seraphim Geocoding Accuracy Validator
-Compares current extraction results against a hand-graded ground truth dataset.
+Compares current extraction results against a hand-graded ground truth dataset
+to identify regressions and evaluate overall engine performance.
 
-Run: npx tsx scripts/evaluate-accuracy.mjs
+Usage: npx tsx scripts/evaluate-accuracy.mjs
 */
 
 import fs from 'fs';
@@ -11,6 +12,10 @@ import { performance } from 'perf_hooks';
 const GRADED_RESULTS_PATH = 'scripts/results/graded-results.json';
 const FAILURES_PATH = 'scripts/results/accuracy-failures.txt';
 
+/*
+Normalizes a location name or coordinate value for consistent comparison.
+Handles null/undefined and string representations of 'null'.
+*/
 function normalize(val) {
   if (val === null || val === undefined) return null;
   if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
@@ -28,7 +33,7 @@ async function run() {
       return;
     }
 
-    // parse the hand-graded results
+    // Parse the hand-graded results
     const gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
 
     let passCount = 0;
@@ -45,7 +50,7 @@ async function run() {
         : item.expected_location;
       const normExpected = normalize(rawExpected);
       
-      // skip items with "ignore" or "default" in the expected notes
+      // Skip items with 'ignore' or 'default' in the expected notes
       if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
         skippedCount++;
         continue;
@@ -53,13 +58,15 @@ async function run() {
 
       totalCount++;
 
-      // live rerun logic
-      // replicate the logic in extractLocation
+      /*
+      Live rerun logic: Replicate the logic in extractLocation to determine
+      the actual location based on current heuristics.
+      */
       const ext = extractLocation(item.title, item.description || '');
       let placeName = ext.match;
       const candidates = ext.candidates;
 
-      // determine actual location based on current logic
+      // Determine actual location based on current logic
       let actualLocationFullName = null;
       if (placeName) {
         const geo = await geocodeLocation(placeName);
@@ -96,12 +103,12 @@ async function run() {
 
       let isCorrect = false;
       if (isApproved) {
-        // don't care about approved entries
+        // If already approved, check if current engine still matches or is null
         if (normActual === null || evalActual === evalExpected) {
           isCorrect = true;
         }
       } else {
-        // for denied/manual entries, require an exact match
+        // For denied or manual entries, require an exact match
         if (evalActual === evalExpected) {
           isCorrect = true;
         }
@@ -134,7 +141,7 @@ async function run() {
     const falsePosCount = failures.filter(f => f.actual && !f.expected).length;
     
 
-    // output results
+    // Output results to console
     console.log(`Accuracy Report:`);
     console.log(`================`);
     console.log(`Pass Count:     ${passCount} / ${totalCount}`);
@@ -163,7 +170,7 @@ async function run() {
         console.log(`... and ${failures.length - 10} more failures.`);
       }
 
-      // write all failures to a file for complete inspection
+      // Write all failures to a file for complete inspection
       const failureOutput = failures.map((f) => {
         const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
         const indentedDesc = f.description ? f.description.replace(/\n/g, '\n                ') : 'null';
@@ -182,3 +189,4 @@ async function run() {
 }
 
 run();
+

@@ -1,3 +1,9 @@
+/*
+Main Map component for the Seraphim OSINT aggregator.
+Renders an interactive map using MapLibre GL JS, handles news item clustering,
+popups, overlays, and camera animations.
+*/
+
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
@@ -48,16 +54,14 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Track the last selection we flew to, so re-renders from description loading
-    // don't repeatedly fire the camera animation.
+    // Track the last selection to prevent redundant camera animations during re-renders.
     const lastFlownSelectionRef = useRef<string | null>(null);
     const lastFlownVersionRef = useRef(0);
 
-    // Holds the latest GeoJSON so we can push it after a style reload.
+    // Cache for GeoJSON data to restore it after map style reloads.
     const pendingGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
 
-    // Guard: when we programmatically remove the popup during flyTo, the popup's
-    // 'close' event fires. This flag prevents it from deselecting the item.
+    // Guard to prevent deselecting items when the popup is programmatically removed during flyTo.
     const isFlyingRef = useRef(false);
 
     useEffect(() => { onBoundsChangeRef.current = onBoundsChange; }, [onBoundsChange]);
@@ -68,6 +72,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
     const geoItems = useMemo(() => items.filter(i => i.latitude != null && i.longitude != null), [items]);
 
+    // Emits the current map bounds with a debounce to avoid excessive API calls.
     const emitBounds = useCallback((map: maplibregl.Map) => {
         if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
         boundsDebounceRef.current = setTimeout(() => {
@@ -84,10 +89,9 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }, 150);
     }, []);
 
-    // Initialize icons, sources, and layers on style load.
+    // Registers icons, sources, and layers. Called on map initialization and style changes.
     const addSourcesAndLayers = useCallback(async (map: maplibregl.Map) => {
-        // 1. Register category icons
-        // 1. Register category icons (idempotent and async-safe)
+        // Register category icons (idempotent and async-safe)
         const iconsToLoad = CATEGORIES.flatMap(cat => [
             { name: `${cat}_inactive`, active: false, cat },
             { name: `${cat}_active`, active: true, cat }
@@ -101,12 +105,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             
             for (const { name, img } of loaded) {
                 if (!map.hasImage(name)) {
-                    try { map.addImage(name, img); } catch { /* ignore race-condition errors */ }
+                    try { map.addImage(name, img); } catch { /* ignore race-condition errors if style reloaded during load */ }
                 }
             }
         }
 
-        // 2. GeoJSON source (with MapLibre client-side clustering)
+        // Configure GeoJSON source with client-side clustering.
         if (!map.getSource('news-events')) {
             map.addSource('news-events', {
                 type: 'geojson',
@@ -120,7 +124,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 3. Individual pins - inactive
+        // Layer for inactive individual news pins.
         if (!map.getLayer('unclustered-point')) {
             map.addLayer({
                 id: 'unclustered-point',
@@ -145,7 +149,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 4. Individual pins - active (selected)
+        // Layer for the currently selected news pin.
         if (!map.getLayer('unclustered-point-active')) {
             map.addLayer({
                 id: 'unclustered-point-active',
@@ -170,7 +174,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 5. Cluster circles (visible at all zooms, rendered ON TOP of individual pins)
+        // Circle layer for clustered news items.
         if (!map.getLayer('clusters-circle')) {
             map.addLayer({
                 id: 'clusters-circle',
@@ -215,7 +219,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 6. Cluster count labels
+        // Numeric labels for news clusters.
         if (!map.getLayer('clusters-count')) {
             map.addLayer({
                 id: 'clusters-count',
@@ -223,7 +227,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                 source: 'news-events',
                 filter: ['any', ['has', 'point_count'], ['>', ['coalesce', ['get', 'eventCount'], 0], 1]],
                 layout: {
-                    // Lower sort key = higher priority. Negative count gives large clusters priority.
                     'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount'], 0]],
                     'text-field': ['to-string', ['coalesce', ['get', 'summedEventCount'], ['get', 'eventCount']]],
                     'text-size': 12,
@@ -238,7 +241,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             });
         }
 
-        // 7. Live Overlays
+        // USGS Earthquake live overlay.
         if (!map.getSource('overlay-usgs')) {
             map.addSource('overlay-usgs', {
                 type: 'geojson',
@@ -266,11 +269,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             }, 'clusters-circle');
         }
 
+        // NOAA Weather Radar live overlay.
         if (!map.getSource('overlay-noaa')) {
             map.addSource('overlay-noaa', {
                 type: 'raster',
                 tiles: [
-                    'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'
+                    'https://mesonet.agron.iastate. Iowa State.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'
                 ],
                 tileSize: 256
             });
@@ -285,6 +289,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             }, 'clusters-circle');
         }
 
+        // NASA EONET (Disasters) live overlay.
         if (!map.getSource('overlay-eonet')) {
             map.addSource('overlay-eonet', {
                 type: 'geojson',
@@ -307,21 +312,18 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
     }, []);
 
-    // Initialize map
+    // Effect to initialize the map and wire up event listeners.
     useEffect(() => {
         if (!containerRef.current || mapRef.current) return;
 
-        // Calculate initial zoom to fit the world (Alaska to NZ) based on screen width.
+        // Calculate initial zoom to fit a broad geographic area based on screen width.
         const getInitialZoom = () => {
             const width = window.innerWidth;
             const isMobile = width <= 860;
             const mapWidth = isMobile ? width : width - 360;
             
-            // For desktop, scale dynamically. For mobile, use a fixed sane baseline.
             if (isMobile) return 1.3;
             
-            // Baseline: 1.6 zoom for a 1080p-ish map width (1560px).
-            // This formula ensures the geographic area covered remains consistent.
             return Math.max(1.0, 1.6 + Math.log2(mapWidth / 1560));
         };
         
@@ -347,13 +349,13 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         });
 
         popupRef.current.on('close', () => {
-            // Don't deselect if we programmatically removed the popup during a flyTo
+            // Avoid deselection if the popup was removed programmatically during an animation.
             if (!isFlyingRef.current) {
                 onSelectItemRef.current(null);
             }
         });
 
-        // Re-initialize layers after style load or setStyle calls.
+        // Handles layer re-initialization after the map style is loaded.
         map.on('style.load', () => {
             addSourcesAndLayers(map).then(() => {
                 if (!eventsWiredRef.current) {
@@ -379,7 +381,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                                 zoom
                             });
                         } else {
-                            // Server-side cluster - just zoom in
+                            // Zoom in if it's a server-side cluster.
                             map.easeTo({
                                 center: features[0].geometry.type === 'Point' ? features[0].geometry.coordinates as [number, number] : undefined,
                                 zoom: map.getZoom() + 2
@@ -387,6 +389,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         }
                     });
 
+                    // Cursor feedback for interactive layers.
                     for (const layer of ['clusters-circle', 'unclustered-point', 'unclustered-point-active']) {
                         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
                         map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
@@ -407,21 +410,19 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Trigger initial fetch when pins toggled
+    // Sync bounds when individual pins are toggled.
     useEffect(() => {
         if (mapReady && mapRef.current) emitBounds(mapRef.current);
     }, [forceIndividualPins, mapReady, emitBounds]);
 
-    // Consolidated effect for style and clustering toggles.
-    // Toggling clustering currently requires a style reload to force source re-initialization.
+    // Handles map style and clustering toggle updates.
     useEffect(() => {
         if (!mapRef.current) return;
         setMapReady(false);
-        // Use diff: false to prevent "Unable to perform style diff" errors during rapid reloads.
         mapRef.current.setStyle(getMapLibreStyle(currentStyle), { diff: false });
     }, [currentStyle, forceIndividualPins]);
 
-    // Sync GeoJSON data
+    // Updates the GeoJSON source when news items change.
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
 
@@ -444,19 +445,18 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             }))
         };
 
-        // Cache so style reloads can restore the data
         pendingGeoJsonRef.current = geojson;
 
         const source = mapRef.current.getSource('news-events') as maplibregl.GeoJSONSource;
         if (source) source.setData(geojson);
     }, [geoItems, mapReady]);
 
-    // Handle Selection, FlyTo, and Popup
+    // Manages selection state, camera flyTo animations, and popup visibility.
     useEffect(() => {
         if (!mapReady || !mapRef.current || !popupRef.current) return;
         const map = mapRef.current;
         
-        // Update active/inactive layer filters
+        // Sync layer filters with current selection.
         if (map.getLayer('unclustered-point') && map.getLayer('unclustered-point-active')) {
             const activeId = selectedItemId || '';
             map.setFilter('unclustered-point', ['all',
@@ -518,7 +518,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     </div>
                 `;
 
-                // Only fly the camera if this is a genuinely new selection
+                // Only animate camera if selection is new or version changed.
                 const isNewSelection =
                     lastFlownSelectionRef.current !== selectedItemId ||
                     lastFlownVersionRef.current !== selectionVersion;
@@ -528,15 +528,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                     lastFlownVersionRef.current = selectionVersion;
 
                     const currentZoom = map.getZoom();
-                    // Lowered zoom for better geographic context (from 11 to 8.5)
                     const targetZoom = Math.max(currentZoom, 8.5);
 
-                    // Temporarily hide popup during camera transition.
                     isFlyingRef.current = true;
                     popupRef.current.remove();
 
                     map.once('moveend', () => {
-                        // Re-add popup after camera settles
                         if (popupRef.current) {
                             popupRef.current
                                 .setLngLat([item.longitude!, item.latitude!])
@@ -550,7 +547,6 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
                         center: [item.longitude!, item.latitude!],
                         zoom: targetZoom,
                         duration: 800,
-                        // Offset the center downwards by adding top padding to the camera view
                         padding: { top: 250, bottom: 0, left: 0, right: 0 }
                     });
                 }
@@ -564,7 +560,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
     }, [selectedItemId, selectionVersion, geoItems, mapReady]);
 
-    // Live-patch popup descriptions
+    // Live-updates popup descriptions when they finish loading.
     useEffect(() => {
         if (!mapReady || !popupRef.current || !popupRef.current.isOpen()) return;
         const el = popupRef.current.getElement();
@@ -582,7 +578,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         });
     }, [geoItems, mapReady]);
 
-    // Settings panel close-on-click-outside
+    // Handles closing the settings panel when clicking outside.
     useEffect(() => {
         if (!settingsOpen) return;
         const handleClick = (e: MouseEvent) => {
@@ -596,7 +592,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         };
     }, [settingsOpen]);
 
-    // Toggle overlays visibility
+    // Toggles visibility of active live overlays.
     useEffect(() => {
         if (!mapReady || !mapRef.current) return;
         const map = mapRef.current;
@@ -633,3 +629,4 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         </div>
     );
 }
+

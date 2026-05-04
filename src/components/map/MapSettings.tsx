@@ -1,10 +1,11 @@
+/*
+MapSettings component for the Seraphim OSINT dashboard.
+Provides a configuration panel to toggle map styles, clustering, and visibility filters.
+*/
+
 import React from 'react';
 import { MAP_STYLES } from './MapConstants';
 import styles from './MapSettings.module.css';
-
-/*
- * MapSettings component for toggling map styles and clustering.
- */
 
 interface MapSettingsProps {
     mapStyle: string;
@@ -45,6 +46,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
             {isOpen && (
                 <div className={styles.mapSettingsPanel}>
+                    {/* Map style selection grid */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Map Style</div>
                         <div className={styles.settingsStyleGrid}>
@@ -62,6 +64,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
                     <div className={styles.settingsDivider} />
 
+                    {/* Toggle for disabling client-side clustering */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
                         <label className={styles.settingsToggle}>
@@ -77,6 +80,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
                     <div className={styles.settingsDivider} />
 
+                    {/* Filter for showing only news items with geographic coordinates */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Visibility</div>
                         <label className={styles.settingsToggle}>
@@ -96,3 +100,4 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 };
 
 export default MapSettings;
+

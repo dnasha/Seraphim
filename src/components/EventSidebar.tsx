@@ -1,6 +1,9 @@
-"use client";
+'use client';
 
-/** Sidebar component for displaying and managing news item selection and detail expansion. */
+/*
+EventSidebar component displays a scrollable list of news events.
+Supports item selection, expansion for details, and mobile-responsive layouts.
+*/
 
 import { NewsItem } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
@@ -17,7 +20,7 @@ import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import ThemeToggle from "./ThemeToggle";
 import styles from "./EventSidebar.module.css";
 
-// Category accent colors for sidebar markers
+/* Category accent colors for sidebar markers */
 const CATEGORY_COLORS: Record<string, string> = {
   general: "#3b82f6",
   world: "#dc2626",
@@ -29,7 +32,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   health: "#7c3aed",
 };
 
-// Brand colors for source attribution badges
+/* Brand colors for source attribution badges */
 function getSourceStyle(sourceName: string): { bg: string; color: string } {
   const s = sourceName.toLowerCase();
   if (s.includes("(x)") || s.includes("twitter"))
@@ -52,7 +55,7 @@ function getSourceStyle(sourceName: string): { bg: string; color: string } {
   if (s.includes("nasa") || s.includes("nature"))
     return { bg: "#059669", color: "#ffffff" };
   if (s.includes("who ")) return { bg: "#7c3aed", color: "#ffffff" };
-  // mainstream media default
+  /* Fallback for general media sources */
   return { bg: "#3b82f6", color: "#ffffff" };
 }
 
@@ -62,7 +65,7 @@ interface EventSidebarProps {
   selectionVersion: number;
   onSelectItem: (id: string | null) => void;
   isLoading: boolean;
-  /** Lazy-fetch description on expansion */
+  /* Lazy-fetch description on expansion */
   onFetchDetails?: (id: string) => void;
   filterBar: ReactNode;
   isOpen: boolean;
@@ -101,7 +104,7 @@ export default function EventSidebar({
     return times.length > 0 ? Math.max(...times) : null;
   }, [items]);
 
-  // Scroll to selected item
+  /* Scroll to selected item */
   useEffect(() => {
     if (!selectedItemId) return;
     const index = items.findIndex((i) => i.id === selectedItemId);
@@ -114,7 +117,7 @@ export default function EventSidebar({
     }
   }, [selectedItemId, selectionVersion, items]);
 
-  // Swipe detection for mobile collapse
+  /* Swipe detection for mobile collapse */
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
@@ -132,7 +135,7 @@ export default function EventSidebar({
     const deltaX = touchStartX.current - touchEndX;
     const deltaY = Math.abs(touchStartY.current - touchEndY);
 
-    // Threshold: 60px left swipe, and movement must be primarily horizontal
+    /* Threshold: 60px left swipe; movement must be primarily horizontal */
     if (deltaX > 60 && deltaY < 50 && isOpen) {
       onToggleSidebar();
     }
@@ -145,34 +148,34 @@ export default function EventSidebar({
     (item: NewsItem) => {
       const hasGeo = item.latitude != null;
 
-      // Viewport check for mobile-specific interactions
+      /* Viewport check for mobile-specific interactions */
       const isMobile = () => window.innerWidth < 860;
 
       if (hasGeo) {
-        // Mapped item selection
+        /* Mapped item selection */
         const isSelected = selectedItemId === item.id;
         onSelectItem(isSelected ? null : item.id);
 
-        // if selecting a mapped item, collapse any unmapped expansion
+        /* If selecting a mapped item, collapse any unmapped expansion */
         if (!isSelected) {
           setExpandedId(null);
-          // on mobile, close the sidebar so the map is fully visible
+          /* On mobile, close the sidebar so the map is fully visible */
           if (isMobile()) {
             onToggleSidebar();
           }
         }
       } else {
-        // Unmapped item expansion
+        /* Unmapped item expansion */
         const isCurrentlyExpanded = expandedId === item.id;
         const nextExpanded = isCurrentlyExpanded ? null : item.id;
         setExpandedId(nextExpanded);
 
-        // Fetches description if not already cached (empty string indicates loaded but blank)
+        /* Fetches description if not already cached; empty string indicates loaded but blank */
         if (nextExpanded && item.description === undefined) {
           onFetchDetails?.(item.id);
         }
 
-        // if expanding an unmapped item, deselect any mapped item
+        /* If expanding an unmapped item, deselect any mapped item */
         if (!isCurrentlyExpanded) {
           onSelectItem(null);
         }
@@ -198,7 +201,7 @@ export default function EventSidebar({
       }
 
       return (
-        // Wrapper for Virtuoso items with gutter padding
+        /* Wrapper for Virtuoso items with gutter padding */
         <div
           style={{
             paddingBottom: "6px",
@@ -209,7 +212,7 @@ export default function EventSidebar({
         >
           <div
             key={item.id}
-            // Selection and layout state classes
+            /* Selection and layout state classes */
             className={[
               styles.eventCard,
               isSelected ? styles.eventCardActive : "",
@@ -244,7 +247,7 @@ export default function EventSidebar({
                     src={item.imageUrl}
                     alt=""
                     loading="lazy"
-                    // Avoid 403 errors from sources that block hotlinking
+                    /* Avoid 403 errors from sources that block hotlinking */
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       const img = e.target as HTMLImageElement;
@@ -350,7 +353,7 @@ export default function EventSidebar({
           </div>
         </div>
       );
-      // Re-binds callback when selection or expansion state changes
+      /* Re-binds callback when selection or expansion state changes */
     },
     [selectedItemId, expandedId, handleCardClick],
   );

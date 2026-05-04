@@ -1,3 +1,8 @@
+/*
+MapActionTools component for managing environmental overlays.
+Provides a menu to toggle live data layers such as earthquakes, weather, and disasters.
+*/
+
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './MapActionTools.module.css';
 
@@ -13,6 +18,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
+    // Effect to handle closing the overlay menu when clicking outside of it.
     useEffect(() => {
         if (!overlayMenuOpen) return;
         const handleClick = (e: MouseEvent) => {
@@ -79,3 +85,4 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
 };
 
 export default MapActionTools;
+

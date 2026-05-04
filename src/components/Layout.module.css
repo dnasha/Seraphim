@@ -1,4 +1,7 @@
-/* Layout.module.css — app shell, main content, top actions, expand/collapse button */
+/* 
+Layout.module.css
+Styles for the main application shell, content area, and top-level action buttons.
+*/
 
 .appLayout {
   display: flex;
