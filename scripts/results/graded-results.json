@@ -122,9 +122,9 @@
   {
     "db_id": "dea850f3-f428-4832-bc91-fa74fdd26974",
     "db_location": {
-      "displayName": "China",
-      "lat": 35.712544532638,
-      "lon": 104.335118041523
+      "displayName": "Philippines",
+      "lat": 12.88,
+      "lon": 121.77
     },
     "description": "After nearly four years of bilateral tensions, Beijing and Manila have signalled an intent to improve ties, but analysts say domestic and geopolitical pressures could limit how long the thaw lasts.",
     "engine_result": {
@@ -423,15 +423,15 @@
   {
     "db_id": "eb418ab5-03a7-46e6-8c9b-372784810f53",
     "db_location": {
-      "displayName": "Real",
-      "lat": 41.56,
-      "lon": -8.44
+      "displayName": "Madrid",
+      "lat": 40.4168,
+      "lon": -3.7038
     },
     "description": "Two goals by Vinicius Jr allowed Madrid to remain in title contention with Barcelona ahead of El Clasico next Sunday.",
     "engine_result": {
-      "displayName": "Barcelona",
-      "lat": 41.39,
-      "lon": 2.16
+      "displayName": "Madrid",
+      "lat": 40.41,
+      "lon": -3.7
     },
     "found_candidates": [
       "Barcelona",
@@ -468,9 +468,9 @@
   {
     "db_id": "e21ed6cd-8227-4922-857a-4761fd018cb9",
     "db_location": {
-      "displayName": "Strait Of Hormuz",
-      "lat": 26.57,
-      "lon": 56.25
+      "displayName": "Persian Gulf",
+      "lat": 26,
+      "lon": 51
     },
     "description": "Vessels have been largely unable to pass through the Strait of Hormuz for months, disrupting key supply chains.",
     "engine_result": {
@@ -677,9 +677,9 @@
   {
     "db_id": "e882400f-07b6-4a4d-b2bb-683fab8985a3",
     "db_location": {
-      "displayName": "Ukraine",
-      "lat": 48.232544532638,
-      "lon": 31.3051180415231
+      "displayName": "Kostyantynivka",
+      "lat": 48.52,
+      "lon": 37.7
     },
     "description": "submitted by    /u/GermanDronePilot  \n [link]   [comments]",
     "engine_result": {
@@ -765,7 +765,11 @@
   },
   {
     "db_id": "dea94889-8a3f-4c54-9a3e-2bf8677781ab",
-    "db_location": null,
+    "db_location": {
+      "displayName": "Amazon Rainforest",
+      "lat": -3.46,
+      "lon": -62.21
+    },
     "description": "submitted by    /u/Only-Job-help  \n [link]   [comments]",
     "engine_result": {
       "displayName": "Amazon Rainforest",
@@ -979,9 +983,9 @@
   {
     "db_id": "15ad9227-ca6a-4c91-9765-d7b5d97ac461",
     "db_location": {
-      "displayName": "Tehran",
-      "lat": 35.69,
-      "lon": 51.42
+      "displayName": "Strait Of Hormuz",
+      "lat": 26.57,
+      "lon": 56.25
     },
     "description": "Iran says the Strait of Hormuz will never return to the status quo that existed before the US-Israel war on Tehran.",
     "engine_result": {
@@ -1051,11 +1055,10 @@
     "graded_status": "approved"
   },
   {
-    "db_id": "18674b81-b26f-4811-a6cf-65c58221040f",
     "db_location": {
-      "displayName": "Israel",
-      "lat": 31.05,
-      "lon": 34.85
+      "displayName": "Tiberias",
+      "lat": 32.79,
+      "lon": 35.53
     },
     "description": "Proposed boycott over immodest photos has led to backlash from northern city's deputy mayor, in latest instance of a mall being at the center of a Haredi-secular clash\nThe post ‘They see naked women’: Haredi leaders urge boycott of Tiberias mall over bikini ads appeared first on The Times of Israel.",
     "engine_result": {
@@ -1074,17 +1077,16 @@
     "graded_status": "approved"
   },
   {
-    "db_id": "2f9960d0-637e-421a-ab52-8f21e5f52894",
     "db_location": {
-      "displayName": "Hormuz",
-      "lat": 26.422544532638,
-      "lon": 56.3851180415231
+      "displayName": "Strait Of Hormuz",
+      "lat": 26.59,
+      "lon": 56
     },
     "description": "US president says any interference with operation, which will start on Monday, will 'have to be dealt with forcefully'.",
     "engine_result": {
       "displayName": "Hormuz",
-      "lat": 26.591788935686914,
-      "lon": 56.00095132547706
+      "lat": 26.59,
+      "lon": 56
     },
     "found_candidates": [
       "Hormuz",
@@ -1269,15 +1271,15 @@
   {
     "db_id": "7541f06b-d9d5-40f0-8183-f0959408b3d2",
     "db_location": {
-      "displayName": "Hormuz",
-      "lat": 26.57,
-      "lon": 56.25
+      "displayName": "Strait Of Hormuz",
+      "lat": 26.75,
+      "lon": 56.49
     },
     "description": "Trump says ships blocked in Hormuz to be freed on Monday\n\n    \nUS President Donald Trump says vessels stranded in the Strait of Hormuz will be allowed to leave from Monday morning.\nIn a post on Truth Social, Trump said he had instructed US officials to prioritise the safe passage of ships and their crews.\n“I have told my Representatives to inform them that we will use best efforts to get their Ships and Crews safely out of the Strait,” he said.\nTrump added that US representatives are engaged in “very positive discussions with the Country of Iran”, suggesting the talks could produce broader outcomes.\nHe described the move as a “humanitarian gesture on behalf of the United States, Middle Eastern Countries but, in particular, the Country of Iran”, noting that “many of these Ships are running low on food”.\nTrump also warned that any interference with the operation would be met with force. He said those who attempt to disrupt the effort “will have to be dealt with forcefully”.",
     "engine_result": {
       "displayName": "Hormuz",
-      "lat": 26.752628428702618,
-      "lon": 56.488006002087374
+      "lat": 26.75,
+      "lon": 56.49
     },
     "found_candidates": [
       "Hormuz",
@@ -1378,9 +1380,9 @@
   {
     "db_id": "060f8445-002d-4cd7-a83d-78575369e1c8",
     "db_location": {
-      "displayName": "Sweden",
-      "lat": 60.13,
-      "lon": 18.64
+      "displayName": "Baltic Sea",
+      "lat": 57,
+      "lon": 19
     },
     "description": "submitted by    /u/JohnHammond94  \n [link]   [comments]",
     "engine_result": {
@@ -1491,17 +1493,16 @@
     "graded_status": "approved"
   },
   {
-    "db_id": "141651a6-65bc-4712-8bc5-dc2c940976d6",
     "db_location": {
-      "displayName": "Eastern",
-      "lat": 6.09,
-      "lon": -0.26
+      "displayName": "United States",
+      "lat": 37.09,
+      "lon": -95.71
     },
     "description": "BREAKING: Trump:\n\nCountries from all over the World, almost all of which are not involved in the Middle Eastern dispute going on so visibly, and violently, for all to see, have asked the United States if we could help free up their Ships, which are locked up in the Strait of Hormuz, on something which they have absolutely nothing to do with — They are merely neutral and innocent bystanders!\n\nFor the good of Iran, the Middle East, and the United States, we have told these Countries that we will guide their Ships safely out of these restricted Waterways, so that they can freely and ably get on with their business.\n\nAgain, these are Ships from areas of the World that are not in any way involved with that which is currently taking place in the Middle East. I have told my Representatives to inform them that we will use best efforts to get their Ships and Crews safely out of the Strait. In all cases, they said they will not be returning until the area becomes safe for navigation, and everyth",
     "engine_result": {
       "displayName": "Strait Of Hormuz",
-      "lat": 26.907356578325153,
-      "lon": 56.03508015666127
+      "lat": 26.91,
+      "lon": 56.04
     },
     "found_candidates": [
       "Strait Of Hormuz",

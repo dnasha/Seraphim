@@ -18,13 +18,31 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function reClusterHistoricalData() {
-    console.log('[re-cluster] Starting historical story consolidation...');
+    console.log('[re-cluster] Initializing historical story consolidation...');
+
+    const startTime = Date.now();
+    
+    // Step 0: Get total count for progress tracking
+    const { count: totalEvents, error: countErr } = await supabase
+        .from('events')
+        .select('*', { count: 'exact', head: true });
+
+    if (countErr) {
+        console.error('[re-cluster] Failed to fetch total event count:', countErr.message);
+        process.exit(1);
+    }
+
+    console.log(`[re-cluster] Total events to analyze: ${totalEvents?.toLocaleString()}`);
 
     const processedIds = new Set<string>();
-    let mergeCount = 0;
-    let lastDate = new Date().toISOString();
+    let totalProcessed = 0;
+    let totalMerges = 0;
+    let totalDeletes = 0;
+    let lastDate = process.env.START_DATE || new Date().toISOString();
 
     while (true) {
+        const batchStartMs = Date.now();
+        
         /* 
            Step 1: Fetch a batch of events.
            We use a sliding window on published_at to safely paginate the entire DB.
@@ -37,16 +55,27 @@ async function reClusterHistoricalData() {
             .limit(500);
 
         if (fetchError) {
-            console.error('Fetch error:', fetchError);
+            console.error('[re-cluster] Fetch error:', fetchError);
             break;
         }
 
         if (!events || events.length === 0) {
-            console.log('[re-cluster] Reached the end of the archive.');
+            console.log('[re-cluster] SUCCESS: Reached the end of the archive.');
             break;
         }
 
-        console.log(`[re-cluster] Processing batch of ${events.length} events (older than ${lastDate})...`);
+        // Progress Calculation
+        totalProcessed += events.length;
+        const progressPercent = ((totalProcessed / (totalEvents || 1)) * 100).toFixed(2);
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        const itemsPerSec = totalProcessed / elapsedSec;
+        const remainingItems = (totalEvents || 0) - totalProcessed;
+        const etaMin = remainingItems > 0 ? (remainingItems / itemsPerSec / 60).toFixed(1) : '0';
+
+        console.log(`\n[re-cluster] --- Batch Progress: ${progressPercent}% (${totalProcessed.toLocaleString()} / ${totalEvents?.toLocaleString()}) ---`);
+        console.log(`[re-cluster] Batch: ${events.length} items | Speed: ${itemsPerSec.toFixed(1)} items/s | ETA: ${etaMin}m`);
+        console.log(`[re-cluster] Date Window: ${lastDate} -> ${events[events.length - 1].published_at}`);
+        
         lastDate = events[events.length - 1].published_at;
 
         const idsToDelete: string[] = [];
@@ -65,142 +94,177 @@ async function reClusterHistoricalData() {
         }
         const masterUpdates: MasterUpdate[] = [];
 
-        for (const event of events) {
-            if (processedIds.has(event.id)) continue;
-            if (!event.embedding) continue;
+        const CONCURRENCY = 50;
+        const eventMap = new Map(events.map(e => [e.id, e]));
 
-        const embedding = typeof event.embedding === 'string' ? JSON.parse(event.embedding) : event.embedding;
-        
-        /* 
-           Step 2: Find potential matches in the database using semantic search.
-           We'll look for events within a 7-day window of this one to keep it logical.
-        */
-        const windowStart = new Date(new Date(event.published_at).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        for (let i = 0; i < events.length; i += CONCURRENCY) {
+            const chunk = events.slice(i, i + CONCURRENCY);
+            
+            // Step 2a: Run vector searches in parallel for the chunk
+            const matchPromises = chunk.map(async (event) => {
+                if (processedIds.has(event.id) || !event.embedding) return null;
+                
+                const embedding = typeof event.embedding === 'string' ? JSON.parse(event.embedding) : event.embedding;
+                const windowStart = new Date(new Date(event.published_at).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        const { data: matches, error: matchError } = await supabase
-            .rpc('match_events', {
-                query_embedding: embedding,
-                match_threshold: SIMILARITY_THRESHOLD_PROXIMITY, // Lower bound for filtering
-                match_count: 10,
-                p_since: windowStart
+                const { data: matches, error } = await supabase
+                    .rpc('match_events', {
+                        query_embedding: embedding,
+                        match_threshold: SIMILARITY_THRESHOLD_PROXIMITY,
+                        match_count: 10,
+                        p_since: windowStart
+                    });
+
+                if (error) {
+                    console.error('[re-cluster] Match RPC error:', error.message);
+                    return null;
+                }
+                return { event, matches: matches || [] };
             });
 
-        if (matchError) {
-            console.error('Match error:', matchError);
-            continue;
-        }
+            const chunkResults = await Promise.all(matchPromises);
 
-        const currentSources = event.sources || [{
-            name: event.source,
-            url: event.url,
-            source_type: event.source_type,
-            discovered_at: event.published_at
-        }];
+            // Step 2b: Bulk fetch missing matches
+            const missingIds = new Set<string>();
+            for (const res of chunkResults) {
+                if (!res) continue;
+                for (const m of res.matches) {
+                    if (m.id !== res.event.id && !eventMap.has(m.id) && !processedIds.has(m.id)) {
+                        missingIds.add(m.id);
+                    }
+                }
+            }
 
-        for (const match of (matches ?? [])) {
-            if (match.id === event.id || processedIds.has(match.id)) continue;
-
-            // Fetch full match data for coordinate check (from memory if possible, else DB)
-            let matchedEvent = events!.find(e => e.id === match.id);
-            
-            if (!matchedEvent) {
-                const { data } = await supabase
+            if (missingIds.size > 0) {
+                const { data: missingData } = await supabase
                     .from('events')
                     .select('id, title, url, source, source_type, latitude, longitude, description, credibility_tier, published_at, embedding, sources')
-                    .eq('id', match.id)
-                    .single();
-                if (data) matchedEvent = data;
-            }
-
-            if (!matchedEvent) continue;
-
-            let shouldMerge = false;
-
-            if (match.similarity >= SIMILARITY_THRESHOLD_STRICT) {
-                shouldMerge = true;
-            } else if (match.similarity >= SIMILARITY_THRESHOLD_PROXIMITY && event.latitude && event.longitude && matchedEvent.latitude && matchedEvent.longitude) {
-                const dist = calculateDistance(event.latitude, event.longitude, matchedEvent.latitude, matchedEvent.longitude);
-                if (dist <= MAX_MERGE_DISTANCE_KM) {
-                    shouldMerge = true;
-                }
-            }
-
-            if (shouldMerge) {
-                console.log(`[re-cluster] Merging: "${event.title.slice(0, 30)}..." + "${matchedEvent.title.slice(0, 30)}..." (Sim: ${match.similarity.toFixed(2)})`);
+                    .in('id', Array.from(missingIds));
                 
-                // Smart Selection: Is the incoming match "better" than our current master?
-                const currentTier = event.credibility_tier || 3;
-                const matchTier = matchedEvent.credibility_tier || 3;
-                
-                let isBetter = false;
-                if (matchTier < currentTier) {
-                    isBetter = true;
-                } else if (matchTier === currentTier) {
-                    const currentLen = (event.description?.length || 0) + (event.title?.length || 0);
-                    const matchLen = (matchedEvent.description?.length || 0) + (matchedEvent.title?.length || 0);
-                    if (matchLen > currentLen) isBetter = true;
+                if (missingData) {
+                    for (const d of missingData) {
+                        eventMap.set(d.id, d);
+                    }
                 }
-
-                if (isBetter) {
-                    event.title = matchedEvent.title;
-                    event.description = matchedEvent.description;
-                    event.source = matchedEvent.source;
-                    event.url = matchedEvent.url;
-                    event.credibility_tier = matchedEvent.credibility_tier;
-                    event.published_at = matchedEvent.published_at; // Keep most authoritative date
-                }
-
-                const matchSource = {
-                    name: matchedEvent.source,
-                    url: matchedEvent.url,
-                    source_type: matchedEvent.source_type,
-                    discovered_at: matchedEvent.published_at
-                };
-
-                // Add to current sources if URL is unique
-                if (!currentSources.some((s: { url: string }) => s.url === matchSource.url)) {
-                    currentSources.push(matchSource);
-                }
-
-                // Queue the duplicate for deletion
-                idsToDelete.push(matchedEvent.id);
-                processedIds.add(matchedEvent.id);
-                mergeCount++;
             }
-        }
 
-        // Update the "master" event with consolidated sources and improved content
-        if (currentSources.length > (event.sources?.length || 1) || processedIds.has(event.id)) {
-            masterUpdates.push({
-                id: event.id,
-                data: {
-                    sources: currentSources,
-                    title: event.title,
-                    description: event.description,
-                    source: event.source,
+            // Step 2c: Process sequentially to preserve newer-absorbs-older logic
+            for (const res of chunkResults) {
+                if (!res) continue;
+                const { event, matches } = res;
+                if (processedIds.has(event.id)) continue;
+
+                const currentSources = event.sources || [{
+                    name: event.source,
                     url: event.url,
-                    credibility_tier: event.credibility_tier,
-                    published_at: event.published_at
+                    source_type: event.source_type,
+                    discovered_at: event.published_at
+                }];
+
+                for (const match of matches) {
+                    if (match.id === event.id || processedIds.has(match.id)) continue;
+
+                    const matchedEvent = eventMap.get(match.id);
+                    if (!matchedEvent) continue;
+
+                    let shouldMerge = false;
+
+                    const eventTime = new Date(event.published_at).getTime();
+                    const matchTime = new Date(matchedEvent.published_at).getTime();
+                    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+                    
+                    if (Math.abs(eventTime - matchTime) > sevenDays) {
+                        continue;
+                    }
+
+                    if (match.similarity >= SIMILARITY_THRESHOLD_STRICT) {
+                        shouldMerge = true;
+                    } else if (match.similarity >= SIMILARITY_THRESHOLD_PROXIMITY && 
+                               event.latitude !== null && event.longitude !== null && 
+                               matchedEvent.latitude !== null && matchedEvent.longitude !== null) {
+                        const dist = calculateDistance(event.latitude, event.longitude, matchedEvent.latitude, matchedEvent.longitude);
+                        if (dist <= MAX_MERGE_DISTANCE_KM) {
+                            shouldMerge = true;
+                        }
+                    }
+
+                    if (shouldMerge) {
+                        console.log(`[re-cluster] MERGE: "${event.title.slice(0, 40)}..." (Master) <-- "${matchedEvent.title.slice(0, 40)}..." (Sim: ${match.similarity.toFixed(2)})`);
+                        
+                        const currentTier = event.credibility_tier || 3;
+                        const matchTier = matchedEvent.credibility_tier || 3;
+                        
+                        let isBetter = false;
+                        if (matchTier < currentTier) {
+                            isBetter = true;
+                        } else if (matchTier === currentTier) {
+                            const currentLen = (event.description?.length || 0) + (event.title?.length || 0);
+                            const matchLen = (matchedEvent.description?.length || 0) + (matchedEvent.title?.length || 0);
+                            if (matchLen > currentLen) isBetter = true;
+                        }
+
+                        if (isBetter) {
+                            console.log(`[re-cluster]   └─ Content Win: Matched event has better ${matchTier < currentTier ? 'tier' : 'length'}. Updating Master.`);
+                            event.title = matchedEvent.title;
+                            event.description = matchedEvent.description;
+                            event.source = matchedEvent.source;
+                            event.url = matchedEvent.url;
+                            event.credibility_tier = matchedEvent.credibility_tier;
+                            event.published_at = matchedEvent.published_at;
+                        }
+
+                        const matchSources = matchedEvent.sources || [{
+                            name: matchedEvent.source,
+                            url: matchedEvent.url,
+                            source_type: matchedEvent.source_type,
+                            discovered_at: matchedEvent.published_at
+                        }];
+
+                        for (const s of matchSources) {
+                            if (!currentSources.some((cs: { url: string }) => cs.url === s.url)) {
+                                currentSources.push(s);
+                            }
+                        }
+
+                        idsToDelete.push(matchedEvent.id);
+                        processedIds.add(matchedEvent.id);
+                        totalMerges++;
+                        totalDeletes++;
+                    }
                 }
-            });
+
+                if (currentSources.length > (event.sources?.length || 1) || processedIds.has(event.id)) {
+                    masterUpdates.push({
+                        id: event.id,
+                        data: {
+                            sources: currentSources,
+                            title: event.title,
+                            description: event.description,
+                            source: event.source,
+                            url: event.url,
+                            credibility_tier: event.credibility_tier,
+                            published_at: event.published_at
+                        }
+                    });
+                }
+                
+                processedIds.add(event.id);
+            }
         }
-        
-        processedIds.add(event.id);
-    } // End of for (const event of events)
 
         // --- Execute Bulk DB Operations for the Batch ---
 
-        // 1. Flush bulk deletes
         if (idsToDelete.length > 0) {
             const DELETE_CHUNK_SIZE = 500;
             for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
                 const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
                 const { error: delErr } = await supabase.from('events').delete().in('id', chunk);
-                if (delErr) console.error('[re-cluster] Bulk delete error:', delErr.message);
+                if (delErr) {
+                    console.error('[re-cluster] Bulk delete error:', delErr.message);
+                }
             }
         }
 
-        // 2. Flush parallel updates
         if (masterUpdates.length > 0) {
             const UPDATE_CHUNK_SIZE = 50;
             for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
@@ -210,9 +274,16 @@ async function reClusterHistoricalData() {
                 ));
             }
         }
-    } // End of while (true)
-    
-    console.log(`[re-cluster] Done! Consolidated ${mergeCount} redundant pins into stories.`);
+
+        const batchElapsed = ((Date.now() - batchStartMs) / 1000).toFixed(1);
+        console.log(`[re-cluster] Batch Summary: ${idsToDelete.length} deletions, ${masterUpdates.length} updates | Time: ${batchElapsed}s`);
+    }
+
+    const totalElapsedMin = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+    console.log(`\n[re-cluster] COMPLETED in ${totalElapsedMin}m`);
+    console.log(`[re-cluster] Total Processed: ${totalProcessed.toLocaleString()}`);
+    console.log(`[re-cluster] Total Merges: ${totalMerges.toLocaleString()}`);
+    console.log(`[re-cluster] Total Deletes: ${totalDeletes.toLocaleString()}`);
 }
 
 reClusterHistoricalData();

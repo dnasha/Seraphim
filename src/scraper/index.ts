@@ -191,7 +191,9 @@ async function resolveStoryMerges(
                 shouldMerge = true;
             } 
             // Strategy 2: Proximity semantic (related text in same location)
-            else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY && event.latitude && event.longitude && candidate.latitude && candidate.longitude) {
+            else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY && 
+                     event.latitude != null && event.longitude != null && 
+                     candidate.latitude != null && candidate.longitude != null) {
                 const dist = calculateDistance(event.latitude, event.longitude, candidate.latitude, candidate.longitude);
                 if (dist <= MAX_MERGE_DISTANCE_KM) {
                     shouldMerge = true;

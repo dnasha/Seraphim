@@ -12,7 +12,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function backfillTiers() {
-    console.log('[re-tier] Starting credibility tier backfill...');
+    console.log('[re-tier] Starting credibility tier backfill (Bulk Source Strategy)...');
 
     // Create a master map of source names to tiers
     const tierMap = new Map<string, number>();
@@ -20,53 +20,52 @@ async function backfillTiers() {
         tierMap.set(s.name, s.credibility_tier);
     });
 
+    console.log(`[re-tier] Found ${tierMap.size} unique sources to verify.`);
+
     let totalUpdated = 0;
 
-    while (true) {
-        const { data, error } = await supabase
-            .from('events')
-            .select('id, source')
-            .is('credibility_tier', null)
-            .limit(1000);
-
-        if (error) {
-            console.error('Fetch error:', error);
-            break;
-        }
-
-        if (!data || data.length === 0) {
-            console.log('[re-tier] No more events found.');
-            break;
-        }
-
-        // Execute updates in parallel chunks to avoid connection limits while maximizing speed
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-            const chunk = data.slice(i, i + CHUNK_SIZE);
-            
-            const promises = chunk.map(event => {
-                const tier = tierMap.get(event.source) || 3;
-                return supabase
-                    .from('events')
-                    .update({ credibility_tier: tier })
-                    .eq('id', event.id);
-            });
-
-            const results = await Promise.all(promises);
-            
-            for (let j = 0; j < results.length; j++) {
-                if (results[j].error) {
-                    console.error(`Error updating ${chunk[j].id}:`, results[j].error);
-                } else {
-                    totalUpdated++;
-                }
-            }
-        }
+    for (const [sourceName, tier] of tierMap) {
+        let sourceUpdated = 0;
         
-        console.log(`[re-tier] Batch complete. Total updated so far: ${totalUpdated}`);
+        while (true) {
+            // Fetch a batch of IDs that need updating for this specific source
+            const { data, error: fetchErr } = await supabase
+                .from('events')
+                .select('id')
+                .eq('source', sourceName)
+                .neq('credibility_tier', tier)
+                .limit(100);
+
+            if (fetchErr) {
+                console.error(`[re-tier] Fetch error for "${sourceName}":`, fetchErr.message);
+                break;
+            }
+
+            if (!data || data.length === 0) break;
+
+            const ids = data.map(d => d.id);
+            
+            // Perform the update for just this batch of 500
+            const { error: updateErr } = await supabase
+                .from('events')
+                .update({ credibility_tier: tier })
+                .in('id', ids);
+
+            if (updateErr) {
+                console.error(`[re-tier] Update error for "${sourceName}":`, updateErr.message);
+                break;
+            }
+
+            sourceUpdated += data.length;
+            totalUpdated += data.length;
+        }
+
+        if (sourceUpdated > 0) {
+            console.log(`[re-tier] Updated ${sourceUpdated} events for "${sourceName}" to Tier ${tier}`);
+        }
     }
 
-    console.log(`[re-tier] Done! Updated a total of ${totalUpdated} events.`);
+    console.log(`[re-tier] Done! Successfully upgraded ${totalUpdated} events.`);
 }
 
 backfillTiers();
