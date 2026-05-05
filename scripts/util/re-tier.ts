@@ -39,18 +39,27 @@ async function backfillTiers() {
             break;
         }
 
-        for (const event of data) {
-            const tier = tierMap.get(event.source) || 3; // Default to Tier 3 if unknown
+        // Execute updates in parallel chunks to avoid connection limits while maximizing speed
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const chunk = data.slice(i, i + CHUNK_SIZE);
+            
+            const promises = chunk.map(event => {
+                const tier = tierMap.get(event.source) || 3;
+                return supabase
+                    .from('events')
+                    .update({ credibility_tier: tier })
+                    .eq('id', event.id);
+            });
 
-            const { error: updateError } = await supabase
-                .from('events')
-                .update({ credibility_tier: tier })
-                .eq('id', event.id);
-
-            if (updateError) {
-                console.error(`Error updating ${event.id}:`, updateError);
-            } else {
-                totalUpdated++;
+            const results = await Promise.all(promises);
+            
+            for (let j = 0; j < results.length; j++) {
+                if (results[j].error) {
+                    console.error(`Error updating ${chunk[j].id}:`, results[j].error);
+                } else {
+                    totalUpdated++;
+                }
             }
         }
         

@@ -5,6 +5,7 @@ import {
     SIMILARITY_THRESHOLD_PROXIMITY, 
     MAX_MERGE_DISTANCE_KM 
 } from '../../src/scraper/utils/vectorize';
+import type { DbEventSource } from '../../src/types';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,6 +48,22 @@ async function reClusterHistoricalData() {
 
         console.log(`[re-cluster] Processing batch of ${events.length} events (older than ${lastDate})...`);
         lastDate = events[events.length - 1].published_at;
+
+        const idsToDelete: string[] = [];
+        
+        interface MasterUpdate {
+            id: string;
+            data: {
+                sources: DbEventSource[];
+                title: string;
+                description: string | null;
+                source: string;
+                url: string;
+                credibility_tier: number;
+                published_at: string;
+            };
+        }
+        const masterUpdates: MasterUpdate[] = [];
 
         for (const event of events) {
             if (processedIds.has(event.id)) continue;
@@ -145,8 +162,8 @@ async function reClusterHistoricalData() {
                     currentSources.push(matchSource);
                 }
 
-                // Delete the duplicate
-                await supabase.from('events').delete().eq('id', matchedEvent.id);
+                // Queue the duplicate for deletion
+                idsToDelete.push(matchedEvent.id);
                 processedIds.add(matchedEvent.id);
                 mergeCount++;
             }
@@ -154,19 +171,45 @@ async function reClusterHistoricalData() {
 
         // Update the "master" event with consolidated sources and improved content
         if (currentSources.length > (event.sources?.length || 1) || processedIds.has(event.id)) {
-            await supabase.from('events').update({ 
-                sources: currentSources,
-                title: event.title,
-                description: event.description,
-                source: event.source,
-                url: event.url,
-                credibility_tier: event.credibility_tier,
-                published_at: event.published_at
-            }).eq('id', event.id);
+            masterUpdates.push({
+                id: event.id,
+                data: {
+                    sources: currentSources,
+                    title: event.title,
+                    description: event.description,
+                    source: event.source,
+                    url: event.url,
+                    credibility_tier: event.credibility_tier,
+                    published_at: event.published_at
+                }
+            });
         }
         
         processedIds.add(event.id);
     } // End of for (const event of events)
+
+        // --- Execute Bulk DB Operations for the Batch ---
+
+        // 1. Flush bulk deletes
+        if (idsToDelete.length > 0) {
+            const DELETE_CHUNK_SIZE = 500;
+            for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
+                const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
+                const { error: delErr } = await supabase.from('events').delete().in('id', chunk);
+                if (delErr) console.error('[re-cluster] Bulk delete error:', delErr.message);
+            }
+        }
+
+        // 2. Flush parallel updates
+        if (masterUpdates.length > 0) {
+            const UPDATE_CHUNK_SIZE = 50;
+            for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
+                const chunk = masterUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
+                await Promise.all(chunk.map(u => 
+                    supabase.from('events').update(u.data).eq('id', u.id)
+                ));
+            }
+        }
     } // End of while (true)
     
     console.log(`[re-cluster] Done! Consolidated ${mergeCount} redundant pins into stories.`);

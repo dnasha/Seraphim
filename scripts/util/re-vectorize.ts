@@ -21,7 +21,7 @@ dotenv.config();
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const BATCH_SIZE = parseInt(process.env.BATCH_SIZE ?? '100', 10);
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE ?? '200', 10);
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -51,10 +51,10 @@ async function run() {
     let processed = 0;
 
     while (true) {
-        /* Fetch a batch of events without embeddings */
+        /* Fetch a batch of events with all required columns to satisfy constraints during upsert */
         const { data: batch, error: fetchErr } = await supabase
             .from('events')
-            .select('id, title, description')
+            .select('id, title, url, source, source_type, published_at, description')
             .is('embedding', null)
             .order('published_at', { ascending: false })
             .limit(BATCH_SIZE);
@@ -73,17 +73,19 @@ async function run() {
         const texts = batch.map(e => buildEmbeddingText(e.title, e.description));
         const embeddings = await generateEmbeddings(texts);
 
-        /* Write embeddings back one at a time (safe for large datasets) */
-        for (let i = 0; i < batch.length; i++) {
-            const embeddingStr = `[${embeddings[i].join(',')}]`;
-            const { error: updateErr } = await supabase
-                .from('events')
-                .update({ embedding: embeddingStr })
-                .eq('id', batch[i].id);
+        /* Write embeddings back in one bulk operation, including required columns */
+        const updates = batch.map((item, i) => ({
+            ...item,
+            embedding: `[${embeddings[i].join(',')}]`
+        }));
 
-            if (updateErr) {
-                console.error(`[re-vectorize] Update failed for ${batch[i].id}:`, updateErr.message);
-            }
+        const { error: updateErr } = await supabase
+            .from('events')
+            .upsert(updates);
+
+        if (updateErr) {
+            console.error(`[re-vectorize] Bulk update failed:`, updateErr.message);
+            break;
         }
 
         processed += batch.length;

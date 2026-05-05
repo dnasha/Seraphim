@@ -277,18 +277,23 @@ async function applyMerges(
     }>
 ): Promise<number> {
     let updated = 0;
+    const mergeEntries = Array.from(merges.entries());
+    const CHUNK_SIZE = 50;
 
-    for (const [eventId, updateData] of merges) {
-        const { error } = await supabase
-            .from('events')
-            .update(updateData)
-            .eq('id', eventId);
-
-        if (error) {
-            console.error(`[scraper] Failed to merge sources into event ${eventId}:`, error.message);
-        } else {
-            updated++;
-        }
+    for (let i = 0; i < mergeEntries.length; i += CHUNK_SIZE) {
+        const chunk = mergeEntries.slice(i, i + CHUNK_SIZE);
+        const promises = chunk.map(([eventId, updateData]) => 
+            supabase.from('events').update(updateData).eq('id', eventId)
+        );
+        
+        const results = await Promise.all(promises);
+        results.forEach((res, idx) => {
+            if (res.error) {
+                console.error(`[scraper] Failed to merge sources into event ${chunk[idx][0]}:`, res.error.message);
+            } else {
+                updated++;
+            }
+        });
     }
 
     return updated;
@@ -336,20 +341,24 @@ async function run(): Promise<void> {
     const knownUrls = new Set<string>();
     const CHUNK_SIZE = 20;
     
+    // Fetch chunks in parallel
+    const chunkPromises = [];
     for (let i = 0; i < incomingUrls.length; i += CHUNK_SIZE) {
         const chunk = incomingUrls.slice(i, i + CHUNK_SIZE);
-        const { data, error } = await supabase
-            .from('events')
-            .select('url')
-            .in('url', chunk);
-            
-        if (error) {
-            console.error(`[scraper] Failed to pre-fetch chunk ${i / CHUNK_SIZE + 1}:`, error.message);
-            // Non-fatal: failures here mean the unique constraint will handle deduplication during upsert
-        } else if (data) {
-            data.forEach((r: { url: string }) => knownUrls.add(r.url));
-        }
+        chunkPromises.push(
+            supabase.from('events').select('url').in('url', chunk)
+        );
     }
+    
+    const results = await Promise.all(chunkPromises);
+    results.forEach((res, idx) => {
+        if (res.error) {
+            console.error(`[scraper] Failed to pre-fetch chunk ${idx + 1}:`, res.error.message);
+            // Non-fatal: failures here mean the unique constraint will handle deduplication during upsert
+        } else if (res.data) {
+            res.data.forEach((r: { url: string }) => knownUrls.add(r.url));
+        }
+    });
     
     console.log(`[scraper] Known URLs in DB: ${knownUrls.size}`);
 
