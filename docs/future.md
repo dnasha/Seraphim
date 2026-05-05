@@ -119,30 +119,48 @@ Everything below is implemented, merged, and working in the current codebase.
 
 _Goal: Shift from raw scraped links to coherent "stories" using semantic clustering, and future-proof the schema for advanced features without losing historical data._
 
-### 3.1 Schema Evolution (The "Story" Model)
+### 3.1 Schema Evolution (The "Story" Model) (Completed)
 
-- **Action**: Create a safe Supabase migration to upgrade the `events` table without downtime.
-- **New Columns**:
-  - `embedding vector(384)`: Stores semantic embeddings of `title + description` using `pgvector`. Will include an HNSW index (`CREATE INDEX ON events USING hnsw (embedding vector_cosine_ops)`) for fast similarity matching.
-  - `sources JSONB`: Replaces the strict 1:1 event-to-url mapping. Stores an array of `{ name, url, source_type, discovered_at }`. The original `url` column remains as the "lead" deduplication key for raw upserts.
-  - `impact_score INTEGER DEFAULT 0`: A pre-calculated score based on source credibility, unique source count, and keyword triggers.
-  - `credibility_tier INTEGER DEFAULT 3`: Tracks the highest credibility tier (1: Wire, 2: Curated OSINT, 3: Raw Social) present in the `sources` array.
-- **Tags**: Ensure the existing `tags JSONB` column is indexed and actively populated by NER models.
-- **UI Impact**: One pin per story instead of overlapping pins. Sidebar "Story Cards" show a primary headline with nested source favicons. Pin sizes scale with `impact_score`.
+- **Action**: Created a safe Supabase migration (`docs/phase_3_1_migration.sql`) to upgrade the `events` table without downtime.
+- **Implemented Changes**:
+  - `embedding vector(384)`: Added support for semantic embeddings via `pgvector`. Includes an HNSW index for fast similarity matching.
+  - `sources JSONB`: Replaced strict 1:1 mapping with a flexible array of `{ name, url, source_type, discovered_at }`.
+  - `impact_score INTEGER DEFAULT 0`: New field for story prioritization.
+  - `credibility_tier INTEGER DEFAULT 3`: Tracks source reliability (1: Wire, 2: Curated, 3: Raw).
+- **API & Type Safety**:
+  - Updated `get_clustered_events` RPC to aggregate and return these new fields.
+  - Synchronized `DbEvent` and `NewsItem` types.
+  - Updated `/api/news` to query the new fields in both clustered and raw modes.
+- **Future-Proofing**: Created `user_profiles`, `user_bookmarks`, and `user_geofences` tables in the migration to prepare for Phase 5.
+- **UI Impact**: The backend is now ready for "Story" cards and deduplicated pin rendering.
 
-### 3.2 Zero-Cost Vectorization Pipeline
+### 3.2 Zero-Cost Vectorization Pipeline (Completed)
 
-- **Action**: Implement semantic embedding generation directly in the Bun ingestion worker using `@huggingface/transformers`.
-- **How it works**: Runs the `all-MiniLM-L6-v2` ONNX model natively in JS using the CPU/WASM backend. No external API keys (OpenAI/Pinecone) or usage costs required.
-- **CI/CD Integration**: The GitHub Actions runner handles this perfectly. Model weights (~22MB) are cached using `actions/cache` to ensure the 30-minute cron jobs remain fast and free.
-- **Merge Logic**: Before upserting a new item, the worker calculates cosine similarity against events from the last 48 hours. If similarity is `> 0.85`, it appends the new source to the existing event's `sources` array instead of creating a new pin.
+- **Action**: Integrated semantic embedding generation directly into the Bun ingestion worker using `@huggingface/transformers`.
+- **Model**: `Xenova/all-MiniLM-L6-v2` (ONNX, fp32). Runs natively in JS via CPU/WASM backend. No external API keys or usage costs.
+- **Architecture**: Dual-signal merge strategy (Strict Semantic > 0.85 OR Proximity Semantic > 0.60 + < 50km). Optimized for minimal DB/worker strain via batching.
+- **CI/CD Integration**: Model weights cached on GitHub Actions for fast 30-minute cron runs.
 
-### 3.3 Data Renewal Tooling (`scripts/util/`)
+### 3.3 Data Renewal Tooling (`scripts/util/`) (Ready)
 
-- **Action**: Establish a suite of idempotent CLI scripts to safely re-process historical data when our algorithms improve.
-- **`remap-db-locations.ts` (Done)**: Re-runs `extractLocation` over all existing DB rows using the latest NLP dictionary, updating coordinates without destroying URLs or timestamps.
-- **`re-vectorize.ts`**: Runs locally to backfill embeddings for the historical archive. Essential for when the embedding model is first introduced or if we change dimensions in the future.
-- **`re-cluster.ts`**: Retroactively consolidates older, overlapping pre-Phase-3 events into the new `sources` JSONB array structure based on spatial/semantic distance.
+- **`remap-db-locations.ts`**: Re-runs `extractLocation` over all existing DB rows to refresh coordinates.
+- **`re-vectorize.ts`**: Backfills embeddings for all historical events.
+- **`re-cluster.ts`**: Consolidates overlapping historical events into the new `sources` JSONB array structure based on spatial/semantic distance.
+- **`re-tier.ts`**: Backfills `credibility_tier` for historical data based on updated `src/data/sources.ts` definitions.
+
+### 3.4 "Story" UI Experience (Next)
+
+- **Action**: Update the frontend to reflect the shift from individual links to aggregated stories.
+- **Map Interaction**: Update MapLibre popups to display a list of all sources for a story rather than just one URL. Add "Source Count" badges to individual pins.
+- **Sidebar Experience**: Update `EventSidebar` cards to show an array of source icons (e.g., BBC + Reuters + X) instead of a single source badge. Add "Follow the Story" expansion for timeline view.
+- **Credibility Integration**: Highlight "Tier 1" verified stories with distinct visual borders or badges to distinguish them from raw social feeds.
+
+### 3.5 Production Data Consolidation (Backfill)
+
+- **Action**: Execute the full suite of renewal tools in production to unify the database into the "Story" model.
+- **Step 1**: Run `re-vectorize.ts` to ensure 100% vector coverage.
+- **Step 2**: Run `re-tier.ts` to assign credibility scores to the archive.
+- **Step 3**: Run `re-cluster.ts` to merge thousands of redundant historical pins into coherent stories.
 
 ---
 

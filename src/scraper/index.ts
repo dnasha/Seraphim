@@ -17,7 +17,9 @@ Pipeline:
 2. Pre-fetch known URLs from database to avoid redundant processing.
 3. Filter out existing items.
 4. Geocode new items via the local NLP engine.
-5. Upsert events into Supabase using the URL as a conflict key.
+5. Generate semantic embeddings (all-MiniLM-L6-v2, local ONNX).
+6. Match against recent events — merge if similarity > 0.85 (Story model).
+7. Upsert new events and update merged stories in Supabase.
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -26,8 +28,17 @@ import { fetchGNews, fetchOSINTGNews } from './fetchers/gnews';
 import { fetchSocialFeeds } from './fetchers/social-feeds';
 import { enrichItemsWithLocation } from './fetchers/geocoding';
 import type { NewsItem } from '@/lib/types';
-import type { DbEvent } from '@/types';
+import type { DbEvent, DbEventSource } from '@/types';
 import { newsItemToDbEvent } from './utils/transforms';
+import {
+    generateEmbeddings,
+    buildEmbeddingText,
+    cosineSimilarity,
+    calculateDistance,
+    SIMILARITY_THRESHOLD_STRICT,
+    SIMILARITY_THRESHOLD_PROXIMITY,
+    MAX_MERGE_DISTANCE_KM,
+} from './utils/vectorize';
 
 /* Configuration */
 
@@ -44,7 +55,246 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
 
-/* Main pipeline execution */
+/* ─── Semantic Merge Logic ─── */
+
+/*
+Fetches recent events that already have embeddings from Supabase.
+Only pulls id, embedding, sources, latitude, and longitude.
+*/
+async function fetchRecentEmbeddings(): Promise<{
+    id: string;
+    embedding: number[];
+    sources: DbEventSource[];
+    latitude?: number;
+    longitude?: number;
+    title?: string;
+    description?: string;
+    credibility_tier?: number;
+    source?: string;
+    url?: string;
+}[]> {
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+    const { data, error } = await supabase
+        .from('events')
+        .select('id, embedding, sources, latitude, longitude, title, description, credibility_tier, source, url')
+        .not('embedding', 'is', null)
+        .gte('published_at', since);
+
+    if (error) {
+        console.error('[scraper] Failed to fetch recent embeddings:', error.message);
+        return [];
+    }
+
+    interface RecentEventRow {
+        id: string;
+        embedding: string | number[];
+        sources: DbEventSource[] | null;
+        latitude: number | null;
+        longitude: number | null;
+        title: string;
+        description: string;
+        credibility_tier: number;
+        source: string;
+        url: string;
+    }
+
+    const rows = (data ?? []) as unknown as RecentEventRow[];
+
+    return rows
+        .filter(r => r.embedding)
+        .map(r => ({
+            id: r.id,
+            embedding: typeof r.embedding === 'string'
+                ? JSON.parse(r.embedding)
+                : r.embedding,
+            sources: r.sources ?? [],
+            latitude: r.latitude ?? undefined,
+            longitude: r.longitude ?? undefined,
+            title: r.title,
+            description: r.description,
+            credibility_tier: r.credibility_tier,
+            source: r.source,
+            url: r.url,
+        }));
+}
+
+/*
+Applies the Story merge logic with Spatial gating:
+  1. Strict Match: Similarity > 0.85 (always merge)
+  2. Proximity Match: Similarity > 0.60 AND distance < 50km
+*/
+async function resolveStoryMerges(
+    dbEvents: DbEvent[],
+    enrichedItems: NewsItem[]
+): Promise<{
+    newEvents: DbEvent[];
+    merges: Map<string, { 
+        sources: DbEventSource[];
+        title?: string;
+        description?: string;
+        source?: string;
+        url?: string;
+        credibility_tier?: number;
+    }>;
+}> {
+    const newEvents: DbEvent[] = [];
+    const merges = new Map<string, { 
+        sources: DbEventSource[];
+        title?: string;
+        description?: string;
+        source?: string;
+        url?: string;
+        credibility_tier?: number;
+    }>();
+
+    if (dbEvents.length === 0) {
+        return { newEvents, merges };
+    }
+
+    console.log(`[vectorize] Generating embeddings for ${dbEvents.length} items...`);
+    const texts = enrichedItems.map(item => buildEmbeddingText(item.title, item.description));
+    const startMs = Date.now();
+
+    let embeddings: number[][];
+    try {
+        embeddings = await generateEmbeddings(texts);
+    } catch (err) {
+        console.error('[vectorize] Embedding generation failed:', err);
+        return { newEvents: dbEvents, merges };
+    }
+
+    console.log(`[vectorize] Embeddings generated in ${((Date.now() - startMs) / 1000).toFixed(1)}s`);
+
+    const candidates = await fetchRecentEmbeddings();
+    console.log(`[vectorize] ${candidates.length} recent candidates loaded for similarity matching`);
+
+    let mergeCount = 0;
+
+    for (let i = 0; i < dbEvents.length; i++) {
+        const event = dbEvents[i];
+        const embedding = embeddings[i];
+
+        event.embedding = `[${embedding.join(',')}]`;
+
+        /* Find best match among candidates */
+        let bestMatchId: string | null = null;
+        let highestSim = -1;
+
+        for (const candidate of candidates) {
+            const sim = cosineSimilarity(embedding, candidate.embedding);
+            
+            let shouldMerge = false;
+
+            // Strategy 1: Strict semantic (highly identical text)
+            if (sim >= SIMILARITY_THRESHOLD_STRICT) {
+                shouldMerge = true;
+            } 
+            // Strategy 2: Proximity semantic (related text in same location)
+            else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY && event.latitude && event.longitude && candidate.latitude && candidate.longitude) {
+                const dist = calculateDistance(event.latitude, event.longitude, candidate.latitude, candidate.longitude);
+                if (dist <= MAX_MERGE_DISTANCE_KM) {
+                    shouldMerge = true;
+                }
+            }
+
+            if (shouldMerge && sim > highestSim) {
+                highestSim = sim;
+                bestMatchId = candidate.id;
+            }
+        }
+
+        if (bestMatchId) {
+            const matchedCandidate = candidates.find(c => c.id === bestMatchId)!;
+            
+            // Smart Selection: If the NEW incoming item is higher quality, swap it into the master
+            let updateContent = false;
+            const currentTier = matchedCandidate.credibility_tier || 3;
+            const incomingTier = event.credibility_tier || 3;
+            
+            if (incomingTier < currentTier) {
+                updateContent = true;
+            } else if (incomingTier === currentTier) {
+                const currentLen = (matchedCandidate.description?.length || 0) + (matchedCandidate.title?.length || 0);
+                const incomingLen = (event.description?.length || 0) + (event.title?.length || 0);
+                if (incomingLen > currentLen) updateContent = true;
+            }
+
+            const newSource: DbEventSource = {
+                name: event.source,
+                url: event.url,
+                source_type: event.source_type,
+                discovered_at: new Date().toISOString(),
+            };
+
+            if (!matchedCandidate.sources.some(s => s.url === event.url)) {
+                if (merges.has(bestMatchId)) {
+                    const m = merges.get(bestMatchId)!;
+                    m.sources.push(newSource);
+                    if (updateContent) {
+                        m.title = event.title;
+                        m.description = event.description;
+                        m.source = event.source;
+                        m.url = event.url;
+                        m.credibility_tier = incomingTier;
+                    }
+                } else {
+                    merges.set(bestMatchId, {
+                        sources: [...matchedCandidate.sources, newSource],
+                        ...(updateContent ? {
+                            title: event.title,
+                            description: event.description,
+                            source: event.source,
+                            url: event.url,
+                            credibility_tier: incomingTier
+                        } : {})
+                    });
+                }
+                mergeCount++;
+            }
+        } else {
+            newEvents.push(event);
+        }
+    }
+
+    console.log(`[vectorize] Story resolution: ${mergeCount} merged, ${newEvents.length} new events`);
+    return { newEvents, merges };
+}
+
+/*
+Applies source merges to existing events in Supabase.
+Each merge is a single UPDATE setting the expanded sources array.
+Batched into individual updates to avoid complex SQL.
+*/
+async function applyMerges(
+    merges: Map<string, { 
+        sources: DbEventSource[];
+        title?: string;
+        description?: string;
+        source?: string;
+        url?: string;
+        credibility_tier?: number;
+    }>
+): Promise<number> {
+    let updated = 0;
+
+    for (const [eventId, updateData] of merges) {
+        const { error } = await supabase
+            .from('events')
+            .update(updateData)
+            .eq('id', eventId);
+
+        if (error) {
+            console.error(`[scraper] Failed to merge sources into event ${eventId}:`, error.message);
+        } else {
+            updated++;
+        }
+    }
+
+    return updated;
+}
+
+/* ─── Main Pipeline ─── */
 
 async function run(): Promise<void> {
     const startMs = Date.now();
@@ -119,29 +369,42 @@ async function run(): Promise<void> {
     const geocodedCount = enrichedItems.filter(i => i.latitude != null).length;
     console.log(`[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`);
 
-    // Step 5: Convert items to database schema and upsert
+    // Step 5: Convert items to database schema
     const dbEvents: DbEvent[] = enrichedItems
         .map(newsItemToDbEvent)
         .filter((e): e is DbEvent => e !== null);
 
+    // Step 6: Vectorize and resolve story merges
+    console.log('[scraper] Running semantic vectorization pipeline...');
+    const { newEvents, merges } = await resolveStoryMerges(dbEvents, enrichedItems);
+
     if (DRY_RUN) {
         console.log('[scraper] DRY RUN — would upsert the following events:');
-        for (const event of dbEvents) {
+        for (const event of newEvents) {
             console.log(`  * [${event.source_type}] ${event.title.slice(0, 80)}`);
             if (event.latitude) console.log(`    Location: ${event.location_name} (${event.latitude.toFixed(3)}, ${event.longitude!.toFixed(3)})`);
+            if (event.embedding) console.log(`    Embedding: [${String(event.embedding).slice(0, 40)}...]`);
         }
-        console.log(`[scraper] DRY RUN complete — ${dbEvents.length} events would have been upserted.`);
+        console.log(`[scraper] DRY RUN — ${newEvents.length} new events, ${merges.size} story merges`);
         return;
     }
 
-    console.log(`[scraper] Upserting ${dbEvents.length} events into Supabase...`);
+    // Step 7a: Apply story merges (UPDATE existing events' sources arrays)
+    if (merges.size > 0) {
+        console.log(`[scraper] Applying ${merges.size} story merges...`);
+        const mergedCount = await applyMerges(merges);
+        console.log(`[scraper] ${mergedCount}/${merges.size} story merges applied`);
+    }
+
+    // Step 7b: Upsert new events
+    console.log(`[scraper] Upserting ${newEvents.length} new events into Supabase...`);
 
     // Chunks are upserted sequentially to prevent request size issues and allow error isolation
     const UPSERT_CHUNK_SIZE = 50;
     let totalUpserted = 0;
 
-    for (let i = 0; i < dbEvents.length; i += UPSERT_CHUNK_SIZE) {
-        const chunk = dbEvents.slice(i, i + UPSERT_CHUNK_SIZE);
+    for (let i = 0; i < newEvents.length; i += UPSERT_CHUNK_SIZE) {
+        const chunk = newEvents.slice(i, i + UPSERT_CHUNK_SIZE);
         const { data: upserted, error: upsertError } = await supabase
             .from('events')
             .upsert(chunk, { onConflict: 'url', ignoreDuplicates: true })
@@ -173,7 +436,7 @@ async function run(): Promise<void> {
     }
 
     const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    console.log(`[scraper] Finished ingestion in ${elapsed}s. Total events successfully handled: ${totalUpserted}`);
+    console.log(`[scraper] Finished ingestion in ${elapsed}s. Events upserted: ${totalUpserted}, Stories merged: ${merges.size}`);
 }
 
 // Process entry point
@@ -181,4 +444,3 @@ run().catch(err => {
     console.error('[scraper] Unhandled error:', err);
     process.exit(1);
 });
-

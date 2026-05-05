@@ -35,6 +35,7 @@ export interface DbEvent {
   longitude?: number | null;
   location_name?: string | null;
   tags?: string[] | null;       // stored as JSONB in Supabase
+  embedding?: number[] | string; // vector(384) pgvector column
   created_at?: string;        // set by Supabase default
   cluster_id?: number;        // ID of the semantic cluster
   event_count?: number;       // Number of events in the cluster

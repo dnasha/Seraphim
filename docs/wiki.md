@@ -19,7 +19,8 @@ Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that sc
 | **Language**        | TypeScript                      | Strict mode, version 6.0.3                                                                                        |
 | **Styling**         | Vanilla CSS                     | CSS Modules for component isolation. Base tokens in `globals.css`                                                 |
 | **Testing**         | Vitest                          | Unit/Integration/Accuracy testing (~130 tests)                                                                    |
-| **Database**        | Supabase (PostgreSQL + PostGIS) | `events` table with RLS. PostGIS enabled for spatial queries                                                      |
+| **Database**        | Supabase (PostgreSQL + PostGIS) | `events` (Story model), `user_profiles`, `user_bookmarks`. `pgvector` enabled. |
+| **Semantic Search** | pgvector (HNSW index)           | Vector-based similarity for story clustering (Phase 3.1)                                                          |
 | **Rate Limiting**   | @upstash/ratelimit              | **Hybrid L1/L2**: Local in-memory cache + Global Redis sync. Includes fail-open stability and timeout protection. |
 | **Theme**           | next-themes                     | Flash-free theme hydration with `attribute="data-theme"`                                                          |
 | **Sanitization**    | isomorphic-dompurify            | Strips XSS payloads from scraped titles/descriptions                                                              |
@@ -101,10 +102,7 @@ Seraphim/
 │     └── Per-row fallback on chunk failure                │
 └─────────────────────────────────────────────────────────┘
               ↓ (Every 30 min via GitHub Actions)
-┌─────────────────────────────────────────────────────────┐
-│  Supabase PostgreSQL  (events table)                    │
-│  └── Current: Single URL deduplication                  │
-│  └── Planned: Phase 3 "Story" model (pgvector)          │
+│  └── Implemented: Phase 3.1 "Story" model (JSONB sources + pgvector)  │
 └─────────────────────────────────────────────────────────┘
                ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -208,6 +206,8 @@ During a full codebase documentation audit, the following technical patterns and
 - **Fail-Open Rate Limiting**: The Upstash Redis rate limiter is wrapped in a fail-open mechanism, ensuring API availability if the Redis service times out.
 - **BBox Snapping Grid**: Uses a dynamic snapping grid (0.5 to 10 degrees) to maximize client-side cache hits when panning the map.
 - **Lazy Description Loading**: Descriptions are excluded from the main list fetch and loaded on-demand to reduce initial payload size by ~40%.
+- **Story Consolidation**: Multiple sources for the same event are now stored in a `sources` JSONB array within a single `events` row, enabling a unified "Story" card UI.
+- **Semantic Foundation**: The database is now `pgvector`-ready with HNSW indexing, supporting sub-millisecond similarity lookups for real-time deduplication.
 
 ---
 

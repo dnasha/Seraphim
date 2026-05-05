@@ -1,13 +1,14 @@
-/*
-Scraper data transformations.
-Converts scraped NewsItems into Supabase-compatible DbEvent rows.
-Provides string sanitization and validation for database integrity.
-*/
-
 import DOMPurify from 'isomorphic-dompurify';
 import type { NewsItem } from '@/lib/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from './date';
+import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
+
+/* Build a static lookup map: source name → credibility_tier */
+const SOURCE_TIER_MAP = new Map<string, number>();
+[...RSS_SOURCES, ...REDDIT_SOURCES, ...TELEGRAM_CHANNELS, ...X_ACCOUNTS].forEach(s => {
+    SOURCE_TIER_MAP.set(s.name, s.credibility_tier);
+});
 
 /*
 Removes incomplete surrogate pairs and sanitizes HTML content.
@@ -52,6 +53,16 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         longitude: (typeof item.longitude === 'number' && Number.isFinite(item.longitude)) ? item.longitude : null,
         location_name: cleanString(item.locationName) || null,
         tags: tags,
+        /* Assign credibility tier from source registry, default to Tier 3 (raw) */
+        credibility_tier: SOURCE_TIER_MAP.get(item.source) ?? 3,
+        /* Initialize the Story model sources array for new items */
+        sources: [{
+            name: item.source,
+            url: item.url,
+            source_type: item.sourceType,
+            discovered_at: new Date().toISOString(),
+        }],
     };
 }
+
 
