@@ -113,76 +113,33 @@ Everything below is implemented, merged, and working in the current codebase.
   - **Stability Fixes**: Refactored Supabase client to a singleton to prevent Auth instances warnings.
   - **Timezone Integrity**: Fixed UI discrepancies between event timestamps and filter selection.
 
+### Phase 3: Data Architecture & Aggregation (Analyst Experience)
+- **Schema Evolution (The "Story" Model)**: Created a safe Supabase migration to upgrade the `events` table with `vector(384)` embeddings, `JSONB` source arrays, and `impact_score`. Includes indexing for fast similarity matching.
+- **Zero-Cost Vectorization Pipeline**: Integrated semantic embedding generation directly into the Bun ingestion worker using `@huggingface/transformers` (Xenova/all-MiniLM-L6-v2). No external API keys or usage costs.
+- **Data Renewal Tooling**: Developed a suite of maintenance scripts (`re-vectorize.ts`, `re-cluster.ts`, `re-tier.ts`) for database health.
+- **Production Consolidation (Backfill)**: Successfully executed the full backfill suite on 38,539 historical records.
+  - **Purged 12,849 redundant pins** by consolidating them into multi-source "Stories."
+  - **Reclaimed ~100MB of storage** via `VACUUM FULL` optimization.
+  - **Validated 93.9% Geocoding Accuracy** on ground-truth benchmarks.
+  - **Final Unmapped Rate: 22.87%** (Healthy skepticism for non-geographic news).
+
 ---
 
-## Phase 3: Data Architecture & Aggregation (Analyst Experience)
+## Phase 4: UI Transformation (The "Story" Experience)
 
-_Goal: Shift from raw scraped links to coherent "stories" using semantic clustering, and future-proof the schema for advanced features without losing historical data._
+_Goal: Update the frontend to reflect the shift from individual links to aggregated stories._
 
-### 3.1 Schema Evolution (The "Story" Model) (Completed)
-
-- **Action**: Created a safe Supabase migration (`docs/phase_3_1_migration.sql`) to upgrade the `events` table without downtime.
-- **Implemented Changes**:
-  - `embedding vector(384)`: Added support for semantic embeddings via `pgvector`. Includes an HNSW index for fast similarity matching.
-  - `sources JSONB`: Replaced strict 1:1 mapping with a flexible array of `{ name, url, source_type, discovered_at }`.
-  - `impact_score INTEGER DEFAULT 0`: New field for story prioritization.
-  - `credibility_tier INTEGER DEFAULT 3`: Tracks source reliability (1: Wire, 2: Curated, 3: Raw).
-- **API & Type Safety**:
-  - Updated `get_clustered_events` RPC to aggregate and return these new fields.
-  - Synchronized `DbEvent` and `NewsItem` types.
-  - Updated `/api/news` to query the new fields in both clustered and raw modes.
-- **Future-Proofing**: Created `user_profiles`, `user_bookmarks`, and `user_geofences` tables in the migration to prepare for Phase 5.
-- **UI Impact**: The backend is now ready for "Story" cards and deduplicated pin rendering.
-
-### 3.2 Zero-Cost Vectorization Pipeline (Completed)
-
-- **Action**: Integrated semantic embedding generation directly into the Bun ingestion worker using `@huggingface/transformers`.
-- **Model**: `Xenova/all-MiniLM-L6-v2` (ONNX, fp32). Runs natively in JS via CPU/WASM backend. No external API keys or usage costs.
-- **Architecture**: Dual-signal merge strategy (Strict Semantic > 0.85 OR Proximity Semantic > 0.60 + < 50km). Optimized for minimal DB/worker strain via batching.
-- **CI/CD Integration**: Model weights cached on GitHub Actions for fast 30-minute cron runs.
-
-### 3.3 Data Renewal Tooling (`scripts/util/`) (Ready)
-
-- **`remap-db-locations.ts`**: Re-runs `extractLocation` over all existing DB rows to refresh coordinates.
-- **`re-vectorize.ts`**: Backfills embeddings for all historical events.
-- **`re-cluster.ts`**: Consolidates overlapping historical events into the new `sources` JSONB array structure based on spatial/semantic distance.
-- **`re-tier.ts`**: Backfills `credibility_tier` for historical data based on updated `src/data/sources.ts` definitions.
-
-### 3.4 "Story" UI Experience (Next)
-
+### 4.1 "Story" UI Components
 - **Action**: Update the frontend to reflect the shift from individual links to aggregated stories.
 - **Map Interaction**: Update MapLibre popups to display a list of all sources for a story rather than just one URL. Add "Source Count" badges to individual pins.
 - **Sidebar Experience**: Update `EventSidebar` cards to show an array of source icons (e.g., BBC + Reuters + X) instead of a single source badge. Add "Follow the Story" expansion for timeline view.
 - **Credibility Integration**: Highlight "Tier 1" verified stories with distinct visual borders or badges to distinguish them from raw social feeds.
 
-### 3.5 Production Data Consolidation (Backfill)
-
-- **Action**: Execute the full suite of renewal tools in production to unify the database into the "Story" model.
-- **Step 1**: Run `re-vectorize.ts` to ensure 100% vector coverage.
-- **Step 2**: Run `re-tier.ts` to assign credibility scores to the archive.
-- **Step 3**: Run `re-cluster.ts` to merge thousands of redundant historical pins into coherent stories.
-
----
-
-## Phase 4: Advanced OSINT Controls (The "Wow" Factor)
-
-_Goal: Give analysts the tools to slice data logically. These are the features that make people share the link._
-
-### 4.1 Temporal Scrubber (Time Slider)
-
+### 4.2 Temporal Scrubber (Time Slider)
 - **Action**: Add a horizontal range slider at the bottom of the map. Users drag a handle to scrub through the last 7 days hour-by-hour. The map animates pins appearing/disappearing based on `published_at`.
 - **Implementation**: A React component with a `<input type="range">` controlling a `maxTimestamp` state. The map layer filters its GeoJSON source by timestamp on each slider change. Include a "Play" button for auto-advance.
 
-### 4.2 Source Credibility Tier Filtering
-
-- **Action**: Add a `credibility_tier` field to `src/data/sources.ts` for every source:
-  - **Tier 1 (Verified)**: Reuters, AP, BBC, NYT wire services and established editors.
-  - **Tier 2 (Curated OSINT)**: Liveuamap, ISW, OSINTtechnical respected analyst accounts.
-  - **Tier 3 (Raw Social)**: Raw Telegram channels, unverified X accounts.
-- **UI**: A 3-toggle filter row in the FilterBar. Analysts can quickly toggle off Tier 3 to see only confirmed reporting.
-
 ### 4.3 View State Syncing (URL Deep Links)
-
 - **Action**: Encode the current map center, zoom level, active filters, and search query into URL search parameters.
 - **Implementation**: Use `useSearchParams` or a custom hook that syncs state bidirectionally with `window.history.replaceState`.
 
@@ -254,3 +211,12 @@ Move the `KNOWN_LOCATIONS` dictionary build to `build-geodata.mjs`, pre-calculat
 ### Phase 2.5: Advanced Visualization & Tiles (Deferred)
 
 Fine-tune the new MapLibre engine for absolute visual perfection. Serve OSINT-specific vector tiles (OpenStreetMap-based) from Cloudflare R2 via Protomaps PMTiles to achieve crisp labels at all zoom levels and $0 egress.
+
+### Phase 4.4: Strategic Handling of Unmapped Events
+
+_Goal: Rethink the 22% of news that provides vital context but lacks coordinates._
+
+- **Current State**: Unmapped events live in the sidebar but are invisible on the map.
+- **Concept**: Implement a "Global Context" sidebar section or a "Regional Heatmap" for broad news (e.g., news mentioning "Ukraine" but no specific city should highlight the entire country polygon at low opacity).
+- **Concept**: "The Tickertape" - A scrolling bottom bar for high-volume, unmapped headlines to keep the main sidebar focused on geographic data.
+- **Concept**: Semantic Cross-Referencing - Use embeddings to link unmapped "Opinion" pieces to the mapped "Events" they are discussing.

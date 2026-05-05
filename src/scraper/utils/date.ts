@@ -10,20 +10,26 @@ Handles standard JS parsing and specific non-standard formats (e.g., CrisisWatch
 Falls back to current system time if parsing fails.
 */
 export function ensureIsoDate(dateStr: string | undefined | null): string {
-    if (!dateStr) return new Date().toISOString();
+    const now = new Date();
+    if (!dateStr) return now.toISOString();
 
     // Try standard JS parsing first
     let d = new Date(dateStr);
-    if (!isNaN(d.getTime())) return d.toISOString();
+    
+    // If standard parsing fails, try CrisisWatch normalization
+    if (isNaN(d.getTime())) {
+        // Normalizes CrisisWatch format: "Friday, April 10, 2026 - 16:35"
+        let cleaned = dateStr.replace(/^[A-Za-z]+,\s+/, ''); // "April 10, 2026 - 16:35"
+        cleaned = cleaned.replace(/\s*-\s*/, ' ');           // "April 10, 2026 16:35"
+        d = new Date(cleaned);
+    }
 
-    // Normalizes CrisisWatch format: "Friday, April 10, 2026 - 16:35"
-    let cleaned = dateStr.replace(/^[A-Za-z]+,\s+/, ''); // "April 10, 2026 - 16:35"
-    cleaned = cleaned.replace(/\s*-\s*/, ' ');           // "April 10, 2026 16:35"
+    // If still invalid, fallback to now
+    if (isNaN(d.getTime())) return now.toISOString();
 
-    d = new Date(cleaned);
-    if (!isNaN(d.getTime())) return d.toISOString();
+    // SAFETY: Cap at 'now' to prevent timezone-induced future dates
+    if (d > now) return now.toISOString();
 
-    // Fallback to current system time for resilience
-    return new Date().toISOString();
+    return d.toISOString();
 }
 
