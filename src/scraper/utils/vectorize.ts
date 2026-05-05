@@ -14,7 +14,10 @@ Design:
     trips entirely.
 */
 
-import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+
+// Force local cache directory for CI/CD stability and reliable caching
+env.cacheDir = './.cache';
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
