@@ -13,6 +13,13 @@ export * from '@/lib/types';
 Database event interface matches Supabase events table.
 Scraper writes these rows; API route reads and transforms them.
 */
+export interface DbEventSource {
+  name: string;
+  url: string;
+  source_type: string;
+  discovered_at: string;
+}
+
 export interface DbEvent {
   id?: string;                // auto-generated UUID primary key
   title: string;
@@ -31,6 +38,9 @@ export interface DbEvent {
   created_at?: string;        // set by Supabase default
   cluster_id?: number;        // ID of the semantic cluster
   event_count?: number;       // Number of events in the cluster
+  impact_score?: number;
+  credibility_tier?: number;
+  sources?: DbEventSource[];
 }
 
 import { NewsItem } from '@/lib/types';
@@ -57,5 +67,13 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     tags: row.tags ?? undefined,
     clusterId: row.cluster_id ?? undefined,
     eventCount: row.event_count ?? undefined,
+    impactScore: row.impact_score ?? undefined,
+    credibilityTier: row.credibility_tier ?? undefined,
+    sources: row.sources?.map(s => ({
+      name: s.name,
+      url: s.url,
+      sourceType: s.source_type,
+      discoveredAt: s.discovered_at,
+    })) ?? undefined,
   };
 }

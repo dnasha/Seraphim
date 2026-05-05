@@ -44,3 +44,5 @@ next-env.d.ts
 
 artifacts
 GEMINI.md
+
+*.sql

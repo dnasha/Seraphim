@@ -54,7 +54,7 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 const RAW_LIMIT = 2000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
-const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name';
+const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, sources';
 
 export async function GET(request: Request) {
     const now = Date.now();

@@ -3,6 +3,13 @@ Core type definitions for the news aggregation pipeline.
 Used across the frontend to represent news items and API responses.
 */
 
+export interface EventSource {
+  name: string;
+  url: string;
+  sourceType: string;
+  discoveredAt: string;
+}
+
 export interface NewsItem {
   id: string;
   title: string;
@@ -22,6 +29,9 @@ export interface NewsItem {
   clusterId?: number;
   eventCount?: number;
   originalId?: string;
+  impactScore?: number;
+  credibilityTier?: number;
+  sources?: EventSource[];
 }
 
 export interface NewsResponse {

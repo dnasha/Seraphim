@@ -1,0 +1,65 @@
+.errorContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface, #0f1117);
+    color: var(--text-primary, #ffffff);
+    z-index: 1000;
+    padding: 2rem;
+    text-align: center;
+}
+
+.errorIcon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1rem;
+    color: var(--red, #ef4444);
+    opacity: 0.8;
+}
+
+.errorTitle {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.errorMessage {
+    font-size: 0.875rem;
+    color: var(--text-muted, #94a3b8);
+    max-width: 320px;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.retryButton {
+    padding: 0.6rem 1.5rem;
+    background: var(--accent, #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.retryButton:hover {
+    opacity: 0.9;
+}
+
+.retryButton:active {
+    opacity: 0.8;
+}
+
+/* Theme handled by variables */
+
+:global(.light-mode) .errorMessage {
+    color: #64748b;
+}
