@@ -153,8 +153,9 @@ export default function EventSidebar({
 
       if (hasGeo) {
         /* Mapped item selection */
-        const isSelected = selectedItemId === item.id;
-        onSelectItem(isSelected ? null : item.id);
+        const targetId = item.originalId || item.id;
+        const isSelected = selectedItemId === targetId;
+        onSelectItem(isSelected ? null : targetId);
 
         /* If selecting a mapped item, collapse any unmapped expansion */
         if (!isSelected) {
@@ -166,13 +167,14 @@ export default function EventSidebar({
         }
       } else {
         /* Unmapped item expansion */
-        const isCurrentlyExpanded = expandedId === item.id;
-        const nextExpanded = isCurrentlyExpanded ? null : item.id;
+        const targetId = item.originalId || item.id;
+        const isCurrentlyExpanded = expandedId === targetId;
+        const nextExpanded = isCurrentlyExpanded ? null : targetId;
         setExpandedId(nextExpanded);
 
         /* Fetches description if not already cached; empty string indicates loaded but blank */
         if (nextExpanded && item.description === undefined) {
-          onFetchDetails?.(item.id);
+          onFetchDetails?.(targetId);
         }
 
         /* If expanding an unmapped item, deselect any mapped item */
@@ -186,9 +188,10 @@ export default function EventSidebar({
 
   const renderItem = useCallback(
     (index: number, item: NewsItem) => {
-      const isSelected = item.id === selectedItemId;
+      const targetId = item.originalId || item.id;
+      const isSelected = targetId === selectedItemId;
       const hasGeo = item.latitude != null;
-      const isExpanded = expandedId === item.id || item.id === selectedItemId;
+      const isExpanded = expandedId === targetId || isSelected;
       const catColor =
         CATEGORY_COLORS[item.category || "general"] || CATEGORY_COLORS.general;
       let timeAgo = "";

@@ -92,7 +92,7 @@ export default function Home() {
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
         if (selectedItemId) {
-            const item = news.find(i => i.id === selectedItemId);
+            const item = news.find(i => i.id === selectedItemId || i.originalId === selectedItemId);
             if (item && item.description === undefined) {
                 fetchEventDetails(selectedItemId);
             }

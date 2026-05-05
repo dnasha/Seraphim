@@ -159,6 +159,8 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
 
     // Client-side description cache: id - description string
     const descriptionCache = useRef<Map<string, string>>(new Map());
+    // Track in-flight description fetches to prevent race conditions
+    const fetchingDetailsRef = useRef<Set<string>>(new Set());
 
     // -------------------------------------------------------------------------
     // Core list fetch (initial + BBox changes + manual refresh)
@@ -207,7 +209,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
 
             // Merge back any descriptions we've already fetched client-side
             const enriched = jitteredItems.map(item => {
-                const cachedDesc = descriptionCache.current.get(item.id);
+                const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
                 return cachedDesc ? { ...item, description: cachedDesc } : item;
             });
 
@@ -219,11 +221,23 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
             const isServerCluster = bbox && bbox.zoom !== undefined && bbox.zoom < 5 && !bbox.forceRaw && !bbox.query;
 
             if (isServerCluster) {
-                setNews(enriched);
+                setNews(prev => {
+                    // Preserve unmapped items from previous fetches (like the initial global fetch)
+                    // so they don't disappear when the map provides a bounding box.
+                    const unmapped = prev.filter(p => p.latitude == null);
+                    return [...enriched, ...unmapped];
+                });
             } else {
                 setNews(prev => {
                     // Accumulate individual pins, filtering out server clusters from prev view
-                    const prevIndividuals = prev.filter(p => !p.eventCount || p.eventCount <= 1);
+                    // Also filter out pins that are no longer within the current bounding box
+                    // to prevent accumulating off-screen pins indefinitely.
+                    const prevIndividuals = prev.filter(p => {
+                        if (p.eventCount && p.eventCount > 1) return false;
+                        if (p.latitude == null) return true; // Keep unmapped items
+                        if (!bbox) return true;
+                        return isWithinBBox(p, bbox);
+                    });
                     const prevMap = new Map(prevIndividuals.map(p => [p.id, p]));
 
                     for (const item of enriched) {
@@ -276,6 +290,9 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
     const fetchEventDetails = useCallback(async (id: string) => {
         if (!id) return;
         if (descriptionCache.current.has(id)) return;
+        if (fetchingDetailsRef.current.has(id)) return;
+
+        fetchingDetailsRef.current.add(id);
 
         // Resolve the actual UUID to fetch from the DB. 
         // For clusters, the id is a hybrid string (e.g. cluster-z3...), 
@@ -283,13 +300,13 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
         let fetchId = id;
         
         // Find the item synchronously to check for originalId
-        const item = newsRef.current.find(i => i.id === id);
+        const item = newsRef.current.find(i => i.id === id || i.originalId === id);
         if (item && item.originalId) {
             fetchId = item.originalId;
         } else {
             // Fallback to cache if not found in current view
             for (const entry of bboxCache.values()) {
-                const cachedItem = entry.data.find(i => i.id === id);
+                const cachedItem = entry.data.find(i => i.id === id || i.originalId === id);
                 if (cachedItem && cachedItem.originalId) {
                     fetchId = cachedItem.originalId;
                     break;
@@ -303,19 +320,27 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
             const { description } = await res.json() as { description: string };
 
             descriptionCache.current.set(id, description);
+            if (fetchId !== id) {
+                descriptionCache.current.set(fetchId, description);
+            }
+            if (item && item.id !== id && item.id !== fetchId) {
+                descriptionCache.current.set(item.id, description);
+            }
 
             setNews(prev =>
-                prev.map(item => (item.id === id ? { ...item, description } : item))
+                prev.map(p => (p.id === id || p.originalId === id || (item && p.id === item.id)) ? { ...p, description } : p)
             );
 
             bboxCache.forEach((entry, key) => {
-                const updated = entry.data.map(item =>
-                    item.id === id ? { ...item, description } : item
+                const updated = entry.data.map(p =>
+                    (p.id === id || p.originalId === id || (item && p.id === item.id)) ? { ...p, description } : p
                 );
                 bboxCache.set(key, { ...entry, data: updated });
             });
         } catch {
             // Silently fail - the card will just show no description
+        } finally {
+            fetchingDetailsRef.current.delete(id);
         }
     }, []);
 
@@ -407,8 +432,14 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
     // Initial fetch
     // -------------------------------------------------------------------------
     useEffect(() => {
-        fetchNews();
-    }, [fetchNews]);
+        // Only fetch immediately if we are including unmapped items (which won't be caught by a BBox fetch)
+        // or if we have a search query (which bypasses BBox).
+        // Otherwise, we wait for the map to trigger onBoundsChange to avoid redundant double-fetching
+        // and the "cluster-flicker" on initial load.
+        if (includeUnmapped || searchQuery) {
+            fetchNews();
+        }
+    }, [fetchNews, includeUnmapped, searchQuery]);
 
     return {
         news,

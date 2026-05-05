@@ -454,6 +454,59 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         if (source) source.setData(geojson);
     }, [geoItems, mapReady]);
 
+    const latestGeoItemsRef = useRef(geoItems);
+    useEffect(() => {
+        latestGeoItemsRef.current = geoItems;
+    }, [geoItems]);
+
+    const generatePopupHtml = useCallback((item: NewsItem) => {
+        const pinColor = getCategoryColor(item.category);
+        const categoryLabel = item.category
+            ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
+            : '';
+        
+        const descriptionHtml = item.description != null
+            ? (item.description
+                ? `<p class="news-popup-summary" data-event-id="${item.originalId || item.id}">${item.description}</p>`
+                : '')
+            : `<div class="news-popup-summary news-popup-summary--loading" data-event-id="${item.originalId || item.id}">
+                <div class="popup-skeleton-line"></div>
+                <div class="popup-skeleton-line" style="width:90%"></div>
+                <div class="popup-skeleton-line" style="width:75%"></div>
+              </div>`;
+
+        return `
+            <div class="news-popup">
+                <div class="news-popup-header">
+                    <h3 class="news-popup-title">${item.title}</h3>
+                    <div class="news-popup-meta">
+                        <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
+                        ${categoryLabel}
+                        <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                        ${item.locationName ? `
+                            <span class="news-popup-meta-sep">•</span>
+                            <span class="news-popup-location">
+                                <svg class="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                </svg>
+                                ${item.locationName}
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="news-popup-content">
+                    ${item.imageUrl ? `
+                        <div class="news-popup-img-container">
+                            <img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                        </div>
+                    ` : ''}
+                    ${descriptionHtml}
+                    <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source →</a>
+                </div>
+            </div>
+        `;
+    }, []);
+
     // Manages selection state, camera flyTo animations, and popup visibility.
     useEffect(() => {
         if (!mapReady || !mapRef.current || !popupRef.current) return;
@@ -473,54 +526,8 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         }
 
         if (selectedItemId) {
-            const item = geoItems.find(i => i.id === selectedItemId);
+            const item = geoItems.find(i => i.id === selectedItemId || i.originalId === selectedItemId);
             if (item) {
-                const pinColor = getCategoryColor(item.category);
-                const categoryLabel = item.category
-                    ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
-                    : '';
-                
-                const descriptionHtml = item.description != null
-                    ? (item.description
-                        ? `<p class="news-popup-summary" data-event-id="${item.id}">${item.description}</p>`
-                        : '')
-                    : `<div class="news-popup-summary news-popup-summary--loading" data-event-id="${item.id}">
-                        <div class="popup-skeleton-line"></div>
-                        <div class="popup-skeleton-line" style="width:90%"></div>
-                        <div class="popup-skeleton-line" style="width:75%"></div>
-                      </div>`;
-
-                const html = `
-                    <div class="news-popup">
-                        <div class="news-popup-header">
-                            <h3 class="news-popup-title">${item.title}</h3>
-                            <div class="news-popup-meta">
-                                <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
-                                ${categoryLabel}
-                                <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
-                                ${item.locationName ? `
-                                    <span class="news-popup-meta-sep">•</span>
-                                    <span class="news-popup-location">
-                                        <svg class="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                                        </svg>
-                                        ${item.locationName}
-                                    </span>
-                                ` : ''}
-                            </div>
-                        </div>
-                        <div class="news-popup-content">
-                            ${item.imageUrl ? `
-                                <div class="news-popup-img-container">
-                                    <img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
-                                </div>
-                            ` : ''}
-                            ${descriptionHtml}
-                            <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source →</a>
-                        </div>
-                    </div>
-                `;
-
                 // Only animate camera if selection is new or version changed.
                 const isNewSelection =
                     lastFlownSelectionRef.current !== selectedItemId ||
@@ -538,9 +545,10 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
 
                     map.once('moveend', () => {
                         if (popupRef.current) {
+                            const latestItem = latestGeoItemsRef.current.find(i => i.id === selectedItemId || i.originalId === selectedItemId) || item;
                             popupRef.current
-                                .setLngLat([item.longitude!, item.latitude!])
-                                .setHTML(html)
+                                .setLngLat([latestItem.longitude!, latestItem.latitude!])
+                                .setHTML(generatePopupHtml(latestItem))
                                 .addTo(map);
                         }
                         isFlyingRef.current = false;
@@ -561,7 +569,7 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
             lastFlownSelectionRef.current = null;
             lastFlownVersionRef.current = 0;
         }
-    }, [selectedItemId, selectionVersion, geoItems, mapReady]);
+    }, [selectedItemId, selectionVersion, geoItems, mapReady, generatePopupHtml]);
 
     // Live-updates popup descriptions when they finish loading.
     useEffect(() => {
@@ -572,10 +580,12 @@ export default function NewsMap({ items, selectedItemId, selectionVersion, onSel
         geoItems.forEach(item => {
             const skeleton = el.querySelector<HTMLElement>(
                 `div[data-event-id="${item.id}"].news-popup-summary--loading`
-            );
+            ) || (item.originalId ? el.querySelector<HTMLElement>(
+                `div[data-event-id="${item.originalId}"].news-popup-summary--loading`
+            ) : null);
             if (skeleton && item.description !== undefined) {
                 skeleton.outerHTML = item.description
-                    ? `<p class="news-popup-summary" data-event-id="${item.id}">${item.description}</p>`
+                    ? `<p class="news-popup-summary" data-event-id="${item.originalId || item.id}">${item.description}</p>`
                     : '';
             }
         });

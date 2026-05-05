@@ -36,10 +36,10 @@ Everything below is implemented, merged, and working in the current codebase.
 
 - **Next.js 16** (App Router) with **React 19**. Single `page.tsx` orchestrating `EventSidebar`, `FilterBar`, and `NewsMap` via two custom hooks (`useNewsData`, `useNewsFilter`).
 - **API route** (`/api/news/route.ts`): Supabase proxy with 15-minute in-memory cache, Edge CDN `Cache-Control` headers, and a 1-minute refresh throttle. Fetches top 500 events ordered by `published_at`.
-- **Leaflet 1.9 map** with custom smooth zoom system replaces Leaflet's default `scrollWheelZoom` with a `requestAnimationFrame` lerp loop calling `_move()` per frame and `_moveEnd()` on settle. Sub-pixel rendering via monkey-patching `_getNewPixelOrigin`, `latLngToLayerPoint`, and `GridLayer._setZoomTransform` to remove `._round()` calls during animation.
-- **Marker system**: `DivIcon`-based category markers (26px normal / 36px active) with `IconCache` to prevent redundant object creation. Selected markers get a CSS "sonar pulse" animation and glow. Highlighting uses direct DOM class manipulation (Ref-based) to avoid React reconciliation.
-- **Clustering**: Server-side clustering (zoom < 5) enabled by default. Client-side `leaflet.markercluster` is disabled. Power users can toggle "Force individual pins" to bypass server-side grouping.
-- **Map styles**: Standard (Voyager), Dark auto-switching with theme. Settings panel with gear icon toggle.
+- **MapLibre GL JS map** with high-performance WebGL rendering. Sub-pixel marker placement and smooth camera transitions. Custom BBox-snapping grid for aggressive client-side caching.
+- **Marker system**: Symbol-layer based category icons with dynamic sizing and sonar-pulse animations. Highlighting uses direct layer filtering to avoid React reconciliation.
+- **Clustering**: Server-side clustering (zoom < 5) via PostGIS ST_ClusterDBSCAN. Client-side clustering via MapLibre's native source clustering for intermediate levels.
+- **Map styles**: Custom Voyager-inspired vector styles, Dark auto-switching with theme. Floating MapActionTools toolbar for environmental overlays.
 - **Sidebar**: Fixed 400px width, collapsible. Logo (Cinzel Decorative font), stat pills (article count, mapped count, last-updated timestamp), filter bar, scrollable card list. Cards show 88×66px thumbnails, source badge, time-ago, location pin. Unmapped articles expand inline; mapped articles fly the map to the pin.
 - **Filtering**: Source toggles (News/Reddit/X/Telegram/GNews), category pills, time range (1D/3D/1W/1M/All), "Mapped Only" toggle, debounced search. Client-side `useMemo` filtering for instant toggling.
 - **Theme**: Light mode default (prevents FOUC). Persistent via `localStorage`. Dark mode overrides via `[data-theme="dark"]` CSS custom properties.
@@ -67,19 +67,19 @@ Everything below is implemented, merged, and working in the current codebase.
 - **Geocoding Accuracy Refinement**:
   - Achieved **98%+ accuracy** on a 400-item "ground truth" benchmark set (`scripts/results/geocode-benchmark-400.json`).
   - Refined NLP heuristics to eliminate persistent false positives (e.g., "Ray", "Arsenal").
-  - Implemented a **remapping utility** (`scripts/results/re-map-locations.ts`) to retroactively update database entries with improved engine logic.
+  - Implemented a **remapping utility** (`scripts/util/remap-db-locations.ts`) to retroactively update database entries with improved engine logic.
 - **Mobile UX Overhaul**:
   - Implemented **swipe-to-collapse** sidebar gesture for intuitive mobile navigation.
   - Optimized the **Filter Bar** with horizontal scrolling and a persistent, pinned search experience.
   - Integrated a **Custom Datetime Picker** that resolves timezone discrepancies and provides a robust date-filtering interface.
-- **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Evaluated `EventSidebar` render performance (stable at current scales) and documented Leaflet `preferCanvas` limitations with `DivIcon` elements for future MapLibre migration context.
+- **Performance & Build Audit**: Ran bundle audits to ensure `geonames.json` is safely tree-shaken from Next.js client bundles. Successfully migrated from Leaflet to MapLibre GL JS for GPU-accelerated rendering of 100K+ points.
 
 ### Phase 1: API & Data Fetching (Scale Enablers)
 
 - **Bounding Box (BBox) Querying**: Modified `/api/news` to accept `minLat/maxLat/minLng/maxLng`. Implemented debounced (400ms) viewport updates in `NewsMap.tsx` to trigger refetches. Added client-side bbox-keyed caching in `useNewsData.ts` to prevent redundant DB hits when panning back to previously viewed areas.
 - **Supabase Realtime**: Replaced 15-minute polling with a Supabase Realtime `INSERT` subscription. Implemented client-side viewport filtering so only events within the current bounding box are injected into the UI, reducing noise and re-render cycles.
 - **Database Egress Optimization**: Optimized initial list fetch by excluding the `description` field (~40% payload reduction). Implemented an on-demand detail endpoint (`/api/news/[id]`) that lazy-loads descriptions when a user expands a sidebar card or clicks a map pin.
-- **Live-Patching Map Popups**: Implemented a specialized `updatePopupDescription` mechanism in `MarkerManager` that patches live Leaflet popups and their internal `setContent` buffers when lazy-loaded data arrives, avoiding costly marker re-creations.
+- **Live-Patching Map Popups**: Implemented a specialized popup update mechanism that patches live MapLibre popups with lazy-loaded descriptions when they arrive, ensuring immediate UI feedback without camera jumps.
 - **Sidebar Virtualization**: Integrated `react-virtuoso` to replace the standard `.map()` card list. Reduced DOM node count from 500+ to ~15 constant nodes. Refactored auto-scroll logic to use `virtuosoRef.current.scrollToIndex` for perfect synchronization with map selection.
 - **Server-Side Clustering (ST_ClusterDBSCAN)**: Implemented support for the `public.get_clustered_events` Supabase RPC. The API now returns aggregated cluster objects (`clusterId`, `eventCount`) when zoomed out, drastically reducing JSON payload size.
 - **Native Cluster Rendering**: Updated `MarkerManager` to detect and render server-side clusters using custom `.cluster-icon` styles, providing a seamless visual transition from individual pins to grouped data.
@@ -96,8 +96,8 @@ Everything below is implemented, merged, and working in the current codebase.
 
 ### Phase 2: UI Rendering & Performance (Browser Savers)
 
-- **Interaction Snappiness**: Optimized map viewport polling with a 150ms debounce (reduced from 400ms). The UI now feels instantaneous when moving the map.
-- **Greedy Client-Side Caching**: Implemented an accumulation-based state manager in `useNewsData.ts`. Individual pins are now merged into a persistent client-side pool, preventing "empty map" flickering when panning back to previously loaded areas.
+- **Interaction Snappiness**: Optimized map viewport polling with a 150ms debounce. The UI feels instantaneous when moving the map.
+- **Viewport-Aware State Eviction**: Implemented an automated eviction policy in `useNewsData.ts`. Individual pins are now merged into a persistent pool but automatically pruned when they fall outside the active snapped bounding box, preventing memory leaks while preserving "back-button" cache hits.
 - **Dynamic BBox Grid Expansion**: Scaled the BBox snapping logic and increased the API `RAW_LIMIT` to 2000 events. This allows for massive, pre-cached data "tiles" that minimize database egress.
 - **Advanced Cluster Visualization**:
   - **Non-Linear Scaling**: Clusters scale logarithmically (14px to 36px) to maintain clarity without overcrowding.
@@ -137,10 +137,10 @@ _Goal: Shift from raw scraped links to coherent "stories" using semantic cluster
 - **CI/CD Integration**: The GitHub Actions runner handles this perfectly. Model weights (~22MB) are cached using `actions/cache` to ensure the 30-minute cron jobs remain fast and free.
 - **Merge Logic**: Before upserting a new item, the worker calculates cosine similarity against events from the last 48 hours. If similarity is `> 0.85`, it appends the new source to the existing event's `sources` array instead of creating a new pin.
 
-### 3.3 Data Renewal Tooling (`scripts/tools/`)
+### 3.3 Data Renewal Tooling (`scripts/util/`)
 
 - **Action**: Establish a suite of idempotent CLI scripts to safely re-process historical data when our algorithms improve.
-- **`re-geocode.ts`**: Re-runs `extractLocation` over all existing DB rows using the latest NLP dictionary, updating coordinates without destroying URLs or timestamps.
+- **`remap-db-locations.ts` (Done)**: Re-runs `extractLocation` over all existing DB rows using the latest NLP dictionary, updating coordinates without destroying URLs or timestamps.
 - **`re-vectorize.ts`**: Runs locally to backfill embeddings for the historical archive. Essential for when the embedding model is first introduced or if we change dimensions in the future.
 - **`re-cluster.ts`**: Retroactively consolidates older, overlapping pre-Phase-3 events into the new `sources` JSONB array structure based on spatial/semantic distance.
 
@@ -217,11 +217,9 @@ _Goal: Turn Seraphim from a project into a product with user accounts and usage 
 
 ## Engineering & Performance Backlog
 
-### Viewport-Aware State Eviction
-
-As users pan around the world, the client-side `news` state currently accumulates every pin retrieved from the API. Implement an eviction policy in `useNewsData.ts` to keep the active set under ~2,000 items.
-
 ### Server-Side Realtime Filtering
+
+Create an alternative to the websocket-based Realtime subscription for fetching new news events as this could be brutal on supabase with high user counts.
 
 Update the Realtime subscription to use server-side filters (e.g., by category or source) matching the user's active UI state, reducing unnecessary egress and client CPU usage.
 
