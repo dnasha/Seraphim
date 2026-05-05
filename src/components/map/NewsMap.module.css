@@ -49,6 +49,11 @@
   transform: scale(1.05);
 }
 
+/* zoom icons in dark mode */
+:global([data-theme="dark"]) :global(.maplibregl-ctrl-icon) {
+  filter: invert(1) brightness(1.8);
+}
+
 /* Positioning for zoom controls */
 :global(.maplibregl-ctrl-top-right) {
   top: 0;
