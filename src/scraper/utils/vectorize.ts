@@ -21,8 +21,10 @@ env.cacheDir = './.cache';
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
+
 /* Similarity thresholds */
 export const SIMILARITY_THRESHOLD_STRICT = 0.85; // Merge regardless of distance
+export const SIMILARITY_THRESHOLD_PLACE_ANCHORED = 0.75; // Merge if exact location name matches
 export const SIMILARITY_THRESHOLD_PROXIMITY = 0.60; // Merge if within distance
 export const MAX_MERGE_DISTANCE_KM = 50;
 

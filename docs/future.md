@@ -10,7 +10,7 @@
 
 - **Modern Backend**: Supabase (PostgreSQL + PostGIS) with a decoupled **Bun scraper worker** running every 30 minutes. Batched upserts with `url` deduplication and advanced sanitization.
 - **Geocoding Engine**: 98.2% accurate tiered lookup engine (Landmarks > Cities > Countries) using a 78K-entry GeoNames dictionary and `compromise` NLP. Includes jitter to prevent pin stacking.
-- **Semantic "Story" Model**: Local vectorization via `@huggingface/transformers` (all-MiniLM-L6-v2) for zero-cost clustering. Consolidation pipeline merged 38k events into 25k multi-source "Stories," purging ~13k redundant pins.
+- **Semantic "Story" Model**: Local vectorization via `@huggingface/transformers` (all-MiniLM-L6-v2) for zero-cost clustering. Consolidation pipeline recently completed a **26k-item production backfill**, merging redundant coverage into multi-source "Stories" while preserving the latest timestamps.
 - **Broad Source Coverage**: Real-time ingestion from **30+ RSS feeds**, **8 Telegram channels** (Cheerio scraping), **4 subreddits**, and **X/Twitter** (Syndication/Nitter).
 
 ### Frontend & Dashboard
@@ -37,6 +37,7 @@ _Goal: Update the frontend to reflect the shift from individual links to aggrega
 ### 4.2 View State Syncing (URL Deep Links) (Completed)
 
 - **Implementation**: Robust `useViewState` hook syncing `lat`, `lng`, `zoom`, `q`, `t`, and `sortMode` to URL.
+- **Display Awareness**: Resolution-aware map scaling using linear interpolation (Lerp) between 1200p and 2K targets. Overcomes Mercator clamping to ensure consistent framing on high-res monitors.
 - **Architecture**: Decoupled `HomeContent.tsx` (Client) from `page.tsx` (Server) for SSR-safe hydration.
 
 ### Phase 4.3: Smart Sorting & Ranking (Completed)

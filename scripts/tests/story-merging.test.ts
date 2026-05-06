@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { 
     calculateDistance, 
     SIMILARITY_THRESHOLD_STRICT, 
+    SIMILARITY_THRESHOLD_PLACE_ANCHORED,
     SIMILARITY_THRESHOLD_PROXIMITY, 
     MAX_MERGE_DISTANCE_KM 
 } from '../../src/scraper/utils/vectorize';
@@ -24,6 +25,13 @@ function selectBestContent(current: MergeCandidate, incoming: MergeCandidate) {
     const incomingLen = (incoming.description?.length || 0) + (incoming.title?.length || 0);
 
     return incomingLen > currentLen ? incoming : current;
+}
+
+function evaluateMerge(similarity: number, distance: number, loc1?: string, loc2?: string) {
+    if (similarity >= SIMILARITY_THRESHOLD_STRICT) return true;
+    if (similarity >= SIMILARITY_THRESHOLD_PLACE_ANCHORED && loc1 && loc2 && loc1 === loc2) return true;
+    if (similarity >= SIMILARITY_THRESHOLD_PROXIMITY && distance <= MAX_MERGE_DISTANCE_KM) return true;
+    return false;
 }
 
 describe('Story Merging & Smart Selection', () => {
@@ -74,8 +82,7 @@ describe('Story Merging & Smart Selection', () => {
         
         expect(distance).toBeGreaterThan(MAX_MERGE_DISTANCE_KM);
         
-        const shouldMerge = similarity >= SIMILARITY_THRESHOLD_STRICT || 
-                           (similarity >= SIMILARITY_THRESHOLD_PROXIMITY && distance <= MAX_MERGE_DISTANCE_KM);
+        const shouldMerge = evaluateMerge(similarity, distance);
         
         expect(shouldMerge).toBe(false);
     });
@@ -87,8 +94,17 @@ describe('Story Merging & Smart Selection', () => {
         const similarity = 0.95; // Extremely high (identical Reuters wire)
         const distance = calculateDistance(cityA.lat, cityA.lon, cityB.lat, cityB.lon);
         
-        const shouldMerge = similarity >= SIMILARITY_THRESHOLD_STRICT || 
-                           (similarity >= SIMILARITY_THRESHOLD_PROXIMITY && distance <= MAX_MERGE_DISTANCE_KM);
+        const shouldMerge = evaluateMerge(similarity, distance);
+        
+        expect(shouldMerge).toBe(true);
+    });
+
+    it('should merge similar events if they share the exact same location name (Place Anchoring)', () => {
+        const similarity = 0.82; // Below strict (0.85), above anchored (0.75)
+        // distance is 100km which would normally fail proximity check
+        const distance = 100;
+        
+        const shouldMerge = evaluateMerge(similarity, distance, 'Canary Islands', 'Canary Islands');
         
         expect(shouldMerge).toBe(true);
     });

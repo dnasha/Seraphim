@@ -76,3 +76,66 @@ Styles for the main application shell, content area, and top-level action button
     left: 12px;
   }
 }
+
+.errorOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 23, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 2rem;
+  text-align: center;
+}
+
+.errorIcon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 1.5rem;
+  color: var(--red, #ef4444);
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.3));
+  opacity: 0.9;
+}
+
+.errorOverlay p {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.errorOverlay button {
+  padding: 0.75rem 2rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.errorOverlay button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  filter: brightness(1.1);
+}
+
+.errorOverlay button:active {
+  transform: translateY(0);
+}
+
+:global(.light-mode) .errorOverlay {
+  background: rgba(255, 255, 255, 0.85);
+}

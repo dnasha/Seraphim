@@ -184,3 +184,10 @@ a {
   scrollbar-color: #666 transparent;
 }
 
+/* Disable all transitions globally during sidebar resize to prevent map flicker/jitter */
+body.is-resizing-sidebar,
+body.is-resizing-sidebar * {
+  transition: none !important;
+  user-select: none !important;
+}
+

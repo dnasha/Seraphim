@@ -35,6 +35,8 @@ interface NewsMapProps {
   mappedOnly: boolean;
   onMappedOnlyChange: (val: boolean) => void;
   onBoundsChange?: (bbox: BBox) => void;
+  initialCenter?: [number, number];
+  initialZoom?: number;
 }
 
 const CATEGORIES = [
@@ -48,7 +50,56 @@ const CATEGORIES = [
   "health",
 ];
 
+/**
+ * Deterministic client-side jitter to prevent unclustered pins from stacking.
+ * Groups items by coordinate, sorts them by ID, and applies a golden-angle spiral.
+ */
+function applyClientJitter(items: NewsItem[]): NewsItem[] {
+  const coordGroups = new Map<string, NewsItem[]>();
+  
+  // Group items by coordinate (rounded to avoid floating point precision issues)
+  for (const item of items) {
+    if (item.latitude == null || item.longitude == null) continue;
+    // Don't jitter server-side clusters
+    if (item.eventCount && item.eventCount > 1) continue;
+    
+    const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
+    if (!coordGroups.has(key)) coordGroups.set(key, []);
+    coordGroups.get(key)!.push(item);
+  }
+  
+  const jitteredMap = new Map<string, { lat: number; lng: number }>();
+  
+  for (const group of coordGroups.values()) {
+    if (group.length <= 1) continue;
+    
+    // Sort by ID to ensure deterministic order within the group
+    group.sort((a, b) => a.id.localeCompare(b.id));
+    
+    for (let i = 1; i < group.length; i++) {
+      const item = group[i];
+      const angle = (i * 137.5 * Math.PI) / 180;
+      // Precision radius to keep items close but visible
+      const radius = 0.0005 + (i * 0.0002);
+      
+      jitteredMap.set(item.id, {
+        lat: item.latitude! + radius * Math.cos(angle),
+        lng: item.longitude! + radius * Math.sin(angle)
+      });
+    }
+  }
+  
+  return items.map(item => {
+    const jittered = jitteredMap.get(item.id);
+    if (jittered) {
+      return { ...item, latitude: jittered.lat, longitude: jittered.lng };
+    }
+    return item;
+  });
+}
+
 export default function NewsMap({
+
   items,
   selectedItemId,
   selectionVersion,
@@ -57,6 +108,8 @@ export default function NewsMap({
   mappedOnly,
   onMappedOnlyChange,
   onBoundsChange,
+  initialCenter,
+  initialZoom,
 }: NewsMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -84,6 +137,42 @@ export default function NewsMap({
   const overlaysRef = useRef(overlays);
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Calculate initial view state based on resolution via interpolation between known ideal points.
+  const getInitialViewState = useCallback(() => {
+    if (typeof window === "undefined") return { center: [9.8454, 7.8751] as [number, number], zoom: 1.2 };
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const isMobile = width <= 860;
+    const mapWidth = isMobile ? width : width - 400;
+
+    // Known ideal points provided by user:
+    // P1: 1920x1200 (1520 map width) -> zoom 1.2, center [9.8454, 7.8751]
+    // P2: 2560x1440 (2160 map width) -> zoom 2.1, center [11.6090, 8.6974]
+    
+    // Interpolation factor based on display resolution (clamped to 0 at the low end)
+    const tH = (height - 1200) / (1440 - 1200);
+    const tW = (mapWidth - 1520) / (2160 - 1520);
+    let t = Math.max(0, Math.max(isNaN(tH) ? 0 : tH, isNaN(tW) ? 0 : tW));
+    if (isNaN(t)) t = 0;
+    
+    const zoom = 1.2 + t * (2.1 - 1.2);
+    const lng = 9.8454 + t * (11.6090 - 9.8454);
+    const lat = 7.8751 + t * (8.6974 - 7.8751);
+
+    if (isMobile) {
+      return { center: [1.65, 28.0] as [number, number], zoom: 1.0 };
+    }
+
+    const finalZoom = (Number.isFinite(zoom) && zoom >= 0.5) ? zoom : 1.2;
+    const finalLng = Number.isFinite(lng) ? lng : 9.8454;
+    const finalLat = Number.isFinite(lat) ? lat : 7.8751;
+
+    return { 
+      center: [finalLng, finalLat] as [number, number], 
+      zoom: Math.max(1.2, finalZoom) 
+    };
+  }, []);
 
   // Track the last selection to prevent redundant camera animations during re-renders.
   const lastFlownSelectionRef = useRef<string | null>(null);
@@ -94,6 +183,10 @@ export default function NewsMap({
 
   // Guard to prevent deselecting items when the popup is programmatically removed during flyTo.
   const isFlyingRef = useRef(false);
+
+  // Track active resizing to suppress data updates/emissions
+  const isResizingRef = useRef(false);
+  const resizeEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     onBoundsChangeRef.current = onBoundsChange;
@@ -114,10 +207,10 @@ export default function NewsMap({
     setCurrentStyle(isDarkMode ? "dark" : "standard");
   }
 
-  const geoItems = useMemo(
-    () => items.filter((i) => i.latitude != null && i.longitude != null),
-    [items],
-  );
+  const geoItems = useMemo(() => {
+    const valid = items.filter((i) => i.latitude != null && i.longitude != null);
+    return applyClientJitter(valid);
+  }, [items]);
 
   // Emits the current map bounds with a debounce to avoid excessive API calls.
   const emitBounds = useCallback((map: maplibregl.Map) => {
@@ -483,28 +576,37 @@ export default function NewsMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Calculate initial zoom to fit a broad geographic area based on screen width.
-    const getInitialZoom = () => {
-      const width = window.innerWidth;
-      const isMobile = width <= 860;
-      const mapWidth = isMobile ? width : width - 360;
-
-      if (isMobile) return 1.3;
-
-      return Math.max(1.0, 1.6 + Math.log2(mapWidth / 1560));
-    };
-
     let map: maplibregl.Map;
 
     try {
+      const view = getInitialViewState();
+      const isNum = (v: number | undefined | null): v is number => typeof v === 'number' && Number.isFinite(v);
+      
+      // Airtight fallback chain for center and zoom
+      const fallbackCenter: [number, number] = [9.8454, 7.8751];
+      const finalCenter: [number, number] = (initialCenter && isNum(initialCenter[0]) && isNum(initialCenter[1])) 
+        ? initialCenter 
+        : (view.center && isNum(view.center[0]) && isNum(view.center[1]))
+          ? view.center
+          : fallbackCenter;
+      
+      const finalZoom = isNum(initialZoom)
+        ? initialZoom
+        : isNum(view.zoom)
+          ? view.zoom
+          : 1.2;
+
       map = new maplibregl.Map({
-        container: containerRef.current,
+        container: containerRef.current as HTMLElement,
         style: getMapLibreStyle(currentStyle),
-        center: [1.65, 28.0],
-        zoom: getInitialZoom(),
-        minZoom: 1.0,
+        center: finalCenter,
+        zoom: finalZoom,
+        minZoom: 0.5,
         maxZoom: 18,
         attributionControl: false,
+        trackResize: false, 
+        // @ts-expect-error - Supported by MapLibre but may be missing from types
+        preserveDrawingBuffer: true,
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
@@ -617,7 +719,12 @@ export default function NewsMap({
             });
           }
 
-          map.on("moveend", () => emitBounds(map));
+          map.on("moveend", () => {
+            // Don't emit bounds if we're in the middle of a container resize
+            if (!isResizingRef.current) {
+              emitBounds(map);
+            }
+          });
         }
         setMapReady(true);
       });
@@ -625,15 +732,24 @@ export default function NewsMap({
 
     mapRef.current = map;
 
-    // Use ResizeObserver to handle container size changes (e.g. sidebar resize)
+    // Use ResizeObserver for synchronous layout synchronization
     const resizeObserver = new ResizeObserver(() => {
+      isResizingRef.current = true;
+      if (resizeEndTimeoutRef.current) clearTimeout(resizeEndTimeoutRef.current);
+      resizeEndTimeoutRef.current = setTimeout(() => {
+        isResizingRef.current = false;
+      }, 150);
+
+      // Calling resize synchronously prevents the 1-frame lag between DOM and Canvas
       map.resize();
     });
+    
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
 
     return () => {
+      if (resizeEndTimeoutRef.current) clearTimeout(resizeEndTimeoutRef.current);
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
@@ -651,6 +767,22 @@ export default function NewsMap({
     }
   }, []);
 
+  // Force initial view on blank load to overcome MapLibre's early clamping/snapping
+  useEffect(() => {
+    if (mapReady && mapRef.current && !initialCenter && !initialZoom) {
+      const timer = setTimeout(() => {
+        if (!mapRef.current) return;
+        const initialView = getInitialViewState();
+        mapRef.current.jumpTo({
+          center: initialView.center,
+          zoom: initialView.zoom
+        });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
+
   // Sync bounds when individual pins are toggled.
   useEffect(() => {
     if (mapReady && mapRef.current) emitBounds(mapRef.current);
@@ -665,7 +797,7 @@ export default function NewsMap({
 
   // Updates the GeoJSON source when news items change.
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
+    if (!mapReady || !mapRef.current || isResizingRef.current) return;
 
     const geojson: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
@@ -983,6 +1115,7 @@ export default function NewsMap({
         ref={containerRef}
         id="news-map"
         className={styles.newsMapContainer}
+        style={{ backfaceVisibility: "hidden", transform: "translateZ(0)" }}
       />
     </div>
   );

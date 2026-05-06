@@ -98,6 +98,7 @@ export default function EventSidebar({
   onSortModeChange,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /* Tracks which cards have their full source timeline expanded */
   const [showAllSourcesIds, setShowAllSourcesIds] = useState<Set<string>>(
@@ -110,6 +111,7 @@ export default function EventSidebar({
   const MAX_WIDTH = 800;
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
+  const lastWidthRef = useRef(DEFAULT_WIDTH);
 
   /* Load persisted width on mount */
   useEffect(() => {
@@ -121,6 +123,7 @@ export default function EventSidebar({
         // and ensure the update happens after the initial paint.
         const rafId = requestAnimationFrame(() => {
           setSidebarWidth(parsed);
+          lastWidthRef.current = parsed;
         });
         return () => cancelAnimationFrame(rafId);
       }
@@ -134,8 +137,9 @@ export default function EventSidebar({
 
   const stopResizing = useCallback(() => {
     setIsResizing(false);
-    localStorage.setItem("seraphim-sidebar-width", sidebarWidth.toString());
-  }, [sidebarWidth]);
+    localStorage.setItem("seraphim-sidebar-width", lastWidthRef.current.toString());
+    setSidebarWidth(lastWidthRef.current);
+  }, []);
 
   const resize = useCallback(
     (e: MouseEvent) => {
@@ -143,7 +147,12 @@ export default function EventSidebar({
 
       /* Clamp width between MIN and MAX */
       const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
-      setSidebarWidth(newWidth);
+      lastWidthRef.current = newWidth;
+      
+      /* Direct DOM manipulation for maximum performance during drag */
+      if (sidebarRef.current) {
+        sidebarRef.current.style.setProperty("--sidebar-width", `${newWidth}px`);
+      }
     },
     [isResizing],
   );
@@ -154,11 +163,13 @@ export default function EventSidebar({
       window.addEventListener("mouseup", stopResizing);
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
+      document.body.classList.add("is-resizing-sidebar");
     } else {
       window.removeEventListener("mousemove", resize);
       window.removeEventListener("mouseup", stopResizing);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      document.body.classList.remove("is-resizing-sidebar");
     }
     return () => {
       window.removeEventListener("mousemove", resize);
@@ -586,6 +597,7 @@ export default function EventSidebar({
 
   return (
     <aside
+      ref={sidebarRef}
       className={[
         styles.eventSidebar,
         isOpen ? styles.eventSidebarMobileOpen : styles.eventSidebarCollapsed,
@@ -714,8 +726,13 @@ export default function EventSidebar({
           onClick={() => onSortModeChange("hot")}
           aria-pressed={sortMode === "hot"}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-            <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z" />
+          <svg viewBox="0 0 46.11 46.11" width="14" height="14" fill="currentColor">
+            <g>
+              <g>
+                <path d="M23.054,0C10.342,0,0,10.342,0,23.055C0,35.768,10.342,46.11,23.055,46.11S46.11,35.768,46.11,23.055 C46.11,10.342,35.768,0,23.054,0z M23.054,39.11C14.201,39.11,7,31.908,7,23.055C7,14.202,14.201,7,23.054,7 c8.853,0,16.056,7.202,16.056,16.055C39.11,31.908,31.907,39.11,23.054,39.11z" />
+                <circle cx="23.054" cy="23.055" r="7.555" />
+              </g>
+            </g>
           </svg>
           Hot
         </button>

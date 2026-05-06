@@ -8,31 +8,47 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: var(--surface, #0f1117);
+    background: rgba(15, 17, 23, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 900;
-    transition: opacity 0.5s ease-in-out;
+    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--border, rgba(255,255,255,0.1));
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(59, 130, 246, 0.1);
     border-top-color: var(--accent, #3b82f6);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 0.75rem;
+    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    margin-bottom: 1.25rem;
+    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3));
 }
 
 .loadingText {
-    font-size: 0.875rem;
-    color: var(--text-muted, #94a3b8);
-    font-weight: 400;
+    font-size: 0.9375rem;
+    color: var(--text-primary, #ffffff);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.8;
+    animation: pulse 2s ease-in-out infinite;
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.9; }
+}
+
 :global(.light-mode) .loadingContainer {
-    background: #f1f5f9;
+    background: rgba(248, 250, 252, 0.75);
+}
+
+:global(.light-mode) .loadingText {
+    color: var(--text-primary, #1e293b);
 }

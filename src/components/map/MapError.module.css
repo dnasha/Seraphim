@@ -8,57 +8,68 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: var(--surface, #0f1117);
+    background: rgba(15, 17, 23, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     color: var(--text-primary, #ffffff);
     z-index: 1000;
-    padding: 2rem;
+    padding: 2.5rem;
     text-align: center;
 }
 
 .errorIcon {
-    width: 48px;
-    height: 48px;
-    margin-bottom: 1rem;
-    color: var(--red, #ef4444);
-    opacity: 0.8;
-}
-
-.errorTitle {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: var(--text-primary);
-}
-
-.errorMessage {
-    font-size: 0.875rem;
-    color: var(--text-muted, #94a3b8);
-    max-width: 320px;
+    width: 56px;
+    height: 56px;
     margin-bottom: 1.5rem;
-    line-height: 1.5;
-}
-
-.retryButton {
-    padding: 0.6rem 1.5rem;
-    background: var(--accent, #3b82f6);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-weight: 500;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: opacity 0.2s ease;
-}
-
-.retryButton:hover {
+    color: var(--red, #ef4444);
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.3));
     opacity: 0.9;
 }
 
+.errorTitle {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.errorMessage {
+    font-size: 1rem;
+    color: var(--text-muted, #94a3b8);
+    max-width: 380px;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.retryButton {
+    padding: 0.8rem 2.2rem;
+    background: var(--accent, #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.retryButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    filter: brightness(1.1);
+}
+
 .retryButton:active {
-    opacity: 0.8;
+    transform: translateY(0);
 }
 
 /* Theme handled by variables */
+
+:global(.light-mode) .errorContainer {
+    background: rgba(248, 250, 252, 0.85);
+}
 
 :global(.light-mode) .errorMessage {
     color: #64748b;

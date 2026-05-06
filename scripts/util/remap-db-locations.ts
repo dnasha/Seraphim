@@ -50,8 +50,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-// Coordinates must differ by more than this to count as a real change (avoids float noise)
-const COORD_EPSILON = 0.001;
 
 // How many rows to SELECT per Supabase request
 const FETCH_PAGE_SIZE = 100;
@@ -113,16 +111,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 // Helpers
 
-function coordChanged(
-  oldLat: number | null, oldLon: number | null,
-  newLat: number | null, newLon: number | null,
-): boolean {
-  // both null -> no change
-  if (oldLat == null && newLat == null) return false;
-  // one became null / non-null -> changed
-  if (oldLat == null || newLat == null || oldLon == null || newLon == null) return true;
-  return Math.abs(oldLat - newLat) > COORD_EPSILON || Math.abs(oldLon - newLon) > COORD_EPSILON;
-}
 
 function locationNameChanged(oldName: string | null, newName: string | null): boolean {
   const a = (oldName ?? '').toLowerCase().trim();
@@ -271,7 +259,6 @@ async function run() {
   }
 
   // Summary
-  const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(`\n[remap] Results`);
   console.log(`[remap] Rows fetched  : ${totalFetched}`);
   console.log(`[remap] Rows changed  : ${allUpdates.length}`);

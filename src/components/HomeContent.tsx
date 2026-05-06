@@ -34,6 +34,29 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     const [searchQuery, setSearchQuery] = useState((searchParams.q as string) || '');
     const [debouncedSearch, setDebouncedSearch] = useState((searchParams.q as string) || '');
     const [sortMode, setSortMode] = useState<SortMode>((searchParams.s as SortMode) || 'new');
+    const [currentBBox, setCurrentBBox] = useState<BBox | null>(null);
+    
+    // Map initial view state from searchParams
+    const getParam = (key: string) => {
+        const val = searchParams[key];
+        return Array.isArray(val) ? val[0] : val;
+    };
+
+    const parseNum = (val: string | undefined) => {
+        if (!val) return NaN;
+        const n = parseFloat(val);
+        return Number.isFinite(n) ? n : NaN;
+    };
+
+    const initialLat = parseNum(getParam('lat'));
+    const initialLng = parseNum(getParam('lng'));
+    const initialZoom = parseNum(getParam('zoom'));
+
+    const initialCenter: [number, number] | undefined = (!isNaN(initialLat) && !isNaN(initialLng))
+        ? [initialLng, initialLat]
+        : undefined;
+    
+    const validInitialZoom = !isNaN(initialZoom) ? initialZoom : undefined;
 
     // Effect to debounce search input to minimize API calls
     useEffect(() => {
@@ -57,7 +80,7 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
         sources, setSources,
         categories, setCategories,
         filteredNews
-    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode);
+    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox);
 
     // UI and interaction state
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -75,6 +98,7 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     // Sync map center/zoom changes to URL
     const handleBoundsChange = useCallback((bbox: BBox) => {
         onBoundsChange(bbox);
+        setCurrentBBox(bbox);
         if (bbox.zoom !== undefined) {
             const centerLat = (bbox.minLat + bbox.maxLat) / 2;
             const centerLng = (bbox.minLng + bbox.maxLng) / 2;
@@ -180,13 +204,20 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
                     mappedOnly={mappedOnly}
                     onMappedOnlyChange={setMappedOnly}
                     onBoundsChange={handleBoundsChange}
+                    initialCenter={initialCenter}
+                    initialZoom={validInitialZoom}
                 />
             </main>
 
             {error && (
                 <div className={styles.errorOverlay}>
+                    <svg className={styles.errorIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
                     <p>{error}</p>
-                    <button onClick={() => fetchNews(true)}>Retry</button>
+                    <button onClick={() => fetchNews(true)}>Retry Connection</button>
                 </div>
             )}
         </div>

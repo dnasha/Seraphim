@@ -54,7 +54,7 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 const RAW_LIMIT = 2000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
-const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, sources';
+const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, sources, event_count';
 
 export async function GET(request: Request) {
     const now = Date.now();
@@ -181,9 +181,19 @@ export async function GET(request: Request) {
                 // Standard query for individual event markers
                 let query = supabase
                     .from('events')
-                    .select(LIST_SELECT)
-                    .order('published_at', { ascending: false })
-                    .limit(sort === 'hot' ? RAW_LIMIT : limit);
+                    .select(LIST_SELECT);
+
+                if (sort === 'hot') {
+                    // Prioritize clusters with highest impact scores first
+                    query = query
+                        .order('impact_score', { ascending: false, nullsFirst: false })
+                        .order('event_count', { ascending: false, nullsFirst: false })
+                        .order('published_at', { ascending: false });
+                } else {
+                    query = query.order('published_at', { ascending: false });
+                }
+
+                query = query.limit(sort === 'hot' ? RAW_LIMIT : limit);
 
                 if (!ignoreBBox && hasBBox) {
                     query = query
@@ -226,7 +236,7 @@ export async function GET(request: Request) {
                 // The client will retry automatically on the next viewport change.
                 if (error.message?.includes('statement timeout') || error.message?.includes('canceling statement')) {
                     console.warn('[api/news] Statement timeout — returning empty result set (fail-open).');
-                    allItems = [];
+                    return NextResponse.json({ items: [], lastUpdated: new Date().toISOString(), sources: { gnews: true, rss: true, social: true } });
                 } else {
                     return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
                 }
@@ -246,30 +256,24 @@ export async function GET(request: Request) {
                 return item;
             });
 
-            const getLatestTime = (item: NewsItem) => {
-                if (!item.sources || item.sources.length === 0) return new Date(item.publishedAt).getTime();
-                let latest = new Date(item.publishedAt).getTime();
-                for (const s of item.sources) {
-                    const t = new Date(s.discoveredAt).getTime();
-                    if (t > latest) latest = t;
-                }
-                return latest;
-            };
-
             // Apply consistent in-memory sorting for all modes to ensure UI stability.
-            // This ensures that 'New' mode is strictly chronological by latest source update,
-            // and 'Hot' mode correctly tie-breaks with the same logic.
             if (sort === 'hot') {
                 allItems.sort((a, b) => {
-                    const countA = a.eventCount && a.eventCount > 1 ? Number(a.eventCount) : (a.sources?.length ?? 1);
-                    const countB = b.eventCount && b.eventCount > 1 ? Number(b.eventCount) : (b.sources?.length ?? 1);
+                    // Primary: Impact Score
+                    const scoreA = a.impactScore || 0;
+                    const scoreB = b.impactScore || 0;
+                    if (scoreB !== scoreA) return scoreB - scoreA;
+
+                    // Secondary: Event Count
+                    const countA = Math.max(Number(a.eventCount) || 0, a.sources?.length || 0, 1);
+                    const countB = Math.max(Number(b.eventCount) || 0, b.sources?.length || 0, 1);
                     if (countB !== countA) return countB - countA;
-                    return getLatestTime(b) - getLatestTime(a);
+                    
+                    // Tertiary: Recency
+                    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
                 });
             } else {
-                // Explicitly sort by recency in memory since the DB 'order by published_at' 
-                // doesn't account for the 'discovered_at' times buried in the JSONB sources array.
-                allItems.sort((a, b) => getLatestTime(b) - getLatestTime(a));
+                allItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
             }
 
             if (limit < allItems.length) {

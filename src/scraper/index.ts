@@ -36,6 +36,7 @@ import {
     cosineSimilarity,
     calculateDistance,
     SIMILARITY_THRESHOLD_STRICT,
+    SIMILARITY_THRESHOLD_PLACE_ANCHORED,
     SIMILARITY_THRESHOLD_PROXIMITY,
     MAX_MERGE_DISTANCE_KM,
 } from './utils/vectorize';
@@ -67,6 +68,7 @@ async function fetchRecentEmbeddings(): Promise<{
     sources: DbEventSource[];
     latitude?: number;
     longitude?: number;
+    location_name?: string;
     title?: string;
     description?: string;
     credibility_tier?: number;
@@ -93,6 +95,7 @@ async function fetchRecentEmbeddings(): Promise<{
         sources: DbEventSource[] | null;
         latitude: number | null;
         longitude: number | null;
+        location_name: string | null;
         title: string;
         description: string;
         credibility_tier: number;
@@ -113,6 +116,7 @@ async function fetchRecentEmbeddings(): Promise<{
             sources: r.sources ?? [],
             latitude: r.latitude ?? undefined,
             longitude: r.longitude ?? undefined,
+            location_name: r.location_name ?? undefined,
             title: r.title,
             description: r.description,
             credibility_tier: r.credibility_tier,
@@ -139,6 +143,8 @@ async function resolveStoryMerges(
         source?: string;
         url?: string;
         credibility_tier?: number;
+        event_count?: number;
+        impact_score?: number;
     }>;
 }> {
     const newEvents: DbEvent[] = [];
@@ -150,6 +156,8 @@ async function resolveStoryMerges(
         url?: string;
         credibility_tier?: number;
         published_at?: string;
+        event_count?: number;
+        impact_score?: number;
     }>();
 
     if (dbEvents.length === 0) {
@@ -194,6 +202,12 @@ async function resolveStoryMerges(
             if (sim >= SIMILARITY_THRESHOLD_STRICT) {
                 shouldMerge = true;
             }
+            // Strategy 1.5: Place Name Anchoring (exact location name match)
+            else if (sim >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
+                     event.location_name && candidate.location_name &&
+                     event.location_name === candidate.location_name) {
+                shouldMerge = true;
+            }
             // Strategy 2: Proximity semantic (related text in same location)
             else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY &&
                      event.latitude != null && event.longitude != null &&
@@ -227,16 +241,32 @@ async function resolveStoryMerges(
             }
 
             // Always pick the latest publication time for the master card
-            const candidateTime = new Date(matchedCandidate.published_at).getTime();
+            // Normalization: Also check against the candidate's existing sources just in case
+            let candidateLatestTime = new Date(matchedCandidate.published_at).getTime();
+            for (const s of matchedCandidate.sources) {
+                const sourceTime = new Date(s.discovered_at).getTime();
+                if (sourceTime > candidateLatestTime) {
+                    candidateLatestTime = sourceTime;
+                }
+            }
+
             const incomingTime = new Date(event.published_at).getTime();
             
-            // Check if we already have a newer time in the current merge set
+            // Check if we already have an even newer time in the current merge set
             const existingMerge = merges.get(bestMatchId);
             const currentSetTime = existingMerge?.published_at ? new Date(existingMerge.published_at).getTime() : -1;
             
-            const latestTime = Math.max(incomingTime, candidateTime, currentSetTime) === incomingTime 
-                ? event.published_at 
-                : (Math.max(incomingTime, candidateTime, currentSetTime) === candidateTime ? matchedCandidate.published_at : existingMerge!.published_at!);
+            const maxTime = Math.max(incomingTime, candidateLatestTime, currentSetTime);
+            
+            let latestPublishedAt = matchedCandidate.published_at;
+            if (maxTime === incomingTime) latestPublishedAt = event.published_at;
+            else if (maxTime === currentSetTime) latestPublishedAt = existingMerge!.published_at!;
+            // else it stays matchedCandidate.published_at (or whichever was the source of candidateLatestTime)
+            // if candidateLatestTime came from a source, we should use that string
+            if (maxTime === candidateLatestTime && candidateLatestTime !== new Date(matchedCandidate.published_at).getTime()) {
+                const latestSource = matchedCandidate.sources.find(s => new Date(s.discovered_at).getTime() === candidateLatestTime);
+                if (latestSource) latestPublishedAt = latestSource.discovered_at;
+            }
 
             const newSource: DbEventSource = {
                 name: event.source,
@@ -246,9 +276,20 @@ async function resolveStoryMerges(
             };
 
             if (!matchedCandidate.sources.some(s => s.url === event.url)) {
+                const updatedSources = existingMerge ? [...existingMerge.sources, newSource] : [...matchedCandidate.sources, newSource];
+                const bestTier = Math.min(currentTier, incomingTier);
+                const eventCount = updatedSources.length;
+                
+                // Unified Impact Score: All sources receive the 'credit' of the most credible source
+                // in the story's timeline. This prevents deprioritization of high-count events 
+                // that are eventually confirmed by high-credibility outlets.
+                const impactScore = eventCount * (3.5 - bestTier);
+
                 if (existingMerge) {
-                    existingMerge.sources.push(newSource);
-                    existingMerge.published_at = latestTime;
+                    existingMerge.sources = updatedSources;
+                    existingMerge.published_at = latestPublishedAt;
+                    existingMerge.event_count = eventCount;
+                    existingMerge.impact_score = impactScore;
                     if (updateContent) {
                         existingMerge.title = event.title;
                         existingMerge.description = event.description;
@@ -258,8 +299,10 @@ async function resolveStoryMerges(
                     }
                 } else {
                     merges.set(bestMatchId, {
-                        sources: [...matchedCandidate.sources, newSource],
-                        published_at: latestTime,
+                        sources: updatedSources,
+                        published_at: latestPublishedAt,
+                        event_count: eventCount,
+                        impact_score: impactScore,
                         ...(updateContent ? {
                             title: event.title,
                             description: event.description,
@@ -292,6 +335,8 @@ async function applyMerges(
         source?: string;
         url?: string;
         credibility_tier?: number;
+        event_count?: number;
+        impact_score?: number;
     }>
 ): Promise<number> {
     let updated = 0;
@@ -410,7 +455,10 @@ async function run(): Promise<void> {
         for (const event of newEvents) {
             console.log(`  * [${event.source_type}] ${event.title.slice(0, 80)}`);
             if (event.latitude) console.log(`    Location: ${event.location_name} (${event.latitude.toFixed(3)}, ${event.longitude!.toFixed(3)})`);
-            if (event.embedding) console.log(`    Embedding: [${String(event.embedding).slice(0, 40)}...]`);
+            if (event.embedding) {
+                const embStr = typeof event.embedding === 'string' ? event.embedding : JSON.stringify(event.embedding);
+                console.log(`    Embedding: [${embStr.slice(0, 40)}...]`);
+            }
         }
         console.log(`[scraper] DRY RUN — ${newEvents.length} new events, ${merges.size} story merges`);
         return;
@@ -450,9 +498,9 @@ async function run(): Promise<void> {
                 if (singleError) {
                     console.error('[scraper] Individual upsert failed for URL:', event.url);
                     console.error('[scraper] Error:', singleError.message);
-                    console.error('[scraper] Full payload:', JSON.stringify(event, (key, value) => 
-                        typeof value === 'number' && !Number.isFinite(value) ? 'SERIALIZATION_ERROR_NOT_FINITE' : value
-                    , 2));
+                    // Truncate payload for readable logs
+                    const safePayload = { ...event, embedding: '[TRUNCATED]' };
+                    console.error('[scraper] Payload snippet:', JSON.stringify(safePayload, null, 2));
                 } else {
                     totalUpserted++;
                 }

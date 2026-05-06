@@ -1,10 +1,5 @@
-/*
-  Pure filtering logic for news items.
-  Extracted from useNewsFilter hook for testability.
-  Handles source, category, time range, search query filtering, and sort mode.
-*/
-
 import { NewsItem } from './types';
+import { BBox, isWithinBBox } from '@/hooks/useNewsData';
 
 export type SortMode = 'new' | 'hot';
 
@@ -18,6 +13,7 @@ export interface FilterOptions {
     searchQuery: string;
     now: number;
     sortMode?: SortMode;
+    bbox?: BBox;
 }
 
 /**
@@ -25,10 +21,15 @@ export interface FilterOptions {
  * Pure function: no React dependencies, no side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, searchQuery, now, sortMode = 'new' } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, searchQuery, now, sortMode = 'new', bbox } = options;
 
     let filtered = items;
     if (now === 0) return filtered;
+
+    // 0. BBox Viewport filtering (to sync sidebar with map view)
+    if (bbox) {
+        filtered = filtered.filter(item => isWithinBBox(item, bbox));
+    }
 
     // 1. Source filtering (RSS, GNews, Social)
     filtered = filtered.filter(item => {
@@ -91,34 +92,26 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         filtered = filtered.filter(n => n.latitude != null);
     }
 
-    const getLatestTime = (item: NewsItem) => {
-        if (!item.sources || item.sources.length === 0) return new Date(item.publishedAt).getTime();
-        let latest = new Date(item.publishedAt).getTime();
-        for (const s of item.sources) {
-            const t = new Date(s.discoveredAt).getTime();
-            if (t > latest) latest = t;
-        }
-        return latest;
-    };
-
     // 6. Sort by mode
     if (sortMode === 'hot') {
-        // "Hot" prioritizes stories with the most corroborating sources or clustered events, then recency
+        // "Hot" prioritizes impact score (backfilled), then corroborating sources, then recency
         filtered.sort((a, b) => {
-            const countA = a.eventCount && a.eventCount > 1 ? Number(a.eventCount) : (a.sources?.length ?? 1);
-            const countB = b.eventCount && b.eventCount > 1 ? Number(b.eventCount) : (b.sources?.length ?? 1);
+            // Primary: Impact Score
+            const scoreA = a.impactScore || 0;
+            const scoreB = b.impactScore || 0;
+            if (scoreB !== scoreA) return scoreB - scoreA;
+
+            // Secondary: Event Count
+            const countA = Math.max(Number(a.eventCount) || 0, a.sources?.length || 0, 1);
+            const countB = Math.max(Number(b.eventCount) || 0, b.sources?.length || 0, 1);
             if (countB !== countA) return countB - countA;
-            const timeA = getLatestTime(a);
-            const timeB = getLatestTime(b);
-            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+
+            // Tertiary: Recency
+            return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
         });
     } else {
         // "New" sorts by latest first (default)
-        filtered.sort((a, b) => {
-            const timeA = getLatestTime(a);
-            const timeB = getLatestTime(b);
-            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
-        });
+        filtered.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
     }
 
     return filtered;

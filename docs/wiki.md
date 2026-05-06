@@ -66,7 +66,7 @@ Seraphim/
 │   │   ├── ThemeToggle.tsx         # Refactored to use useTheme() hook
 │   │   ├── ThemeToggle.module.css  # Scoped toggle styles (icons, hover, shadows)
 │   │   ├── map/
-│   │   │   ├── NewsMap.tsx         # MapLibre map with Dynamic Zoom logic
+│   │   │   ├── NewsMap.tsx         # MapLibre map with Resolution-Aware View State logic
 │   │   │   ├── MapConstants.tsx    # Centralized styling helper exports
 │   │   │   └── index.tsx           # Barrel export
 │   │   └── EventSidebar.tsx        # Sidebar (uses centralized colors)
@@ -147,9 +147,10 @@ The engine uses a tiered lookup strategy with manual overrides to resolve naming
 
 ### Map Rendering (MapLibre)
 
-- **Dynamic Zoom**: The initial zoom level is calculated via `getInitialZoom()` based on window width.
-  - **Desktop**: Scales logarithmically to keep the "Alaska to NZ" span consistent on high-res monitors.
-  - **Mobile**: Uses a fixed sane baseline (1.3) for legibility.
+- **Resolution-Aware View State**: The initial zoom and center are calculated via `getInitialViewState()` using linear interpolation (Lerp).
+  - **Scaling**: Interpolates between 1200p (zoom 1.2) and 1440p/2K (zoom 2.1) to maintain consistent visual density across high-res monitors.
+  - **Clamping**: Overcomes default Mercator latitude clamping by relaxing `maxBounds` and using a delayed `jumpTo` injection after map readiness.
+- **Reliability**: Implements strict numeric validation (Number.isFinite) to prevent initialization crashes caused by NaN or null values.
 - **Style Persistence**: Layers are re-added via `style.load` events, ensuring pins survive map style toggles.
 
 ### Styling & Colors
@@ -206,7 +207,12 @@ During a full codebase documentation audit, the following technical patterns and
 - **Fail-Open Rate Limiting**: The Upstash Redis rate limiter is wrapped in a fail-open mechanism, ensuring API availability if the Redis service times out.
 - **BBox Snapping Grid**: Uses a dynamic snapping grid (0.5 to 10 degrees) to maximize client-side cache hits when panning the map.
 - **Lazy Description Loading**: Descriptions are excluded from the main list fetch and loaded on-demand to reduce initial payload size by ~40%.
-- **Story Consolidation**: Multiple sources for the same event are now stored in a `sources` JSONB array within a single `events` row, enabling a unified "Story" card UI.
+- **Story Consolidation (Re-Cluster)**: A dedicated `re-cluster.ts` script manages historical backfills, ensuring that semantically similar events are merged into a single "Master" story. 
+- **Tiered Similarity thresholds**: 
+    - 0.85: Strict (Global match)
+    - 0.75: Place-Anchored (Similarity + matching location name)
+    - 0.60: Proximity-Anchored (Similarity + <50km distance)
+- **Master Story Selection**: When merging, the system chooses the story with the highest credibility tier (Diamond > Gold > Silver). If tiers match, it chooses the most detailed (longest) content. The `published_at` timestamp is always synced to the latest update in the cluster.
 - **Semantic Foundation**: The database is now `pgvector`-ready with HNSW indexing, supporting sub-millisecond similarity lookups for real-time deduplication.
 
 ---

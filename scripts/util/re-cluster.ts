@@ -2,13 +2,20 @@ import { createClient } from '@supabase/supabase-js';
 import { 
     calculateDistance, 
     SIMILARITY_THRESHOLD_STRICT, 
+    SIMILARITY_THRESHOLD_PLACE_ANCHORED,
     SIMILARITY_THRESHOLD_PROXIMITY, 
     MAX_MERGE_DISTANCE_KM 
 } from '../../src/scraper/utils/vectorize';
 import type { DbEventSource } from '../../src/types';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Explicitly check for 'true' string, default to false if unset or anything else
+const DRY_RUN = String(process.env.DRY_RUN).toLowerCase() === 'true';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('Missing environment variables.');
@@ -18,7 +25,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function reClusterHistoricalData() {
-    console.log('[re-cluster] Initializing historical story consolidation...');
+    console.log(`[re-cluster] Initializing historical story consolidation... (DRY_RUN=${DRY_RUN})`);
 
     const startTime = Date.now();
     
@@ -49,7 +56,7 @@ async function reClusterHistoricalData() {
         */
         const { data: events, error: fetchError } = await supabase
             .from('events')
-            .select('id, title, url, source, source_type, embedding, latitude, longitude, sources, published_at, description, credibility_tier')
+            .select('id, title, url, source, source_type, embedding, latitude, longitude, location_name, sources, published_at, description, credibility_tier')
             .lt('published_at', lastDate)
             .order('published_at', { ascending: false })
             .limit(500);
@@ -138,7 +145,7 @@ async function reClusterHistoricalData() {
             if (missingIds.size > 0) {
                 const { data: missingData } = await supabase
                     .from('events')
-                    .select('id, title, url, source, source_type, latitude, longitude, description, credibility_tier, published_at, embedding, sources')
+                    .select('id, title, url, source, source_type, latitude, longitude, location_name, description, credibility_tier, published_at, embedding, sources')
                     .in('id', Array.from(missingIds));
                 
                 if (missingData) {
@@ -154,12 +161,21 @@ async function reClusterHistoricalData() {
                 const { event, matches } = res;
                 if (processedIds.has(event.id)) continue;
 
-                const currentSources = event.sources || [{
+                let changed = false;
+                const currentSources: DbEventSource[] = event.sources ? [...event.sources] : [{
                     name: event.source,
                     url: event.url,
                     source_type: event.source_type,
                     discovered_at: event.published_at
                 }];
+
+                // Normalization Fix: Ensure the top-level timestamp is the latest among EXISTING sources
+                for (const s of currentSources) {
+                    if (new Date(s.discovered_at).getTime() > new Date(event.published_at).getTime()) {
+                        event.published_at = s.discovered_at;
+                        changed = true;
+                    }
+                }
 
                 for (const match of matches) {
                     if (match.id === event.id || processedIds.has(match.id)) continue;
@@ -179,6 +195,10 @@ async function reClusterHistoricalData() {
 
                     if (match.similarity >= SIMILARITY_THRESHOLD_STRICT) {
                         shouldMerge = true;
+                    } else if (match.similarity >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
+                               event.location_name && matchedEvent.location_name &&
+                               event.location_name === matchedEvent.location_name) {
+                        shouldMerge = true;
                     } else if (match.similarity >= SIMILARITY_THRESHOLD_PROXIMITY && 
                                event.latitude !== null && event.longitude !== null && 
                                matchedEvent.latitude !== null && matchedEvent.longitude !== null) {
@@ -194,6 +214,11 @@ async function reClusterHistoricalData() {
                         const currentTier = event.credibility_tier || 3;
                         const matchTier = matchedEvent.credibility_tier || 3;
                         
+                        // Always track the most recent timestamp for the master card
+                        const eventTime = new Date(event.published_at).getTime();
+                        const matchTime = new Date(matchedEvent.published_at).getTime();
+                        const latestPublishedAt = matchTime > eventTime ? matchedEvent.published_at : event.published_at;
+
                         let isBetter = false;
                         if (matchTier < currentTier) {
                             isBetter = true;
@@ -210,8 +235,10 @@ async function reClusterHistoricalData() {
                             event.source = matchedEvent.source;
                             event.url = matchedEvent.url;
                             event.credibility_tier = matchedEvent.credibility_tier;
-                            event.published_at = matchedEvent.published_at;
                         }
+
+                        // Ensure we always keep the most recent time
+                        event.published_at = latestPublishedAt;
 
                         const matchSources = matchedEvent.sources || [{
                             name: matchedEvent.source,
@@ -230,10 +257,11 @@ async function reClusterHistoricalData() {
                         processedIds.add(matchedEvent.id);
                         totalMerges++;
                         totalDeletes++;
+                        changed = true;
                     }
                 }
 
-                if (currentSources.length > (event.sources?.length || 1) || processedIds.has(event.id)) {
+                if (changed) {
                     masterUpdates.push({
                         id: event.id,
                         data: {
@@ -255,23 +283,33 @@ async function reClusterHistoricalData() {
         // --- Execute Bulk DB Operations for the Batch ---
 
         if (idsToDelete.length > 0) {
-            const DELETE_CHUNK_SIZE = 500;
-            for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
-                const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
-                const { error: delErr } = await supabase.from('events').delete().in('id', chunk);
-                if (delErr) {
-                    console.error('[re-cluster] Bulk delete error:', delErr.message);
+            if (DRY_RUN) {
+                console.log(`[re-cluster]   └─ Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
+            } else {
+                console.log(`[re-cluster]   └─ Action: Deleting ${idsToDelete.length} merged items.`);
+                const DELETE_CHUNK_SIZE = 500;
+                for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
+                    const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
+                    const { error: delErr } = await supabase.from('events').delete().in('id', chunk);
+                    if (delErr) {
+                        console.error('[re-cluster] Bulk delete error:', delErr.message);
+                    }
                 }
             }
         }
 
         if (masterUpdates.length > 0) {
-            const UPDATE_CHUNK_SIZE = 50;
-            for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
-                const chunk = masterUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
-                await Promise.all(chunk.map(u => 
-                    supabase.from('events').update(u.data).eq('id', u.id)
-                ));
+            if (DRY_RUN) {
+                console.log(`[re-cluster]   └─ Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
+            } else {
+                console.log(`[re-cluster]   └─ Action: Updating ${masterUpdates.length} master stories.`);
+                const UPDATE_CHUNK_SIZE = 50;
+                for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
+                    const chunk = masterUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
+                    await Promise.all(chunk.map(u => 
+                        supabase.from('events').update(u.data).eq('id', u.id)
+                    ));
+                }
             }
         }
 

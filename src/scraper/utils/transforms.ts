@@ -40,6 +40,8 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         if (tags.length === 0) tags = null;
     }
     
+    const tier = SOURCE_TIER_MAP.get(item.source) ?? 3;
+    
     return {
         title: cleanString(item.title),
         description: cleanString(item.description),
@@ -54,7 +56,9 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         location_name: cleanString(item.locationName) || null,
         tags: tags,
         /* Assign credibility tier from source registry, default to Tier 3 (raw) */
-        credibility_tier: SOURCE_TIER_MAP.get(item.source) ?? 3,
+        credibility_tier: tier,
+        event_count: 1,
+        impact_score: 3.5 - tier,
         /* Initialize the Story model sources array for new items */
         sources: [{
             name: item.source,

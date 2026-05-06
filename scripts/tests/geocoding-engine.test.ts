@@ -218,7 +218,7 @@ describe('extractLocation - landmarks', () => {
     it('detects Pentagon', () => {
         // Pentagon is in FALSE_POSITIVES to avoid institutional bias, 
         // but we verify the extractor remains stable.
-        const { match, candidates } = extractLocation('Pentagon briefing outlines new NATO deployment strategy', '');
+        const { candidates } = extractLocation('Pentagon briefing outlines new NATO deployment strategy', '');
         expect(Array.isArray(candidates)).toBe(true);
     });
 
