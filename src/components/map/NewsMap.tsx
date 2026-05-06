@@ -18,6 +18,7 @@ import {
   formatTimeAgo,
   getSourceBadgeColor,
   getCategoryColor,
+  getCredibilityStyle,
 } from "./MapConstants";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
@@ -106,9 +107,12 @@ export default function NewsMap({
   useEffect(() => {
     overlaysRef.current = overlays;
   }, [overlays]);
-  useEffect(() => {
+  // Sync style with dark mode changes
+  const [prevIsDarkMode, setPrevIsDarkMode] = useState(isDarkMode);
+  if (prevIsDarkMode !== isDarkMode) {
+    setPrevIsDarkMode(isDarkMode);
     setCurrentStyle(isDarkMode ? "dark" : "standard");
-  }, [isDarkMode]);
+  }
 
   const geoItems = useMemo(
     () => items.filter((i) => i.latitude != null && i.longitude != null),
@@ -238,6 +242,35 @@ export default function NewsMap({
         },
         paint: {
           "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
+        },
+      });
+    }
+
+    // Ring indicator for multi-source story pins (sourceCount > 1).
+    if (!map.getLayer("multisource-ring")) {
+      map.addLayer({
+        id: "multisource-ring",
+        type: "circle",
+        source: "news-events",
+        filter: [
+          "all",
+          [
+            "!",
+            [
+              "any",
+              ["has", "point_count"],
+              [">", ["coalesce", ["get", "eventCount"], 0], 1],
+            ],
+          ],
+          [">", ["coalesce", ["get", "sourceCount"], 0], 1],
+        ],
+        paint: {
+          "circle-radius": 16,
+          "circle-color": "transparent",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#d97706",
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.3, 8, 0.7],
+          "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.3, 8, 0.7],
         },
       });
     }
@@ -475,9 +508,11 @@ export default function NewsMap({
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
-      setMapError(
-        "Could not initialize map engine. Your browser may not support WebGL.",
-      );
+      setTimeout(() => {
+        setMapError(
+          "Could not initialize map engine. Your browser may not support WebGL.",
+        );
+      }, 0);
       return;
     }
 
@@ -494,6 +529,13 @@ export default function NewsMap({
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
       "top-right",
+    );
+    map.addControl(
+      new maplibregl.ScaleControl({
+        maxWidth: 80,
+        unit: "metric",
+      }),
+      "bottom-left",
     );
     map.addControl(
       new maplibregl.AttributionControl({ compact: false }),
@@ -583,7 +625,16 @@ export default function NewsMap({
 
     mapRef.current = map;
 
+    // Use ResizeObserver to handle container size changes (e.g. sidebar resize)
+    const resizeObserver = new ResizeObserver(() => {
+      map.resize();
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -634,6 +685,8 @@ export default function NewsMap({
           imageUrl: item.imageUrl,
           description: item.description,
           eventCount: item.eventCount,
+          credibilityTier: item.credibilityTier ?? 3,
+          sourceCount: item.sources?.length ?? 0,
         },
       })),
     };
@@ -653,8 +706,22 @@ export default function NewsMap({
 
   const generatePopupHtml = useCallback((item: NewsItem) => {
     const pinColor = getCategoryColor(item.category);
+    const credStyle = getCredibilityStyle(item.credibilityTier);
+    const sourceCount = item.sources?.length ?? 0;
+
+    const latestSource = item.sources?.length 
+      ? [...item.sources].sort((a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime())[0]
+      : null;
+    const displayDate = latestSource ? latestSource.discoveredAt : item.publishedAt;
+
     const categoryLabel = item.category
       ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
+      : "";
+
+    const credBadgeHtml = `<span class="news-popup-credibility" style="background:${credStyle.bg};color:${credStyle.color}" title="${credStyle.label} source"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>`;
+
+    const sourceCountHtml = sourceCount > 1
+      ? `<span class="news-popup-source-count" title="${sourceCount} sources reporting on this"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>${sourceCount}</span>`
       : "";
 
     const descriptionHtml =
@@ -668,18 +735,47 @@ export default function NewsMap({
                 <div class="popup-skeleton-line" style="width:75%"></div>
               </div>`;
 
+    /* Build source list HTML for multi-source stories */
+    let sourcesListHtml = "";
+    if (sourceCount > 1 && item.sources) {
+      const sorted = [...item.sources].sort(
+        (a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime(),
+      );
+      const sourceEntries = sorted
+        .map((src) => {
+          const srcColor = getSourceBadgeColor(src.name);
+          const srcTime = formatTimeAgo(src.discoveredAt);
+          return `<div class="news-popup-source-entry">
+            <span class="news-popup-source-name" style="background:${srcColor};color:#fff">${src.name}</span>
+            <a class="news-popup-source-link" href="${src.url}" target="_blank" rel="noopener noreferrer">${new URL(src.url).hostname}</a>
+            ${srcTime ? `<span class="news-popup-source-time">${srcTime}</span>` : ""}
+          </div>`;
+        })
+        .join("");
+      sourcesListHtml = `<div class="news-popup-sources-section">
+        <div class="news-popup-sources-header">Sources & Timeline</div>
+        <div class="news-popup-sources-list">${sourceEntries}</div>
+      </div>`;
+    }
+
+    const singleLinkHtml = sourceCount <= 1
+      ? `<a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source \u2192</a>`
+      : "";
+
     return `
             <div class="news-popup">
                 <div class="news-popup-header">
                     <h3 class="news-popup-title">${item.title}</h3>
                     <div class="news-popup-meta">
                         <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
+                        ${credBadgeHtml}
                         ${categoryLabel}
-                        <span class="news-popup-time">${formatTimeAgo(item.publishedAt)}</span>
+                        ${sourceCountHtml}
+                        <span class="news-popup-time">${formatTimeAgo(displayDate)}</span>
                         ${
                           item.locationName
                             ? `
-                            <span class="news-popup-meta-sep">•</span>
+                            <span class="news-popup-meta-sep">\u2022</span>
                             <span class="news-popup-location">
                                 <svg class="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
                                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -702,8 +798,9 @@ export default function NewsMap({
                         : ""
                     }
                     ${descriptionHtml}
-                    <a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source →</a>
+                    ${singleLinkHtml}
                 </div>
+                ${sourcesListHtml}
             </div>
         `;
   }, []);

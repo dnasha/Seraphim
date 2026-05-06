@@ -60,7 +60,7 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
             name: item.source,
             url: item.url,
             source_type: item.sourceType,
-            discovered_at: new Date().toISOString(),
+            discovered_at: ensureIsoDate(item.publishedAt),
         }],
     };
 }

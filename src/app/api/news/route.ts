@@ -85,7 +85,8 @@ export async function GET(request: Request) {
     // Optional override to skip clustering regardless of zoom level
     const forceRaw = searchParams.get('force_raw') === 'true';
 
-    // Time window parameters (ISO timestamps)
+    const sort = searchParams.get('sort') || 'new';
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : RAW_LIMIT;
     const sinceStr = searchParams.get('since');
     const untilStr = searchParams.get('until');
 
@@ -95,8 +96,8 @@ export async function GET(request: Request) {
     // Construct a cache key that captures all query parameters
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
     const cacheKey = (hasBBox || ignoreBBox)
-        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}`
-        : `events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}`;
+        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${limit !== RAW_LIMIT ? `,l:${limit}` : ''}`
+        : `events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${limit !== RAW_LIMIT ? `,l:${limit}` : ''}`;
     const canUseCache = !includeUnmapped;
 
     // Prevent excessive refresh attempts
@@ -173,7 +174,7 @@ export async function GET(request: Request) {
                 if (untilStr) rpcParams.p_until = untilStr;
                 if (searchQuery) rpcParams.p_search_query = searchQuery;
 
-                const res = await supabase.rpc('get_clustered_events', rpcParams).limit(RAW_LIMIT);
+                const res = await supabase.rpc('get_clustered_events', rpcParams).limit(sort === 'hot' ? RAW_LIMIT : limit);
                 rows = res.data;
                 error = res.error;
             } else {
@@ -182,7 +183,7 @@ export async function GET(request: Request) {
                     .from('events')
                     .select(LIST_SELECT)
                     .order('published_at', { ascending: false })
-                    .limit(RAW_LIMIT);
+                    .limit(sort === 'hot' ? RAW_LIMIT : limit);
 
                 if (!ignoreBBox && hasBBox) {
                     query = query
@@ -221,7 +222,14 @@ export async function GET(request: Request) {
 
             if (error) {
                 console.error('[api/news] Supabase query failed:', error.message);
-                return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
+                // Fail gracefully on statement timeouts so the UI stays functional.
+                // The client will retry automatically on the next viewport change.
+                if (error.message?.includes('statement timeout') || error.message?.includes('canceling statement')) {
+                    console.warn('[api/news] Statement timeout — returning empty result set (fail-open).');
+                    allItems = [];
+                } else {
+                    return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
+                }
             }
 
             allItems = (rows as DbEvent[]).map((row) => {
@@ -237,6 +245,36 @@ export async function GET(request: Request) {
                 }
                 return item;
             });
+
+            const getLatestTime = (item: NewsItem) => {
+                if (!item.sources || item.sources.length === 0) return new Date(item.publishedAt).getTime();
+                let latest = new Date(item.publishedAt).getTime();
+                for (const s of item.sources) {
+                    const t = new Date(s.discoveredAt).getTime();
+                    if (t > latest) latest = t;
+                }
+                return latest;
+            };
+
+            // Apply consistent in-memory sorting for all modes to ensure UI stability.
+            // This ensures that 'New' mode is strictly chronological by latest source update,
+            // and 'Hot' mode correctly tie-breaks with the same logic.
+            if (sort === 'hot') {
+                allItems.sort((a, b) => {
+                    const countA = a.eventCount && a.eventCount > 1 ? Number(a.eventCount) : (a.sources?.length ?? 1);
+                    const countB = b.eventCount && b.eventCount > 1 ? Number(b.eventCount) : (b.sources?.length ?? 1);
+                    if (countB !== countA) return countB - countA;
+                    return getLatestTime(b) - getLatestTime(a);
+                });
+            } else {
+                // Explicitly sort by recency in memory since the DB 'order by published_at' 
+                // doesn't account for the 'discovered_at' times buried in the JSONB sources array.
+                allItems.sort((a, b) => getLatestTime(b) - getLatestTime(a));
+            }
+
+            if (limit < allItems.length) {
+                allItems = allItems.slice(0, limit);
+            }
 
             if (canUseCache) {
                 sourceCache.set(cacheKey, { data: allItems, timestamp: now });

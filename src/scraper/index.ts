@@ -72,6 +72,7 @@ async function fetchRecentEmbeddings(): Promise<{
     credibility_tier?: number;
     source?: string;
     url?: string;
+    published_at: string;
 }[]> {
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
@@ -97,6 +98,7 @@ async function fetchRecentEmbeddings(): Promise<{
         credibility_tier: number;
         source: string;
         url: string;
+        published_at: string;
     }
 
     const rows = (data ?? []) as unknown as RecentEventRow[];
@@ -116,6 +118,7 @@ async function fetchRecentEmbeddings(): Promise<{
             credibility_tier: r.credibility_tier,
             source: r.source,
             url: r.url,
+            published_at: r.published_at,
         }));
 }
 
@@ -139,13 +142,14 @@ async function resolveStoryMerges(
     }>;
 }> {
     const newEvents: DbEvent[] = [];
-    const merges = new Map<string, { 
+    const merges = new Map<string, {
         sources: DbEventSource[];
         title?: string;
         description?: string;
         source?: string;
         url?: string;
         credibility_tier?: number;
+        published_at?: string;
     }>();
 
     if (dbEvents.length === 0) {
@@ -183,16 +187,16 @@ async function resolveStoryMerges(
 
         for (const candidate of candidates) {
             const sim = cosineSimilarity(embedding, candidate.embedding);
-            
+
             let shouldMerge = false;
 
             // Strategy 1: Strict semantic (highly identical text)
             if (sim >= SIMILARITY_THRESHOLD_STRICT) {
                 shouldMerge = true;
-            } 
+            }
             // Strategy 2: Proximity semantic (related text in same location)
-            else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY && 
-                     event.latitude != null && event.longitude != null && 
+            else if (sim >= SIMILARITY_THRESHOLD_PROXIMITY &&
+                     event.latitude != null && event.longitude != null &&
                      candidate.latitude != null && candidate.longitude != null) {
                 const dist = calculateDistance(event.latitude, event.longitude, candidate.latitude, candidate.longitude);
                 if (dist <= MAX_MERGE_DISTANCE_KM) {
@@ -208,12 +212,12 @@ async function resolveStoryMerges(
 
         if (bestMatchId) {
             const matchedCandidate = candidates.find(c => c.id === bestMatchId)!;
-            
+
             // Smart Selection: If the NEW incoming item is higher quality, swap it into the master
             let updateContent = false;
             const currentTier = matchedCandidate.credibility_tier || 3;
             const incomingTier = event.credibility_tier || 3;
-            
+
             if (incomingTier < currentTier) {
                 updateContent = true;
             } else if (incomingTier === currentTier) {
@@ -222,27 +226,40 @@ async function resolveStoryMerges(
                 if (incomingLen > currentLen) updateContent = true;
             }
 
+            // Always pick the latest publication time for the master card
+            const candidateTime = new Date(matchedCandidate.published_at).getTime();
+            const incomingTime = new Date(event.published_at).getTime();
+            
+            // Check if we already have a newer time in the current merge set
+            const existingMerge = merges.get(bestMatchId);
+            const currentSetTime = existingMerge?.published_at ? new Date(existingMerge.published_at).getTime() : -1;
+            
+            const latestTime = Math.max(incomingTime, candidateTime, currentSetTime) === incomingTime 
+                ? event.published_at 
+                : (Math.max(incomingTime, candidateTime, currentSetTime) === candidateTime ? matchedCandidate.published_at : existingMerge!.published_at!);
+
             const newSource: DbEventSource = {
                 name: event.source,
                 url: event.url,
                 source_type: event.source_type,
-                discovered_at: new Date().toISOString(),
+                discovered_at: event.published_at, // Use the article's own time instead of scraper run time
             };
 
             if (!matchedCandidate.sources.some(s => s.url === event.url)) {
-                if (merges.has(bestMatchId)) {
-                    const m = merges.get(bestMatchId)!;
-                    m.sources.push(newSource);
+                if (existingMerge) {
+                    existingMerge.sources.push(newSource);
+                    existingMerge.published_at = latestTime;
                     if (updateContent) {
-                        m.title = event.title;
-                        m.description = event.description;
-                        m.source = event.source;
-                        m.url = event.url;
-                        m.credibility_tier = incomingTier;
+                        existingMerge.title = event.title;
+                        existingMerge.description = event.description;
+                        existingMerge.source = event.source;
+                        existingMerge.url = event.url;
+                        existingMerge.credibility_tier = incomingTier;
                     }
                 } else {
                     merges.set(bestMatchId, {
                         sources: [...matchedCandidate.sources, newSource],
+                        published_at: latestTime,
                         ...(updateContent ? {
                             title: event.title,
                             description: event.description,
@@ -258,7 +275,6 @@ async function resolveStoryMerges(
             newEvents.push(event);
         }
     }
-
     console.log(`[vectorize] Story resolution: ${mergeCount} merged, ${newEvents.length} new events`);
     return { newEvents, merges };
 }

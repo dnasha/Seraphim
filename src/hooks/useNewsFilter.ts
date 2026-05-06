@@ -2,15 +2,15 @@
 
 /*
 useNewsFilter hook handles client-side filtering of news events.
-Maintains state for active sources and categories, and provides a memoized
-filtered list based on user preferences and search queries.
+Maintains state for active sources, categories, and sort mode, and provides
+a memoized filtered list based on user preferences and search queries.
 */
 
 import { useState, useEffect, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
-import { applyNewsFilters } from '@/lib/filters';
+import { applyNewsFilters, SortMode } from '@/lib/filters';
 
-export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string, customStartDate?: string, customEndDate?: string) {
+export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string, customStartDate?: string, customEndDate?: string, sortMode: SortMode = 'new') {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
     
@@ -39,8 +39,9 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: 
             mappedOnly,
             searchQuery: debouncedSearch,
             now,
+            sortMode,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now, customStartDate, customEndDate]); /* Re-filter whenever state or source data changes. */
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now, customStartDate, customEndDate, sortMode]); /* Re-filter whenever state or source data changes. */
 
     return {
         sources, setSources,

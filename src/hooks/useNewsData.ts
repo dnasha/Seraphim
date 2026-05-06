@@ -25,6 +25,8 @@ export interface BBox {
     timeRange?: string;
     /** Global search query. */
     query?: string;
+    /** Sort mode for cache invalidation */
+    sortMode?: string;
 }
 
 
@@ -51,6 +53,7 @@ function bboxKey(b: BBox) {
             `q:${b.query}`,
             b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
             b.timeRange === 'custom' ? `tr:${b.timeRange},s:${b.since || ''},u:${b.until || ''}` : b.timeRange ? `tr:${b.timeRange}` : '',
+            b.sortMode ? `sort:${b.sortMode}` : '',
             b.forceRaw ? 'raw' : '',
         ].filter(Boolean).join(',');
     }
@@ -62,6 +65,7 @@ function bboxKey(b: BBox) {
         b.maxLng.toFixed(4),
         b.zoom !== undefined ? `z:${b.zoom.toFixed(1)}` : '',
         b.timeRange === 'custom' ? `tr:${b.timeRange},s:${b.since || ''},u:${b.until || ''}` : b.timeRange ? `tr:${b.timeRange}` : '',
+        b.sortMode ? `sort:${b.sortMode}` : '',
         b.forceRaw ? 'raw' : '',
     ].filter(Boolean).join(',');
 }
@@ -140,15 +144,18 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
 const bboxCache = new Map<string, { bbox: BBox; data: NewsItem[]; timestamp: number }>();
 const BBOX_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
-export function useNewsData({ includeUnmapped, timeRange, searchQuery, customStartDate, customEndDate }: { includeUnmapped: boolean; timeRange: string; searchQuery?: string; customStartDate?: string; customEndDate?: string; }) {
+export function useNewsData({ includeUnmapped, timeRange, searchQuery, customStartDate, customEndDate, sortMode }: { includeUnmapped: boolean; timeRange: string; searchQuery?: string; customStartDate?: string; customEndDate?: string; sortMode?: string; }) {
     const [news, setNews] = useState<NewsItem[]>([]);
+    const [globalHighlights, setGlobalHighlights] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
     // Keep a synchronous ref of the current news items for callbacks
     const newsRef = useRef<NewsItem[]>([]);
+    const globalHighlightsRef = useRef<NewsItem[]>([]);
     useEffect(() => { newsRef.current = news; }, [news]);
+    useEffect(() => { globalHighlightsRef.current = globalHighlights; }, [globalHighlights]);
 
     // Track the current bounding box so Realtime can filter/refetch correctly
     const currentBBoxRef = useRef<BBox | null>(null);
@@ -156,11 +163,65 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
     const searchQueryRef = useRef(searchQuery);
     const customStartDateRef = useRef(customStartDate);
     const customEndDateRef = useRef(customEndDate);
+    const sortModeRef = useRef(sortMode);
 
     // Client-side description cache: id - description string
     const descriptionCache = useRef<Map<string, string>>(new Map());
     // Track in-flight description fetches to prevent race conditions
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
+
+    // -------------------------------------------------------------------------
+    // Shared fetch logic (Internal)
+    // -------------------------------------------------------------------------
+    const _performFetch = useCallback(async (options: {
+        isRefresh?: boolean;
+        bbox?: BBox;
+        isGlobal?: boolean;
+        limit?: number;
+    }) => {
+        const { isRefresh, bbox, isGlobal, limit: requestedLimit } = options;
+        const params = new URLSearchParams();
+        
+        if (isRefresh) params.append('refresh', 'true');
+        if (includeUnmapped) params.append('include_unmapped', 'true');
+        if (sortMode) params.append('sort', sortMode);
+
+        if (bbox) {
+            params.append('minLat', String(bbox.minLat));
+            params.append('maxLat', String(bbox.maxLat));
+            params.append('minLng', String(bbox.minLng));
+            params.append('maxLng', String(bbox.maxLng));
+            if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
+            if (bbox.forceRaw) params.append('force_raw', 'true');
+            if (bbox.since) params.append('since', bbox.since);
+            if (bbox.until) params.append('until', bbox.until);
+            if (bbox.query) params.append('query', bbox.query);
+        } else if (searchQuery) {
+            params.append('query', searchQuery);
+        } else {
+            // No BBox and no search query? Use computeSince for general context
+            const since = computeSince(timeRange, customStartDate);
+            const until = computeUntil(timeRange, customEndDate);
+            if (since) params.append('since', since);
+            if (until) params.append('until', until);
+        }
+
+        if (requestedLimit) {
+            params.append('limit', String(requestedLimit));
+        }
+
+        const res = await fetch(`/api/news?${params.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch news');
+
+        const data: NewsResponse = await res.json();
+        
+        // Apply jitter and merge cached descriptions
+        const jittered = applyClientJitter(data.items);
+        return jittered.map(item => {
+            const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
+            return cachedDesc ? { ...item, description: cachedDesc } : item;
+        });
+    }, [includeUnmapped, searchQuery, sortMode, timeRange, customStartDate, customEndDate]);
 
     // -------------------------------------------------------------------------
     // Core list fetch (initial + BBox changes + manual refresh)
@@ -176,42 +237,62 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
             const key = bboxKey(bbox);
             const cached = bboxCache.get(key);
             if (cached && Date.now() - cached.timestamp < BBOX_CACHE_TTL) {
-                setNews(cached.data);
+                const isServerCluster = bbox.zoom !== undefined && bbox.zoom < 5 && !bbox.forceRaw && !bbox.query;
+                const highlightIds = new Set(globalHighlightsRef.current.map(h => h.id));
+                
+                if (isServerCluster) {
+                    setNews(prev => {
+                        const unmapped = prev.filter(p => p.latitude == null);
+                        const map = new Map<string, NewsItem>();
+                        
+                        for (const item of cached.data) map.set(item.id, item);
+                        for (const item of unmapped) map.set(item.id, item);
+                        
+                        const clusterOriginalIds = new Set(Array.from(map.values()).filter(p => p.originalId && p.id !== p.originalId).map(p => p.originalId));
+                        for (const item of globalHighlightsRef.current) {
+                            if (!clusterOriginalIds.has(item.id)) {
+                                const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
+                                map.set(item.id, cachedDesc ? { ...item, description: cachedDesc } : item);
+                            }
+                        }
+                        
+                        return Array.from(map.values());
+                    });
+                } else {
+                    setNews(prev => {
+                        const prevIndividuals = prev.filter(p => {
+                            if (p.eventCount && p.eventCount > 1) return false;
+                            if (p.latitude == null) return true; 
+                            if (highlightIds.has(p.id)) return true;
+                            return isWithinBBox(p, bbox);
+                        });
+                        const prevMap = new Map(prevIndividuals.map(p => [p.id, p]));
+
+                        for (const item of cached.data) {
+                            if (item.originalId && item.id !== item.originalId) {
+                                prevMap.delete(item.originalId);
+                            }
+                            prevMap.set(item.id, item);
+                        }
+
+                        const clusterOriginalIds = new Set(Array.from(prevMap.values()).filter(p => p.originalId && p.id !== p.originalId).map(p => p.originalId));
+                        for (const item of globalHighlightsRef.current) {
+                            if (!clusterOriginalIds.has(item.id)) {
+                                prevMap.set(item.id, item);
+                            }
+                        }
+
+                        return Array.from(prevMap.values());
+                    });
+                }
+                
                 setIsLoading(false);
                 return;
             }
         }
 
         try {
-            const params = new URLSearchParams();
-            if (isRefresh) params.append('refresh', 'true');
-            if (includeUnmapped) params.append('include_unmapped', 'true');
-            if (bbox) {
-                params.append('minLat', String(bbox.minLat));
-                params.append('maxLat', String(bbox.maxLat));
-                params.append('minLng', String(bbox.minLng));
-                params.append('maxLng', String(bbox.maxLng));
-                if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
-                if (bbox.forceRaw) params.append('force_raw', 'true');
-                if (bbox.since) params.append('since', bbox.since);
-                if (bbox.until) params.append('until', bbox.until);
-                if (bbox.query) params.append('query', bbox.query);
-            } else if (searchQuery) {
-                params.append('query', searchQuery);
-            }
-
-            const res = await fetch(`/api/news?${params.toString()}`);
-            if (!res.ok) throw new Error('Failed to fetch news');
-
-            const data: NewsResponse = await res.json();
-
-            const jitteredItems = applyClientJitter(data.items);
-
-            // Merge back any descriptions we've already fetched client-side
-            const enriched = jitteredItems.map(item => {
-                const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
-                return cachedDesc ? { ...item, description: cachedDesc } : item;
-            });
+            const enriched = await _performFetch({ isRefresh, bbox });
 
             // Update client-side bbox cache
             if (bbox) {
@@ -219,30 +300,72 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
             }
 
             const isServerCluster = bbox && bbox.zoom !== undefined && bbox.zoom < 5 && !bbox.forceRaw && !bbox.query;
+            const highlightIds = new Set(globalHighlightsRef.current.map(h => h.id));
 
             if (isServerCluster) {
                 setNews(prev => {
-                    // Preserve unmapped items from previous fetches (like the initial global fetch)
-                    // so they don't disappear when the map provides a bounding box.
                     const unmapped = prev.filter(p => p.latitude == null);
-                    return [...enriched, ...unmapped];
+                    const map = new Map<string, NewsItem>();
+                    
+                    for (const item of enriched) map.set(item.id, item);
+                    for (const item of unmapped) map.set(item.id, item);
+                    
+                    const clusterOriginalIds = new Set<string>();
+                    for (const [id, item] of map.entries()) {
+                        if (item.originalId && item.id !== item.originalId) {
+                            clusterOriginalIds.add(item.originalId);
+                            const hotItem = globalHighlightsRef.current.find(gh => gh.id === item.originalId);
+                            if (hotItem) {
+                                const clusterTime = new Date(item.publishedAt).getTime();
+                                const hotTime = new Date(hotItem.publishedAt).getTime();
+                                map.set(id, {
+                                    ...item,
+                                    title: hotItem.title,
+                                    description: hotItem.description || item.description,
+                                    imageUrl: hotItem.imageUrl || item.imageUrl,
+                                    source: hotItem.source,
+                                    sourceType: hotItem.sourceType,
+                                    credibilityTier: hotItem.credibilityTier,
+                                    sources: hotItem.sources,
+                                    publishedAt: hotTime > clusterTime ? hotItem.publishedAt : item.publishedAt,
+                                });
+                            }                        }
+                    }
+
+                    for (const item of globalHighlightsRef.current) {
+                        if (!clusterOriginalIds.has(item.id)) {
+                            const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
+                            map.set(item.id, cachedDesc ? { ...item, description: cachedDesc } : item);
+                        }
+                    }
+                    
+                    return Array.from(map.values());
                 });
             } else {
                 setNews(prev => {
-                    // Accumulate individual pins, filtering out server clusters from prev view
-                    // Also filter out pins that are no longer within the current bounding box
-                    // to prevent accumulating off-screen pins indefinitely.
                     const prevIndividuals = prev.filter(p => {
                         if (p.eventCount && p.eventCount > 1) return false;
-                        if (p.latitude == null) return true; // Keep unmapped items
+                        if (p.latitude == null) return true; 
+                        if (highlightIds.has(p.id)) return true;
                         if (!bbox) return true;
                         return isWithinBBox(p, bbox);
                     });
                     const prevMap = new Map(prevIndividuals.map(p => [p.id, p]));
 
                     for (const item of enriched) {
+                        if (item.originalId && item.id !== item.originalId) {
+                            prevMap.delete(item.originalId);
+                        }
                         prevMap.set(item.id, item);
                     }
+
+                    const clusterOriginalIds = new Set(Array.from(prevMap.values()).filter(p => p.originalId && p.id !== p.originalId).map(p => p.originalId));
+                    for (const item of globalHighlightsRef.current) {
+                        if (!clusterOriginalIds.has(item.id)) {
+                            prevMap.set(item.id, item);
+                        }
+                    }
+
                     return Array.from(prevMap.values());
                 });
             }
@@ -253,7 +376,33 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
         } finally {
             setIsLoading(false);
         }
-    }, [includeUnmapped, searchQuery]); // Dependencies trigger a full clear/refetch on preference changes.
+    }, [_performFetch]);
+
+    // -------------------------------------------------------------------------
+    // Background Global Fetch - ensure Hot/New items are always available
+    // -------------------------------------------------------------------------
+    const fetchGlobalHighlights = useCallback(async (updateNews = true) => {
+        try {
+            const enriched = await _performFetch({ isGlobal: true, limit: 50 });
+
+            setGlobalHighlights(enriched);
+            globalHighlightsRef.current = enriched;
+            
+            if (updateNews) {
+                setNews(prev => {
+                    const prevMap = new Map(prev.map(p => [p.id, p]));
+                    for (const item of enriched) {
+                        prevMap.set(item.id, item);
+                    }
+                    return Array.from(prevMap.values());
+                });
+            }
+            return enriched;
+        } catch (err) {
+            console.error('[useNewsData] Failed to fetch global highlights:', err);
+            return [];
+        }
+    }, [_performFetch]);
 
     // -------------------------------------------------------------------------
     // Re-fetch when timeRange or searchQuery changes - invalidate cache and reload
@@ -263,26 +412,97 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
         const prevSearch = searchQueryRef.current;
         const prevStartDate = customStartDateRef.current;
         const prevEndDate = customEndDateRef.current;
+        const prevSortMode = sortModeRef.current;
 
         timeRangeRef.current = timeRange;
         searchQueryRef.current = searchQuery;
         customStartDateRef.current = customStartDate;
         customEndDateRef.current = customEndDate;
+        sortModeRef.current = sortMode;
 
-        if (prevTimeRange === timeRange && prevSearch === searchQuery && prevStartDate === customStartDate && prevEndDate === customEndDate) return; // no actual change on mount
+        if (prevTimeRange === timeRange && prevSearch === searchQuery && prevStartDate === customStartDate && prevEndDate === customEndDate && prevSortMode === sortMode) return;
 
-        // Invalidate all cached results - they may span a different time window or query
-        bboxCache.clear();
-
-        const currentBBox = currentBBoxRef.current;
-        if (currentBBox) {
+        // NEW: Coordinated load to prevent flickering.
+        // Instead of triggering two independent updates, we wait for both and update ONCE.
+        const coordinateLoad = async () => {
+            setIsLoading(true);
+            setError(null);
+            
+            // Invalidate cache
+            bboxCache.clear();
+            
+            const currentBBox = currentBBoxRef.current;
             const since = computeSince(timeRange, customStartDate);
             const until = computeUntil(timeRange, customEndDate);
-            fetchNews(false, { ...currentBBox, since: since ?? undefined, until: until ?? undefined, timeRange, query: searchQuery });
-        } else {
-            fetchNews();
-        }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, fetchNews]);
+            const enrichedBBox = currentBBox ? { 
+                ...currentBBox, 
+                since: since ?? undefined, 
+                until: until ?? undefined, 
+                timeRange, 
+                query: searchQuery, 
+                sortMode 
+            } : undefined;
+
+            try {
+                // Fetch both in parallel
+                const [globalResults, bboxResults] = await Promise.all([
+                    _performFetch({ isGlobal: true, limit: 50 }),
+                    _performFetch({ bbox: enrichedBBox })
+                ]);
+
+                // Update global refs/state
+                setGlobalHighlights(globalResults);
+                globalHighlightsRef.current = globalResults;
+
+                // Update main news list with the union of both
+                const isServerCluster = enrichedBBox && enrichedBBox.zoom !== undefined && enrichedBBox.zoom < 5 && !enrichedBBox.forceRaw && !enrichedBBox.query;
+                const map = new Map<string, NewsItem>();
+
+                // Add BBox results first
+                for (const item of bboxResults) map.set(item.id, item);
+                
+                const clusterOriginalIds = new Set<string>();
+                for (const item of bboxResults) {
+                    if (item.originalId && item.id !== item.originalId) {
+                        clusterOriginalIds.add(item.originalId);
+                        const hotItem = globalResults.find(gh => gh.id === item.originalId);
+                        if (hotItem) {
+                             // Enrich cluster with story metadata
+                             const clusterTime = new Date(item.publishedAt).getTime();
+                             const hotTime = new Date(hotItem.publishedAt).getTime();
+                             map.set(item.id, {
+                                ...item,
+                                title: hotItem.title,
+                                description: hotItem.description || item.description,
+                                imageUrl: hotItem.imageUrl || item.imageUrl,
+                                source: hotItem.source,
+                                sourceType: hotItem.sourceType,
+                                credibilityTier: hotItem.credibilityTier,
+                                sources: hotItem.sources,
+                                publishedAt: hotTime > clusterTime ? hotItem.publishedAt : item.publishedAt,
+                             });
+                        }
+                    }
+                }
+
+                // Add Global highlights that aren't already represented by a cluster
+                for (const item of globalResults) {
+                    if (!clusterOriginalIds.has(item.id)) {
+                        map.set(item.id, item);
+                    }
+                }
+
+                setNews(Array.from(map.values()));
+                setLastUpdated(new Date().toISOString());
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'An error occurred');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void coordinateLoad();
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, _performFetch]);
 
     // -------------------------------------------------------------------------
     // On-demand detail fetch (description lazy-load)
@@ -331,6 +551,10 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
                 prev.map(p => (p.id === id || p.originalId === id || (item && p.id === item.id)) ? { ...p, description } : p)
             );
 
+            setGlobalHighlights(prev =>
+                prev.map(p => (p.id === id || p.originalId === id || (item && p.id === item.id)) ? { ...p, description } : p)
+            );
+
             bboxCache.forEach((entry, key) => {
                 const updated = entry.data.map(p =>
                     (p.id === id || p.originalId === id || (item && p.id === item.id)) ? { ...p, description } : p
@@ -357,6 +581,7 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
             until: until ?? undefined,
             timeRange: timeRangeRef.current,
             query: searchQueryRef.current,
+            sortMode: sortModeRef.current,
         };
         currentBBoxRef.current = enrichedBBox;
         fetchNews(false, enrichedBBox);
@@ -406,7 +631,8 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
                     if (bbox && !isWithinBBox(newItem, bbox)) return;
 
                     setNews(prev => {
-                        if (prev.some(p => p.id === newItem.id)) return prev;
+                        const prevIds = new Set(prev.map(p => p.id));
+                        if (prevIds.has(newItem.id)) return prev;
                         const updated = [newItem, ...prev];
                         
                         // Update all cache entries that contain this new item
@@ -437,7 +663,9 @@ export function useNewsData({ includeUnmapped, timeRange, searchQuery, customSta
         // Otherwise, we wait for the map to trigger onBoundsChange to avoid redundant double-fetching
         // and the "cluster-flicker" on initial load.
         if (includeUnmapped || searchQuery) {
-            fetchNews();
+            void Promise.resolve().then(() => {
+                fetchNews();
+            });
         }
     }, [fetchNews, includeUnmapped, searchQuery]);
 

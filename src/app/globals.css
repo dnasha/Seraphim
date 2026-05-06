@@ -45,8 +45,8 @@ body {
   --surface-alt: #f3f4f6;
   --border: #e5e7eb;
   --text-primary: #000000;
-  --text-secondary: #111827;
-  --text-muted: #374151;
+  --text-secondary: #000000;
+  --text-muted: #1f2937;
   --red: #ef4444;
   --green: #22c55e;
   --sidebar-width: 400px;
@@ -63,8 +63,8 @@ body {
   --surface-alt: #22252f;
   --border: #2e3140;
   --text-primary: #ffffff;
-  --text-secondary: #f9fafb;
-  --text-muted: #d1d5db;
+  --text-secondary: #ffffff;
+  --text-muted: #e5e7eb;
 }
 
 a {

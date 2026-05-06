@@ -3,7 +3,7 @@ Map configuration constants and utilities.
 Provides map styles, category icons, and helper functions for formatting and icon generation.
 */
 
-import { getCategoryColor, getSourceBadgeColor } from "@/lib/colors";
+import { getCategoryColor, getSourceBadgeColor, getCredibilityStyle } from "@/lib/colors";
 
 // Definitions for available map base layers and their attributions.
 export const MAP_STYLES: Record<
@@ -37,7 +37,7 @@ export const MAP_STYLES: Record<
   },
 };
 
-export { getCategoryColor, getSourceBadgeColor };
+export { getCategoryColor, getSourceBadgeColor, getCredibilityStyle };
 
 // SVG path data for news category icons.
 export const CATEGORY_ICONS: Record<string, string> = {
@@ -77,7 +77,7 @@ export async function generateCategoryIcon(
 
   const svgStr = `
         <svg width="${containerSize}" height="${containerSize}" viewBox="0 0 ${containerSize} ${containerSize}" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="${cx}" cy="${cy}" r="${r + 1.5}" fill="#ffffff" />
+            <circle cx="${cx}" cy="${cy}" r="${r + 1.5}" fill="${isActive ? color : '#ffffff'}" ${isActive ? 'fill-opacity="0.4"' : ''} />
             <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />
             <g transform="translate(${iconOffset}, ${iconOffset}) scale(${iconScale})">
                 <path d="${iconPath}" fill="#ffffff" />

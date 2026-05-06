@@ -6,16 +6,22 @@ Includes card expansion details and responsive mobile layouts.
 
 /* Sidebar shell */
 .eventSidebar {
-  width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
+  width: var(--sidebar-width, 400px);
+  min-width: var(--sidebar-width, 400px);
   background: var(--surface);
-  border-right: none;
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  position: relative; /* For resize handle */
+  overflow: visible; /* Let handle be visible */
   z-index: 1000;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
+  will-change: transform, width;
+}
+
+.isResizing {
+  transition: none !important;
+  cursor: col-resize;
 }
 
 .eventSidebarCollapsed {
@@ -40,7 +46,7 @@ Includes card expansion details and responsive mobile layouts.
 
 .eventSidebarLogo h1 {
   font-family: var(--font-cinzel-decorative), cursive;
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--text-primary);
@@ -100,7 +106,7 @@ Includes card expansion details and responsive mobile layouts.
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px 8px 32px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--text-primary);
   transition: all 0.2s ease;
 }
@@ -109,7 +115,6 @@ Includes card expansion details and responsive mobile layouts.
   outline: none;
   border-color: var(--accent);
   background: var(--surface-alt);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .statsSearchInput::placeholder {
@@ -118,9 +123,9 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .statPill {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  height: 26px;
+  height: 28px;
   padding: 0 12px;
   display: flex;
   align-items: center;
@@ -141,11 +146,11 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .lastUpdated {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-secondary);
   background-color: var(--surface-alt);
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
   display: flex;
   align-items: center;
@@ -224,6 +229,42 @@ Includes card expansion details and responsive mobile layouts.
   flex-direction: column;
   will-change: transform;
   backface-visibility: hidden;
+  overflow: hidden; /* Ensure list content doesn't bleed */
+}
+
+/* Resize Handle */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -3px; /* Center the hit area on the edge */
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+}
+
+.resizeHandle::after {
+  content: '';
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease, opacity 0.15s ease;
+  opacity: 0;
+}
+
+.resizeHandle:hover::after,
+.isResizing .resizeHandle::after {
+  width: 2px;
+  opacity: 0.8;
+}
+
+/* Hide handle on mobile */
+@media (max-width: 860px) {
+  .resizeHandle {
+    display: none;
+  }
 }
 
 
@@ -280,20 +321,16 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCard:hover {
-  background: var(--surface-alt);
-  border-color: var(--accent);
-  box-shadow: 0 1px 6px rgba(59, 130, 246, 0.08);
+  border-color: var(--card-accent, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--card-accent, var(--accent));
 }
 
 .eventCardActive {
-  border-color: var(--accent);
-  background: rgba(59, 130, 246, 0.06);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  /* Colors and shadows handled via inline styles for category theming */
+  z-index: 1;
 }
 
-[data-theme="dark"] .eventCardActive {
-  background: rgba(96, 165, 250, 0.08);
-}
+
 
 /* category accent bar on left edge */
 .eventCardAccent {
@@ -337,9 +374,9 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardTitle {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -347,6 +384,8 @@ Includes card expansion details and responsive mobile layouts.
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .eventCardExpanded .eventCardTitle {
@@ -360,14 +399,15 @@ Includes card expansion details and responsive mobile layouts.
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 2px;
-  font-size: 0.6875rem;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
 .eventCardSource {
   font-style: normal;
   font-weight: 600;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: #fff;
   padding: 1px 7px;
   border-radius: 3px;
@@ -380,7 +420,7 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardLocation {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--green);
   display: inline;
 }
@@ -434,15 +474,15 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardDetailDesc {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 0 0 8px;
 }
 
 .eventCardDetailLink {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
@@ -597,3 +637,260 @@ Includes card expansion details and responsive mobile layouts.
     min-height: 0;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Sort Mode Toggle (Hot / New)
+   ═══════════════════════════════════════════════════════════ */
+
+.sortToggleRow {
+  display: flex;
+  gap: 0;
+  padding: 0 16px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.sortToggleBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sortToggleBtn:first-child {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
+.sortToggleBtn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.sortToggleBtn:hover:not(.sortToggleBtnActive) {
+  background: var(--surface-alt);
+  color: var(--text-primary);
+}
+
+.sortToggleBtnActive {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.sortToggleBtnActive + .sortToggleBtn {
+  border-left-color: var(--accent);
+}
+
+.sortToggleBtn svg {
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Story UI: Credibility badges, source count, timeline
+   ═══════════════════════════════════════════════════════════ */
+
+/* Credibility tier badge (round icon badge) */
+.credibilityBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+  transition: transform 0.15s;
+  line-height: 0;
+}
+
+.credibilityBadge:hover {
+  transform: scale(1.1);
+}
+
+.credibilityBadge svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Source count pill in meta row (round badge with number) */
+.sourceCountBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  height: 20px;
+  min-width: 20px;
+  cursor: help;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.sourceCountBadge:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-muted);
+}
+
+.sourceCountBadge svg {
+  width: 11px;
+  height: 11px;
+  display: block;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Tier 1 Diamond Blue accent bar override */
+.eventCardTier1 .eventCardAccent {
+  background-color: #0369a1 !important;
+}
+
+/* ── Sources & Timeline (expanded card) ─────────────────── */
+
+.storyTimeline {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 6px;
+}
+
+.storyTimelineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.storyTimelineTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timelineList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 14px;
+}
+
+/* Vertical connector line */
+.timelineList::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 1.5px;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.timelineEntry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  position: relative;
+}
+
+/* Timeline dot */
+.timelineEntry::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--surface);
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.timelineEntry:first-child::before {
+  background: var(--green);
+}
+
+.timelineEntryBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.timelineEntrySource {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.timelineEntryLink {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  margin-top: 1px;
+}
+
+.timelineEntryLink:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.timelineEntryTime {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+/* Show all toggle button */
+.showAllToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 5px 0;
+  margin-top: 4px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.showAllToggle:hover {
+  background: var(--surface-alt);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
