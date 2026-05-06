@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { NewsItem } from "@/lib/types";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { BBox } from "@/hooks/useNewsData";
+import { BBox } from "@/lib/geo";
 
 import {
   getMapLibreStyle,

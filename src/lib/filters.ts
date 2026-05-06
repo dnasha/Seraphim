@@ -1,5 +1,5 @@
 import { NewsItem } from './types';
-import { BBox, isWithinBBox } from '@/hooks/useNewsData';
+import { BBox, isWithinBBox } from './geo';
 
 export type SortMode = 'new' | 'hot';
 

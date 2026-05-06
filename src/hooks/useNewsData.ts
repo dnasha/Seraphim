@@ -8,48 +8,8 @@ It handles bounding box snap logic and integrates with Supabase Realtime.
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { BBox, snapBBox, isWithinBBox } from '@/lib/geo';
 
-export interface BBox {
-    minLat: number;
-    maxLat: number;
-    minLng: number;
-    maxLng: number;
-    zoom?: number;
-    forceRaw?: boolean;
-    since?: string;
-    until?: string;
-    timeRange?: string;
-    query?: string;
-    sortMode?: string;
-}
-
-function snapBBox(b: BBox): BBox {
-    const z = b.zoom || 5;
-    const grid = z < 4 ? 20 : z < 7 ? 10 : z < 10 ? 5 : 2;
-    return {
-        ...b,
-        minLat: Math.floor(b.minLat / grid) * grid,
-        maxLat: Math.ceil(b.maxLat / grid) * grid,
-        minLng: Math.floor(b.minLng / grid) * grid,
-        maxLng: Math.ceil(b.maxLng / grid) * grid,
-        zoom: Math.round(z),
-    };
-}
-
-
-export function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
-    if (bbox.query) {
-        const q = bbox.query.toLowerCase();
-        return item.title.toLowerCase().includes(q) || !!item.locationName?.toLowerCase().includes(q);
-    }
-    if (item.latitude == null || item.longitude == null) return false;
-    // Handle antimeridian crossing if necessary, though snapBBox usually keeps it simple
-    if (bbox.minLng > bbox.maxLng) {
-        return (item.latitude >= bbox.minLat && item.latitude <= bbox.maxLat) &&
-               (item.longitude >= bbox.minLng || item.longitude <= bbox.maxLng);
-    }
-    return (item.latitude >= bbox.minLat && item.latitude <= bbox.maxLat && item.longitude >= bbox.minLng && item.longitude <= bbox.maxLng);
-}
 
 function computeSince(timeRange: string, customStartDate?: string): string | null {
     if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
