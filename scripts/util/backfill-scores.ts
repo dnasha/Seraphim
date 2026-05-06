@@ -68,7 +68,7 @@ async function backfillScores() {
             // Heuristic: sum of (3.5 - credibility_tier)
             // If sources don't have tiers, we use the master event's tier as a fallback for all sources
             const masterTier = event.credibility_tier || 3;
-            const impact_score = event_count * (3.5 - masterTier);
+            const impact_score = event_count * (5.0 - masterTier);
 
             return {
                 id: event.id,

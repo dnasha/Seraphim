@@ -620,11 +620,19 @@ export default function NewsMap({
 
     map.on("error", (e) => {
       // Only set error if it's a critical map-loading error, not just a missing icon/tile
-      if (e.error && !mapReady) {
+      // Ignore 503/404 errors from optional third-party overlays (NASA, USGS, NOAA)
+      const errorMsg = e.error?.message || (typeof e.error === 'string' ? e.error : "");
+      const isOverlayError = errorMsg.includes("eonet.gsfc.nasa.gov") || 
+                            errorMsg.includes("earthquake.usgs.gov") ||
+                            errorMsg.includes("mesonet.agron.iastate.edu");
+
+      if (e.error && !mapReady && !isOverlayError) {
         console.error("MapLibre error event:", e.error);
         setMapError(
           "Failed to load map resources. Please check your connection.",
         );
+      } else if (isOverlayError) {
+        console.warn("Non-critical overlay error suppressed:", errorMsg);
       }
     });
 
@@ -751,7 +759,13 @@ export default function NewsMap({
     return () => {
       if (resizeEndTimeoutRef.current) clearTimeout(resizeEndTimeoutRef.current);
       resizeObserver.disconnect();
-      map.remove();
+      if (map) {
+        try {
+          map.remove();
+        } catch (err) {
+          console.warn("Suppressing map removal error:", err);
+        }
+      }
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -760,11 +774,9 @@ export default function NewsMap({
   const handleRetry = useCallback(() => {
     setMapError(null);
     setMapReady(false);
+    // Incrementing retryCount triggers the main initialization effect to re-run.
+    // The previous map instance will be cleaned up by the effect's return function.
     setRetryCount((prev) => prev + 1);
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
   }, []);
 
   // Force initial view on blank load to overcome MapLibre's early clamping/snapping
@@ -1019,7 +1031,7 @@ export default function NewsMap({
       }
     } else {
       if (!isFlyingRef.current) {
-        popupRef.current.remove();
+        popupRef.current?.remove();
       }
       lastFlownSelectionRef.current = null;
       lastFlownVersionRef.current = 0;

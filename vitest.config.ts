@@ -1,5 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
+import { config } from 'dotenv';
+import { expand } from 'dotenv-expand';
+
+// Load environment variables from .env.local for tests
+expand(config({ path: resolve(__dirname, '.env.local') }));
 
 export default defineConfig({
     resolve: {

@@ -281,9 +281,9 @@ async function resolveStoryMerges(
                 const eventCount = updatedSources.length;
                 
                 // Unified Impact Score: All sources receive the 'credit' of the most credible source
-                // in the story's timeline. This prevents deprioritization of high-count events 
-                // that are eventually confirmed by high-credibility outlets.
-                const impactScore = eventCount * (3.5 - bestTier);
+                // in the story's timeline. We use a flattened 2:1 ratio (Diamond=4, Silver=2) 
+                // to ensure high-volume stories aren't buried by low-volume high-credibility ones.
+                const impactScore = eventCount * (5.0 - bestTier);
 
                 if (existingMerge) {
                     existingMerge.sources = updatedSources;
