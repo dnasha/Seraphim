@@ -60,8 +60,8 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
   // Group items by coordinate (rounded to avoid floating point precision issues)
   for (const item of items) {
     if (item.latitude == null || item.longitude == null) continue;
-    // Don't jitter server-side clusters
-    if (item.eventCount && item.eventCount > 1) continue;
+    // Don't jitter MapLibre-generated clusters (handled by engine)
+    if (item.eventCount && item.eventCount > 1000) continue; // Safety guard
     
     const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
     if (!coordGroups.has(key)) coordGroups.set(key, []);
@@ -217,11 +217,14 @@ export default function NewsMap({
     if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
     boundsDebounceRef.current = setTimeout(() => {
       const bounds = map.getBounds();
+      const center = map.getCenter();
       const bbox: BBox = {
         minLat: bounds.getSouth(),
         maxLat: bounds.getNorth(),
         minLng: bounds.getWest(),
         maxLng: bounds.getEast(),
+        centerLat: center.lat,
+        centerLng: center.lng,
         zoom: map.getZoom(),
         forceRaw: forceIndividualPinsRef.current,
       };
@@ -265,8 +268,8 @@ export default function NewsMap({
           features: [],
         },
         cluster: !forceIndividualPinsRef.current,
-        clusterMaxZoom: 5,
-        clusterRadius: 20,
+        clusterMaxZoom: 4,
+        clusterRadius: 35,
         clusterProperties: {
           summedEventCount: ["+", ["coalesce", ["get", "eventCount"], 1]],
         },
@@ -286,7 +289,7 @@ export default function NewsMap({
             [
               "any",
               ["has", "point_count"],
-              [">", ["coalesce", ["get", "eventCount"], 0], 1],
+              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
             ],
           ],
           ["!=", ["get", "id"], ""],
@@ -319,7 +322,7 @@ export default function NewsMap({
             [
               "any",
               ["has", "point_count"],
-              [">", ["coalesce", ["get", "eventCount"], 0], 1],
+              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
             ],
           ],
           ["==", ["get", "id"], ""],
@@ -352,10 +355,10 @@ export default function NewsMap({
             [
               "any",
               ["has", "point_count"],
-              [">", ["coalesce", ["get", "eventCount"], 0], 1],
+              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
             ],
           ],
-          [">", ["coalesce", ["get", "sourceCount"], 0], 1],
+          [">", ["coalesce", ["get", "eventCount"], 0], 1],
         ],
         paint: {
           "circle-radius": 16,
@@ -377,7 +380,7 @@ export default function NewsMap({
         filter: [
           "any",
           ["has", "point_count"],
-          [">", ["coalesce", ["get", "eventCount"], 0], 1],
+          ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
         ],
         layout: {
           "circle-sort-key": [
@@ -454,7 +457,7 @@ export default function NewsMap({
         filter: [
           "any",
           ["has", "point_count"],
-          [">", ["coalesce", ["get", "eventCount"], 0], 1],
+          ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
         ],
         layout: {
           "symbol-sort-key": [
@@ -967,7 +970,7 @@ export default function NewsMap({
           [
             "any",
             ["has", "point_count"],
-            [">", ["coalesce", ["get", "eventCount"], 0], 1],
+            ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
           ],
         ],
         ["!=", ["get", "id"], activeId],
@@ -979,7 +982,7 @@ export default function NewsMap({
           [
             "any",
             ["has", "point_count"],
-            [">", ["coalesce", ["get", "eventCount"], 0], 1],
+            ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
           ],
         ],
         ["==", ["get", "id"], activeId],

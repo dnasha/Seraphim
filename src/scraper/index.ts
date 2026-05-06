@@ -132,8 +132,7 @@ Applies the Story merge logic with Spatial gating:
   2. Proximity Match: Similarity > 0.60 AND distance < 50km
 */
 async function resolveStoryMerges(
-    dbEvents: DbEvent[],
-    enrichedItems: NewsItem[]
+    dbEvents: DbEvent[]
 ): Promise<{
     newEvents: DbEvent[];
     merges: Map<string, { 
@@ -165,14 +164,19 @@ async function resolveStoryMerges(
     }
 
     console.log(`[vectorize] Generating embeddings for ${dbEvents.length} items...`);
-    const texts = enrichedItems.map(item => buildEmbeddingText(item.title, item.description));
+    /* 
+       CRITICAL FIX: We build texts from dbEvents directly to ensure 1:1 alignment 
+       with the items we are assigning embeddings to. 
+    */
+    const texts = dbEvents.map(event => buildEmbeddingText(event.title, event.description));
     const startMs = Date.now();
 
     let embeddings: number[][];
     try {
         embeddings = await generateEmbeddings(texts);
     } catch (err) {
-        console.error('[vectorize] Embedding generation failed:', err);
+        console.error('[vectorize] FATAL: Embedding generation failed. Items will be inserted without vectors.');
+        console.error('[vectorize] Error details:', err instanceof Error ? err.message : String(err));
         return { newEvents: dbEvents, merges };
     }
 
@@ -448,7 +452,7 @@ async function run(): Promise<void> {
 
     // Step 6: Vectorize and resolve story merges
     console.log('[scraper] Running semantic vectorization pipeline...');
-    const { newEvents, merges } = await resolveStoryMerges(dbEvents, enrichedItems);
+    const { newEvents, merges } = await resolveStoryMerges(dbEvents);
 
     if (DRY_RUN) {
         console.log('[scraper] DRY RUN — would upsert the following events:');

@@ -9,7 +9,7 @@ a memoized filtered list based on user preferences and search queries.
 import { useState, useEffect, useMemo } from 'react';
 import { NewsItem } from '@/lib/types';
 import { applyNewsFilters, SortMode } from '@/lib/filters';
-import { BBox } from './useNewsData';
+import { BBox } from '@/lib/geo';
 
 export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string, customStartDate?: string, customEndDate?: string, sortMode: SortMode = 'new', currentBBox?: BBox | null) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);

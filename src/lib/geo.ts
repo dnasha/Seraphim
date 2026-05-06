@@ -8,6 +8,8 @@ export interface BBox {
     maxLat: number;
     minLng: number;
     maxLng: number;
+    centerLat?: number;
+    centerLng?: number;
     zoom?: number;
     forceRaw?: boolean;
     since?: string;

@@ -108,7 +108,10 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
             signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
+        const text = (await res.text()).trim();
+        if (!text.startsWith('<')) {
+            throw new Error(`Invalid XML response (starts with "${text.slice(0, 20)}...")`);
+        }
         const feed = await parser.parseString(text);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

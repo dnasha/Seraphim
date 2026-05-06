@@ -5,9 +5,10 @@ import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import FilterBar from '@/components/FilterBar';
 import EventSidebar from '@/components/EventSidebar';
-import { useNewsData, BBox } from '@/hooks/useNewsData';
+import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
 import { useViewState } from '@/hooks/useViewState';
+import { BBox } from '@/lib/geo';
 import { SortMode } from '@/lib/filters';
 import styles from '@/components/Layout.module.css';
 
@@ -99,10 +100,8 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     const handleBoundsChange = useCallback((bbox: BBox) => {
         onBoundsChange(bbox);
         setCurrentBBox(bbox);
-        if (bbox.zoom !== undefined) {
-            const centerLat = (bbox.minLat + bbox.maxLat) / 2;
-            const centerLng = (bbox.minLng + bbox.maxLng) / 2;
-            updateURL({ lat: centerLat, lng: centerLng, zoom: bbox.zoom });
+        if (bbox.zoom !== undefined && bbox.centerLat !== undefined && bbox.centerLng !== undefined) {
+            updateURL({ lat: bbox.centerLat, lng: bbox.centerLng, zoom: bbox.zoom });
         }
     }, [onBoundsChange, updateURL]);
 
