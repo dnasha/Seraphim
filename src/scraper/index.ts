@@ -398,36 +398,32 @@ async function run(): Promise<void> {
     const itemsWithUrl = rawItems.filter(item => !!item.url);
 
     // Step 2: Pre-fetch known URLs from database to skip redundant processing
-    console.log('[scraper] Fetching recent known URLs from Supabase...');
+    console.log('[scraper] Fetching recent known URLs from Supabase (Deep Deduplication)...');
     const incomingUrls = itemsWithUrl.map(i => i.url);
 
     /*
-    Supabase in() filter generates GET requests, which can exceed URI length limits.
-    Items are processed in chunks of 20 to maintain safe request lengths.
+    We use the check_urls_exist RPC to check both the 'url' column and 
+    the 'sources' JSONB array. This prevents duplicating items that 
+    have already been merged into other stories.
     */
     const knownUrls = new Set<string>();
-    const CHUNK_SIZE = 20;
+    const CHUNK_SIZE = 50; 
     
-    // Fetch chunks in parallel
-    const chunkPromises = [];
     for (let i = 0; i < incomingUrls.length; i += CHUNK_SIZE) {
         const chunk = incomingUrls.slice(i, i + CHUNK_SIZE);
-        chunkPromises.push(
-            supabase.from('events').select('url').in('url', chunk)
-        );
+        const { data, error } = await supabase.rpc('check_urls_exist', { 
+            p_urls: chunk 
+        });
+
+        if (error) {
+            console.error(`[scraper] Deep deduplication check failed for chunk ${Math.floor(i/CHUNK_SIZE) + 1}:`, error.message);
+            // Fallback: we could do a simple .in() here, but the RPC is required for correct 'Story' model deduplication
+        } else if (data) {
+            data.forEach((r: { existing_url: string }) => knownUrls.add(r.existing_url));
+        }
     }
     
-    const results = await Promise.all(chunkPromises);
-    results.forEach((res, idx) => {
-        if (res.error) {
-            console.error(`[scraper] Failed to pre-fetch chunk ${idx + 1}:`, res.error.message);
-            // Non-fatal: failures here mean the unique constraint will handle deduplication during upsert
-        } else if (res.data) {
-            res.data.forEach((r: { url: string }) => knownUrls.add(r.url));
-        }
-    });
-    
-    console.log(`[scraper] Known URLs in DB: ${knownUrls.size}`);
+    console.log(`[scraper] Known URLs (Primary + Merged): ${knownUrls.size}`);
 
     // Step 3: Filter for new items only
     const newItems = itemsWithUrl.filter(item => !knownUrls.has(item.url));
