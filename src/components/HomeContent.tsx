@@ -99,16 +99,35 @@ export function HomeContent() {
         updateURL({ eventId: id || undefined });
     }, [updateURL, setSelectedItemId, setSelectionVersion]);
 
-    // Deselect current item and close popups when filters or sort mode change
+    // Handle filter/sort changes: reset scroll, expansion, and selection
     useEffect(() => {
-        // skip initial mount to respect URL parameters
         if (isFirstMount.current) {
             isFirstMount.current = false;
             return;
         }
-        setFilterVersion(v => v + 1);
-        handleSelectItem(null);
+        // Use requestAnimationFrame to avoid synchronous cascading renders
+        requestAnimationFrame(() => {
+            setFilterVersion(v => v + 1);
+            handleSelectItem(null);
+        });
     }, [sources, categories, timeRange, debouncedSearch, sortMode, unmappedOnly, handleSelectItem]);
+
+    // Handle bbox changes: reset sidebar scroll to top if no item is selected or if the selected item is panned out
+    useEffect(() => {
+        if (isFirstMount.current) return;
+        
+        // Check if a selected item is still visible in the current result set
+        const isVisible = selectedItemId && filteredNews.some(i => i.id === selectedItemId || i.originalId === selectedItemId);
+        
+        // If we don't have a visible selected item, we want to reset the scroll to the top of the new viewport results.
+        // This prevents the sidebar from "jumping around" as items shift during panning.
+        if (!isVisible) {
+            // Use requestAnimationFrame to avoid synchronous cascading renders
+            requestAnimationFrame(() => {
+                setFilterVersion(v => v + 1);
+            });
+        }
+    }, [currentBBox, filteredNews, selectedItemId]);
 
     // Sync map center/zoom changes to URL
     const handleBoundsChange = useCallback((bbox: BBox) => {
