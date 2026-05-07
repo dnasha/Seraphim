@@ -39,6 +39,8 @@ export interface DbEvent {
   created_at?: string;        // set by Supabase default
   cluster_id?: number;        // ID of the semantic cluster
   story_count?: number;       // Number of stories in the cluster (RPC)
+  center_lat?: number;        // Centroid of the cluster (RPC)
+  center_lng?: number;        // Centroid of the cluster (RPC)
   event_count?: number;       // Number of sources for this story
   is_top_hot?: boolean;        // Whether this story or its cluster contains a global top-3 hot story
   impact_score?: number;
@@ -71,8 +73,8 @@ export interface DbEvent {
     category: row.category,
     publishedAt: row.published_at,
     imageUrl: row.image_url,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
+    latitude: row.center_lat ?? row.latitude ?? undefined,
+    longitude: row.center_lng ?? row.longitude ?? undefined,
     locationName: row.location_name ?? undefined,
     tags: row.tags ?? undefined,
     clusterId: row.cluster_id ?? undefined,
