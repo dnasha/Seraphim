@@ -20,6 +20,7 @@ import {
   getCategoryColor,
   getCredibilityStyle,
 } from "./MapConstants";
+import { canonicalEventCount } from "@/lib/ranking";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
@@ -32,8 +33,8 @@ interface NewsMapProps {
   selectionVersion: number;
   onSelectItem: (id: string | null) => void;
   isDarkMode: boolean;
-  mappedOnly: boolean;
-  onMappedOnlyChange: (val: boolean) => void;
+  unmappedOnly: boolean;
+  onUnmappedOnlyChange: (val: boolean) => void;
   onBoundsChange?: (bbox: BBox) => void;
   initialCenter?: [number, number];
   initialZoom?: number;
@@ -61,7 +62,7 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
   for (const item of items) {
     if (item.latitude == null || item.longitude == null) continue;
     // Don't jitter MapLibre-generated clusters (handled by engine)
-    if (item.eventCount && item.eventCount > 1000) continue; // Safety guard
+    if (item.storyCount && item.storyCount > 1000) continue; // Safety guard
     
     const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
     if (!coordGroups.has(key)) coordGroups.set(key, []);
@@ -73,18 +74,32 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
   for (const group of coordGroups.values()) {
     if (group.length <= 1) continue;
     
-    // Sort by ID to ensure deterministic order within the group
-    group.sort((a, b) => a.id.localeCompare(b.id));
-    
-    for (let i = 1; i < group.length; i++) {
+    // Sort by canonical story id for deterministic jitter across refresh/zoom transitions
+    group.sort((a, b) => (a.originalId || a.id).localeCompare(b.originalId || b.id));
+
+    const baseLat = group[0].latitude!;
+    const baseLng = group[0].longitude!;
+    const latRad = (baseLat * Math.PI) / 180;
+    const lngScale = Math.max(Math.cos(latRad), 0.2); // avoid huge jumps near poles
+    const goldenAngle = (137.5 * Math.PI) / 180;
+    const kmToLatDeg = (km: number) => km / 111.32;
+    const baseRadius = kmToLatDeg(3.0); // ~3km base jitter
+    const growth = kmToLatDeg(1.2);     // ~1.2km additional ring growth
+
+    for (let i = 0; i < group.length; i++) {
       const item = group[i];
-      const angle = (i * 137.5 * Math.PI) / 180;
-      // Precision radius to keep items close but visible
-      const radius = 0.0005 + (i * 0.0002);
-      
+      const angle = i * goldenAngle;
+      const radius = baseRadius + i * growth;
+      const latOffset = radius * Math.cos(angle);
+      const lngOffset = (radius * Math.sin(angle)) / lngScale;
+
+      const jitteredLat = Math.max(-85, Math.min(85, baseLat + latOffset));
+      const jitteredLngRaw = baseLng + lngOffset;
+      const jitteredLng = ((jitteredLngRaw + 180) % 360 + 360) % 360 - 180;
+
       jitteredMap.set(item.id, {
-        lat: item.latitude! + radius * Math.cos(angle),
-        lng: item.longitude! + radius * Math.sin(angle)
+        lat: jitteredLat,
+        lng: jitteredLng,
       });
     }
   }
@@ -105,8 +120,8 @@ export default function NewsMap({
   selectionVersion,
   onSelectItem,
   isDarkMode,
-  mappedOnly,
-  onMappedOnlyChange,
+  unmappedOnly,
+  onUnmappedOnlyChange,
   onBoundsChange,
   initialCenter,
   initialZoom,
@@ -260,21 +275,43 @@ export default function NewsMap({
     }
 
     // Configure GeoJSON source with client-side clustering.
-    if (!map.getSource("news-events")) {
-      map.addSource("news-events", {
-        type: "geojson",
-        data: pendingGeoJsonRef.current || {
-          type: "FeatureCollection",
-          features: [],
-        },
-        cluster: !forceIndividualPinsRef.current,
-        clusterMaxZoom: 4,
-        clusterRadius: 35,
-        clusterProperties: {
-          summedEventCount: ["+", ["coalesce", ["get", "eventCount"], 1]],
-        },
-      });
+    // Explicitly remove source and layers if they exist to force a clean reload with new clustering settings
+    if (map.getSource("news-events")) {
+      // Layers must be removed before the source
+      const layers = [
+        "clusters-count",
+        "clusters-circle",
+        "multisource-ring",
+        "unclustered-point-active",
+        "unclustered-point",
+      ];
+      for (const l of layers) {
+        if (map.getLayer(l)) map.removeLayer(l);
+      }
+      map.removeSource("news-events");
     }
+
+    map.addSource("news-events", {
+      type: "geojson",
+      data: pendingGeoJsonRef.current || {
+        type: "FeatureCollection",
+        features: [],
+      },
+      cluster: !forceIndividualPinsRef.current,
+      clusterMaxZoom: 4,
+      clusterRadius: 35,
+      clusterProperties: {
+        summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
+      },
+    });
+
+    const clusterCheck: maplibregl.FilterSpecification = forceIndividualPinsRef.current
+      ? ["all", ["has", "point_count"], ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"]] 
+      : [
+          "any",
+          ["has", "point_count"],
+          ["all", [">", ["coalesce", ["get", "storyCount"], 0], 1], ["<", ["zoom"], 5]],
+        ];
 
     // Layer for inactive individual news pins.
     if (!map.getLayer("unclustered-point")) {
@@ -284,14 +321,7 @@ export default function NewsMap({
         source: "news-events",
         filter: [
           "all",
-          [
-            "!",
-            [
-              "any",
-              ["has", "point_count"],
-              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-            ],
-          ],
+          ["!", clusterCheck],
           ["!=", ["get", "id"], ""],
         ],
         layout: {
@@ -317,14 +347,7 @@ export default function NewsMap({
         source: "news-events",
         filter: [
           "all",
-          [
-            "!",
-            [
-              "any",
-              ["has", "point_count"],
-              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-            ],
-          ],
+          ["!", clusterCheck],
           ["==", ["get", "id"], ""],
         ],
         layout: {
@@ -350,15 +373,8 @@ export default function NewsMap({
         source: "news-events",
         filter: [
           "all",
-          [
-            "!",
-            [
-              "any",
-              ["has", "point_count"],
-              ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-            ],
-          ],
-          [">", ["coalesce", ["get", "eventCount"], 0], 1],
+          ["!", clusterCheck],
+          [">", ["coalesce", ["get", "storyCount"], 0], 1],
         ],
         paint: {
           "circle-radius": 16,
@@ -377,23 +393,19 @@ export default function NewsMap({
         id: "clusters-circle",
         type: "circle",
         source: "news-events",
-        filter: [
-          "any",
-          ["has", "point_count"],
-          ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-        ],
+        filter: clusterCheck,
         layout: {
           "circle-sort-key": [
             "coalesce",
-            ["get", "summedEventCount"],
-            ["get", "eventCount"],
+            ["get", "summedStoryCount"],
+            ["get", "storyCount"],
             0,
           ],
         },
         paint: {
           "circle-color": [
             "step",
-            ["coalesce", ["get", "summedEventCount"], ["get", "eventCount"], 0],
+            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
             "#fca5a5",
             10,
             "#f87171",
@@ -411,7 +423,7 @@ export default function NewsMap({
           "circle-radius": [
             "interpolate",
             ["linear"],
-            ["coalesce", ["get", "summedEventCount"], ["get", "eventCount"], 0],
+            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
             2,
             14,
             10,
@@ -430,7 +442,7 @@ export default function NewsMap({
           "circle-opacity": [
             "interpolate",
             ["linear"],
-            ["coalesce", ["get", "summedEventCount"], ["get", "eventCount"], 0],
+            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
             2,
             0.8,
             20,
@@ -454,20 +466,16 @@ export default function NewsMap({
         id: "clusters-count",
         type: "symbol",
         source: "news-events",
-        filter: [
-          "any",
-          ["has", "point_count"],
-          ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-        ],
+        filter: clusterCheck,
         layout: {
           "symbol-sort-key": [
             "*",
             -1,
-            ["coalesce", ["get", "summedEventCount"], ["get", "eventCount"], 0],
+            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
           ],
           "text-field": [
             "to-string",
-            ["coalesce", ["get", "summedEventCount"], ["get", "eventCount"]],
+            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"]],
           ],
           "text-size": 12,
           "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
@@ -782,19 +790,20 @@ export default function NewsMap({
     setRetryCount((prev) => prev + 1);
   }, []);
 
-  // Force initial view on blank load to overcome MapLibre's early clamping/snapping
+  // Force initial view injection after map readiness to overcome MapLibre early clamping/snapping.
   useEffect(() => {
-    if (mapReady && mapRef.current && !initialCenter && !initialZoom) {
-      const timer = setTimeout(() => {
-        if (!mapRef.current) return;
-        const initialView = getInitialViewState();
-        mapRef.current.jumpTo({
-          center: initialView.center,
-          zoom: initialView.zoom
-        });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+    if (!mapReady || !mapRef.current) return;
+    const timer = setTimeout(() => {
+      if (!mapRef.current) return;
+      const initialView = getInitialViewState();
+      const targetCenter = initialCenter ?? initialView.center;
+      const targetZoom = initialZoom ?? initialView.zoom;
+      mapRef.current.jumpTo({
+        center: targetCenter,
+        zoom: targetZoom
+      });
+    }, 100);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady]);
 
@@ -831,9 +840,11 @@ export default function NewsMap({
           locationName: item.locationName,
           imageUrl: item.imageUrl,
           description: item.description,
-          eventCount: item.eventCount,
+          eventCount: item.sourcesCount,
+          storyCount: item.storyCount ?? 1,
+          sourcesCount: item.sourcesCount ?? 1,
           credibilityTier: item.credibilityTier ?? 3,
-          sourceCount: item.sources?.length ?? 0,
+          sourceCount: canonicalEventCount(item),
         },
       })),
     };
@@ -854,7 +865,7 @@ export default function NewsMap({
   const generatePopupHtml = useCallback((item: NewsItem) => {
     const pinColor = getCategoryColor(item.category);
     const credStyle = getCredibilityStyle(item.credibilityTier);
-    const sourceCount = item.sources?.length ?? 0;
+    const sourceCount = canonicalEventCount(item);
 
     const latestSource = item.sources?.length 
       ? [...item.sources].sort((a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime())[0]
@@ -865,7 +876,7 @@ export default function NewsMap({
       ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
       : "";
 
-    const credBadgeHtml = `<span class="news-popup-credibility" style="background:${credStyle.bg};color:${credStyle.color}" title="${credStyle.label} source"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>`;
+    const credBadgeHtml = `<span class="news-popup-credibility" style="background:${credStyle.bg};color:${credStyle.color}" title="${credStyle.label} source"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-6.45 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>`;
 
     const sourceCountHtml = sourceCount > 1
       ? `<span class="news-popup-source-count" title="${sourceCount} sources reporting on this"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>${sourceCount}</span>`
@@ -963,30 +974,31 @@ export default function NewsMap({
       map.getLayer("unclustered-point-active")
     ) {
       const activeId = selectedItemId || "";
-      map.setFilter("unclustered-point", [
-        "all",
-        [
-          "!",
-          [
+      const clusterCheck: maplibregl.FilterSpecification = forceIndividualPinsRef.current
+        ? ["all", ["has", "point_count"], ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"]]
+        : [
             "any",
             ["has", "point_count"],
-            ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-          ],
-        ],
+            ["all", [">", ["coalesce", ["get", "storyCount"], 0], 1], ["<", ["zoom"], 5]],
+          ];
+
+      map.setFilter("unclustered-point", [
+        "all",
+        ["!", clusterCheck],
         ["!=", ["get", "id"], activeId],
       ]);
       map.setFilter("unclustered-point-active", [
         "all",
-        [
-          "!",
-          [
-            "any",
-            ["has", "point_count"],
-            ["all", [">", ["coalesce", ["get", "eventCount"], 0], 1], ["<", ["zoom"], 5]],
-          ],
-        ],
+        ["!", clusterCheck],
         ["==", ["get", "id"], activeId],
       ]);
+      
+      if (map.getLayer("clusters-circle")) {
+        map.setFilter("clusters-circle", clusterCheck);
+      }
+      if (map.getLayer("clusters-count")) {
+        map.setFilter("clusters-count", clusterCheck);
+      }
     }
 
     if (selectedItemId) {
@@ -1114,9 +1126,9 @@ export default function NewsMap({
             }
             isOpen={settingsOpen}
             onToggleOpen={() => setSettingsOpen((o) => !o)}
-            panelRef={settingsPanelRef}
-            mappedOnly={mappedOnly}
-            onMappedOnlyChange={onMappedOnlyChange}
+            panelRef={settingsPanelRef as React.RefObject<HTMLDivElement>}
+            unmappedOnly={unmappedOnly}
+            onUnmappedOnlyChange={onUnmappedOnlyChange}
           />
           <MapActionTools
             overlays={overlays}

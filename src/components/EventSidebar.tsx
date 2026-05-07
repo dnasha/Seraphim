@@ -22,6 +22,7 @@ import {
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import ThemeToggle from "./ThemeToggle";
 import { getCredibilityStyle } from "@/lib/colors";
+import { canonicalEventCount } from "@/lib/ranking";
 import styles from "./EventSidebar.module.css";
 
 /* Category accent colors for sidebar markers */
@@ -177,8 +178,8 @@ export default function EventSidebar({
     };
   }, [isResizing, resize, stopResizing]);
 
-  const totalEventCount = useMemo(() => {
-    return items.reduce((sum, item) => sum + (item.eventCount ?? 1), 0);
+  const totalStoryCount = useMemo(() => {
+    return items.reduce((acc, item) => acc + (item.storyCount || 1), 0);
   }, [items]);
 
   const newestEventTime = useMemo(() => {
@@ -257,8 +258,10 @@ export default function EventSidebar({
         const nextExpanded = isCurrentlyExpanded ? null : targetId;
         setExpandedId(nextExpanded);
 
-        /* Fetches description if not already cached; empty string indicates loaded but blank */
-        if (nextExpanded && item.description === undefined) {
+        const itemSourceCount = canonicalEventCount(item);
+        const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
+        /* Fetches details lazily for description and timeline sources. */
+        if (nextExpanded && (item.description === undefined || needsTimelineDetails)) {
           onFetchDetails?.(targetId);
         }
 
@@ -280,7 +283,7 @@ export default function EventSidebar({
       const catColor =
         CATEGORY_COLORS[item.category || "general"] || CATEGORY_COLORS.general;
       const credStyle = getCredibilityStyle(item.credibilityTier);
-      const sourceCount = item.sources?.length ?? 0;
+      const sourceCount = canonicalEventCount(item);
       const isTier1 = item.credibilityTier === 1;
 
       let timeAgo = "";
@@ -523,7 +526,12 @@ export default function EventSidebar({
                   )}
                 </div>
                 <div className={styles.timelineList}>
-                  {visibleSources.map((src, i) => {
+                  {item.sources == null ? (
+                    <div className={styles.descriptionSkeleton}>
+                      <div className={styles.skeletonLine} />
+                      <div className={styles.skeletonLine} style={{ width: "86%" }} />
+                    </div>
+                  ) : visibleSources.map((src, i) => {
                     const srcStyle = getSourceStyle(src.name);
                     let srcTimeAgo = "";
                     try {
@@ -683,7 +691,7 @@ export default function EventSidebar({
             </div>
           )}
           <span className={styles.statPill}>
-            {totalEventCount.toLocaleString()} events
+            {totalStoryCount.toLocaleString()} stories
           </span>
         </div>
 

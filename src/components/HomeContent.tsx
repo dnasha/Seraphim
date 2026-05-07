@@ -26,7 +26,7 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     const { updateURL } = useViewState();
     
     // Filtering and time range state (initialized from searchParams for SSR stability)
-    const [mappedOnly, setMappedOnly] = useState(true);
+    const [unmappedOnly, setUnmappedOnly] = useState(false);
     const [timeRange, setTimeRange] = useState((searchParams.t as string) || '1d');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -74,17 +74,20 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
         customStartDate,
         customEndDate,
         sortMode,
-        includeUnmapped: true // Enable background fetching for unmapped items
+        unmappedOnly
     });
     
+    const sidebarRespectBBox = true;
+
     const {
         sources, setSources,
         categories, setCategories,
-        filteredNews
-    } = useNewsFilter(news, mappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox);
+        filteredNews,
+        mapNews,
+    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox, unmappedOnly);
 
     // UI and interaction state
-    const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+    const [selectedItemId, setSelectedItemId] = useState<string | null>(getParam('eventId') || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -94,7 +97,8 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     const handleSelectItem = useCallback((id: string | null) => {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
-    }, []);
+        updateURL({ eventId: id || undefined });
+    }, [updateURL]);
 
     // Sync map center/zoom changes to URL
     const handleBoundsChange = useCallback((bbox: BBox) => {
@@ -195,13 +199,13 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
-                    items={filteredNews}
+                    items={mapNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
                     isDarkMode={isDarkMode}
-                    mappedOnly={mappedOnly}
-                    onMappedOnlyChange={setMappedOnly}
+                    unmappedOnly={unmappedOnly}
+                    onUnmappedOnlyChange={setUnmappedOnly}
                     onBoundsChange={handleBoundsChange}
                     initialCenter={initialCenter}
                     initialZoom={validInitialZoom}

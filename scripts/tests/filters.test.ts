@@ -262,3 +262,39 @@ describe('applyNewsFilters - edge cases', () => {
     });
 });
 
+describe('applyNewsFilters - dedupe and bbox scope', () => {
+    it('dedupes cluster + original cards by canonical id', () => {
+        const base = makeItem({
+            id: 'story-1',
+            title: 'Latest event',
+            publishedAt: new Date(NOW - 1000 * 60).toISOString(),
+            impactScore: 10,
+            eventCount: 4,
+        });
+        const cluster = makeItem({
+            id: 'cluster-z4-12.0000-13.0000-4',
+            originalId: 'story-1',
+            title: 'Cluster event',
+            publishedAt: new Date(NOW - 1000 * 60 * 5).toISOString(),
+            impactScore: 8,
+            eventCount: 4,
+        });
+
+        const result = applyNewsFilters([cluster, base], defaultOpts({ sortMode: 'hot' }));
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('story-1');
+    });
+
+    it('can skip bbox filtering for global zoomed-out sidebar mode', () => {
+        const inView = makeItem({ id: 'in-view', latitude: 10, longitude: 10 });
+        const outOfView = makeItem({ id: 'out-of-view', latitude: 70, longitude: 70 });
+        const bbox = { minLat: 0, maxLat: 20, minLng: 0, maxLng: 20 };
+
+        const viewportResult = applyNewsFilters([inView, outOfView], defaultOpts({ bbox, respectBBox: true }));
+        expect(viewportResult.map((i) => i.id)).toEqual(['in-view']);
+
+        const globalResult = applyNewsFilters([inView, outOfView], defaultOpts({ bbox, respectBBox: false }));
+        expect(globalResult.map((i) => i.id).sort()).toEqual(['in-view', 'out-of-view']);
+    });
+});
+

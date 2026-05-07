@@ -38,7 +38,8 @@ export interface DbEvent {
   embedding?: number[] | string; // vector(384) pgvector column
   created_at?: string;        // set by Supabase default
   cluster_id?: number;        // ID of the semantic cluster
-  event_count?: number;       // Number of events in the cluster
+  story_count?: number;       // Number of stories in the cluster (RPC)
+  event_count?: number;       // Number of sources for this story
   impact_score?: number;
   credibility_tier?: number;
   sources?: DbEventSource[];
@@ -67,7 +68,8 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     locationName: row.location_name ?? undefined,
     tags: row.tags ?? undefined,
     clusterId: row.cluster_id ?? undefined,
-    eventCount: row.event_count ?? undefined,
+    storyCount: row.story_count ?? undefined,
+    sourcesCount: row.event_count ?? undefined,
     impactScore: row.impact_score ?? undefined,
     credibilityTier: row.credibility_tier ?? undefined,
     sources: row.sources?.map(s => ({

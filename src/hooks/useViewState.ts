@@ -25,6 +25,8 @@ export interface ViewState {
     cat?: string;
     /** Sort mode ('new' or 'hot') */
     s?: string;
+    /** Selected event ID */
+    eventId?: string;
 }
 
 const DEFAULT_SOURCES = ['news', 'reddit', 'x', 'telegram', 'extra'];
@@ -45,6 +47,7 @@ function parseInitialState(params: URLSearchParams): ViewState {
     const src = params.get('src');
     const cat = params.get('cat');
     const s = params.get('s');
+    const eventId = params.get('eventId');
 
     if (lat) state.lat = parseFloat(lat);
     if (lng) state.lng = parseFloat(lng);
@@ -54,6 +57,7 @@ function parseInitialState(params: URLSearchParams): ViewState {
     if (src) state.src = src;
     if (cat) state.cat = cat;
     if (s) state.s = s;
+    if (eventId) state.eventId = eventId;
 
     return state;
 }
@@ -112,6 +116,7 @@ export function useViewState() {
                 }
             }
             if (s.s && s.s !== 'new') params.set('s', s.s);
+            if (s.eventId) params.set('eventId', s.eventId);
 
             const qs = params.toString();
             const newUrl = qs

@@ -27,7 +27,9 @@ export interface NewsItem {
   foundLocations?: string[];
   tags?: string[];
   clusterId?: number;
-  eventCount?: number;
+  sourcesCount?: number;
+  storyCount?: number;
+  clusterSize?: number;
   originalId?: string;
   impactScore?: number;
   credibilityTier?: number;
@@ -38,6 +40,14 @@ export interface NewsResponse {
   items: NewsItem[];
   lastUpdated: string;
   nextCursor?: string;
+  meta?: {
+    sort: 'new' | 'hot';
+    view: 'map' | 'sidebar';
+    scope: 'viewport' | 'global';
+    clustered: boolean;
+    zoomBucket: number | null;
+    globalTopN?: number;
+  };
   sources: {
     gnews: boolean;
     rss: boolean;

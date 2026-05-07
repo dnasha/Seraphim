@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { DbEvent } from '@/types';
 
 // In-memory cache for event descriptions to reduce database load
-const detailCache = new Map<string, { description: string; timestamp: number }>();
+const detailCache = new Map<string, { description: string; sources: DbEvent['sources']; timestamp: number }>();
 const DETAIL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 export async function GET(
@@ -32,26 +32,26 @@ export async function GET(
     const cached = detailCache.get(id);
     if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
         return NextResponse.json(
-            { description: cached.description },
+            { description: cached.description, sources: cached.sources ?? [] },
             { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
         );
     }
 
     const { data, error } = await supabase
         .from('events')
-        .select('description')
+        .select('description, sources')
         .eq('id', id)
-        .single<Pick<DbEvent, 'description'>>();
+        .single<Pick<DbEvent, 'description' | 'sources'>>();
 
     if (error || !data) {
         console.error('[api/news/[id]] Supabase query failed:', error?.message);
         return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    detailCache.set(id, { description: data.description ?? '', timestamp: Date.now() });
+    detailCache.set(id, { description: data.description ?? '', sources: data.sources ?? [], timestamp: Date.now() });
 
     return NextResponse.json(
-        { description: data.description ?? '' },
+        { description: data.description ?? '', sources: data.sources ?? [] },
         { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
     );
 }

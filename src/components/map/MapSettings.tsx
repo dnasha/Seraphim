@@ -14,9 +14,9 @@ interface MapSettingsProps {
     onForceIndividualPinsToggle: () => void;
     isOpen: boolean;
     onToggleOpen: () => void;
-    panelRef: React.RefObject<HTMLDivElement | null>;
-    mappedOnly: boolean;
-    onMappedOnlyChange: (val: boolean) => void;
+    panelRef: React.RefObject<HTMLDivElement>;
+    unmappedOnly: boolean;
+    onUnmappedOnlyChange: (val: boolean) => void;
 }
 
 const MapSettings: React.FC<MapSettingsProps> = ({
@@ -27,8 +27,8 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     isOpen,
     onToggleOpen,
     panelRef,
-    mappedOnly,
-    onMappedOnlyChange,
+    unmappedOnly,
+    onUnmappedOnlyChange
 }) => {
     return (
         <div className={styles.mapSettingsArea} ref={panelRef}>
@@ -67,31 +67,25 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                     {/* Toggle for disabling client-side clustering */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
-                        <label className={styles.settingsToggle}>
+                        <div className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} style={{ cursor: 'pointer' }}>
                             <span className={styles.settingsToggleLabel}>Force individual pins</span>
-                            <div
-                                className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}
-                                onClick={onForceIndividualPinsToggle}
-                            >
+                            <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
-                        </label>
+                        </div>
                     </div>
 
                     <div className={styles.settingsDivider} />
 
-                    {/* Filter for showing only news items with geographic coordinates */}
+                    {/* Filter for showing ONLY news items without geographic coordinates */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Visibility</div>
-                        <label className={styles.settingsToggle}>
-                            <span className={styles.settingsToggleLabel}>Mapped only</span>
-                            <div
-                                className={`${styles.toggleSwitch}${mappedOnly ? ` ${styles.toggleSwitchOn}` : ''}`}
-                                onClick={() => onMappedOnlyChange(!mappedOnly)}
-                            >
+                        <div className={styles.settingsToggle} onClick={() => onUnmappedOnlyChange(!unmappedOnly)} style={{ cursor: 'pointer' }}>
+                            <span className={styles.settingsToggleLabel}>Unmapped only</span>
+                            <div className={`${styles.toggleSwitch}${unmappedOnly ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
-                        </label>
+                        </div>
                     </div>
                 </div>
             )}

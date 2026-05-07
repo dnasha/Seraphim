@@ -23,28 +23,32 @@
   - **Lazy Loading**: Descriptions and full article metadata are fetched on-demand to reduce initial payload by 40%.
   - **Fail-Safe Architecture**: Singleton Supabase clients, hybrid L1/L2 rate limiting, and 96% test coverage across 127 suites.
 
+### Story Implementation & View-State
+- **Story UI Evolution**: Transitioned from individual links to aggregated stories with icon-only round badges (Diamond/Gold/Silver tiers). Implemented source-count pills with hover tooltips and timeline expansion.
+- **URL View State**: Robust `useViewState` hook syncing `lat`, `lng`, `zoom`, `q`, `t`, and `sortMode` to URL.
+- **Resolution Awareness**: Resolution-aware map scaling using linear interpolation (Lerp) between 1200p and 2K targets, overcoming Mercator clamping for consistent framing.
+- **Hydration Stabilization**: Decoupled `HomeContent.tsx` (Client) from `page.tsx` (Server) using `useSyncExternalStore` to resolve React 19 hydration mismatches.
+
 ---
 
-## Phase 4: UI Transformation (The "Story" Experience) (Completed)
+## Phase 4: Stabilization & Architectural Rethinking
 
-_Goal: Update the frontend to reflect the shift from individual links to aggregated stories._
+_Goal: Transition from working prototype to production-grade resilience and smarter ranking._
 
-### 4.1 "Story" UI Components (Completed)
+### 4.1 Story UI & URL Hardening
+- **Fix**: Resolve remaining sidebar layout shifts during data revalidation.
+- **Fix**: Harden URL coordinate validation to prevent "NaN" or out-of-bounds crashes on manual URL entry.
+- **Action**: Implement "Back Button" history support for map movements and filter changes to ensure natural browser navigation.
 
-- **Implementation**: Icon-only round badges with Diamond/Gold/Silver tiers. Source-count pills with hover tooltips. Story timeline expansion in sidebar.
-- **Credibility**: Diamond Blue (#0369a1) verified tier integration.
+### 4.2 API Rethinking: Hybrid Fetching
+- **Action**: Decouple the sidebar from the map's immediate viewport to prevent "Empty Sidebar" syndrome when zoomed into rural areas.
+- **Implementation**: Transition to a hybrid data model:
+  - **Viewport Data**: Map pins remain strictly tied to the current BBox.
+  - **Global Context**: Sidebar fetches the "Top X" hottest stories globally (or within a broad region) to ensure it always feels alive and informative.
 
-### 4.2 View State Syncing (URL Deep Links) (Completed)
-
-- **Implementation**: Robust `useViewState` hook syncing `lat`, `lng`, `zoom`, `q`, `t`, and `sortMode` to URL.
-- **Display Awareness**: Resolution-aware map scaling using linear interpolation (Lerp) between 1200p and 2K targets. Overcomes Mercator clamping to ensure consistent framing on high-res monitors.
-- **Architecture**: Decoupled `HomeContent.tsx` (Client) from `page.tsx` (Server) for SSR-safe hydration.
-
-### Phase 4.3: Smart Sorting & Ranking (Completed)
-
-- **Hot Sort**: Prioritizes stories corroborated by multiple outlets (Source Count DESC), with recency as a tiebreaker.
-- **New Sort**: Classic recency-based feed.
-- **Toggle UI**: Segmented control in sidebar below filter chips.
+### 4.3 Smart Ranking & Impact Scoring
+- **Action**: Re-calibrate the "Hot" ranking heuristic. Move beyond simple source counts to a weighted score: `(Source Weight * Credibility Tier) / Temporal Decay`.
+- **Action**: Finalize the `impact_score` and `event_count` columns in the database to allow for high-performance server-side sorting and filtering.
 
 ---
 
@@ -71,9 +75,13 @@ _Goal: Implement "nice-to-have" features that enhance the visual experience and 
 
 _Goal: Turn Seraphim from a project into a product with user accounts and usage tiers._
 
-### 5.1 User Auth & Usage Tiers (Supabase Auth)
+### 5.1 User Auth & Stripe Monetization
 
-- **Action**: Integrate Supabase Auth and execute a migration for user-specific data.
+- **Auth**: Integrate Supabase Auth for JWT-based session management and secure API access.
+- **Monetization (Stripe)**:
+  - **Checkout**: Implement Stripe Checkout for seamless Pro tier onboarding.
+  - **Webhooks**: Deploy a listener to handle `checkout.session.completed` and `customer.subscription.deleted` events, ensuring `user_profiles.tier` remains synced with payment status.
+  - **Portal**: Provide a "Manage Billing" link using the Stripe Customer Portal for self-service subscription management.
 - **New Tables**:
   - `user_profiles`: Stores `tier` ('free', 'pro'), `stripe_customer_id`, and preferences.
   - `user_bookmarks`: Stores `user_id`, `event_id`, and personal notes.

@@ -1,5 +1,6 @@
 import { NewsItem } from './types';
 import { BBox, isWithinBBox } from './geo';
+import { compareNewsItems, normalizeSortMode, sortNewsItems as sortRanked } from './ranking';
 
 export type SortMode = 'new' | 'hot';
 
@@ -10,10 +11,12 @@ export interface FilterOptions {
     customStartDate?: string;
     customEndDate?: string;
     mappedOnly: boolean;
+    unmappedOnly?: boolean;
     searchQuery: string;
     now: number;
     sortMode?: SortMode;
     bbox?: BBox;
+    respectBBox?: boolean;
 }
 
 /**
@@ -21,13 +24,15 @@ export interface FilterOptions {
  * Pure function: no React dependencies, no side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, searchQuery, now, sortMode = 'new', bbox } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true } = options;
+    const mode = normalizeSortMode(sortMode);
 
     let filtered = items;
     if (now === 0) return filtered;
 
     // 0. BBox Viewport filtering (to sync sidebar with map view)
-    if (bbox) {
+    // BBox filter is bypassed if unmappedOnly is true to allow viewing global unmapped news
+    if (bbox && respectBBox && !unmappedOnly) {
         filtered = filtered.filter(item => isWithinBBox(item, bbox));
     }
 
@@ -40,6 +45,8 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
             if (sources.includes('reddit') && s.includes('reddit')) return true;
             if (sources.includes('x') && (s.includes('(x)') || s.includes('twitter'))) return true;
             if (sources.includes('telegram') && s.includes('telegram')) return true;
+            // If they have all defaults selected, don't drop unknown social sources
+            if (sources.includes('reddit') && sources.includes('x') && sources.includes('telegram')) return true;
         }
         return false;
     });
@@ -87,32 +94,27 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         );
     }
 
-    // 5. Geographical filter (items with coordinates)
-    if (mappedOnly) {
+    // 5. Geographical filter (items with/without coordinates)
+    if (unmappedOnly) {
+        filtered = filtered.filter(n => n.latitude == null);
+    } else if (mappedOnly) {
         filtered = filtered.filter(n => n.latitude != null);
     }
 
-    // 6. Sort by mode
-    if (sortMode === 'hot') {
-        // "Hot" prioritizes impact score (backfilled), then corroborating sources, then recency
-        filtered.sort((a, b) => {
-            // Primary: Impact Score
-            const scoreA = a.impactScore || 0;
-            const scoreB = b.impactScore || 0;
-            if (scoreB !== scoreA) return scoreB - scoreA;
-
-            // Secondary: Event Count
-            const countA = Math.max(Number(a.eventCount) || 0, a.sources?.length || 0, 1);
-            const countB = Math.max(Number(b.eventCount) || 0, b.sources?.length || 0, 1);
-            if (countB !== countA) return countB - countA;
-
-            // Tertiary: Recency
-            return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-        });
-    } else {
-        // "New" sorts by latest first (default)
-        filtered.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    // 6. Canonical dedupe to prevent duplicate cards/pins when both cluster and original exist.
+    const deduped = new Map<string, NewsItem>();
+    for (const item of filtered) {
+        const key = item.originalId || item.id;
+        const existing = deduped.get(key);
+        if (!existing) {
+            deduped.set(key, item);
+            continue;
+        }
+        if (compareNewsItems(item, existing, mode) < 0) {
+            deduped.set(key, item);
+        }
     }
 
-    return filtered;
+    // 7. Sort by mode
+    return sortRanked(Array.from(deduped.values()), mode);
 }

@@ -107,26 +107,8 @@ a {
   font-size: 0.75rem;
 }
 
-/* Shared News Popup Links */
-.news-popup-link {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-  text-align: right;
-  margin-top: 4px;
-  transition: opacity 0.15s, color 0.15s;
-}
+/* Shared News Popup Links - managed via NewsMap.module.css :global() */
 
-.news-popup-link:visited {
-  color: var(--accent);
-}
-
-.news-popup-link:hover {
-  text-decoration: underline;
-  opacity: 0.8;
-}
 
 /* Global Scrollbar Styles (Webkit) */
 ::-webkit-scrollbar {

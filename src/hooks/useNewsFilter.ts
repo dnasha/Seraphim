@@ -11,7 +11,18 @@ import { NewsItem } from '@/lib/types';
 import { applyNewsFilters, SortMode } from '@/lib/filters';
 import { BBox } from '@/lib/geo';
 
-export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: string, debouncedSearch: string, customStartDate?: string, customEndDate?: string, sortMode: SortMode = 'new', currentBBox?: BBox | null) {
+export function useNewsFilter(
+    news: NewsItem[],
+    mappedOnly: boolean,
+    timeRange: string,
+    debouncedSearch: string,
+    customStartDate?: string,
+    customEndDate?: string,
+    sortMode: SortMode = 'new',
+    currentBBox?: BBox | null,
+    sidebarRespectBBox = true,
+    unmappedOnly = false
+) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
     
@@ -38,16 +49,36 @@ export function useNewsFilter(news: NewsItem[], mappedOnly: boolean, timeRange: 
             customStartDate,
             customEndDate,
             mappedOnly,
+            unmappedOnly,
             searchQuery: debouncedSearch,
             now,
             sortMode,
             bbox: currentBBox || undefined,
+            respectBBox: sidebarRespectBBox,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, now, customStartDate, customEndDate, sortMode, currentBBox]); /* Re-filter whenever state or source data changes. */
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox]); /* Re-filter whenever state or source data changes. */
+
+    const mapNews = useMemo(() => {
+        return applyNewsFilters(news, {
+            sources,
+            categories,
+            timeRange,
+            customStartDate,
+            customEndDate,
+            mappedOnly,
+            unmappedOnly,
+            searchQuery: debouncedSearch,
+            now,
+            sortMode,
+            bbox: currentBBox || undefined,
+            respectBBox: true,
+        });
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, sortMode, currentBBox]);
 
     return {
         sources, setSources,
         categories, setCategories,
-        filteredNews
+        filteredNews,
+        mapNews,
     };
 }

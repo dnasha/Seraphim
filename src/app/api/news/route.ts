@@ -11,6 +11,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { DbEvent, dbEventToNewsItem } from '@/types';
+import { normalizeSortMode, sortNewsItems } from '@/lib/ranking';
 
 // Global rate limiter using Upstash Redis
 const redis = Redis.fromEnv();
@@ -42,7 +43,6 @@ function performL1Cleanup() {
 // Server-side cache for news items to reduce database load
 // Key format: "events" or "bbox:{coords}[,cluster][,z:{zoom}][,s:{since}][,u:{until}][,q:{query}]"
 const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
@@ -54,20 +54,23 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 const RAW_LIMIT = 2000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
-const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, sources, event_count';
+const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count';
 
 export async function GET(request: Request) {
     const now = Date.now();
     const { searchParams } = new URL(request.url);
     let forceRefresh = searchParams.get('refresh') === 'true';
-    const includeUnmapped = searchParams.get('include_unmapped') === 'true';
-
+    const unmappedOnly = searchParams.get('unmapped_only') === 'true';
+    const viewMode = searchParams.get('view') === 'sidebar' ? 'sidebar' : 'map';
+    const scopeMode = unmappedOnly ? 'global' : (searchParams.get('scope') === 'global' ? 'global' : 'viewport');
+    
     // Bounding box parameters for geographic filtering
     const minLat = searchParams.get('minLat');
     const maxLat = searchParams.get('maxLat');
     const minLng = searchParams.get('minLng');
     const maxLng = searchParams.get('maxLng');
-    const hasBBox = minLat !== null && maxLat !== null && minLng !== null && maxLng !== null;
+    // BBox is ignored if unmappedOnly is true
+    const hasBBox = !unmappedOnly && minLat !== null && maxLat !== null && minLng !== null && maxLng !== null;
 
     // Numerical stability epsilon for coordinate comparisons
     const EPSILON = 0.00001;
@@ -76,7 +79,7 @@ export async function GET(request: Request) {
     const searchQuery = searchParams.get('query');
     
     // Global search overrides bounding box constraints
-    const ignoreBBox = !!searchQuery;
+    const ignoreBBox = !!searchQuery || unmappedOnly;
 
     // Zoom level used to determine whether to apply server-side clustering
     const zoomStr = searchParams.get('zoom');
@@ -85,20 +88,22 @@ export async function GET(request: Request) {
     // Optional override to skip clustering regardless of zoom level
     const forceRaw = searchParams.get('force_raw') === 'true';
 
-    const sort = searchParams.get('sort') || 'new';
+    const sort = normalizeSortMode(searchParams.get('sort'));
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : RAW_LIMIT;
     const sinceStr = searchParams.get('since');
     const untilStr = searchParams.get('until');
+    const effectiveLimit = limit;
 
     // Logic to determine if server-side clustering should be performed
-    const useServerClustering = (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
+    const useServerClustering = !unmappedOnly && (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
 
     // Construct a cache key that captures all query parameters
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
     const cacheKey = (hasBBox || ignoreBBox)
-        ? `bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${limit !== RAW_LIMIT ? `,l:${limit}` : ''}`
-        : `events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${limit !== RAW_LIMIT ? `,l:${limit}` : ''}`;
-    const canUseCache = !includeUnmapped;
+        ? `view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ''}${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${searchQuery ? `,q:${searchQuery}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ''}${unmappedOnly ? ',unmappedOnly:1' : ''}`
+        : `view:${viewMode},scope:${scopeMode},events${sinceStr ? `,s:${sinceStr}` : ''}${untilStr ? `,u:${untilStr}` : ''}${sort !== 'new' ? `,sort:${sort}` : ''}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ''}${unmappedOnly ? ',unmappedOnly:1' : ''}`;
+    const canUseCache = true;
+    const cacheTtlMs = !hasBBox ? 5 * 60 * 1000 : 60 * 1000;
 
     // Prevent excessive refresh attempts
     if (forceRefresh) {
@@ -139,24 +144,17 @@ export async function GET(request: Request) {
         let allItems: NewsItem[];
         const cached = sourceCache.get(cacheKey);
 
-        if (canUseCache && !forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
+        if (canUseCache && !forceRefresh && cached && (now - cached.timestamp) < cacheTtlMs) {
             allItems = cached.data;
         } else {
             let rows, error;
 
-            const normalizeLng = (lng: number) => ((lng + 180) % 360 + 360) % 360 - 180;
             let normMinLng: number | null = null;
             let normMaxLng: number | null = null;
-            let crossesAntimeridian = false;
 
             if (!ignoreBBox && hasBBox) {
-                const minL = parseFloat(minLng!) - EPSILON;
-                const maxL = parseFloat(maxLng!) + EPSILON;
-                if (maxL - minL < 360) {
-                    normMinLng = normalizeLng(minL);
-                    normMaxLng = normalizeLng(maxL);
-                    crossesAntimeridian = normMinLng > normMaxLng;
-                }
+                normMinLng = parseFloat(minLng!) - EPSILON;
+                normMaxLng = parseFloat(maxLng!) + EPSILON;
             }
 
             if (useServerClustering) {
@@ -165,20 +163,20 @@ export async function GET(request: Request) {
                     p_zoom_level: Math.floor(zoom!),
                     p_min_lat: ignoreBBox ? null : parseFloat(minLat!) - EPSILON,
                     p_max_lat: ignoreBBox ? null : parseFloat(maxLat!) + EPSILON,
-                    // If it crosses the antimeridian, passing unwrapped bounds to a simple RPC will fail.
-                    // Omit longitude filtering for the RPC in this case.
-                    p_min_lng: crossesAntimeridian || normMinLng === null ? null : normMinLng,
-                    p_max_lng: crossesAntimeridian || normMaxLng === null ? null : normMaxLng,
+                    p_min_lng: ignoreBBox ? null : normMinLng,
+                    p_max_lng: ignoreBBox ? null : normMaxLng,
+                    p_sort_mode: sort,
+                    p_limit: effectiveLimit,
                 };
                 if (sinceStr) rpcParams.p_since = sinceStr;
                 if (untilStr) rpcParams.p_until = untilStr;
                 if (searchQuery) rpcParams.p_search_query = searchQuery;
 
-                const res = await supabase.rpc('get_clustered_events', rpcParams).limit(sort === 'hot' ? RAW_LIMIT : limit);
+                const res = await supabase.rpc('get_clustered_events', rpcParams);
                 rows = res.data;
                 error = res.error;
             } else {
-                // Standard query for individual event markers
+                // Standard query for individual event markers or unmapped-only view
                 let query = supabase
                     .from('events')
                     .select(LIST_SELECT);
@@ -193,15 +191,18 @@ export async function GET(request: Request) {
                     query = query.order('published_at', { ascending: false });
                 }
 
-                query = query.limit(sort === 'hot' ? RAW_LIMIT : limit);
+                query = query.limit(effectiveLimit);
 
-                if (!ignoreBBox && hasBBox) {
+                if (unmappedOnly) {
+                    // If explicitly requested, return ONLY events without coordinates
+                    query = query.is('latitude', null);
+                } else if (!ignoreBBox && hasBBox) {
                     query = query
                         .gte('latitude', parseFloat(minLat!) - EPSILON)
                         .lte('latitude', parseFloat(maxLat!) + EPSILON);
 
                     if (normMinLng !== null && normMaxLng !== null) {
-                        if (crossesAntimeridian) {
+                        if (normMinLng > normMaxLng) {
                             // Crosses the antimeridian
                             query = query.or(`longitude.gte.${normMinLng},longitude.lte.${normMaxLng}`);
                         } else {
@@ -209,7 +210,8 @@ export async function GET(request: Request) {
                             query = query.gte('longitude', normMinLng).lte('longitude', normMaxLng);
                         }
                     }
-                } else if (!includeUnmapped) {
+                } else {
+                    // Otherwise, only fetch items WITH coordinates
                     query = query.not('latitude', 'is', null);
                 }
 
@@ -247,37 +249,19 @@ export async function GET(request: Request) {
                 // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes.
                 // We store the original UUID so the frontend can still fetch the description 
                 // of the representative event for this cluster.
-                // ONLY apply to aggregated clusters (eventCount > 1). Individual items MUST
+                // ONLY apply to aggregated clusters (storyCount > 1). Individual items MUST
                 // retain their UUIDs directly to avoid duplicate keys during zoom transitions.
-                if (useServerClustering && item.clusterId && item.eventCount && item.eventCount > 1) {
+                if (useServerClustering && item.clusterId && (item.storyCount ?? 1) > 1) {
                     item.originalId = item.id;
-                    item.id = `cluster-z${Math.floor(zoom!)}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.eventCount}`;
+                    item.id = `cluster-z${Math.floor(zoom!)}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.storyCount}`;
                 }
                 return item;
             });
 
-            // Apply consistent in-memory sorting for all modes to ensure UI stability.
-            if (sort === 'hot') {
-                allItems.sort((a, b) => {
-                    // Primary: Impact Score
-                    const scoreA = a.impactScore || 0;
-                    const scoreB = b.impactScore || 0;
-                    if (scoreB !== scoreA) return scoreB - scoreA;
+            allItems = sortNewsItems(allItems, sort);
 
-                    // Secondary: Event Count
-                    const countA = Math.max(Number(a.eventCount) || 0, a.sources?.length || 0, 1);
-                    const countB = Math.max(Number(b.eventCount) || 0, b.sources?.length || 0, 1);
-                    if (countB !== countA) return countB - countA;
-                    
-                    // Tertiary: Recency
-                    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-                });
-            } else {
-                allItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-            }
-
-            if (limit < allItems.length) {
-                allItems = allItems.slice(0, limit);
+            if (effectiveLimit < allItems.length) {
+                allItems = allItems.slice(0, effectiveLimit);
             }
 
             if (canUseCache) {
@@ -288,6 +272,13 @@ export async function GET(request: Request) {
         const response: NewsResponse = {
             items: allItems,
             lastUpdated: new Date().toISOString(),
+            meta: {
+                sort,
+                view: viewMode,
+                scope: scopeMode,
+                clustered: useServerClustering,
+                zoomBucket: zoom !== null ? Math.floor(zoom) : null,
+            },
             sources: {
                 gnews: true,
                 rss: true,
@@ -295,9 +286,11 @@ export async function GET(request: Request) {
             },
         };
 
-        const cacheControl = canUseCache && !hasBBox
-            ? 'public, s-maxage=900, stale-while-revalidate=59'
-            : 'public, s-maxage=60, stale-while-revalidate=10';
+        const cacheControl = !canUseCache
+            ? 'no-store'
+            : !hasBBox
+                ? 'public, s-maxage=900, stale-while-revalidate=59'
+                : 'public, s-maxage=60, stale-while-revalidate=10';
 
         return NextResponse.json(response, {
             headers: { 'Cache-Control': cacheControl }
