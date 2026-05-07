@@ -28,27 +28,19 @@
 - **URL View State**: Robust `useViewState` hook syncing `lat`, `lng`, `zoom`, `q`, `t`, and `sortMode` to URL.
 - **Resolution Awareness**: Resolution-aware map scaling using linear interpolation (Lerp) between 1200p and 2K targets, overcoming Mercator clamping for consistent framing.
 - **Hydration Stabilization**: Decoupled `HomeContent.tsx` (Client) from `page.tsx` (Server) using `useSyncExternalStore` to resolve React 19 hydration mismatches.
+- **News Feed Synchronization**: Finalized `events.published_at` as a "pulse" timestamp that reflects the latest source activity rather than initial scrape time.
+- **API Resilience & Transparency**: Implemented `isCapped` metadata logic and "2,000+" UI indicators to handle high-density result sets gracefully.
+- **Smart Ranking Implementation**: Finalized `impact_score` and `event_count` sorting logic, enabling high-performance "Hot" sorting across the archive.
 
 ---
 
-## Phase 4: Stabilization & Architectural Rethinking
+## Phase 4.4: Complete UI Overhaul (Visual Excellence)
 
-_Goal: Transition from working prototype to production-grade resilience and smarter ranking._
+_Goal: Elevate Seraphim from a functional tool to a premium, "wow-factor" dashboard._
 
-### 4.1 Story UI & URL Hardening
-- **Fix**: Resolve remaining sidebar layout shifts during data revalidation.
-- **Fix**: Harden URL coordinate validation to prevent "NaN" or out-of-bounds crashes on manual URL entry.
-- **Action**: Implement "Back Button" history support for map movements and filter changes to ensure natural browser navigation.
-
-### 4.2 API Rethinking: Hybrid Fetching
-- **Action**: Decouple the sidebar from the map's immediate viewport to prevent "Empty Sidebar" syndrome when zoomed into rural areas.
-- **Implementation**: Transition to a hybrid data model:
-  - **Viewport Data**: Map pins remain strictly tied to the current BBox.
-  - **Global Context**: Sidebar fetches the "Top X" hottest stories globally (or within a broad region) to ensure it always feels alive and informative.
-
-### 4.3 Smart Ranking & Impact Scoring
-- **Action**: Re-calibrate the "Hot" ranking heuristic. Move beyond simple source counts to a weighted score: `(Source Weight * Credibility Tier) / Temporal Decay`.
-- **Action**: Finalize the `impact_score` and `event_count` columns in the database to allow for high-performance server-side sorting and filtering.
+- **Action**: Redesign the Sidebar and Map Overlays with a cohesive, modern aesthetic (Glassmorphism, refined typography, and better spacing).
+- **Action**: Implement smooth micro-animations for card entry, expansion, and map marker transitions.
+- **Action**: Refine the color palette (using HSL-tailored tokens) to ensure a high-end "Command Center" feel.
 
 ---
 

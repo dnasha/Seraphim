@@ -82,6 +82,7 @@ interface EventSidebarProps {
   onSortModeChange: (mode: SortMode) => void;
   filterVersion?: number;
   animatedEffects?: boolean;
+  isCapped?: boolean;
 }
 
 export default function EventSidebar({
@@ -101,6 +102,7 @@ export default function EventSidebar({
   onSortModeChange,
   filterVersion = 0,
   animatedEffects = false,
+  isCapped = false,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -142,7 +144,10 @@ export default function EventSidebar({
 
   const stopResizing = useCallback(() => {
     setIsResizing(false);
-    localStorage.setItem("seraphim-sidebar-width", lastWidthRef.current.toString());
+    localStorage.setItem(
+      "seraphim-sidebar-width",
+      lastWidthRef.current.toString(),
+    );
     setSidebarWidth(lastWidthRef.current);
   }, []);
 
@@ -153,10 +158,13 @@ export default function EventSidebar({
       /* Clamp width between MIN and MAX */
       const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
       lastWidthRef.current = newWidth;
-      
+
       /* Direct DOM manipulation for maximum performance during drag */
       if (sidebarRef.current) {
-        sidebarRef.current.style.setProperty("--sidebar-width", `${newWidth}px`);
+        sidebarRef.current.style.setProperty(
+          "--sidebar-width",
+          `${newWidth}px`,
+        );
       }
     },
     [isResizing],
@@ -291,7 +299,10 @@ export default function EventSidebar({
         const itemSourceCount = canonicalEventCount(item);
         const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
         /* Fetches details lazily for description and timeline sources. */
-        if (nextExpanded && (item.description === undefined || needsTimelineDetails)) {
+        if (
+          nextExpanded &&
+          (item.description === undefined || needsTimelineDetails)
+        ) {
           onFetchDetails?.(targetId);
         }
 
@@ -328,7 +339,7 @@ export default function EventSidebar({
           : null;
         const displayDate = latestSource
           ? latestSource.discoveredAt
-          : (item.latestActivityAt || item.publishedAt);
+          : item.latestActivityAt || item.publishedAt;
 
         timeAgo = formatTimeAgo(displayDate);
       } catch {
@@ -571,48 +582,53 @@ export default function EventSidebar({
                   {item.sources == null ? (
                     <div className={styles.descriptionSkeleton}>
                       <div className={styles.skeletonLine} />
-                      <div className={styles.skeletonLine} style={{ width: "86%" }} />
-                    </div>
-                  ) : visibleSources.map((src, i) => {
-                    const srcStyle = getSourceStyle(src.name);
-                    let srcTimeAgo = "";
-                    try {
-                      srcTimeAgo = formatTimeAgo(src.discoveredAt);
-                    } catch {
-                      /* ignore */
-                    }
-                    return (
                       <div
-                        key={`${src.url}-${i}`}
-                        className={styles.timelineEntry}
-                      >
-                        <div className={styles.timelineEntryBody}>
-                          <span
-                            className={styles.timelineEntrySource}
-                            style={{
-                              background: srcStyle.bg,
-                              color: srcStyle.color,
-                            }}
-                          >
-                            {src.name}
-                          </span>
-                          <a
-                            className={styles.timelineEntryLink}
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {src.url}
-                          </a>
-                          {srcTimeAgo && (
-                            <span className={styles.timelineEntryTime}>
-                              {srcTimeAgo}
+                        className={styles.skeletonLine}
+                        style={{ width: "86%" }}
+                      />
+                    </div>
+                  ) : (
+                    visibleSources.map((src, i) => {
+                      const srcStyle = getSourceStyle(src.name);
+                      let srcTimeAgo = "";
+                      try {
+                        srcTimeAgo = formatTimeAgo(src.discoveredAt);
+                      } catch {
+                        /* ignore */
+                      }
+                      return (
+                        <div
+                          key={`${src.url}-${i}`}
+                          className={styles.timelineEntry}
+                        >
+                          <div className={styles.timelineEntryBody}>
+                            <span
+                              className={styles.timelineEntrySource}
+                              style={{
+                                background: srcStyle.bg,
+                                color: srcStyle.color,
+                              }}
+                            >
+                              {src.name}
                             </span>
-                          )}
+                            <a
+                              className={styles.timelineEntryLink}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {src.url}
+                            </a>
+                            {srcTimeAgo && (
+                              <span className={styles.timelineEntryTime}>
+                                {srcTimeAgo}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
                 {hasHiddenSources && (
                   <button
@@ -736,7 +752,8 @@ export default function EventSidebar({
             </div>
           )}
           <span className={styles.statPill}>
-            {totalStoryCount.toLocaleString()} stories
+            {totalStoryCount.toLocaleString()}
+            {isCapped ? "+" : ""} stories
           </span>
         </div>
 
@@ -779,7 +796,12 @@ export default function EventSidebar({
           onClick={() => onSortModeChange("hot")}
           aria-pressed={sortMode === "hot"}
         >
-          <svg viewBox="0 0 46.11 46.11" width="14" height="14" fill="currentColor">
+          <svg
+            viewBox="0 0 46.11 46.11"
+            width="14"
+            height="14"
+            fill="currentColor"
+          >
             <g>
               <g>
                 <path d="M23.054,0C10.342,0,0,10.342,0,23.055C0,35.768,10.342,46.11,23.055,46.11S46.11,35.768,46.11,23.055 C46.11,10.342,35.768,0,23.054,0z M23.054,39.11C14.201,39.11,7,31.908,7,23.055C7,14.202,14.201,7,23.054,7 c8.853,0,16.056,7.202,16.056,16.055C39.11,31.908,31.907,39.11,23.054,39.11z" />
@@ -791,7 +813,10 @@ export default function EventSidebar({
         </button>
       </div>
 
-      <div className={styles.eventList} style={{ opacity: isLoading ? 0.7 : 1, transition: 'opacity 0.2s' }}>
+      <div
+        className={styles.eventList}
+        style={{ opacity: isLoading ? 0.7 : 1, transition: "opacity 0.2s" }}
+      >
         {isLoading && (
           <div className={styles.topProgressBar}>
             <div className={styles.progressIndicator} />

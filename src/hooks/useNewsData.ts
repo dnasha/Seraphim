@@ -15,8 +15,8 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 const LOCAL_RESPONSE_TTL_MS = 60_000;
 const MAX_ENTITY_COUNT = 5000;
 
-const responseCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
-const inFlightFetches = new Map<string, Promise<NewsItem[]>>();
+const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
+const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean }>>();
 
 function computeSince(timeRange: string, customStartDate?: string): string | null {
     if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
@@ -85,6 +85,7 @@ export function useNewsData({
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+    const [isCapped, setIsCapped] = useState(false);
 
     const newsRef = useRef<NewsItem[]>([]);
     const currentBBoxRef = useRef<BBox | null>(null);
@@ -205,11 +206,14 @@ export function useNewsData({
         const now = Date.now();
         const cached = responseCache.get(requestKey);
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
-            return cached.data.map(item => {
-                const cacheKey = item.originalId || item.id;
-                const cachedDetail = detailCache.current.get(cacheKey);
-                return cachedDetail ? { ...item, ...cachedDetail } : item;
-            });
+            return {
+                items: cached.data.map(item => {
+                    const cacheKey = item.originalId || item.id;
+                    const cachedDetail = detailCache.current.get(cacheKey);
+                    return cachedDetail ? { ...item, ...cachedDetail } : item;
+                }),
+                isCapped: cached.isCapped
+            };
         }
 
         const existingInFlight = inFlightFetches.get(requestKey);
@@ -224,8 +228,9 @@ export function useNewsData({
                 const cachedDetail = detailCache.current.get(cacheKey);
                 return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
-            responseCache.set(requestKey, { data: hydrated, timestamp: Date.now() });
-            return hydrated;
+            const isCapped = data.meta?.isCapped || hydrated.length >= 1990; 
+            responseCache.set(requestKey, { data: hydrated, isCapped, timestamp: Date.now() });
+            return { items: hydrated, isCapped };
         })();
 
         inFlightFetches.set(requestKey, fetchPromise);
@@ -296,16 +301,15 @@ export function useNewsData({
             visibleSidebarIdsRef.current = new Set(visibleIds);
 
             mergeItemsIntoStore(cached.data);
-            syncNewsFromStore(sortMode);
+            setIsCapped(cached.isCapped);
             setIsLoading(false);
             setLastUpdated(new Date(cached.timestamp).toISOString());
             return;
         }
 
         setIsLoading(true);
-
         try {
-            const mapResults = await _performFetch({
+            const { items: mapResults, isCapped: resultCapped } = await _performFetch({
                 isRefresh,
                 bbox: enrichedBBox,
                 signal: abortController.signal,
@@ -324,6 +328,7 @@ export function useNewsData({
 
             mergeItemsIntoStore(mapResults);
             syncNewsFromStore(sortMode);
+            setIsCapped(resultCapped);
             setLastUpdated(new Date().toISOString());
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
@@ -446,5 +451,5 @@ export function useNewsData({
         return () => { supabase.removeChannel(channel); };
     }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
 
-    return { news, appliedSortMode, isLoading, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
+    return { news, appliedSortMode, isLoading, isCapped, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

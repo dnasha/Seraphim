@@ -187,14 +187,6 @@ export async function GET(request: Request) {
       if (useServerClustering) {
         // Execute server-side clustering RPC
         // The RPC handles bbox, time range, search, and sorting internally.
-        // Calculate a buffered time window for 'Hot' mode to catch stories with recent 
-        // source activity but slightly older master 'published_at' timestamps.
-        let rpcSince = sinceStr;
-        if (sort === "hot" && sinceMs !== null) {
-          const bufferMs = 24 * 60 * 60 * 1000; // 24h buffer
-          rpcSince = new Date(sinceMs - bufferMs).toISOString();
-        }
-
         const rpcParams: Record<string, unknown> = {
           p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
           p_min_lat: ignoreBBox ? null : parseFloat(minLat!) - EPSILON,
@@ -204,7 +196,7 @@ export async function GET(request: Request) {
           p_sort_mode: sort,
           p_limit: effectiveLimit,
         };
-        if (rpcSince) rpcParams.p_since = rpcSince;
+        if (sinceStr) rpcParams.p_since = sinceStr;
         if (untilStr) rpcParams.p_until = untilStr;
         if (searchQuery) rpcParams.p_search_query = searchQuery;
 
@@ -370,6 +362,7 @@ export async function GET(request: Request) {
         scope: scopeMode,
         clustered: useServerClustering,
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
+        isCapped: allItems.length >= RAW_LIMIT,
       },
       sources: {
         gnews: true,

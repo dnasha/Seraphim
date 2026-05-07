@@ -50,6 +50,7 @@ export interface NewsResponse {
     clustered: boolean;
     zoomBucket: number | null;
     globalTopN?: number;
+    isCapped?: boolean;
   };
   sources: {
     gnews: boolean;

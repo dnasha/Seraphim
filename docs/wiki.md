@@ -212,7 +212,9 @@ During a full codebase documentation audit, the following technical patterns and
     - 0.85: Strict (Global match)
     - 0.75: Place-Anchored (Similarity + matching location name)
     - 0.60: Proximity-Anchored (Similarity + <50km distance)
-- **Master Story Selection**: When merging, the system chooses the story with the highest credibility tier (Diamond > Gold > Silver). If tiers match, it chooses the most detailed (longest) content. The `published_at` timestamp is always synced to the latest update in the cluster.
+- **Master Story Selection**: When merging, the system chooses the story with the highest credibility tier (Diamond > Gold > Silver). If tiers match, it chooses the most detailed (longest) content.
+- **News Feed Synchronization (Pulse Logic)**: The `published_at` timestamp is dynamically synced to the `discoveredAt` date of the **latest source** added to a story cluster. This ensures that old stories with new updates "pulse" back to the top of the feed.
+- **API result capping**: The `/api/news` endpoint returns an `isCapped` boolean flag if the result set reaches the server-side limit (currently 2,000 items). The UI reflects this with a **"+"** indicator (e.g., "2,000+ stories").
 - **Semantic Foundation**: The database is now `pgvector`-ready with HNSW indexing, supporting sub-millisecond similarity lookups for real-time deduplication.
 
 ---
