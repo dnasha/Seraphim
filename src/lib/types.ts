@@ -29,6 +29,7 @@ export interface NewsItem {
   clusterId?: number;
   sourcesCount?: number;
   storyCount?: number;
+  isTopHot?: boolean;
   clusterSize?: number;
   originalId?: string;
   impactScore?: number;

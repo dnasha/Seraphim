@@ -35,9 +35,12 @@ interface NewsMapProps {
   isDarkMode: boolean;
   unmappedOnly: boolean;
   onUnmappedOnlyChange: (val: boolean) => void;
+  animatedEffects: boolean;
+  onAnimatedEffectsChange: (val: boolean) => void;
   onBoundsChange?: (bbox: BBox) => void;
   initialCenter?: [number, number];
   initialZoom?: number;
+  sortMode: "new" | "hot";
 }
 
 const CATEGORIES = [
@@ -57,25 +60,27 @@ const CATEGORIES = [
  */
 function applyClientJitter(items: NewsItem[]): NewsItem[] {
   const coordGroups = new Map<string, NewsItem[]>();
-  
+
   // Group items by coordinate (rounded to avoid floating point precision issues)
   for (const item of items) {
     if (item.latitude == null || item.longitude == null) continue;
     // Don't jitter MapLibre-generated clusters (handled by engine)
     if (item.storyCount && item.storyCount > 1000) continue; // Safety guard
-    
+
     const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
     if (!coordGroups.has(key)) coordGroups.set(key, []);
     coordGroups.get(key)!.push(item);
   }
-  
+
   const jitteredMap = new Map<string, { lat: number; lng: number }>();
-  
+
   for (const group of coordGroups.values()) {
     if (group.length <= 1) continue;
-    
+
     // Sort by canonical story id for deterministic jitter across refresh/zoom transitions
-    group.sort((a, b) => (a.originalId || a.id).localeCompare(b.originalId || b.id));
+    group.sort((a, b) =>
+      (a.originalId || a.id).localeCompare(b.originalId || b.id),
+    );
 
     const baseLat = group[0].latitude!;
     const baseLng = group[0].longitude!;
@@ -84,7 +89,7 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
     const goldenAngle = (137.5 * Math.PI) / 180;
     const kmToLatDeg = (km: number) => km / 111.32;
     const baseRadius = kmToLatDeg(3.0); // ~3km base jitter
-    const growth = kmToLatDeg(1.2);     // ~1.2km additional ring growth
+    const growth = kmToLatDeg(1.2); // ~1.2km additional ring growth
 
     for (let i = 0; i < group.length; i++) {
       const item = group[i];
@@ -95,7 +100,7 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
 
       const jitteredLat = Math.max(-85, Math.min(85, baseLat + latOffset));
       const jitteredLngRaw = baseLng + lngOffset;
-      const jitteredLng = ((jitteredLngRaw + 180) % 360 + 360) % 360 - 180;
+      const jitteredLng = ((((jitteredLngRaw + 180) % 360) + 360) % 360) - 180;
 
       jitteredMap.set(item.id, {
         lat: jitteredLat,
@@ -103,8 +108,8 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
       });
     }
   }
-  
-  return items.map(item => {
+
+  return items.map((item) => {
     const jittered = jitteredMap.get(item.id);
     if (jittered) {
       return { ...item, latitude: jittered.lat, longitude: jittered.lng };
@@ -114,7 +119,6 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
 }
 
 export default function NewsMap({
-
   items,
   selectedItemId,
   selectionVersion,
@@ -122,12 +126,16 @@ export default function NewsMap({
   isDarkMode,
   unmappedOnly,
   onUnmappedOnlyChange,
+  animatedEffects,
+  onAnimatedEffectsChange,
   onBoundsChange,
   initialCenter,
   initialZoom,
+  sortMode,
 }: NewsMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const pulseAnimationFrameRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
@@ -149,13 +157,15 @@ export default function NewsMap({
   const onBoundsChangeRef = useRef(onBoundsChange);
   const onSelectItemRef = useRef(onSelectItem);
   const forceIndividualPinsRef = useRef(forceIndividualPins);
+  const animatedEffectsRef = useRef(animatedEffects);
   const overlaysRef = useRef(overlays);
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // Calculate initial view state based on resolution via interpolation between known ideal points.
   const getInitialViewState = useCallback(() => {
-    if (typeof window === "undefined") return { center: [9.8454, 7.8751] as [number, number], zoom: 1.2 };
+    if (typeof window === "undefined")
+      return { center: [9.8454, 7.8751] as [number, number], zoom: 1.2 };
     const width = window.innerWidth;
     const height = window.innerHeight;
     const isMobile = width <= 860;
@@ -164,28 +174,28 @@ export default function NewsMap({
     // Known ideal points provided by user:
     // P1: 1920x1200 (1520 map width) -> zoom 1.2, center [9.8454, 7.8751]
     // P2: 2560x1440 (2160 map width) -> zoom 2.1, center [11.6090, 8.6974]
-    
+
     // Interpolation factor based on display resolution (clamped to 0 at the low end)
     const tH = (height - 1200) / (1440 - 1200);
     const tW = (mapWidth - 1520) / (2160 - 1520);
     let t = Math.max(0, Math.max(isNaN(tH) ? 0 : tH, isNaN(tW) ? 0 : tW));
     if (isNaN(t)) t = 0;
-    
+
     const zoom = 1.2 + t * (2.1 - 1.2);
-    const lng = 9.8454 + t * (11.6090 - 9.8454);
+    const lng = 9.8454 + t * (11.609 - 9.8454);
     const lat = 7.8751 + t * (8.6974 - 7.8751);
 
     if (isMobile) {
       return { center: [1.65, 28.0] as [number, number], zoom: 1.0 };
     }
 
-    const finalZoom = (Number.isFinite(zoom) && zoom >= 0.5) ? zoom : 1.2;
+    const finalZoom = Number.isFinite(zoom) && zoom >= 0.5 ? zoom : 1.2;
     const finalLng = Number.isFinite(lng) ? lng : 9.8454;
     const finalLat = Number.isFinite(lat) ? lat : 7.8751;
 
-    return { 
-      center: [finalLng, finalLat] as [number, number], 
-      zoom: Math.max(1.2, finalZoom) 
+    return {
+      center: [finalLng, finalLat] as [number, number],
+      zoom: Math.max(1.2, finalZoom),
     };
   }, []);
 
@@ -201,7 +211,9 @@ export default function NewsMap({
 
   // Track active resizing to suppress data updates/emissions
   const isResizingRef = useRef(false);
-  const resizeEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizeEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   useEffect(() => {
     onBoundsChangeRef.current = onBoundsChange;
@@ -213,8 +225,52 @@ export default function NewsMap({
     forceIndividualPinsRef.current = forceIndividualPins;
   }, [forceIndividualPins]);
   useEffect(() => {
+    animatedEffectsRef.current = animatedEffects;
+  }, [animatedEffects]);
+  useEffect(() => {
     overlaysRef.current = overlays;
   }, [overlays]);
+
+  // Animation loop for pulsing global top-3 hot stories
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    const animate = (timestamp: number) => {
+      if (!animatedEffectsRef.current) {
+        if (map.getLayer("hot-story-pulse")) {
+          map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
+        }
+        pulseAnimationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      const duration = 2000;
+      const t = (timestamp % duration) / duration;
+
+      // Tighter growth: starts at 20 and expands to 55 (at full scale)
+      const radius = 20 + t * 35;
+      // Stronger opacity with a linear-ish decay for better visibility
+      const opacity = Math.max(0, 0.6 * (1 - t));
+      // Perfectly sharp edges
+      const blur = 0;
+
+      if (map.getLayer("hot-story-pulse")) {
+        map.setPaintProperty("hot-story-pulse", "circle-radius", radius);
+        map.setPaintProperty("hot-story-pulse", "circle-opacity", opacity);
+        map.setPaintProperty("hot-story-pulse", "circle-blur", blur);
+      }
+
+      pulseAnimationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    pulseAnimationFrameRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (pulseAnimationFrameRef.current)
+        cancelAnimationFrame(pulseAnimationFrameRef.current);
+    };
+  }, [mapReady]);
+
   // Sync style with dark mode changes
   const [prevIsDarkMode, setPrevIsDarkMode] = useState(isDarkMode);
   if (prevIsDarkMode !== isDarkMode) {
@@ -223,9 +279,37 @@ export default function NewsMap({
   }
 
   const geoItems = useMemo(() => {
-    const valid = items.filter((i) => i.latitude != null && i.longitude != null);
-    return applyClientJitter(valid);
-  }, [items]);
+    const valid = items.filter(
+      (i) => i.latitude != null && i.longitude != null,
+    );
+    const jittered = applyClientJitter(valid);
+
+    // Identify top 3 items based on the current sort mode (viewport-aware)
+    const sorted = [...jittered].sort((a, b) => {
+      if (sortMode === "hot") {
+        const scoreA = a.impactScore || 0;
+        const scoreB = b.impactScore || 0;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        
+        const countA = canonicalEventCount(a);
+        const countB = canonicalEventCount(b);
+        if (countB !== countA) return countB - countA;
+      }
+
+      // Fallback for Hot mode tiebreak OR primary for New mode
+      return (
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+    });
+
+    const topIds = new Set(sorted.slice(0, 3).map((i) => i.id));
+
+    return jittered.map((item) => ({
+      ...item,
+      // Pulses ONLY follow the current viewport's top 3 to ensure UI consistency
+      isTopHot: topIds.has(item.id),
+    }));
+  }, [items, sortMode]);
 
   // Emits the current map bounds with a debounce to avoid excessive API calls.
   const emitBounds = useCallback((map: maplibregl.Map) => {
@@ -281,7 +365,7 @@ export default function NewsMap({
       const layers = [
         "clusters-count",
         "clusters-circle",
-        "multisource-ring",
+        "hot-story-pulse",
         "unclustered-point-active",
         "unclustered-point",
       ];
@@ -302,92 +386,28 @@ export default function NewsMap({
       clusterRadius: 35,
       clusterProperties: {
         summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
+        hasTopHot: ["max", ["case", ["==", ["get", "isTopHot"], true], 1, 0]],
       },
     });
 
-    const clusterCheck: maplibregl.FilterSpecification = forceIndividualPinsRef.current
-      ? ["all", ["has", "point_count"], ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"]] 
-      : [
-          "any",
-          ["has", "point_count"],
-          ["all", [">", ["coalesce", ["get", "storyCount"], 0], 1], ["<", ["zoom"], 5]],
-        ];
+    const clusterCheck: maplibregl.FilterSpecification =
+      forceIndividualPinsRef.current
+        ? [
+            "all",
+            ["has", "point_count"],
+            ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"],
+          ]
+        : [
+            "any",
+            ["has", "point_count"],
+            [
+              "all",
+              [">", ["coalesce", ["get", "storyCount"], 0], 1],
+              ["<", ["zoom"], 5],
+            ],
+          ];
 
-    // Layer for inactive individual news pins.
-    if (!map.getLayer("unclustered-point")) {
-      map.addLayer({
-        id: "unclustered-point",
-        type: "symbol",
-        source: "news-events",
-        filter: [
-          "all",
-          ["!", clusterCheck],
-          ["!=", ["get", "id"], ""],
-        ],
-        layout: {
-          "icon-image": [
-            "concat",
-            ["coalesce", ["get", "category"], "general"],
-            "_inactive",
-          ],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-        },
-        paint: {
-          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 8, 1.0],
-        },
-      });
-    }
-
-    // Layer for the currently selected news pin.
-    if (!map.getLayer("unclustered-point-active")) {
-      map.addLayer({
-        id: "unclustered-point-active",
-        type: "symbol",
-        source: "news-events",
-        filter: [
-          "all",
-          ["!", clusterCheck],
-          ["==", ["get", "id"], ""],
-        ],
-        layout: {
-          "icon-image": [
-            "concat",
-            ["coalesce", ["get", "category"], "general"],
-            "_active",
-          ],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-        },
-        paint: {
-          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
-        },
-      });
-    }
-
-    // Ring indicator for multi-source story pins (sourceCount > 1).
-    if (!map.getLayer("multisource-ring")) {
-      map.addLayer({
-        id: "multisource-ring",
-        type: "circle",
-        source: "news-events",
-        filter: [
-          "all",
-          ["!", clusterCheck],
-          [">", ["coalesce", ["get", "storyCount"], 0], 1],
-        ],
-        paint: {
-          "circle-radius": 16,
-          "circle-color": "transparent",
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#d97706",
-          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.3, 8, 0.7],
-          "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.3, 8, 0.7],
-        },
-      });
-    }
-
-    // Circle layer for clustered news items.
+    // Circle layer for clustered news items
     if (!map.getLayer("clusters-circle")) {
       map.addLayer({
         id: "clusters-circle",
@@ -454,11 +474,67 @@ export default function NewsMap({
             1000,
             0.95,
           ],
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 0,
           "circle-stroke-color": "#ffffff",
         },
       });
     }
+
+    // Pulse animation layer for global top-3 hot stories.
+    // We add this AFTER clusters-circle to ensure it pulses OVER the red cluster background
+    // but BEFORE the count labels so it doesn't obscure text.
+    if (map.getLayer("hot-story-pulse")) map.removeLayer("hot-story-pulse");
+
+    map.addLayer({
+      id: "hot-story-pulse",
+      type: "circle",
+      source: "news-events",
+      filter: [
+        "any",
+        ["==", ["get", "hasTopHot"], 1],
+        ["==", ["get", "isTopHot"], true],
+      ],
+      paint: {
+        "circle-radius": 0,
+        "circle-color": [
+          "case",
+          ["has", "point_count"],
+          "#ef4444",
+          [
+            "match",
+            ["get", "category"],
+            "world",
+            "#dc2626",
+            "crisis",
+            "#b91c1c",
+            "nation",
+            "#2563eb",
+            "business",
+            "#d97706",
+            "technology",
+            "#0891b2",
+            "science",
+            "#059669",
+            "health",
+            "#7c3aed",
+            "#3b82f6",
+          ],
+        ],
+        "circle-opacity": 0,
+        "circle-blur": 0,
+        "circle-stroke-width": 0,
+      },
+    });
+
+    map.setPaintProperty("hot-story-pulse", "circle-radius-transition", {
+      duration: 0,
+    });
+    map.setPaintProperty("hot-story-pulse", "circle-opacity-transition", {
+      duration: 0,
+    });
+    map.setPaintProperty("hot-story-pulse", "circle-blur-transition", {
+      duration: 0,
+    });
 
     // Numeric labels for news clusters.
     if (!map.getLayer("clusters-count")) {
@@ -485,6 +561,50 @@ export default function NewsMap({
         },
         paint: {
           "text-color": "#ffffff",
+        },
+      });
+    }
+
+    // Layer for inactive individual news pins.
+    if (!map.getLayer("unclustered-point")) {
+      map.addLayer({
+        id: "unclustered-point",
+        type: "symbol",
+        source: "news-events",
+        filter: ["all", ["!", clusterCheck], ["!=", ["get", "id"], ""]],
+        layout: {
+          "icon-image": [
+            "concat",
+            ["coalesce", ["get", "category"], "general"],
+            "_inactive",
+          ],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 8, 1.0],
+        },
+      });
+    }
+
+    // Layer for the currently selected news pin.
+    if (!map.getLayer("unclustered-point-active")) {
+      map.addLayer({
+        id: "unclustered-point-active",
+        type: "symbol",
+        source: "news-events",
+        filter: ["all", ["!", clusterCheck], ["==", ["get", "id"], ""]],
+        layout: {
+          "icon-image": [
+            "concat",
+            ["coalesce", ["get", "category"], "general"],
+            "_active",
+          ],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
         },
       });
     }
@@ -591,16 +711,18 @@ export default function NewsMap({
 
     try {
       const view = getInitialViewState();
-      const isNum = (v: number | undefined | null): v is number => typeof v === 'number' && Number.isFinite(v);
-      
+      const isNum = (v: number | undefined | null): v is number =>
+        typeof v === "number" && Number.isFinite(v);
+
       // Airtight fallback chain for center and zoom
       const fallbackCenter: [number, number] = [9.8454, 7.8751];
-      const finalCenter: [number, number] = (initialCenter && isNum(initialCenter[0]) && isNum(initialCenter[1])) 
-        ? initialCenter 
-        : (view.center && isNum(view.center[0]) && isNum(view.center[1]))
-          ? view.center
-          : fallbackCenter;
-      
+      const finalCenter: [number, number] =
+        initialCenter && isNum(initialCenter[0]) && isNum(initialCenter[1])
+          ? initialCenter
+          : view.center && isNum(view.center[0]) && isNum(view.center[1])
+            ? view.center
+            : fallbackCenter;
+
       const finalZoom = isNum(initialZoom)
         ? initialZoom
         : isNum(view.zoom)
@@ -615,7 +737,7 @@ export default function NewsMap({
         minZoom: 0.5,
         maxZoom: 18,
         attributionControl: false,
-        trackResize: false, 
+        trackResize: false,
         // @ts-expect-error - Supported by MapLibre but may be missing from types
         preserveDrawingBuffer: true,
       });
@@ -632,10 +754,12 @@ export default function NewsMap({
     map.on("error", (e) => {
       // Only set error if it's a critical map-loading error, not just a missing icon/tile
       // Ignore 503/404 errors from optional third-party overlays (NASA, USGS, NOAA)
-      const errorMsg = e.error?.message || (typeof e.error === 'string' ? e.error : "");
-      const isOverlayError = errorMsg.includes("eonet.gsfc.nasa.gov") || 
-                            errorMsg.includes("earthquake.usgs.gov") ||
-                            errorMsg.includes("mesonet.agron.iastate.edu");
+      const errorMsg =
+        e.error?.message || (typeof e.error === "string" ? e.error : "");
+      const isOverlayError =
+        errorMsg.includes("eonet.gsfc.nasa.gov") ||
+        errorMsg.includes("earthquake.usgs.gov") ||
+        errorMsg.includes("mesonet.agron.iastate.edu");
 
       if (e.error && !mapReady && !isOverlayError) {
         console.error("MapLibre error event:", e.error);
@@ -754,7 +878,8 @@ export default function NewsMap({
     // Use ResizeObserver for synchronous layout synchronization
     const resizeObserver = new ResizeObserver(() => {
       isResizingRef.current = true;
-      if (resizeEndTimeoutRef.current) clearTimeout(resizeEndTimeoutRef.current);
+      if (resizeEndTimeoutRef.current)
+        clearTimeout(resizeEndTimeoutRef.current);
       resizeEndTimeoutRef.current = setTimeout(() => {
         isResizingRef.current = false;
       }, 150);
@@ -762,13 +887,14 @@ export default function NewsMap({
       // Calling resize synchronously prevents the 1-frame lag between DOM and Canvas
       map.resize();
     });
-    
+
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
 
     return () => {
-      if (resizeEndTimeoutRef.current) clearTimeout(resizeEndTimeoutRef.current);
+      if (resizeEndTimeoutRef.current)
+        clearTimeout(resizeEndTimeoutRef.current);
       resizeObserver.disconnect();
       if (map) {
         try {
@@ -800,7 +926,7 @@ export default function NewsMap({
       const targetZoom = initialZoom ?? initialView.zoom;
       mapRef.current.jumpTo({
         center: targetCenter,
-        zoom: targetZoom
+        zoom: targetZoom,
       });
     }, 100);
     return () => clearTimeout(timer);
@@ -843,6 +969,7 @@ export default function NewsMap({
           eventCount: item.sourcesCount,
           storyCount: item.storyCount ?? 1,
           sourcesCount: item.sourcesCount ?? 1,
+          isTopHot: item.isTopHot ?? false,
           credibilityTier: item.credibilityTier ?? 3,
           sourceCount: canonicalEventCount(item),
         },
@@ -867,10 +994,16 @@ export default function NewsMap({
     const credStyle = getCredibilityStyle(item.credibilityTier);
     const sourceCount = canonicalEventCount(item);
 
-    const latestSource = item.sources?.length 
-      ? [...item.sources].sort((a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime())[0]
+    const latestSource = item.sources?.length
+      ? [...item.sources].sort(
+          (a, b) =>
+            new Date(b.discoveredAt).getTime() -
+            new Date(a.discoveredAt).getTime(),
+        )[0]
       : null;
-    const displayDate = latestSource ? latestSource.discoveredAt : item.publishedAt;
+    const displayDate = latestSource
+      ? latestSource.discoveredAt
+      : item.publishedAt;
 
     const categoryLabel = item.category
       ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
@@ -878,9 +1011,10 @@ export default function NewsMap({
 
     const credBadgeHtml = `<span class="news-popup-credibility" style="background:${credStyle.bg};color:${credStyle.color}" title="${credStyle.label} source"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-6.45 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>`;
 
-    const sourceCountHtml = sourceCount > 1
-      ? `<span class="news-popup-source-count" title="${sourceCount} sources reporting on this"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>${sourceCount}</span>`
-      : "";
+    const sourceCountHtml =
+      sourceCount > 1
+        ? `<span class="news-popup-source-count" title="${sourceCount} sources reporting on this"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z"/></svg>${sourceCount}</span>`
+        : "";
 
     const descriptionHtml =
       item.description != null
@@ -897,7 +1031,9 @@ export default function NewsMap({
     let sourcesListHtml = "";
     if (sourceCount > 1 && item.sources) {
       const sorted = [...item.sources].sort(
-        (a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime(),
+        (a, b) =>
+          new Date(b.discoveredAt).getTime() -
+          new Date(a.discoveredAt).getTime(),
       );
       const sourceEntries = sorted
         .map((src) => {
@@ -916,9 +1052,10 @@ export default function NewsMap({
       </div>`;
     }
 
-    const singleLinkHtml = sourceCount <= 1
-      ? `<a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source \u2192</a>`
-      : "";
+    const singleLinkHtml =
+      sourceCount <= 1
+        ? `<a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source \u2192</a>`
+        : "";
 
     return `
             <div class="news-popup">
@@ -974,13 +1111,22 @@ export default function NewsMap({
       map.getLayer("unclustered-point-active")
     ) {
       const activeId = selectedItemId || "";
-      const clusterCheck: maplibregl.FilterSpecification = forceIndividualPinsRef.current
-        ? ["all", ["has", "point_count"], ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"]]
-        : [
-            "any",
-            ["has", "point_count"],
-            ["all", [">", ["coalesce", ["get", "storyCount"], 0], 1], ["<", ["zoom"], 5]],
-          ];
+      const clusterCheck: maplibregl.FilterSpecification =
+        forceIndividualPinsRef.current
+          ? [
+              "all",
+              ["has", "point_count"],
+              ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"],
+            ]
+          : [
+              "any",
+              ["has", "point_count"],
+              [
+                "all",
+                [">", ["coalesce", ["get", "storyCount"], 0], 1],
+                ["<", ["zoom"], 5],
+              ],
+            ];
 
       map.setFilter("unclustered-point", [
         "all",
@@ -992,7 +1138,7 @@ export default function NewsMap({
         ["!", clusterCheck],
         ["==", ["get", "id"], activeId],
       ]);
-      
+
       if (map.getLayer("clusters-circle")) {
         map.setFilter("clusters-circle", clusterCheck);
       }
@@ -1060,19 +1206,57 @@ export default function NewsMap({
     if (!el) return;
 
     geoItems.forEach((item) => {
+      const popupContainer = el.querySelector<HTMLElement>(".news-popup");
+      if (!popupContainer) return;
+
       const skeleton =
-        el.querySelector<HTMLElement>(
+        popupContainer.querySelector<HTMLElement>(
           `div[data-event-id="${item.id}"].news-popup-summary--loading`,
         ) ||
         (item.originalId
-          ? el.querySelector<HTMLElement>(
+          ? popupContainer.querySelector<HTMLElement>(
               `div[data-event-id="${item.originalId}"].news-popup-summary--loading`,
             )
           : null);
+
       if (skeleton && item.description !== undefined) {
+        // Update description
         skeleton.outerHTML = item.description
           ? `<p class="news-popup-summary" data-event-id="${item.originalId || item.id}">${item.description}</p>`
           : "";
+
+        // Also check if we need to update the sources list now that we have data
+        const sourceCount = canonicalEventCount(item);
+        if (
+          sourceCount > 1 &&
+          item.sources &&
+          !popupContainer.querySelector(".news-popup-sources-section")
+        ) {
+          const sorted = [...item.sources].sort(
+            (a, b) =>
+              new Date(b.discoveredAt).getTime() -
+              new Date(a.discoveredAt).getTime(),
+          );
+          const sourceEntries = sorted
+            .map((src) => {
+              const srcColor = getSourceBadgeColor(src.name);
+              const srcTime = formatTimeAgo(src.discoveredAt);
+              return `<div class="news-popup-source-entry">
+                <span class="news-popup-source-name" style="background:${srcColor};color:#fff">${src.name}</span>
+                <a class="news-popup-source-link" href="${src.url}" target="_blank" rel="noopener noreferrer">${new URL(src.url).hostname}</a>
+                ${srcTime ? `<span class="news-popup-source-time">${srcTime}</span>` : ""}
+              </div>`;
+            })
+            .join("");
+
+          const sourcesSection = document.createElement("div");
+          sourcesSection.className = "news-popup-sources-section";
+          sourcesSection.innerHTML = `
+            <div class="news-popup-sources-header">Sources & Timeline</div>
+            <div class="news-popup-sources-list">${sourceEntries}</div>
+          `;
+          popupContainer.appendChild(sourcesSection);
+        }
       }
     });
   }, [geoItems, mapReady]);
@@ -1129,6 +1313,8 @@ export default function NewsMap({
             panelRef={settingsPanelRef as React.RefObject<HTMLDivElement>}
             unmappedOnly={unmappedOnly}
             onUnmappedOnlyChange={onUnmappedOnlyChange}
+            animatedEffects={animatedEffects}
+            onAnimatedEffectsChange={onAnimatedEffectsChange}
           />
           <MapActionTools
             overlays={overlays}

@@ -7,12 +7,10 @@
 import { Suspense } from 'react';
 import { HomeContent } from '@/components/HomeContent';
 
-export default async function Home(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-    const searchParams = await props.searchParams;
-    
+export default function Home() {
     return (
         <Suspense fallback={null}>
-            <HomeContent searchParams={searchParams} />
+            <HomeContent />
         </Suspense>
     );
 }

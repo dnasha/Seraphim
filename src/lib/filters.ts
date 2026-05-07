@@ -1,6 +1,6 @@
 import { NewsItem } from './types';
 import { BBox, isWithinBBox } from './geo';
-import { compareNewsItems, normalizeSortMode, sortNewsItems as sortRanked } from './ranking';
+import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked } from './ranking';
 
 export type SortMode = 'new' | 'hot';
 
@@ -69,7 +69,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         const untilTime = untilDate ? untilDate.getTime() : Infinity;
         
         filtered = filtered.filter(item => {
-            const time = new Date(item.publishedAt).getTime();
+            const time = latestReportTimestamp(item);
             return time >= sinceTime && time <= untilTime;
         });
     } else {
@@ -81,7 +81,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
             'all': Infinity,
         }[timeRange] || Infinity;
 
-        filtered = filtered.filter(item => (now - new Date(item.publishedAt).getTime()) <= rangeMs);
+        filtered = filtered.filter(item => (now - latestReportTimestamp(item)) <= rangeMs);
     }
 
     // 4. Search query filtering (title, description, location)

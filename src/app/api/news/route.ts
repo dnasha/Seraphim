@@ -11,7 +11,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { NewsItem, NewsResponse } from '@/lib/types';
 import { DbEvent, dbEventToNewsItem } from '@/types';
-import { normalizeSortMode, sortNewsItems } from '@/lib/ranking';
+import { latestReportTimestamp, normalizeSortMode, sortNewsItems } from '@/lib/ranking';
 
 // Global rate limiter using Upstash Redis
 const redis = Redis.fromEnv();
@@ -55,6 +55,7 @@ const RAW_LIMIT = 2000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count';
+const HOT_LIST_SELECT = `${LIST_SELECT}, sources`;
 
 export async function GET(request: Request) {
     const now = Date.now();
@@ -92,10 +93,13 @@ export async function GET(request: Request) {
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : RAW_LIMIT;
     const sinceStr = searchParams.get('since');
     const untilStr = searchParams.get('until');
+    const sinceMs = sinceStr ? new Date(sinceStr).getTime() : null;
+    const untilMs = untilStr ? new Date(untilStr).getTime() : null;
     const effectiveLimit = limit;
 
     // Logic to determine if server-side clustering should be performed
     const useServerClustering = !unmappedOnly && (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
+    let clusteredResponse = useServerClustering;
 
     // Construct a cache key that captures all query parameters
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
@@ -168,8 +172,8 @@ export async function GET(request: Request) {
                     p_sort_mode: sort,
                     p_limit: effectiveLimit,
                 };
-                if (sinceStr) rpcParams.p_since = sinceStr;
-                if (untilStr) rpcParams.p_until = untilStr;
+                if (sort !== 'hot' && sinceStr) rpcParams.p_since = sinceStr;
+                if (sort !== 'hot' && untilStr) rpcParams.p_until = untilStr;
                 if (searchQuery) rpcParams.p_search_query = searchQuery;
 
                 const res = await supabase.rpc('get_clustered_events', rpcParams);
@@ -179,7 +183,7 @@ export async function GET(request: Request) {
                 // Standard query for individual event markers or unmapped-only view
                 let query = supabase
                     .from('events')
-                    .select(LIST_SELECT);
+                    .select(sort === 'hot' ? HOT_LIST_SELECT : LIST_SELECT);
 
                 if (sort === 'hot') {
                     // Prioritize clusters with highest impact scores first
@@ -187,6 +191,9 @@ export async function GET(request: Request) {
                         .order('impact_score', { ascending: false, nullsFirst: false })
                         .order('event_count', { ascending: false, nullsFirst: false })
                         .order('published_at', { ascending: false });
+
+                    // "Hot" only includes corroborated stories (more than one source).
+                    query = query.gt('event_count', 1);
                 } else {
                     query = query.order('published_at', { ascending: false });
                 }
@@ -220,14 +227,17 @@ export async function GET(request: Request) {
                 }
 
                 // Server-side time filtering to reduce data transfer
-                if (sinceStr) {
+                if (sort !== 'hot' && sinceStr) {
                     query = query.gte('published_at', sinceStr);
                 }
-                if (untilStr) {
+                if (sort !== 'hot' && untilStr) {
                     query = query.lte('published_at', untilStr);
                 }
 
-                const res = await query;
+                const [res] = await Promise.all([
+                    query
+                ]);
+                
                 rows = res.data;
                 error = res.error;
             }
@@ -237,8 +247,38 @@ export async function GET(request: Request) {
                 // Fail gracefully on statement timeouts so the UI stays functional.
                 // The client will retry automatically on the next viewport change.
                 if (error.message?.includes('statement timeout') || error.message?.includes('canceling statement')) {
+                    const stale = sourceCache.get(cacheKey);
+                    if (stale && stale.data.length > 0) {
+                        console.warn('[api/news] Statement timeout — serving stale cache for fail-open stability.');
+                        return NextResponse.json({
+                            items: stale.data,
+                            lastUpdated: new Date(stale.timestamp).toISOString(),
+                            meta: {
+                                sort,
+                                view: viewMode,
+                                scope: scopeMode,
+                                clustered: useServerClustering,
+                                zoomBucket: zoom !== null ? Math.floor(zoom) : null,
+                            },
+                            sources: { gnews: true, rss: true, social: true },
+                        }, {
+                            headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=30' }
+                        });
+                    }
+
                     console.warn('[api/news] Statement timeout — returning empty result set (fail-open).');
-                    return NextResponse.json({ items: [], lastUpdated: new Date().toISOString(), sources: { gnews: true, rss: true, social: true } });
+                    return NextResponse.json({
+                        items: [],
+                        lastUpdated: new Date().toISOString(),
+                        meta: {
+                            sort,
+                            view: viewMode,
+                            scope: scopeMode,
+                            clustered: useServerClustering,
+                            zoomBucket: zoom !== null ? Math.floor(zoom) : null,
+                        },
+                        sources: { gnews: true, rss: true, social: true }
+                    });
                 } else {
                     return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
                 }
@@ -258,6 +298,69 @@ export async function GET(request: Request) {
                 return item;
             });
 
+            if (sort === 'hot') {
+                allItems = allItems.filter((item) => (item.sourcesCount ?? 0) > 1);
+
+                const hasSince = Number.isFinite(sinceMs);
+                const hasUntil = Number.isFinite(untilMs);
+                if (hasSince || hasUntil) {
+                    allItems = allItems.filter((item) => {
+                        const ts = latestReportTimestamp(item);
+                        if (!Number.isFinite(ts) || ts <= 0) return false;
+                        if (hasSince && ts < (sinceMs as number)) return false;
+                        if (hasUntil && ts > (untilMs as number)) return false;
+                        return true;
+                    });
+                }
+
+                // If clustered hot returns no corroborated representatives, retry once with raw rows.
+                if (useServerClustering && allItems.length === 0) {
+                    let fallbackQuery = supabase
+                        .from('events')
+                        .select(HOT_LIST_SELECT)
+                        .order('impact_score', { ascending: false, nullsFirst: false })
+                        .order('event_count', { ascending: false, nullsFirst: false })
+                        .order('published_at', { ascending: false })
+                        .gt('event_count', 1)
+                        .limit(effectiveLimit);
+
+                    if (!ignoreBBox && hasBBox) {
+                        fallbackQuery = fallbackQuery
+                            .gte('latitude', parseFloat(minLat!) - EPSILON)
+                            .lte('latitude', parseFloat(maxLat!) + EPSILON);
+
+                        if (normMinLng !== null && normMaxLng !== null) {
+                            if (normMinLng > normMaxLng) {
+                                fallbackQuery = fallbackQuery.or(`longitude.gte.${normMinLng},longitude.lte.${normMaxLng}`);
+                            } else {
+                                fallbackQuery = fallbackQuery.gte('longitude', normMinLng).lte('longitude', normMaxLng);
+                            }
+                        }
+                    } else {
+                        fallbackQuery = fallbackQuery.not('latitude', 'is', null);
+                    }
+
+                    if (searchQuery) {
+                        fallbackQuery = fallbackQuery.or(`title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
+                    }
+
+                    const fallbackRes = await fallbackQuery;
+                    if (!fallbackRes.error && fallbackRes.data) {
+                        allItems = (fallbackRes.data as DbEvent[])
+                            .map(dbEventToNewsItem)
+                            .filter((item) => (item.sourcesCount ?? 0) > 1)
+                            .filter((item) => {
+                                const ts = latestReportTimestamp(item);
+                                if (!Number.isFinite(ts) || ts <= 0) return false;
+                                if (hasSince && ts < (sinceMs as number)) return false;
+                                if (hasUntil && ts > (untilMs as number)) return false;
+                                return true;
+                            });
+                        clusteredResponse = false;
+                    }
+                }
+            }
+
             allItems = sortNewsItems(allItems, sort);
 
             if (effectiveLimit < allItems.length) {
@@ -276,7 +379,7 @@ export async function GET(request: Request) {
                 sort,
                 view: viewMode,
                 scope: scopeMode,
-                clustered: useServerClustering,
+                clustered: clusteredResponse,
                 zoomBucket: zoom !== null ? Math.floor(zoom) : null,
             },
             sources: {

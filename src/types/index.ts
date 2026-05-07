@@ -40,18 +40,26 @@ export interface DbEvent {
   cluster_id?: number;        // ID of the semantic cluster
   story_count?: number;       // Number of stories in the cluster (RPC)
   event_count?: number;       // Number of sources for this story
+  is_top_hot?: boolean;        // Whether this story or its cluster contains a global top-3 hot story
   impact_score?: number;
   credibility_tier?: number;
   sources?: DbEventSource[];
-}
+  }
 
-import { NewsItem } from '@/lib/types';
+  import { NewsItem } from '@/lib/types';
 
-/*
-Helper function to map a DbEvent row to a NewsItem.
-Keeps the API route thin by centralizing field mapping.
-*/
-export function dbEventToNewsItem(row: DbEvent): NewsItem {
+  /*
+  Helper function to map a DbEvent row to a NewsItem.
+  Keeps the API route thin by centralizing field mapping.
+  */
+  export function dbEventToNewsItem(row: DbEvent): NewsItem {
+  // Use a fallback for event_count vs source_count to handle RPC mismatches
+  const raw = row as unknown as Record<string, unknown>;
+  const eventCountRaw = row.event_count ?? raw.event_count ?? raw.source_count ?? raw.sourceCount ?? raw.eventCount;
+  const impactScoreRaw = row.impact_score ?? raw.impact_score ?? raw.impactScore;
+  const parsedEventCount = Number(eventCountRaw);
+  const parsedImpactScore = Number(impactScoreRaw);
+
   return {
     id: String(row.id ?? row.url),
     title: row.title,
@@ -69,8 +77,9 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
     tags: row.tags ?? undefined,
     clusterId: row.cluster_id ?? undefined,
     storyCount: row.story_count ?? undefined,
-    sourcesCount: row.event_count ?? undefined,
-    impactScore: row.impact_score ?? undefined,
+    sourcesCount: Number.isFinite(parsedEventCount) ? parsedEventCount : undefined,
+    isTopHot: row.is_top_hot ?? undefined,
+    impactScore: Number.isFinite(parsedImpactScore) ? parsedImpactScore : undefined,
     credibilityTier: row.credibility_tier ?? undefined,
     sources: row.sources?.map(s => ({
       name: s.name,
@@ -79,4 +88,4 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
       discoveredAt: s.discovered_at,
     })) ?? undefined,
   };
-}
+  }

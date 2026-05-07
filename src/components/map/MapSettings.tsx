@@ -17,6 +17,8 @@ interface MapSettingsProps {
     panelRef: React.RefObject<HTMLDivElement>;
     unmappedOnly: boolean;
     onUnmappedOnlyChange: (val: boolean) => void;
+    animatedEffects: boolean;
+    onAnimatedEffectsChange: (val: boolean) => void;
 }
 
 const MapSettings: React.FC<MapSettingsProps> = ({
@@ -28,7 +30,9 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     onToggleOpen,
     panelRef,
     unmappedOnly,
-    onUnmappedOnlyChange
+    onUnmappedOnlyChange,
+    animatedEffects,
+    onAnimatedEffectsChange
 }) => {
     return (
         <div className={styles.mapSettingsArea} ref={panelRef}>
@@ -83,6 +87,19 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                         <div className={styles.settingsToggle} onClick={() => onUnmappedOnlyChange(!unmappedOnly)} style={{ cursor: 'pointer' }}>
                             <span className={styles.settingsToggleLabel}>Unmapped only</span>
                             <div className={`${styles.toggleSwitch}${unmappedOnly ? ` ${styles.toggleSwitchOn}` : ''}`}>
+                                <div className={styles.toggleKnob} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={styles.settingsDivider} />
+
+                    {/* Toggle for high-performance pulse animations on global hot stories */}
+                    <div className={styles.settingsSection}>
+                        <div className={styles.settingsLabel}>Visuals</div>
+                        <div className={styles.settingsToggle} onClick={() => onAnimatedEffectsChange(!animatedEffects)} style={{ cursor: 'pointer' }}>
+                            <span className={styles.settingsToggleLabel}>Animated effects</span>
+                            <div className={`${styles.toggleSwitch}${animatedEffects ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
                         </div>

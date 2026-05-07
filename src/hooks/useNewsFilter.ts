@@ -21,7 +21,8 @@ export function useNewsFilter(
     sortMode: SortMode = 'new',
     currentBBox?: BBox | null,
     sidebarRespectBBox = true,
-    unmappedOnly = false
+    unmappedOnly = false,
+    appliedSortMode?: string
 ) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
@@ -41,6 +42,9 @@ export function useNewsFilter(
         };
     }, []);
 
+    // Use appliedSortMode if provided to ensure filters match the current data state
+    const effectiveSortMode = (appliedSortMode as SortMode) || sortMode;
+
     const filteredNews = useMemo(() => {
         return applyNewsFilters(news, {
             sources,
@@ -52,11 +56,11 @@ export function useNewsFilter(
             unmappedOnly,
             searchQuery: debouncedSearch,
             now,
-            sortMode,
+            sortMode: effectiveSortMode,
             bbox: currentBBox || undefined,
             respectBBox: sidebarRespectBBox,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox]); /* Re-filter whenever state or source data changes. */
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox]); /* Re-filter whenever state or source data changes. */
 
     const mapNews = useMemo(() => {
         return applyNewsFilters(news, {
@@ -69,11 +73,11 @@ export function useNewsFilter(
             unmappedOnly,
             searchQuery: debouncedSearch,
             now,
-            sortMode,
+            sortMode: effectiveSortMode,
             bbox: currentBBox || undefined,
             respectBBox: true,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, sortMode, currentBBox]);
+    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox]);
 
     return {
         sources, setSources,

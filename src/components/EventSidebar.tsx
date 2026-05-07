@@ -22,7 +22,7 @@ import {
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import ThemeToggle from "./ThemeToggle";
 import { getCredibilityStyle } from "@/lib/colors";
-import { canonicalEventCount } from "@/lib/ranking";
+import { canonicalEventCount, latestReportTimestamp } from "@/lib/ranking";
 import styles from "./EventSidebar.module.css";
 
 /* Category accent colors for sidebar markers */
@@ -80,6 +80,8 @@ interface EventSidebarProps {
   onSearchChange: (query: string) => void;
   sortMode: SortMode;
   onSortModeChange: (mode: SortMode) => void;
+  filterVersion?: number;
+  animatedEffects?: boolean;
 }
 
 export default function EventSidebar({
@@ -97,6 +99,8 @@ export default function EventSidebar({
   onSearchChange,
   sortMode,
   onSortModeChange,
+  filterVersion = 0,
+  animatedEffects = false,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -185,10 +189,28 @@ export default function EventSidebar({
   const newestEventTime = useMemo(() => {
     if (items.length === 0) return null;
     const times = items
-      .map((i) => new Date(i.publishedAt).getTime())
+      .map((i) => latestReportTimestamp(i))
       .filter((t) => !isNaN(t));
     return times.length > 0 ? Math.max(...times) : null;
   }, [items]);
+
+  /* Identify the top 3 IDs for pulsing indicators (matches map logic) */
+  const top3Ids = useMemo(() => {
+    if (!animatedEffects) return new Set<string>();
+    return new Set(items.slice(0, 3).map((item) => item.originalId || item.id));
+  }, [items, animatedEffects]);
+
+  /* Reset scroll and expansion when filters change explicitly */
+  useEffect(() => {
+    if (virtuosoRef.current) {
+      virtuosoRef.current.scrollToIndex({ index: 0 });
+    }
+    // Use requestAnimationFrame to avoid synchronous cascading renders
+    requestAnimationFrame(() => {
+      setExpandedId(null);
+      setShowAllSourcesIds(new Set());
+    });
+  }, [filterVersion]);
 
   /* Scroll to selected item */
   useEffect(() => {
@@ -243,6 +265,14 @@ export default function EventSidebar({
         const isSelected = selectedItemId === targetId;
         onSelectItem(isSelected ? null : targetId);
 
+        if (!isSelected) {
+          const itemSourceCount = canonicalEventCount(item);
+          const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
+          if (item.description === undefined || needsTimelineDetails) {
+            onFetchDetails?.(targetId);
+          }
+        }
+
         /* If selecting a mapped item, collapse any unmapped expansion */
         if (!isSelected) {
           setExpandedId(null);
@@ -285,6 +315,7 @@ export default function EventSidebar({
       const credStyle = getCredibilityStyle(item.credibilityTier);
       const sourceCount = canonicalEventCount(item);
       const isTier1 = item.credibilityTier === 1;
+      const isTop3 = top3Ids.has(targetId);
 
       let timeAgo = "";
       try {
@@ -412,7 +443,7 @@ export default function EventSidebar({
                       title={`${sourceCount} sources reporting on this`}
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                        <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
                       </svg>
                       {sourceCount}
                     </span>
@@ -446,6 +477,17 @@ export default function EventSidebar({
                   <span className={styles.eventCardExpandHint}>
                     Click to expand
                   </span>
+                )}
+                {isTop3 && (
+                  <span
+                    className={styles.top3PulseDot}
+                    style={
+                      {
+                        "--pulse-color": catColor,
+                        "--pulse-color-alpha": `${catColor}b3`, // ~70% opacity
+                      } as React.CSSProperties
+                    }
+                  />
                 )}
               </div>
             </div>
@@ -519,7 +561,7 @@ export default function EventSidebar({
                       title={`${sourceCount} sources reporting on this`}
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                        <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
                       </svg>
                       {sourceCount}
                     </span>
@@ -600,7 +642,7 @@ export default function EventSidebar({
       );
       /* Re-binds callback when selection or expansion state changes */
     },
-    [selectedItemId, expandedId, handleCardClick, showAllSourcesIds],
+    [selectedItemId, expandedId, handleCardClick, showAllSourcesIds, top3Ids],
   );
 
   return (
@@ -746,7 +788,12 @@ export default function EventSidebar({
         </button>
       </div>
 
-      <div className={styles.eventList}>
+      <div className={styles.eventList} style={{ opacity: isLoading ? 0.7 : 1, transition: 'opacity 0.2s' }}>
+        {isLoading && (
+          <div className={styles.topProgressBar}>
+            <div className={styles.progressIndicator} />
+          </div>
+        )}
         {isLoading && items.length === 0 ? (
           <div className={styles.eventListLoading}>
             <div className={styles.loadingSpinner} />

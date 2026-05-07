@@ -77,7 +77,6 @@ export async function generateCategoryIcon(
 
   const svgStr = `
         <svg width="${containerSize}" height="${containerSize}" viewBox="0 0 ${containerSize} ${containerSize}" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="${cx}" cy="${cy}" r="${r + 1.5}" fill="${isActive ? color : '#ffffff'}" ${isActive ? 'fill-opacity="0.4"' : ''} />
             <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />
             <g transform="translate(${iconOffset}, ${iconOffset}) scale(${iconScale})">
                 <path d="${iconPath}" fill="#ffffff" />

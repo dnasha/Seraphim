@@ -165,6 +165,25 @@ describe('applyNewsFilters - time range filtering', () => {
         const result = applyNewsFilters([recentItem, oldItem, ancientItem], defaultOpts({ timeRange: 'all' }));
         expect(result).toHaveLength(3);
     });
+
+    it('uses latest source discovery time when publishedAt is stale', () => {
+        const stalePublished = makeItem({
+            id: 'stale-published',
+            publishedAt: new Date(NOW - 1000 * 60 * 60 * 48).toISOString(), // 48h old
+            sources: [
+                {
+                    name: 'Source A',
+                    url: 'https://example.com/a',
+                    sourceType: 'rss',
+                    discoveredAt: new Date(NOW - 1000 * 60 * 30).toISOString(), // 30m ago
+                },
+            ],
+        });
+
+        const result = applyNewsFilters([stalePublished], defaultOpts({ timeRange: '1d' }));
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('stale-published');
+    });
 });
 
 /*

@@ -290,6 +290,32 @@ Includes card expansion details and responsive mobile layouts.
   margin-bottom: 12px;
 }
 
+/* Top Progress Bar for Stale-While-Revalidate fetches */
+.topProgressBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: transparent;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.progressIndicator {
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  animation: progressMove 1.5s infinite ease-in-out;
+  border-radius: 2px;
+}
+
+@keyframes progressMove {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(300%); }
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
@@ -371,6 +397,36 @@ Includes card expansion details and responsive mobile layouts.
 .eventCardBody {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+
+.top3PulseDot {
+  position: absolute;
+  top: 1px;
+  right: 0px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--pulse-color, var(--accent));
+  border-radius: 40%;
+  box-shadow: 0 0 0 rgba(59, 130, 246, 0.4);
+  animation: pulse-top3 2s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes pulse-top3 {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--pulse-color-alpha, rgba(59, 130, 246, 0.7));
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
 }
 
 .eventCardTitle {
@@ -386,6 +442,7 @@ Includes card expansion details and responsive mobile layouts.
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+  padding-right: 14px; /* Slightly reduced padding as dot moved closer to corner */
 }
 
 .eventCardExpanded .eventCardTitle {
@@ -728,17 +785,17 @@ Includes card expansion details and responsive mobile layouts.
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0 8px;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0 10px;
   border-radius: 12px;
   white-space: nowrap;
   background: var(--surface-alt);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
-  height: 20px;
-  min-width: 20px;
+  border: 1.5px solid var(--border);
+  height: 24px;
+  min-width: 24px;
   cursor: help;
   transition: all 0.15s;
   line-height: 1;
@@ -750,16 +807,11 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sourceCountBadge svg {
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
   display: block;
   flex-shrink: 0;
-  opacity: 0.7;
-}
-
-/* Tier 1 Diamond Blue accent bar override */
-.eventCardTier1 .eventCardAccent {
-  background-color: #0369a1 !important;
+  stroke-width: 1px;
 }
 
 /* ── Sources & Timeline (expanded card) ─────────────────── */

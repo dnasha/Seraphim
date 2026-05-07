@@ -30,12 +30,39 @@ function computeUntil(timeRange: string, customEndDate?: string): string | null 
 
 function mergeNewsItem(existing: NewsItem | undefined, incoming: NewsItem): NewsItem {
     if (!existing) return incoming;
+    
+    // Reporting strength is strictly based on actual sources (event_count or sources array length)
+    // We explicitly prefer the highest known source count to prevent "hot" stories from being 
+    // downgraded by partial or newer raw updates that haven't been aggregated in the DB yet.
+    const raw = incoming as unknown as Record<string, unknown>;
+    const sCount = Number(
+        incoming.sourcesCount ?? 
+        raw.sourceCount ?? 
+        raw.event_count ?? 
+        raw.source_count ?? 
+        raw.eventCount ?? 
+        0
+    );
+
+    const sourcesCount = Math.max(
+        Number(existing.sourcesCount) || 0,
+        sCount
+    );
+
+    const impactScore = Math.max(
+        Number(existing.impactScore) || 0,
+        Number(incoming.impactScore) || 0
+    );
+
     return {
         ...existing,
         ...incoming,
+        sourcesCount: sourcesCount > 0 ? sourcesCount : undefined,
+        impactScore: impactScore > 0 ? impactScore : undefined,
         description: incoming.description ?? existing.description,
         sources: incoming.sources ?? existing.sources,
         originalId: incoming.originalId ?? existing.originalId,
+        isTopHot: incoming.isTopHot || existing.isTopHot,
     };
 }
 
@@ -63,7 +90,7 @@ export function useNewsData({
     const currentBBoxRef = useRef<BBox | null>(null);
     const isFirstMount = useRef(true);
 
-    const descriptionCache = useRef<Map<string, string>>(new Map());
+    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources'] }>>(new Map());
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
 
     const entitiesRef = useRef<Map<string, NewsItem>>(new Map());
@@ -73,9 +100,12 @@ export function useNewsData({
     const requestVersionRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
 
+    const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'new');
+
     const syncNewsFromStore = useCallback((mode: string | undefined) => {
         const normalizedMode = normalizeSortMode(mode);
         setNews(sortNewsItems(Array.from(entitiesRef.current.values()), normalizedMode));
+        setAppliedSortMode(normalizedMode);
     }, []);
 
     const pruneEntityStore = useCallback(() => {
@@ -101,15 +131,26 @@ export function useNewsData({
 
     const mergeItemsIntoStore = useCallback((items: NewsItem[]) => {
         const now = Date.now();
+
         for (const item of items) {
-            const existing = entitiesRef.current.get(item.id);
+            // Use canonical key (representative UUID) for deduplication
+            const key = item.originalId || item.id;
+            const existing = entitiesRef.current.get(key);
+            
             const merged = mergeNewsItem(existing, item);
-            entitiesRef.current.set(item.id, merged);
-            entityTouchedAtRef.current.set(item.id, now);
+            
+            // Hydrate from detail cache if available
+            const cached = detailCache.current.get(key);
+            if (cached) {
+                merged.description = cached.description;
+                merged.sources = cached.sources;
+            }
+
+            entitiesRef.current.set(key, merged);
+            entityTouchedAtRef.current.set(key, now);
         }
 
-        // Evict stale server-side clusters that are no longer in the current viewport/zoom
-        // to prevent inflation of totalStoryCount and overlapping map markers.
+        // Evict stale items...
         for (const key of entitiesRef.current.keys()) {
             if (key.startsWith('cluster-') && !visibleMapIdsRef.current.has(key)) {
                 entitiesRef.current.delete(key);
@@ -165,8 +206,9 @@ export function useNewsData({
         const cached = responseCache.get(requestKey);
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
             return cached.data.map(item => {
-                const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
-                return cachedDesc ? { ...item, description: cachedDesc } : item;
+                const cacheKey = item.originalId || item.id;
+                const cachedDetail = detailCache.current.get(cacheKey);
+                return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
         }
 
@@ -178,8 +220,9 @@ export function useNewsData({
             if (!res.ok) throw new Error('Failed to fetch news');
             const data: NewsResponse = await res.json();
             const hydrated = data.items.map(item => {
-                const cachedDesc = descriptionCache.current.get(item.id) || (item.originalId ? descriptionCache.current.get(item.originalId) : undefined);
-                return cachedDesc ? { ...item, description: cachedDesc } : item;
+                const cacheKey = item.originalId || item.id;
+                const cachedDetail = detailCache.current.get(cacheKey);
+                return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
             responseCache.set(requestKey, { data: hydrated, timestamp: Date.now() });
             return hydrated;
@@ -201,11 +244,11 @@ export function useNewsData({
 
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
-        setIsLoading(true);
         setError(null);
 
         if (isRefresh) {
             responseCache.clear();
+            detailCache.current.clear(); // Full refresh clears detail cache too
         }
 
         const bbox = rawBBox ? snapBBox(rawBBox) : currentBBoxRef.current;
@@ -220,8 +263,49 @@ export function useNewsData({
             sortMode
         } : undefined;
 
+        // Construct the cache key
+        const params = new URLSearchParams();
+        if (unmappedOnly) params.append('unmapped_only', 'true');
+        if (sortMode) params.append('sort', sortMode);
+        params.append('view', 'map');
+        params.append('scope', 'viewport');
+        if (enrichedBBox) {
+            params.append('minLat', String(enrichedBBox.minLat));
+            params.append('maxLat', String(enrichedBBox.maxLat));
+            params.append('minLng', String(enrichedBBox.minLng));
+            params.append('maxLng', String(enrichedBBox.maxLng));
+            if (enrichedBBox.zoom !== undefined) params.append('zoom', String(enrichedBBox.zoom));
+            if (enrichedBBox.query) params.append('query', enrichedBBox.query);
+            if (enrichedBBox.since) params.append('since', enrichedBBox.since);
+            if (enrichedBBox.until) params.append('until', enrichedBBox.until);
+        } else {
+            if (since) params.append('since', since);
+            if (until) params.append('until', until);
+            if (searchQuery) params.append('query', searchQuery);
+        }
+        const requestKey = params.toString();
+        const now = Date.now();
+        const cached = responseCache.get(requestKey);
+
+        if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
+            entitiesRef.current.clear();
+            entityTouchedAtRef.current.clear();
+
+            const visibleIds = new Set(cached.data.map(item => item.originalId || item.id));
+            visibleMapIdsRef.current = visibleIds;
+            visibleSidebarIdsRef.current = new Set(visibleIds);
+
+            mergeItemsIntoStore(cached.data);
+            syncNewsFromStore(sortMode);
+            setIsLoading(false);
+            setLastUpdated(new Date(cached.timestamp).toISOString());
+            return;
+        }
+
+        setIsLoading(true);
+
         try {
-            const mapPromise = _performFetch({
+            const mapResults = await _performFetch({
                 isRefresh,
                 bbox: enrichedBBox,
                 signal: abortController.signal,
@@ -229,12 +313,14 @@ export function useNewsData({
                 scope: 'viewport'
             });
 
-            const mapResults = await mapPromise;
-
             if (requestVersion !== requestVersionRef.current) return;
 
-            visibleMapIdsRef.current = new Set(mapResults.map(item => item.id));
-            visibleSidebarIdsRef.current = new Set(mapResults.map(item => item.id));
+            entitiesRef.current.clear();
+            entityTouchedAtRef.current.clear();
+
+            const visibleIds = new Set(mapResults.map(item => item.originalId || item.id));
+            visibleMapIdsRef.current = visibleIds;
+            visibleSidebarIdsRef.current = new Set(visibleIds);
 
             mergeItemsIntoStore(mapResults);
             syncNewsFromStore(sortMode);
@@ -248,7 +334,7 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
         if (isFirstMount.current) {
@@ -256,19 +342,36 @@ export function useNewsData({
             const timer = setTimeout(() => coordinateLoad(), 0);
             return () => clearTimeout(timer);
         }
+        
         coordinateLoad();
     }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, coordinateLoad]);
 
     const fetchEventDetails = useCallback(async (id: string) => {
-        if (!id || descriptionCache.current.has(id) || fetchingDetailsRef.current.has(id)) return;
-        fetchingDetailsRef.current.add(id);
-        let fetchId = id;
-        const item = newsRef.current.find(i => i.id === id || i.originalId === id);
-        if (item && item.originalId) fetchId = item.originalId;
+        if (!id || fetchingDetailsRef.current.has(id)) return;
+        
+        let targetId = id;
+        // Skip UUIDs that are obviously client-side or server-side hybrid cluster IDs.
+        if (id.startsWith('cluster-')) {
+            const item = newsRef.current.find(i => i.id === id);
+            if (item?.originalId) {
+                targetId = item.originalId;
+            } else {
+                return;
+            }
+        }
+
+        const existingDetail = detailCache.current.get(targetId);
+        if (existingDetail) return;
+
+        fetchingDetailsRef.current.add(targetId);
 
         try {
-            const res = await fetch(`/api/news/${fetchId}`);
-            if (!res.ok) return;
+            console.log(`[useNewsData] Fetching details for ${targetId}`);
+            const res = await fetch(`/api/news/${targetId}`);
+            if (!res.ok) {
+                console.error(`[useNewsData] Failed to fetch details for ${targetId}: ${res.status} ${res.statusText}`);
+                return;
+            }
             const { description, sources } = await res.json() as { description?: string; sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>; };
             const descriptionValue = typeof description === 'string' ? description : '';
             const mappedSources = Array.isArray(sources)
@@ -279,16 +382,14 @@ export function useNewsData({
                     discoveredAt: s.discovered_at,
                 }))
                 : undefined;
-            descriptionCache.current.set(id, descriptionValue);
-            if (fetchId !== id) descriptionCache.current.set(fetchId, descriptionValue);
+            
+            detailCache.current.set(targetId, { description: descriptionValue, sources: mappedSources });
 
             let changed = false;
             for (const [entityId, entity] of entitiesRef.current.entries()) {
                 if (
-                    entity.id === id ||
-                    entity.originalId === id ||
-                    entity.id === fetchId ||
-                    entity.originalId === fetchId
+                    entity.id === targetId ||
+                    entity.originalId === targetId
                 ) {
                     entitiesRef.current.set(entityId, {
                         ...entity,
@@ -301,9 +402,9 @@ export function useNewsData({
             }
             if (changed) syncNewsFromStore(sortMode);
         } catch (err) {
-            console.error('[useNewsData] Failed to fetch event details:', err);
+            console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
         } finally {
-            fetchingDetailsRef.current.delete(id);
+            fetchingDetailsRef.current.delete(targetId);
         }
     }, [sortMode, syncNewsFromStore]);
 
@@ -316,7 +417,7 @@ export function useNewsData({
         const channel = supabase
             .channel('events-inserts')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'events' }, (payload) => {
-                const row = payload.new as Record<string, unknown>;
+                const row = payload.new as unknown as Record<string, unknown>;
                 const newItem: NewsItem = {
                     id: String(row.id),
                     title: String(row.title),
@@ -330,8 +431,8 @@ export function useNewsData({
                     longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
                     locationName: row.location_name ? String(row.location_name) : undefined,
                     tags: Array.isArray(row.tags) ? row.tags : undefined,
-                    impactScore: typeof row.impact_score === 'number' ? row.impact_score : undefined,
-                    sourcesCount: typeof row.event_count === 'number' ? row.event_count : undefined
+                    impactScore: typeof row.impact_score === 'number' ? row.impact_score : (typeof row.impactScore === 'number' ? row.impactScore : undefined),
+                    sourcesCount: typeof row.event_count === 'number' ? row.event_count : (typeof row.source_count === 'number' ? row.source_count : (typeof row.sourceCount === 'number' ? row.sourceCount : undefined))
                 };
 
                 const bbox = currentBBoxRef.current;
@@ -345,5 +446,5 @@ export function useNewsData({
         return () => { supabase.removeChannel(channel); };
     }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
 
-    return { news, isLoading, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
+    return { news, appliedSortMode, isLoading, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

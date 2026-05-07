@@ -6,15 +6,40 @@ export function normalizeSortMode(mode?: string | null): SortMode {
     return mode === 'hot' ? 'hot' : 'new';
 }
 
-export function canonicalEventCount(item: Pick<NewsItem, 'sourcesCount' | 'sources' | 'storyCount'>): number {
-    const sourcesCount = Number(item.sourcesCount);
-    if (Number.isFinite(sourcesCount) && sourcesCount > 0) return sourcesCount;
-    
-    const fallbackSourcesCount = item.sources?.length ?? 0;
-    return fallbackSourcesCount > 0 ? fallbackSourcesCount : 1;
+export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sources'>): number {
+    const publishedAtMs = Number(new Date(item.publishedAt).getTime()) || 0;
+    let latestSourceMs = 0;
+
+    for (const source of item.sources ?? []) {
+        const discoveredAtMs = Number(new Date(source.discoveredAt).getTime()) || 0;
+        if (discoveredAtMs > latestSourceMs) {
+            latestSourceMs = discoveredAtMs;
+        }
+    }
+
+    return Math.max(publishedAtMs, latestSourceMs);
 }
 
-export function eventStrength(item: Pick<NewsItem, 'sourcesCount' | 'sources' | 'storyCount'>): number {
+export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
+    // Check all possible count field variations to be extremely robust against API/RPC mismatches
+    const raw = item as unknown as Record<string, unknown>;
+    const sCount = Number(
+        item.sourcesCount ?? 
+        raw.sourceCount ?? 
+        raw.event_count ?? 
+        raw.source_count ?? 
+        raw.eventCount ?? 
+        0
+    );
+    const sourcesLen = item.sources?.length || 0;
+
+    // Reporting strength is strictly based on actual sources (event_count or sources array length)
+    // We explicitly IGNORE map cluster count (storyCount) for this metric.
+    const count = Math.max(sCount, sourcesLen);
+    return count > 0 ? count : 1;
+}
+
+export function eventStrength(item: Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
     return canonicalEventCount(item);
 }
 
@@ -25,16 +50,30 @@ export function clusterStoryCount(item: Pick<NewsItem, 'storyCount'>): number {
 
 export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): number {
     if (mode === 'hot') {
-        const scoreA = a.impactScore || 0;
-        const scoreB = b.impactScore || 0;
+        // 1. Impact Score (DESC)
+        const rawA = a as unknown as Record<string, unknown>;
+        const rawB = b as unknown as Record<string, unknown>;
+        const scoreA = (a.impactScore ?? rawA.impact_score) as number || 0;
+        const scoreB = (b.impactScore ?? rawB.impact_score) as number || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
 
-        const countA = eventStrength(a);
-        const countB = eventStrength(b);
+        // 2. Real Event Count (Sources) (DESC)
+        const countA = canonicalEventCount(a);
+        const countB = canonicalEventCount(b);
         if (countB !== countA) return countB - countA;
     }
 
-    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    // 3. Recency (DESC)
+    const timeA = latestReportTimestamp(a);
+    const timeB = latestReportTimestamp(b);
+    if (timeB !== timeA) return timeB - timeA;
+
+    // Final tiebreaks for stable sorting
+    const credA = a.credibilityTier || 3;
+    const credB = b.credibilityTier || 3;
+    if (credB !== credA) return credA - credB;
+
+    return (a.originalId || a.id).localeCompare(b.originalId || b.id);
 }
 
 export function sortNewsItems(items: NewsItem[], mode: SortMode): NewsItem[] {

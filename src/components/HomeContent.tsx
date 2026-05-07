@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
+import React, { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import FilterBar from '@/components/FilterBar';
@@ -15,7 +15,7 @@ import styles from '@/components/Layout.module.css';
 // Dynamically import NewsMap to prevent SSR issues with MapLibre library
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
-export function HomeContent({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
+export function HomeContent() {
     const { resolvedTheme } = useTheme();
     // Official React 18+ way to detect hydration/client-side status without cascading renders
     const mounted = useSyncExternalStore(
@@ -23,41 +23,29 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
         () => true,
         () => false
     );
-    const { updateURL } = useViewState();
+    const { initialState, updateURL } = useViewState();
+    const isFirstMount = React.useRef(true);
+    const [filterVersion, setFilterVersion] = useState(0);
     
-    // Filtering and time range state (initialized from searchParams for SSR stability)
+    // Filtering and time range state (initialized from initialState/URL for persistence)
     const [unmappedOnly, setUnmappedOnly] = useState(false);
-    const [timeRange, setTimeRange] = useState((searchParams.t as string) || '1d');
+    const [animatedEffects, setAnimatedEffects] = useState(true);
+    const [timeRange, setTimeRange] = useState(initialState.t || '1d');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     
-    // Search and debounce state (initialized from searchParams for SSR stability)
-    const [searchQuery, setSearchQuery] = useState((searchParams.q as string) || '');
-    const [debouncedSearch, setDebouncedSearch] = useState((searchParams.q as string) || '');
-    const [sortMode, setSortMode] = useState<SortMode>((searchParams.s as SortMode) || 'new');
+    // Search and debounce state (initialized from initialState/URL for persistence)
+    const [searchQuery, setSearchQuery] = useState(initialState.q || '');
+    const [debouncedSearch, setDebouncedSearch] = useState(initialState.q || '');
+    const [sortMode, setSortMode] = useState<SortMode>((initialState.s as SortMode) || 'new');
     const [currentBBox, setCurrentBBox] = useState<BBox | null>(null);
     
-    // Map initial view state from searchParams
-    const getParam = (key: string) => {
-        const val = searchParams[key];
-        return Array.isArray(val) ? val[0] : val;
-    };
-
-    const parseNum = (val: string | undefined) => {
-        if (!val) return NaN;
-        const n = parseFloat(val);
-        return Number.isFinite(n) ? n : NaN;
-    };
-
-    const initialLat = parseNum(getParam('lat'));
-    const initialLng = parseNum(getParam('lng'));
-    const initialZoom = parseNum(getParam('zoom'));
-
-    const initialCenter: [number, number] | undefined = (!isNaN(initialLat) && !isNaN(initialLng))
-        ? [initialLng, initialLat]
+    // Map initial view state from initialState/URL
+    const initialCenter: [number, number] | undefined = (initialState.lat != null && initialState.lng != null)
+        ? [initialState.lng, initialState.lat]
         : undefined;
     
-    const validInitialZoom = !isNaN(initialZoom) ? initialZoom : undefined;
+    const validInitialZoom = initialState.zoom;
 
     // Effect to debounce search input to minimize API calls
     useEffect(() => {
@@ -68,7 +56,7 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     }, [searchQuery]);
 
     // Data fetching and filtering hooks
-    const { news, isLoading, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+    const { news, appliedSortMode, isLoading, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 
         timeRange,
         customStartDate,
@@ -84,10 +72,10 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
         categories, setCategories,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox, unmappedOnly);
+    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
 
     // UI and interaction state
-    const [selectedItemId, setSelectedItemId] = useState<string | null>(getParam('eventId') || null);
+    const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -99,6 +87,17 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
         setSelectionVersion(v => v + 1);
         updateURL({ eventId: id || undefined });
     }, [updateURL]);
+
+    // Deselect current item and close popups when filters or sort mode change
+    useEffect(() => {
+        // skip initial mount to respect URL parameters
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
+        setFilterVersion(v => v + 1);
+        handleSelectItem(null);
+    }, [sources, categories, timeRange, debouncedSearch, sortMode, unmappedOnly, handleSelectItem]);
 
     // Sync map center/zoom changes to URL
     const handleBoundsChange = useCallback((bbox: BBox) => {
@@ -144,7 +143,7 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
         if (selectedItemId) {
-            const item = items.find(n => n.id === selectedItemId);
+            const item = items.find(n => n.id === selectedItemId || n.originalId === selectedItemId);
             if (item && item.description === undefined && fetchEventDetails) {
                 fetchEventDetails(selectedItemId);
             }
@@ -195,6 +194,8 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
                 onSearchChange={handleSearchChange}
                 sortMode={sortMode}
                 onSortModeChange={handleSortModeChange}
+                filterVersion={filterVersion}
+                animatedEffects={animatedEffects}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
@@ -206,9 +207,12 @@ export function HomeContent({ searchParams }: { searchParams: { [key: string]: s
                     isDarkMode={isDarkMode}
                     unmappedOnly={unmappedOnly}
                     onUnmappedOnlyChange={setUnmappedOnly}
+                    animatedEffects={animatedEffects}
+                    onAnimatedEffectsChange={setAnimatedEffects}
                     onBoundsChange={handleBoundsChange}
                     initialCenter={initialCenter}
                     initialZoom={validInitialZoom}
+                    sortMode={sortMode}
                 />
             </main>
 
