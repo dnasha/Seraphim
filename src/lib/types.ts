@@ -15,6 +15,8 @@ export interface NewsItem {
   title: string;
   /* Omitted on initial list fetch. Loaded on demand when a card is expanded. */
   description?: string;
+  /* Canonical "freshness" timestamp: latest source discovery or publishedAt fallback. */
+  latestActivityAt?: string;
   url: string;
   source: string;
   sourceType: 'gnews' | 'rss' | 'social';

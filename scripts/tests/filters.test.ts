@@ -184,6 +184,19 @@ describe('applyNewsFilters - time range filtering', () => {
         expect(result).toHaveLength(1);
         expect(result[0].id).toBe('stale-published');
     });
+
+    it('uses latestActivityAt when sources are not present in list payload', () => {
+        const stalePublished = makeItem({
+            id: 'latest-activity-override',
+            publishedAt: new Date(NOW - 1000 * 60 * 60 * 48).toISOString(), // 48h old
+            latestActivityAt: new Date(NOW - 1000 * 60 * 15).toISOString(), // 15m ago
+            sources: undefined,
+        });
+
+        const result = applyNewsFilters([stalePublished], defaultOpts({ timeRange: '1d' }));
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('latest-activity-override');
+    });
 });
 
 /*

@@ -20,7 +20,7 @@ import {
   getCategoryColor,
   getCredibilityStyle,
 } from "./MapConstants";
-import { canonicalEventCount } from "@/lib/ranking";
+import { canonicalEventCount, latestReportTimestamp } from "@/lib/ranking";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
@@ -165,37 +165,46 @@ export default function NewsMap({
   // Calculate initial view state based on resolution via interpolation between known ideal points.
   const getInitialViewState = useCallback(() => {
     if (typeof window === "undefined")
-      return { center: [9.8454, 7.8751] as [number, number], zoom: 1.2 };
+      return { center: [11.2907, 36.2494] as [number, number], zoom: 1.1 };
+    
     const width = window.innerWidth;
     const height = window.innerHeight;
     const isMobile = width <= 860;
+    
+    // Sidebar is 400px wide on desktop, 0px (overlay) on mobile
     const mapWidth = isMobile ? width : width - 400;
 
-    // Known ideal points provided by user:
-    // P1: 1920x1200 (1520 map width) -> zoom 1.2, center [9.8454, 7.8751]
-    // P2: 2560x1440 (2160 map width) -> zoom 2.1, center [11.6090, 8.6974]
+    // Ideal points for resolution-aware scaling:
+    // P1 (1080p): 1920x1080 display -> 1520 map width -> zoom 1.1
+    // P2 (2K): 2560x1440 display -> 2160 map width -> zoom 2.1
+    
+    const baseWidth = 1520;
+    const targetWidth = 2160;
+    const baseZoom = 1.1;
+    const targetZoom = 2.1;
+    
+    // Calculate interpolation factor 't' based on current map width relative to P1 and P2.
+    const tW = (mapWidth - baseWidth) / (targetWidth - baseWidth);
+    const tH = (height - 1080) / (1440 - 1080);
+    
+    // We take the max growth to ensure we don't zoom out too much on narrow or tall displays.
+    // Clamping t at -0.2 prevents extreme zoom-outs on smaller 1K/16:10 screens.
+    const t = Math.max(-0.2, Math.max(isNaN(tW) ? 0 : tW, isNaN(tH) ? 0 : tH));
+    
+    // Center point persists across all resolutions as requested.
+    const center: [number, number] = [11.2907, 36.2494];
+    
+    // Extrapolate zoom
+    const zoom = baseZoom + t * (targetZoom - baseZoom);
 
-    // Interpolation factor based on display resolution (clamped to 0 at the low end)
-    const tH = (height - 1200) / (1440 - 1200);
-    const tW = (mapWidth - 1520) / (2160 - 1520);
-    let t = Math.max(0, Math.max(isNaN(tH) ? 0 : tH, isNaN(tW) ? 0 : tW));
-    if (isNaN(t)) t = 0;
-
-    const zoom = 1.2 + t * (2.1 - 1.2);
-    const lng = 9.8454 + t * (11.609 - 9.8454);
-    const lat = 7.8751 + t * (8.6974 - 7.8751);
-
-    if (isMobile) {
-      return { center: [1.65, 28.0] as [number, number], zoom: 1.0 };
-    }
-
-    const finalZoom = Number.isFinite(zoom) && zoom >= 0.5 ? zoom : 1.2;
-    const finalLng = Number.isFinite(lng) ? lng : 9.8454;
-    const finalLat = Number.isFinite(lat) ? lat : 7.8751;
+    // Apply healthy clamping: 
+    // - On desktop, we use a floor of 1.2 to get closer to the requested 'global' look,
+    //   while still providing enough height to minimize the 'snap-to-equator' effect.
+    const finalZoom = Math.max(isMobile ? 0.9 : 1.2, Math.min(zoom, 4.0));
 
     return {
-      center: [finalLng, finalLat] as [number, number],
-      zoom: Math.max(1.2, finalZoom),
+      center,
+      zoom: finalZoom,
     };
   }, []);
 
@@ -297,9 +306,7 @@ export default function NewsMap({
       }
 
       // Fallback for Hot mode tiebreak OR primary for New mode
-      return (
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      );
+      return latestReportTimestamp(b) - latestReportTimestamp(a);
     });
 
     const topIds = new Set(sorted.slice(0, 3).map((i) => i.id));
@@ -1003,7 +1010,7 @@ export default function NewsMap({
       : null;
     const displayDate = latestSource
       ? latestSource.discoveredAt
-      : item.publishedAt;
+      : (item.latestActivityAt || item.publishedAt);
 
     const categoryLabel = item.category
       ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`

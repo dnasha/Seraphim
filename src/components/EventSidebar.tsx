@@ -328,7 +328,7 @@ export default function EventSidebar({
           : null;
         const displayDate = latestSource
           ? latestSource.discoveredAt
-          : item.publishedAt;
+          : (item.latestActivityAt || item.publishedAt);
 
         timeAgo = formatTimeAgo(displayDate);
       } catch {
@@ -670,16 +670,19 @@ export default function EventSidebar({
 
       <div className={styles.eventSidebarHeader}>
         <div className={styles.eventSidebarLogo}>
-          <Image
-            src="/logo.webp"
-            alt="Seraphim Logo"
-            width={54}
-            height={54}
-            priority
-            className={styles.sidebarLogoImg}
-            style={{ height: "3.4rem", width: "auto", borderRadius: "4px" }}
-          />
-          <h1>Seraphim</h1>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/" className={styles.logoLink}>
+            <Image
+              src="/logo.webp"
+              alt="Seraphim Logo"
+              width={54}
+              height={54}
+              priority
+              className={styles.sidebarLogoImg}
+              style={{ height: "3.4rem", width: "auto", borderRadius: "4px" }}
+            />
+            <h1>Seraphim</h1>
+          </a>
           <div className={styles.eventSidebarActions}>
             <ThemeToggle />
             <button

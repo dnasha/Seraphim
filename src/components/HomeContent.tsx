@@ -64,7 +64,7 @@ export function HomeContent() {
         sortMode,
         unmappedOnly
     });
-    
+
     const sidebarRespectBBox = true;
 
     const {
@@ -81,12 +81,23 @@ export function HomeContent() {
 
     const isDarkMode = resolvedTheme === 'dark';
 
+    // Sync UI state from URL when it changes externally (e.g. logo click, back/forward navigation)
+    const [prevInitialState, setPrevInitialState] = useState(initialState);
+    if (initialState !== prevInitialState) {
+        setPrevInitialState(initialState);
+        setSearchQuery(initialState.q || '');
+        setDebouncedSearch(initialState.q || '');
+        setTimeRange(initialState.t || '1d');
+        setSortMode((initialState.s as SortMode) || 'new');
+        setSelectedItemId(initialState.eventId || null);
+    }
+
     // Callback to handle item selection from map or sidebar
     const handleSelectItem = useCallback((id: string | null) => {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
         updateURL({ eventId: id || undefined });
-    }, [updateURL]);
+    }, [updateURL, setSelectedItemId, setSelectionVersion]);
 
     // Deselect current item and close popups when filters or sort mode change
     useEffect(() => {

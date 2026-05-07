@@ -44,14 +44,25 @@ Includes card expansion details and responsive mobile layouts.
   justify-content: space-between;
 }
 
-.eventSidebarLogo h1 {
+.logoLink {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex: 1;
+  transition: opacity 0.2s ease;
+}
+
+.logoLink:hover {
+  opacity: 0.8;
+}
+
+.logoLink h1 {
   font-family: var(--font-cinzel-decorative), cursive;
   font-size: 1.85rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--text-primary);
   text-transform: uppercase;
-  flex: 1;
   margin-left: 12px;
 }
 

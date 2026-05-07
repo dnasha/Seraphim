@@ -6,7 +6,8 @@ export function normalizeSortMode(mode?: string | null): SortMode {
     return mode === 'hot' ? 'hot' : 'new';
 }
 
-export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sources'>): number {
+export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sources' | 'latestActivityAt'>): number {
+    const latestActivityMs = item.latestActivityAt ? Number(new Date(item.latestActivityAt).getTime()) : 0;
     const publishedAtMs = Number(new Date(item.publishedAt).getTime()) || 0;
     let latestSourceMs = 0;
 
@@ -17,7 +18,7 @@ export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sour
         }
     }
 
-    return Math.max(publishedAtMs, latestSourceMs);
+    return Math.max(latestActivityMs, publishedAtMs, latestSourceMs);
 }
 
 export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCount' | 'sources'>): number {

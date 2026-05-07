@@ -47,15 +47,12 @@ const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
 
-// Threshold for switching to server-side clustering (zoom levels < 5)
-const CLUSTER_ZOOM_THRESHOLD = 5;
-
 // Maximum number of raw event rows to return in a single request
 const RAW_LIMIT = 2000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
 const LIST_SELECT = 'id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count';
-const HOT_LIST_SELECT = `${LIST_SELECT}, sources`;
+const LIST_SELECT_WITH_SOURCES = `${LIST_SELECT}, sources`;
 
 export async function GET(request: Request) {
     const now = Date.now();
@@ -86,9 +83,6 @@ export async function GET(request: Request) {
     const zoomStr = searchParams.get('zoom');
     const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
-    // Optional override to skip clustering regardless of zoom level
-    const forceRaw = searchParams.get('force_raw') === 'true';
-
     const sort = normalizeSortMode(searchParams.get('sort'));
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : RAW_LIMIT;
     const sinceStr = searchParams.get('since');
@@ -97,9 +91,8 @@ export async function GET(request: Request) {
     const untilMs = untilStr ? new Date(untilStr).getTime() : null;
     const effectiveLimit = limit;
 
-    // Logic to determine if server-side clustering should be performed
-    const useServerClustering = !unmappedOnly && (hasBBox || ignoreBBox) && zoom !== null && zoom < CLUSTER_ZOOM_THRESHOLD && !forceRaw;
-    let clusteredResponse = useServerClustering;
+    // Keep API results as raw rows; map/sidebar handle clustering/sorting client-side.
+    const useServerClustering = false;
 
     // Construct a cache key that captures all query parameters
     const bboxKeyPart = ignoreBBox ? 'global' : `${minLat},${maxLat},${minLng},${maxLng}`;
@@ -172,8 +165,8 @@ export async function GET(request: Request) {
                     p_sort_mode: sort,
                     p_limit: effectiveLimit,
                 };
-                if (sort !== 'hot' && sinceStr) rpcParams.p_since = sinceStr;
-                if (sort !== 'hot' && untilStr) rpcParams.p_until = untilStr;
+                if (sinceStr) rpcParams.p_since = sinceStr;
+                if (untilStr) rpcParams.p_until = untilStr;
                 if (searchQuery) rpcParams.p_search_query = searchQuery;
 
                 const res = await supabase.rpc('get_clustered_events', rpcParams);
@@ -183,7 +176,7 @@ export async function GET(request: Request) {
                 // Standard query for individual event markers or unmapped-only view
                 let query = supabase
                     .from('events')
-                    .select(sort === 'hot' ? HOT_LIST_SELECT : LIST_SELECT);
+                    .select(LIST_SELECT_WITH_SOURCES);
 
                 if (sort === 'hot') {
                     // Prioritize clusters with highest impact scores first
@@ -191,9 +184,6 @@ export async function GET(request: Request) {
                         .order('impact_score', { ascending: false, nullsFirst: false })
                         .order('event_count', { ascending: false, nullsFirst: false })
                         .order('published_at', { ascending: false });
-
-                    // "Hot" only includes corroborated stories (more than one source).
-                    query = query.gt('event_count', 1);
                 } else {
                     query = query.order('published_at', { ascending: false });
                 }
@@ -224,14 +214,6 @@ export async function GET(request: Request) {
 
                 if (searchQuery) {
                     query = query.or(`title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
-                }
-
-                // Server-side time filtering to reduce data transfer
-                if (sort !== 'hot' && sinceStr) {
-                    query = query.gte('published_at', sinceStr);
-                }
-                if (sort !== 'hot' && untilStr) {
-                    query = query.lte('published_at', untilStr);
                 }
 
                 const [res] = await Promise.all([
@@ -298,68 +280,28 @@ export async function GET(request: Request) {
                 return item;
             });
 
-            if (sort === 'hot') {
-                allItems = allItems.filter((item) => (item.sourcesCount ?? 0) > 1);
-
-                const hasSince = Number.isFinite(sinceMs);
-                const hasUntil = Number.isFinite(untilMs);
-                if (hasSince || hasUntil) {
-                    allItems = allItems.filter((item) => {
-                        const ts = latestReportTimestamp(item);
-                        if (!Number.isFinite(ts) || ts <= 0) return false;
-                        if (hasSince && ts < (sinceMs as number)) return false;
-                        if (hasUntil && ts > (untilMs as number)) return false;
-                        return true;
-                    });
-                }
-
-                // If clustered hot returns no corroborated representatives, retry once with raw rows.
-                if (useServerClustering && allItems.length === 0) {
-                    let fallbackQuery = supabase
-                        .from('events')
-                        .select(HOT_LIST_SELECT)
-                        .order('impact_score', { ascending: false, nullsFirst: false })
-                        .order('event_count', { ascending: false, nullsFirst: false })
-                        .order('published_at', { ascending: false })
-                        .gt('event_count', 1)
-                        .limit(effectiveLimit);
-
-                    if (!ignoreBBox && hasBBox) {
-                        fallbackQuery = fallbackQuery
-                            .gte('latitude', parseFloat(minLat!) - EPSILON)
-                            .lte('latitude', parseFloat(maxLat!) + EPSILON);
-
-                        if (normMinLng !== null && normMaxLng !== null) {
-                            if (normMinLng > normMaxLng) {
-                                fallbackQuery = fallbackQuery.or(`longitude.gte.${normMinLng},longitude.lte.${normMaxLng}`);
-                            } else {
-                                fallbackQuery = fallbackQuery.gte('longitude', normMinLng).lte('longitude', normMaxLng);
-                            }
-                        }
-                    } else {
-                        fallbackQuery = fallbackQuery.not('latitude', 'is', null);
-                    }
-
-                    if (searchQuery) {
-                        fallbackQuery = fallbackQuery.or(`title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
-                    }
-
-                    const fallbackRes = await fallbackQuery;
-                    if (!fallbackRes.error && fallbackRes.data) {
-                        allItems = (fallbackRes.data as DbEvent[])
-                            .map(dbEventToNewsItem)
-                            .filter((item) => (item.sourcesCount ?? 0) > 1)
-                            .filter((item) => {
-                                const ts = latestReportTimestamp(item);
-                                if (!Number.isFinite(ts) || ts <= 0) return false;
-                                if (hasSince && ts < (sinceMs as number)) return false;
-                                if (hasUntil && ts > (untilMs as number)) return false;
-                                return true;
-                            });
-                        clusteredResponse = false;
-                    }
-                }
+            // Apply time-window semantics against latest source activity, not only story publish time.
+            const hasSince = Number.isFinite(sinceMs);
+            const hasUntil = Number.isFinite(untilMs);
+            if (hasSince || hasUntil) {
+                allItems = allItems.filter((item) => {
+                    const ts = latestReportTimestamp(item);
+                    if (!Number.isFinite(ts) || ts <= 0) return false;
+                    if (hasSince && ts < (sinceMs as number)) return false;
+                    if (hasUntil && ts > (untilMs as number)) return false;
+                    return true;
+                });
             }
+
+            // Keep list payload lean while preserving latest-activity semantics for client filters/sorting.
+            allItems = allItems.map((item) => {
+                const ts = latestReportTimestamp(item);
+                return {
+                    ...item,
+                    latestActivityAt: Number.isFinite(ts) && ts > 0 ? new Date(ts).toISOString() : item.publishedAt,
+                    sources: undefined,
+                };
+            });
 
             allItems = sortNewsItems(allItems, sort);
 
@@ -379,7 +321,7 @@ export async function GET(request: Request) {
                 sort,
                 view: viewMode,
                 scope: scopeMode,
-                clustered: clusteredResponse,
+                clustered: useServerClustering,
                 zoomBucket: zoom !== null ? Math.floor(zoom) : null,
             },
             sources: {
