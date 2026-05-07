@@ -736,12 +736,14 @@ export default function NewsMap({
           ? view.zoom
           : 1.2;
 
+      const isMobileLocal = typeof window !== "undefined" && window.innerWidth <= 860;
+
       map = new maplibregl.Map({
         container: containerRef.current as HTMLElement,
         style: getMapLibreStyle(currentStyle),
         center: finalCenter,
         zoom: finalZoom,
-        minZoom: 0.5,
+        minZoom: isMobileLocal ? 0.8 : 1.2,
         maxZoom: 18,
         attributionControl: false,
         trackResize: false,
