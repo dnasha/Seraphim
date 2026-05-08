@@ -16,18 +16,15 @@ const RSS_HEADERS = {
     'Accept-Language': 'en-US,en;q=0.9',
 };
 
-// Headers optimized for Reddit RSS (conservative to avoid breaking their strict filtering)
-const REDDIT_HEADERS = {
-    'User-Agent': 'Seraphim/1.0 (news aggregator)',
-    'Accept': 'application/rss+xml, application/xml, text/xml',
-};
-
 const FEED_TIMEOUT_MS = 15000;
 
 // Global parser with robust browser-like headers
 const parser = new Parser({
     timeout: 15000,
-    headers: RSS_HEADERS,
+    headers: {
+        'User-Agent': 'Seraphim/1.0 (news aggregator)',
+        'Accept': 'application/rss+xml, application/xml, text/xml',
+    },
     customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
     },
@@ -38,7 +35,10 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
-            headers: REDDIT_HEADERS,
+            headers: {
+                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'Accept': 'application/rss+xml, application/xml, text/xml',
+            },
             signal: AbortSignal.timeout(15000),
         });
         
