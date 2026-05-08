@@ -9,11 +9,17 @@ import styles from './MapActionTools.module.css';
 interface MapActionToolsProps {
     overlays: Record<string, boolean>;
     onOverlayToggle: (overlay: string, active: boolean) => void;
+    isGlobe: boolean;
+    onToggleGlobe: () => void;
+    onResetOrientation: () => void;
 }
 
 const MapActionTools: React.FC<MapActionToolsProps> = ({
     overlays,
     onOverlayToggle,
+    isGlobe,
+    onToggleGlobe,
+    onResetOrientation,
 }) => {
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -71,6 +77,26 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 </div>
             )}
             
+            <button
+                className={styles.actionBtn}
+                onClick={onResetOrientation}
+                title="Reset Orientation (North up)"
+            >
+                <svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor">
+                    <path d="M256,0C114.6,0,0,114.6,0,256s114.6,256,256,256s256-114.6,256-256S397.4,0,256,0z M256,472.6
+                        c-119.6,0-216.6-97-216.6-216.6S136.4,39.4,256,39.4s216.6,97,216.6,216.6S375.6,472.6,256,472.6z M118.2,393.8l187.1-88.6
+                        l88.6-187.1l-187.1,88.6L118.2,393.8z M285.5,285.5l-118.2,59.1l59.1-118.2L285.5,285.5z"/>
+                </svg>
+            </button>
+
+            <button
+                className={`${styles.actionBtn}${isGlobe ? ` ${styles.actionBtnActive}` : ''}`}
+                onClick={onToggleGlobe}
+                title={isGlobe ? "Switch to 2D Map" : "Switch to 3D Globe"}
+            >
+                <span className={styles.btnText}>3D</span>
+            </button>
+
             <button
                 className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}`}
                 onClick={() => setOverlayMenuOpen(!overlayMenuOpen)}

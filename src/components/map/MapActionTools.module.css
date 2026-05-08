@@ -43,6 +43,12 @@
   background: var(--accent);
 }
 
+.btnText {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
 /* Overlay menu layout */
 .overlayMenu {
   position: absolute;

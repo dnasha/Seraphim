@@ -43,6 +43,11 @@ interface NewsMapProps {
   sortMode: "new" | "hot";
 }
 
+type ExtendedMap = maplibregl.Map & {
+  setProjection?: (projection: { type: string }) => void;
+  setFog?: (fog: unknown) => void;
+};
+
 const CATEGORIES = [
   "general",
   "world",
@@ -151,6 +156,17 @@ export default function NewsMap({
     noaa: false,
     eonet: false,
   });
+  const [isGlobe, setIsGlobe] = useState(false);
+  const isGlobeRef = useRef(isGlobe);
+  const currentStyleRef = useRef(currentStyle);
+
+  useEffect(() => {
+    isGlobeRef.current = isGlobe;
+  }, [isGlobe]);
+
+  useEffect(() => {
+    currentStyleRef.current = currentStyle;
+  }, [currentStyle]);
 
   const settingsPanelRef = useRef<HTMLDivElement>(null);
 
@@ -813,6 +829,26 @@ export default function NewsMap({
 
     // Handles layer re-initialization after the map style is loaded.
     map.on("style.load", () => {
+      // Enable Globe projection if in 3D mode. 
+      // We use defensive checks and a local type extension to support MapLibre 5 features while satisfying strict linting rules.
+      const extMap = map as ExtendedMap;
+      if (extMap.setProjection) {
+        extMap.setProjection({ type: isGlobeRef.current ? "globe" : "mercator" });
+      }
+
+      // Add atmospheric fog for 3D depth if in 3D mode.
+      if (extMap.setFog) {
+        if (isGlobeRef.current) {
+          extMap.setFog({
+            range: [-1, 2],
+            color: currentStyleRef.current === "dark" ? "#000b1e" : "#ffffff",
+            "horizon-blend": 0.1,
+          });
+        } else {
+          extMap.setFog(null);
+        }
+      }
+
       addSourcesAndLayers(map).then(() => {
         if (!eventsWiredRef.current) {
           eventsWiredRef.current = true;
@@ -838,21 +874,26 @@ export default function NewsMap({
                 "news-events",
               ) as maplibregl.GeoJSONSource;
               const zoom = await source.getClusterExpansionZoom(clusterId);
-              map.easeTo({
+              map.flyTo({
                 center:
                   features[0].geometry.type === "Point"
                     ? (features[0].geometry.coordinates as [number, number])
                     : undefined,
                 zoom,
+                speed: 1.5,
+                curve: 1, // Faster zoom in for clusters
+                essential: true,
               });
             } else {
               // Zoom in if it's a server-side cluster.
-              map.easeTo({
+              map.flyTo({
                 center:
                   features[0].geometry.type === "Point"
                     ? (features[0].geometry.coordinates as [number, number])
                     : undefined,
                 zoom: map.getZoom() + 2,
+                speed: 1.2,
+                essential: true,
               });
             }
           });
@@ -1194,23 +1235,61 @@ export default function NewsMap({
           map.flyTo({
             center: [item.longitude!, item.latitude!],
             zoom: targetZoom,
-            duration: 800,
-            padding: { top: 250, bottom: 0, left: 0, right: 0 },
+            pitch: animatedEffects && isGlobe ? 45 : 0,
+            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+            speed: animatedEffects ? 1.5 : 1,
+            curve: animatedEffects ? 1.42 : 1,
+            essential: true,
+            // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
+            padding: { top: targetZoom > 4 ? 250 : 0, bottom: 0, left: 0, right: 0 },
           });
         }
       }
     } else {
       if (!isFlyingRef.current) {
         popupRef.current?.remove();
+
       }
       lastFlownSelectionRef.current = null;
       lastFlownVersionRef.current = 0;
     }
-  }, [selectedItemId, selectionVersion, geoItems, mapReady, generatePopupHtml]);
+  }, [
+    selectedItemId,
+    selectionVersion,
+    geoItems,
+    mapReady,
+    generatePopupHtml,
+    animatedEffects,
+    isGlobe,
+  ]);
 
-  // Live-updates popup descriptions when they finish loading.
   useEffect(() => {
     if (!mapReady || !popupRef.current || !popupRef.current.isOpen()) return;
+
+    // Sync popup position if the item's jittered coordinates have updated.
+    if (selectedItemId) {
+      const selectedItem = geoItems.find(
+        (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+      );
+      if (
+        selectedItem &&
+        selectedItem.latitude != null &&
+        selectedItem.longitude != null
+      ) {
+        const currentPos = popupRef.current.getLngLat();
+        const dist = Math.sqrt(
+          Math.pow(currentPos.lng - selectedItem.longitude, 2) +
+            Math.pow(currentPos.lat - selectedItem.latitude, 2),
+        );
+        if (dist > 0.00001) {
+          popupRef.current.setLngLat([
+            selectedItem.longitude,
+            selectedItem.latitude,
+          ]);
+        }
+      }
+    }
+
     const el = popupRef.current.getElement();
     if (!el) return;
 
@@ -1268,7 +1347,7 @@ export default function NewsMap({
         }
       }
     });
-  }, [geoItems, mapReady]);
+  }, [geoItems, mapReady, selectedItemId]);
 
   // Handles closing the settings panel when clicking outside.
   useEffect(() => {
@@ -1303,6 +1382,46 @@ export default function NewsMap({
     setVis("overlay-eonet-point", overlays["eonet"]);
   }, [overlays, mapReady, currentStyle]);
 
+  const handleResetOrientation = useCallback(() => {
+    if (!mapRef.current) return;
+    mapRef.current.easeTo({
+      pitch: 0,
+      bearing: 0,
+      duration: 1000,
+      easing: (t) => t * (2 - t),
+    });
+  }, []);
+
+  // Handles projection and fog toggling without reloading the map style.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !mapRef.current.isStyleLoaded()) return;
+    const map = mapRef.current as ExtendedMap;
+
+    if (map.setProjection) {
+      map.setProjection({ type: isGlobe ? "globe" : "mercator" });
+    }
+
+    if (map.setFog) {
+      if (isGlobe) {
+        map.setFog({
+          range: [-1, 2],
+          color: currentStyle === "dark" ? "#000b1e" : "#ffffff",
+          "horizon-blend": 0.1,
+        });
+      } else {
+        map.setFog(null);
+      }
+    }
+
+    // When toggling 3D off, instantly reset pitch and bearing for a clean orthogonal 2D view.
+    if (!isGlobe) {
+      map.jumpTo({ pitch: 0, bearing: 0 });
+    }
+
+    // Force a resize to ensure the globe/mercator transition is perfectly centered in the container.
+    map.resize();
+  }, [isGlobe, mapReady, currentStyle]);
+
   return (
     <div className={styles.mapWrapper}>
       {!mapReady && !mapError && <MapLoading />}
@@ -1330,6 +1449,9 @@ export default function NewsMap({
             onOverlayToggle={(overlay, active) =>
               setOverlays((prev) => ({ ...prev, [overlay]: active }))
             }
+            isGlobe={isGlobe}
+            onToggleGlobe={() => setIsGlobe((v) => !v)}
+            onResetOrientation={handleResetOrientation}
           />
         </>
       )}
