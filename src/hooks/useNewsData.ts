@@ -93,6 +93,7 @@ export function useNewsData({
         sortMode?: string;
         query?: string;
         timeRange?: string;
+        unmappedOnly?: boolean;
     } | null>(null);
     const isFirstMount = useRef(true);
 
@@ -500,7 +501,7 @@ export function useNewsData({
             })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
+    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore, unmappedOnly]);
 
     return { news, appliedSortMode, isLoading, isCapped, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }
