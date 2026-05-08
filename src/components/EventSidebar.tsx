@@ -83,6 +83,7 @@ interface EventSidebarProps {
   filterVersion?: number;
   animatedEffects?: boolean;
   isCapped?: boolean;
+  appliedLimit?: number;
 }
 
 export default function EventSidebar({
@@ -103,6 +104,7 @@ export default function EventSidebar({
   filterVersion = 0,
   animatedEffects = false,
   isCapped = false,
+  appliedLimit,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -748,8 +750,8 @@ export default function EventSidebar({
             </div>
           )}
           <span className={styles.statPill}>
-            {isCapped && totalStoryCount >= 1990 && totalStoryCount < 2000
-              ? "2,000"
+            {isCapped && appliedLimit
+              ? appliedLimit.toLocaleString()
               : totalStoryCount.toLocaleString()}
             {isCapped ? "+" : ""} stories found
           </span>

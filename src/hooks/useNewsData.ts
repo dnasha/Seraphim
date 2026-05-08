@@ -15,8 +15,8 @@ const CLUSTER_ZOOM_THRESHOLD = 5;
 const LOCAL_RESPONSE_TTL_MS = 60_000;
 const MAX_ENTITY_COUNT = 5000;
 
-const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
-const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean }>>();
+const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; appliedLimit?: number; timestamp: number }>();
+const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean; appliedLimit?: number }>>();
 
 function computeSince(timeRange: string, customStartDate?: string): string | null {
     if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
@@ -86,6 +86,7 @@ export function useNewsData({
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const [isCapped, setIsCapped] = useState(false);
+    const [appliedLimit, setAppliedLimit] = useState<number | undefined>(undefined);
 
     const newsRef = useRef<NewsItem[]>([]);
     const lastFetchParamsRef = useRef<{
@@ -230,7 +231,8 @@ export function useNewsData({
                     const cachedDetail = detailCache.current.get(cacheKey);
                     return cachedDetail ? { ...item, ...cachedDetail } : item;
                 }),
-                isCapped: cached.isCapped
+                isCapped: cached.isCapped,
+                appliedLimit: cached.appliedLimit
             };
         }
 
@@ -247,10 +249,11 @@ export function useNewsData({
                 return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
             const apiCapped = data.meta?.isCapped || false;
-            const totalStories = hydrated.reduce((acc, item) => acc + (item.storyCount || 1), 0);
-            const isCapped = apiCapped || hydrated.length >= 1990 || totalStories >= 1990;
-            responseCache.set(requestKey, { data: hydrated, isCapped, timestamp: Date.now() });
-            return { items: hydrated, isCapped };
+            // Since limits are dynamic and controlled by the server, we trust the apiCapped flag.
+            const isCapped = apiCapped;
+            const appliedLimit = data.meta?.appliedLimit;
+            responseCache.set(requestKey, { data: hydrated, isCapped, appliedLimit, timestamp: Date.now() });
+            return { items: hydrated, isCapped, appliedLimit };
         })();
 
         inFlightFetches.set(requestKey, fetchPromise);
@@ -350,6 +353,7 @@ export function useNewsData({
             mergeItemsIntoStore(cached.data);
             syncNewsFromStore(sortMode);
             setIsCapped(cached.isCapped);
+            setAppliedLimit(cached.appliedLimit);
             setIsLoading(false);
             setLastUpdated(new Date(cached.timestamp).toISOString());
             lastFetchParamsRef.current = {
@@ -363,7 +367,7 @@ export function useNewsData({
 
         setIsLoading(true);
         try {
-            const { items: mapResults, isCapped: resultCapped } = await _performFetch({
+            const { items: mapResults, isCapped: resultCapped, appliedLimit: fetchLimit } = await _performFetch({
                 isRefresh,
                 bbox: enrichedBBox,
                 signal: abortController.signal,
@@ -381,6 +385,7 @@ export function useNewsData({
             mergeItemsIntoStore(mapResults);
             syncNewsFromStore(sortMode);
             setIsCapped(resultCapped);
+            setAppliedLimit(fetchLimit);
             setLastUpdated(new Date().toISOString());
             lastFetchParamsRef.current = {
                 bbox,
@@ -509,5 +514,5 @@ export function useNewsData({
         return () => { supabase.removeChannel(channel); };
     }, [mergeItemsIntoStore, sortMode, syncNewsFromStore, unmappedOnly]);
 
-    return { news, appliedSortMode, isLoading, isCapped, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
+    return { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

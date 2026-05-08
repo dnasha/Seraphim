@@ -12,8 +12,9 @@ async function runAudit() {
         try {
             const items = await fetchSingleFeed(source);
             if (items.length === 0) status = "No Items / Fail";
-        } catch (e) {
+        } catch (error) {
             status = "Error";
+            console.error(`Error fetching ${source.name}:`, error);
         }
         const end = performance.now();
         results.push({ name: source.name, latency: end - start, status });

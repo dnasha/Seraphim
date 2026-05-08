@@ -56,7 +56,7 @@ export function HomeContent() {
     }, [searchQuery]);
 
     // Data fetching and filtering hooks
-    const { news, appliedSortMode, isLoading, isCapped, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+    const { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 
         timeRange,
         customStartDate,
@@ -227,6 +227,7 @@ export function HomeContent() {
                 filterVersion={filterVersion}
                 animatedEffects={animatedEffects}
                 isCapped={isCapped}
+                appliedLimit={appliedLimit}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>

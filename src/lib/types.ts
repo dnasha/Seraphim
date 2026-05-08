@@ -51,6 +51,7 @@ export interface NewsResponse {
     zoomBucket: number | null;
     globalTopN?: number;
     isCapped?: boolean;
+    appliedLimit?: number;
   };
   sources: {
     gnews: boolean;

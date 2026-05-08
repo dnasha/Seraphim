@@ -51,7 +51,7 @@ const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
 
 // Maximum number of raw event rows to return in a single request
-const RAW_LIMIT = 2000;
+const RAW_LIMIT = 1000;
 
 // Fields selected for list view. Description is excluded and fetched per-item.
 const LIST_SELECT =
@@ -104,12 +104,33 @@ export async function GET(request: Request) {
   const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
   const sort = normalizeSortMode(searchParams.get("sort"));
-  const limit = searchParams.get("limit")
+  const requestedLimit = searchParams.get("limit")
     ? parseInt(searchParams.get("limit")!)
     : RAW_LIMIT;
   const sinceStr = searchParams.get("since");
   const untilStr = searchParams.get("until");
-  const effectiveLimit = limit;
+
+  let effectiveLimit = requestedLimit;
+
+  // Implement dynamic capping based on zoom level
+  // Base: 1000, Zoom >= 4: 500, Zoom >= 6.5: 250
+  if (zoom !== null && !unmappedOnly && !searchQuery) {
+    if (zoom >= 6.5) {
+      effectiveLimit = Math.min(requestedLimit, 250);
+    } else if (zoom >= 4) {
+      effectiveLimit = Math.min(requestedLimit, 500);
+    }
+  }
+
+  // Override: If the time filter range is above 24hrs, revert to a 1000 cap
+  if (sinceStr) {
+    const sinceTime = new Date(sinceStr).getTime();
+    const untilTime = untilStr ? new Date(untilStr).getTime() : now;
+    if (untilTime - sinceTime > 24 * 60 * 60 * 1000 + 5000) {
+      // Use 1000 if the calculated limit was lower
+      effectiveLimit = Math.max(effectiveLimit, 1000);
+    }
+  }
 
   // Enable server-side clustering only at very low zoom levels to preserve performance.
   // At zoom 5 and above, we return raw events to allow the client-side engine to cluster organically.
@@ -259,7 +280,11 @@ export async function GET(request: Request) {
         error = res.error;
       }
 
-      if (rows && rows.length >= 1990) {
+      const totalRawCount = useServerClustering
+        ? (rows as DbEvent[]).reduce((acc, r) => acc + (Number(r.story_count) || 1), 0)
+        : rows.length;
+
+      if (totalRawCount >= effectiveLimit - 5) {
         queryCapped = true;
       }
 
@@ -365,6 +390,7 @@ export async function GET(request: Request) {
         clustered: useServerClustering,
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
         isCapped: queryCapped,
+        appliedLimit: effectiveLimit,
       },
       sources: {
         gnews: true,
