@@ -243,7 +243,7 @@ export function HomeContent() {
                     onBoundsChange={handleBoundsChange}
                     initialCenter={initialCenter}
                     initialZoom={validInitialZoom}
-                    sortMode={sortMode}
+                    sortMode={appliedSortMode as SortMode}
                 />
             </main>
 

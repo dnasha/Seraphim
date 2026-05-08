@@ -88,7 +88,12 @@ export function useNewsData({
     const [isCapped, setIsCapped] = useState(false);
 
     const newsRef = useRef<NewsItem[]>([]);
-    const currentBBoxRef = useRef<BBox | null>(null);
+    const lastFetchParamsRef = useRef<{
+        bbox: BBox | null;
+        sortMode?: string;
+        query?: string;
+        timeRange?: string;
+    } | null>(null);
     const isFirstMount = useRef(true);
 
     const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources'] }>>(new Map());
@@ -105,7 +110,17 @@ export function useNewsData({
 
     const syncNewsFromStore = useCallback((mode: string | undefined) => {
         const normalizedMode = normalizeSortMode(mode);
-        setNews(sortNewsItems(Array.from(entitiesRef.current.values()), normalizedMode));
+        
+        // Filter the persistent store down to only the items intended for the current view.
+        // This prevents the sidebar from 'bloating' with items from previous pans/zooms
+        // while allowing the store to keep them cached for performance.
+        const activeItems = Array.from(entitiesRef.current.values())
+            .filter(item => {
+                const key = item.originalId || item.id;
+                return visibleMapIdsRef.current.has(key) || visibleMapIdsRef.current.has(item.id);
+            });
+
+        setNews(sortNewsItems(activeItems, normalizedMode));
         setAppliedSortMode(normalizedMode);
     }, []);
 
@@ -256,7 +271,27 @@ export function useNewsData({
             detailCache.current.clear(); // Full refresh clears detail cache too
         }
 
-        const bbox = rawBBox ? snapBBox(rawBBox) : currentBBoxRef.current;
+        const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
+
+        // Performance optimization: If the snapped BBox AND all filters (sort, query, time) 
+        // haven't changed since the LAST FETCH, skip entirely.
+        const prev = lastFetchParamsRef.current;
+        const isSameBBox = (!bbox && !prev?.bbox) || (
+            bbox && prev?.bbox &&
+            bbox.minLat === prev.bbox.minLat &&
+            bbox.maxLat === prev.bbox.maxLat &&
+            bbox.minLng === prev.bbox.minLng &&
+            bbox.maxLng === prev.bbox.maxLng &&
+            bbox.zoom === prev.bbox.zoom
+        );
+
+        if (!isRefresh && prev && isSameBBox &&
+            sortMode === prev.sortMode &&
+            searchQuery === prev.query &&
+            timeRange === prev.timeRange) {
+            return;
+        }
+
         const since = computeSince(timeRange, customStartDate);
         const until = computeUntil(timeRange, customEndDate);
         const enrichedBBox = bbox ? {
@@ -292,18 +327,24 @@ export function useNewsData({
         const now = Date.now();
         const cached = responseCache.get(requestKey);
 
+        // Cache hit path: If we have fresh data for this specific snapped BBox,
+        // just update visibility and sync without clearing the global store.
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
-            entitiesRef.current.clear();
-            entityTouchedAtRef.current.clear();
-
             const visibleIds = new Set(cached.data.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
             visibleSidebarIdsRef.current = new Set(visibleIds);
 
             mergeItemsIntoStore(cached.data);
+            syncNewsFromStore(sortMode);
             setIsCapped(cached.isCapped);
             setIsLoading(false);
             setLastUpdated(new Date(cached.timestamp).toISOString());
+            lastFetchParamsRef.current = {
+                bbox,
+                sortMode,
+                query: searchQuery,
+                timeRange
+            };
             return;
         }
 
@@ -319,9 +360,7 @@ export function useNewsData({
 
             if (requestVersion !== requestVersionRef.current) return;
 
-            entitiesRef.current.clear();
-            entityTouchedAtRef.current.clear();
-
+            // Update the visibility set before syncing the store
             const visibleIds = new Set(mapResults.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
             visibleSidebarIdsRef.current = new Set(visibleIds);
@@ -330,6 +369,12 @@ export function useNewsData({
             syncNewsFromStore(sortMode);
             setIsCapped(resultCapped);
             setLastUpdated(new Date().toISOString());
+            lastFetchParamsRef.current = {
+                bbox,
+                sortMode,
+                query: searchQuery,
+                timeRange
+            };
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
             if (requestVersion !== requestVersionRef.current) return;
@@ -414,7 +459,6 @@ export function useNewsData({
     }, [sortMode, syncNewsFromStore]);
 
     const onBoundsChange = useCallback((bbox: BBox) => {
-        currentBBoxRef.current = bbox;
         coordinateLoad(false, bbox);
     }, [coordinateLoad]);
 
@@ -440,7 +484,7 @@ export function useNewsData({
                     sourcesCount: typeof row.event_count === 'number' ? row.event_count : (typeof row.source_count === 'number' ? row.source_count : (typeof row.sourceCount === 'number' ? row.sourceCount : undefined))
                 };
 
-                const bbox = currentBBoxRef.current;
+                const bbox = lastFetchParamsRef.current?.bbox;
                 const isGlobalSidebarView = !!bbox && bbox.zoom !== undefined && bbox.zoom < CLUSTER_ZOOM_THRESHOLD;
                 if (!isGlobalSidebarView && bbox && !isWithinBBox(newItem, bbox)) return;
 
