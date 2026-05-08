@@ -48,7 +48,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
         const feed = await parser.parseString(text);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (feed.items || []).slice(0, 25).map((item: any, index: number) => ({
+        return (feed.items || []).slice(0, 10).map((item: any, index: number) => ({
             id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
