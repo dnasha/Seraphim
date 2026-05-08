@@ -9,29 +9,37 @@ import { NewsItem } from '@/lib/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '../utils/date';
 
+// Headers optimized for standard RSS feeds to bypass bot detection
+const RSS_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    'Referer': 'https://www.google.com/',
+    'Accept-Language': 'en-US,en;q=0.9',
+};
+
+// Headers optimized for Reddit RSS (conservative to avoid breaking their strict filtering)
+const REDDIT_HEADERS = {
+    'User-Agent': 'Seraphim/1.0 (news aggregator)',
+    'Accept': 'application/rss+xml, application/xml, text/xml',
+};
+
+const FEED_TIMEOUT_MS = 7000;
+
 // Global parser with robust browser-like headers
 const parser = new Parser({
     timeout: 15000,
-    headers: {
-        'User-Agent': 'Seraphim/1.0 (news aggregator)',
-        'Accept': 'application/rss+xml, application/xml, text/xml',
-    },
+    headers: RSS_HEADERS,
     customFields: {
         item: ['media:content', 'media:thumbnail', 'enclosure'],
     },
 });
-
-const DEFAULT_UA = 'Seraphim/1.0 (news aggregator)';
 
 /* Fetches and parses a Reddit subreddit RSS feed */
 export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
-            headers: {
-                'User-Agent': DEFAULT_UA,
-                'Accept': 'application/rss+xml, application/xml, text/xml',
-            },
+            headers: REDDIT_HEADERS,
             signal: AbortSignal.timeout(15000),
         });
         
@@ -100,16 +108,13 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
-const FEED_TIMEOUT_MS = 10000;
+// (Moved constants up for visibility)
 
 /* Fetches and parses a single standard RSS feed */
 export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
-            headers: {
-                'User-Agent': DEFAULT_UA,
-                'Accept': 'application/rss+xml, application/xml, text/xml',
-            },
+            headers: RSS_HEADERS,
             signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

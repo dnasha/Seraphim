@@ -134,3 +134,5 @@ _Goal: Rethink the 22% of news that provides vital context but lacks coordinates
 - **Concept**: Implement a "Global Context" sidebar section or a "Regional Heatmap" for broad news (e.g., news mentioning "Ukraine" but no specific city should highlight the entire country polygon at low opacity).
 - **Concept**: "The Tickertape" - A scrolling bottom bar for high-volume, unmapped headlines to keep the main sidebar focused on geographic data.
 - **Concept**: Semantic Cross-Referencing - Use embeddings to link unmapped "Opinion" pieces to the mapped "Events" they are discussing.
+
+add redis query to premium users

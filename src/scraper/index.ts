@@ -408,43 +408,13 @@ Applies source merges to existing events in Supabase.
 Each merge is a single UPDATE setting the expanded sources array.
 Batched into individual updates to avoid complex SQL.
 */
-async function applyMerges(
-  merges: Map<
-    string,
-    {
-      sources: DbEventSource[];
-      title?: string;
-      description?: string;
-      source?: string;
-      url?: string;
-      credibility_tier?: number;
-      event_count?: number;
-      impact_score?: number;
-    }
-  >,
-): Promise<number> {
-  const mergeEntries = Array.from(merges.entries());
-  
-  // Parallelize all merges at once if the number is reasonable
-  // Otherwise, use a small number of concurrent batches
-  const promises = mergeEntries.map(([eventId, updateData]) =>
-    supabase.from("events").update(updateData).eq("id", eventId)
-  );
+/*
+Removed applyMerges in favor of bulk_ingest_events RPC 
+*/
 
-  const results = await Promise.all(promises);
-  let successful = 0;
-  results.forEach((res, idx) => {
-    if (res.error) {
-      console.error(
-        `[scraper] Failed to merge sources into event ${mergeEntries[idx][0]}:`,
-        res.error.message,
-      );
-    } else {
-      successful++;
-    }
-  });
-
-  return successful;
+interface BulkIngestResult {
+  upserted_count: number;
+  merged_count: number;
 }
 
 /* ─── Main Pipeline ─── */
@@ -568,72 +538,30 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Step 7a: Apply story merges (UPDATE existing events' sources arrays)
-  if (merges.size > 0) {
-    console.log(`[scraper] Applying ${merges.size} story merges...`);
-    const mergedCount = await applyMerges(merges);
-    console.log(`[scraper] ${mergedCount}/${merges.size} story merges applied`);
+  // Step 7: Bulk Ingest (Updates + Upserts) in a single RPC call
+  console.log(`[scraper] Ingesting ${newEvents.length} new events and ${merges.size} merges via RPC...`);
+  
+  const mergePayload = Array.from(merges.entries()).map(([id, data]) => ({
+    id,
+    ...data
+  }));
+
+  const { data: ingestResult, error: ingestError } = await supabase.rpc('bulk_ingest_events', {
+    p_new_events: newEvents,
+    p_merges: mergePayload
+  });
+
+  if (ingestError) {
+    console.error('[scraper] Bulk ingestion RPC failed:', ingestError.message);
+    // Fallback to sequential if necessary, but RPC is preferred for performance
+    throw new Error(`Bulk ingestion failed: ${ingestError.message}`);
   }
 
-  // Step 7b: Upsert new events
-  console.log(
-    `[scraper] Upserting ${newEvents.length} new events into Supabase...`,
-  );
-
-  // Chunks are upserted sequentially to prevent request size issues and allow error isolation
-  const UPSERT_CHUNK_SIZE = 50;
-  const upsertChunks = [];
-  for (let i = 0; i < newEvents.length; i += UPSERT_CHUNK_SIZE) {
-    upsertChunks.push(newEvents.slice(i, i + UPSERT_CHUNK_SIZE));
-  }
-
-  const upsertPromises = upsertChunks.map(chunk => 
-    supabase
-      .from("events")
-      .upsert(chunk, { onConflict: "url", ignoreDuplicates: true })
-      .select("id")
-  );
-
-  const upsertResults = await Promise.all(upsertPromises);
-  let totalUpserted = 0;
-
-  for (let i = 0; i < upsertResults.length; i++) {
-    const res = upsertResults[i];
-    const chunk = upsertChunks[i];
-
-    if (res.error) {
-      console.error(
-        `[scraper] Chunk upsert failed for chunk ${i}:`,
-        res.error.message,
-      );
-
-      // On chunk failure, retry individual rows to isolate the problematic record
-      console.log(
-        `[scraper] Attempting individual upserts for failed chunk to isolate error...`,
-      );
-      for (const event of chunk) {
-        const { error: singleError } = await supabase
-          .from("events")
-          .upsert([event], { onConflict: "url", ignoreDuplicates: true });
-
-        if (singleError) {
-          console.error(
-            "[scraper] Individual upsert failed for URL:",
-            event.url,
-          );
-          // ... rest of error logging ...
-        } else {
-          totalUpserted++;
-        }
-      }
-    } else {
-      totalUpserted += res.data?.length ?? chunk.length;
-    }
-  }
+  const { upserted_count, merged_count } = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(
-    `[scraper] Finished ingestion in ${elapsed}s. Events upserted: ${totalUpserted}, Stories merged: ${merges.size}`,
+    `[scraper] Finished ingestion in ${elapsed}s. Events upserted: ${upserted_count}, Stories merged: ${merged_count}`,
   );
 }
 

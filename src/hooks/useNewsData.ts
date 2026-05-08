@@ -278,6 +278,12 @@ export function useNewsData({
 
         const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
 
+        // Prevent useless initial fetch on map view before map provides a bounding box
+        if (!bbox && !unmappedOnly && !searchQuery) {
+            setIsLoading(false);
+            return;
+        }
+
         // Performance optimization: Skip fetch if parameters haven't changed.
         // If unmappedOnly is true, we ignore BBox changes entirely.
         const prev = lastFetchParamsRef.current;

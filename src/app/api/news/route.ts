@@ -88,8 +88,16 @@ export async function GET(request: Request) {
   // Search query for text-based filtering
   const searchQuery = searchParams.get("query");
 
-  // Global search overrides bounding box constraints
-  const ignoreBBox = !!searchQuery || unmappedOnly;
+  // Detect if the requested bounding box is essentially the entire globe
+  const isGlobalBBox =
+    hasBBox &&
+    parseFloat(minLat!) <= -89 &&
+    parseFloat(maxLat!) >= 89 &&
+    parseFloat(minLng!) <= -179 &&
+    parseFloat(maxLng!) >= 179;
+
+  // Global search or global view overrides bounding box constraints
+  const ignoreBBox = !!searchQuery || unmappedOnly || isGlobalBBox;
 
   // Zoom level used to determine whether to apply server-side clustering
   const zoomStr = searchParams.get("zoom");
