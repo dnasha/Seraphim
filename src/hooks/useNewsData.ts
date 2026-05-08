@@ -208,6 +208,8 @@ export function useNewsData({
             if (bbox.until) params.append('until', bbox.until);
             if (bbox.query) params.append('query', bbox.query);
         } else {
+            // Global scope for unmapped or search-only queries
+            params.append('scope', 'global');
             const since = computeSince(timeRange, customStartDate);
             const until = computeUntil(timeRange, customEndDate);
             if (since) params.append('since', since);
@@ -275,10 +277,10 @@ export function useNewsData({
 
         const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
 
-        // Performance optimization: If the snapped BBox AND all filters (sort, query, time) 
-        // haven't changed since the LAST FETCH, skip entirely.
+        // Performance optimization: Skip fetch if parameters haven't changed.
+        // If unmappedOnly is true, we ignore BBox changes entirely.
         const prev = lastFetchParamsRef.current;
-        const isSameBBox = (!bbox && !prev?.bbox) || (
+        const isSameBBox = unmappedOnly || (!bbox && !prev?.bbox) || (
             bbox && prev?.bbox &&
             bbox.minLat === prev.bbox.minLat &&
             bbox.maxLat === prev.bbox.maxLat &&
@@ -288,6 +290,7 @@ export function useNewsData({
         );
 
         if (!isRefresh && prev && isSameBBox &&
+            unmappedOnly === prev.unmappedOnly &&
             sortMode === prev.sortMode &&
             searchQuery === prev.query &&
             timeRange === prev.timeRange) {
@@ -310,8 +313,9 @@ export function useNewsData({
         if (unmappedOnly) params.append('unmapped_only', 'true');
         if (sortMode) params.append('sort', sortMode);
         params.append('view', 'map');
-        params.append('scope', 'viewport');
-        if (enrichedBBox) {
+        params.append('scope', unmappedOnly ? 'global' : 'viewport');
+        
+        if (enrichedBBox && !unmappedOnly) {
             params.append('minLat', String(enrichedBBox.minLat));
             params.append('maxLat', String(enrichedBBox.maxLat));
             params.append('minLng', String(enrichedBBox.minLng));
@@ -375,7 +379,8 @@ export function useNewsData({
                 bbox,
                 sortMode,
                 query: searchQuery,
-                timeRange
+                timeRange,
+                unmappedOnly
             };
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
@@ -487,7 +492,7 @@ export function useNewsData({
                 };
 
                 const bbox = lastFetchParamsRef.current?.bbox;
-                const isGlobalSidebarView = !!bbox && bbox.zoom !== undefined && bbox.zoom < CLUSTER_ZOOM_THRESHOLD;
+                const isGlobalSidebarView = unmappedOnly || (!!bbox && bbox.zoom !== undefined && bbox.zoom < CLUSTER_ZOOM_THRESHOLD);
                 if (!isGlobalSidebarView && bbox && !isWithinBBox(newItem, bbox)) return;
 
                 mergeItemsIntoStore([newItem]);

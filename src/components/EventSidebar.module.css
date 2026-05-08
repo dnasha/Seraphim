@@ -354,6 +354,7 @@ Includes card expansion details and responsive mobile layouts.
   border-radius: var(--radius-md);
   cursor: pointer;
   transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     background 0.15s,
     border-color 0.15s,
     box-shadow 0.15s;
@@ -366,7 +367,8 @@ Includes card expansion details and responsive mobile layouts.
 
 .eventCard:hover {
   border-color: var(--card-accent, var(--accent));
-  box-shadow: inset 0 0 0 1px var(--card-accent, var(--accent));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
 }
 
 .eventCardActive {
@@ -524,9 +526,10 @@ Includes card expansion details and responsive mobile layouts.
   transition: max-height 0.2s, opacity 0.2s, margin-top 0.2s;
   text-align: right;
   margin-top: 0;
+  padding-right: 48px; /* Prevent overlap with source count badge (even for 3+ digits) */
 }
 
-.eventCardUnmapped:hover .eventCardExpandHint {
+.eventCard:hover .eventCardExpandHint {
   max-height: 20px;
   opacity: 1;
   margin-top: 4px;
