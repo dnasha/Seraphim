@@ -546,18 +546,62 @@ async function run(): Promise<void> {
     ...data
   }));
 
-  const { data: ingestResult, error: ingestError } = await supabase.rpc('bulk_ingest_events', {
-    p_new_events: newEvents,
-    p_merges: mergePayload
-  });
+  let upserted_count = 0;
+  let merged_count = 0;
 
-  if (ingestError) {
-    console.error('[scraper] Bulk ingestion RPC failed:', ingestError.message);
-    // Fallback to sequential if necessary, but RPC is preferred for performance
-    throw new Error(`Bulk ingestion failed: ${ingestError.message}`);
+  try {
+    const { data: ingestResult, error: ingestError } = await supabase.rpc('bulk_ingest_events', {
+      p_new_events: newEvents,
+      p_merges: mergePayload
+    });
+
+    if (ingestError) {
+      const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
+      
+      if (isTimeout) {
+        console.warn('[scraper] Bulk ingestion RPC timed out. Falling back to sequential ingestion...');
+        
+        // Fallback: Process merges individually
+        for (const merge of mergePayload) {
+          const { error: mErr } = await supabase
+            .from('events')
+            .update(merge as Partial<DbEvent>)
+            .eq('id', merge.id);
+          if (!mErr) {
+            merged_count++;
+          } else {
+            console.error(`[scraper] Individual merge failed for ${merge.id}:`, mErr.message);
+          }
+        }
+
+        // Fallback: Process new events individually
+        for (const event of newEvents) {
+          const { error: iErr } = await supabase
+            .from('events')
+            .insert(event);
+          if (!iErr) {
+            upserted_count++;
+          } else if (!iErr.message.includes('duplicate key')) {
+            console.error(`[scraper] Individual insertion failed for ${event.url}:`, iErr.message);
+          }
+        }
+      } else {
+        console.error('[scraper] Bulk ingestion RPC failed:', ingestError.message);
+        throw new Error(`Bulk ingestion failed: ${ingestError.message}`);
+      }
+    } else {
+      const result = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
+      upserted_count = result.upserted_count;
+      merged_count = result.merged_count;
+    }
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes('timeout') || err.message.includes('canceling statement'))) {
+       // already handled or logged above, but just in case of fetch-level timeout
+       console.error('[scraper] Ingestion network/timeout error:', err.message);
+    } else {
+       throw err;
+    }
   }
-
-  const { upserted_count, merged_count } = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(
