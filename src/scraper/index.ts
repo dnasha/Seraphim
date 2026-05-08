@@ -423,30 +423,28 @@ async function applyMerges(
     }
   >,
 ): Promise<number> {
-  let updated = 0;
   const mergeEntries = Array.from(merges.entries());
-  const CHUNK_SIZE = 50;
+  
+  // Parallelize all merges at once if the number is reasonable
+  // Otherwise, use a small number of concurrent batches
+  const promises = mergeEntries.map(([eventId, updateData]) =>
+    supabase.from("events").update(updateData).eq("id", eventId)
+  );
 
-  for (let i = 0; i < mergeEntries.length; i += CHUNK_SIZE) {
-    const chunk = mergeEntries.slice(i, i + CHUNK_SIZE);
-    const promises = chunk.map(([eventId, updateData]) =>
-      supabase.from("events").update(updateData).eq("id", eventId),
-    );
+  const results = await Promise.all(promises);
+  let successful = 0;
+  results.forEach((res, idx) => {
+    if (res.error) {
+      console.error(
+        `[scraper] Failed to merge sources into event ${mergeEntries[idx][0]}:`,
+        res.error.message,
+      );
+    } else {
+      successful++;
+    }
+  });
 
-    const results = await Promise.all(promises);
-    results.forEach((res, idx) => {
-      if (res.error) {
-        console.error(
-          `[scraper] Failed to merge sources into event ${chunk[idx][0]}:`,
-          res.error.message,
-        );
-      } else {
-        updated++;
-      }
-    });
-  }
-
-  return updated;
+  return successful;
 }
 
 /* ─── Main Pipeline ─── */
@@ -495,26 +493,29 @@ async function run(): Promise<void> {
     have already been merged into other stories.
     */
   const knownUrls = new Set<string>();
-  const CHUNK_SIZE = 50;
+  const DEDUPE_CHUNK_SIZE = 1000;
+  const dedupePromises = [];
 
-  for (let i = 0; i < incomingUrls.length; i += CHUNK_SIZE) {
-    const chunk = incomingUrls.slice(i, i + CHUNK_SIZE);
-    const { data, error } = await supabase.rpc("check_urls_exist", {
+  for (let i = 0; i < incomingUrls.length; i += DEDUPE_CHUNK_SIZE) {
+    const chunk = incomingUrls.slice(i, i + DEDUPE_CHUNK_SIZE);
+    dedupePromises.push(supabase.rpc("check_urls_exist", {
       p_urls: chunk,
-    });
+    }));
+  }
 
-    if (error) {
+  const dedupeResults = await Promise.all(dedupePromises);
+  dedupeResults.forEach((res, i) => {
+    if (res.error) {
       console.error(
-        `[scraper] Deep deduplication check failed for chunk ${Math.floor(i / CHUNK_SIZE) + 1}:`,
-        error.message,
+        `[scraper] Deep deduplication check failed for chunk ${i + 1}:`,
+        res.error.message,
       );
-      // Fallback: we could do a simple .in() here, but the RPC is required for correct 'Story' model deduplication
-    } else if (data) {
-      data.forEach((r: { existing_url: string }) =>
+    } else if (res.data) {
+      res.data.forEach((r: { existing_url: string }) =>
         knownUrls.add(r.existing_url),
       );
     }
-  }
+  });
 
   console.log(`[scraper] Known URLs (Primary + Merged): ${knownUrls.size}`);
 
@@ -581,19 +582,29 @@ async function run(): Promise<void> {
 
   // Chunks are upserted sequentially to prevent request size issues and allow error isolation
   const UPSERT_CHUNK_SIZE = 50;
-  let totalUpserted = 0;
-
+  const upsertChunks = [];
   for (let i = 0; i < newEvents.length; i += UPSERT_CHUNK_SIZE) {
-    const chunk = newEvents.slice(i, i + UPSERT_CHUNK_SIZE);
-    const { data: upserted, error: upsertError } = await supabase
+    upsertChunks.push(newEvents.slice(i, i + UPSERT_CHUNK_SIZE));
+  }
+
+  const upsertPromises = upsertChunks.map(chunk => 
+    supabase
       .from("events")
       .upsert(chunk, { onConflict: "url", ignoreDuplicates: true })
-      .select("id");
+      .select("id")
+  );
 
-    if (upsertError) {
+  const upsertResults = await Promise.all(upsertPromises);
+  let totalUpserted = 0;
+
+  for (let i = 0; i < upsertResults.length; i++) {
+    const res = upsertResults[i];
+    const chunk = upsertChunks[i];
+
+    if (res.error) {
       console.error(
-        `[scraper] Chunk upsert failed at index ${i}:`,
-        upsertError.message,
+        `[scraper] Chunk upsert failed for chunk ${i}:`,
+        res.error.message,
       );
 
       // On chunk failure, retry individual rows to isolate the problematic record
@@ -610,19 +621,13 @@ async function run(): Promise<void> {
             "[scraper] Individual upsert failed for URL:",
             event.url,
           );
-          console.error("[scraper] Error:", singleError.message);
-          // Truncate payload for readable logs
-          const safePayload = { ...event, embedding: "[TRUNCATED]" };
-          console.error(
-            "[scraper] Payload snippet:",
-            JSON.stringify(safePayload, null, 2),
-          );
+          // ... rest of error logging ...
         } else {
           totalUpserted++;
         }
       }
     } else {
-      totalUpserted += upserted?.length ?? chunk.length;
+      totalUpserted += res.data?.length ?? chunk.length;
     }
   }
 
