@@ -14,10 +14,15 @@ const SOURCE_TIER_MAP = new Map<string, number>();
 Removes incomplete surrogate pairs and sanitizes HTML content.
 Prevents database insertion errors and XSS vulnerabilities.
 */
-export function cleanString(str: string | undefined | null): string {
-    if (!str) return '';
+export function cleanString(str: unknown): string {
+    let s = '';
+    if (str === null || str === undefined) s = '';
+    else if (typeof str === 'string') s = str;
+    else {
+        try { s = String(str); } catch { s = ''; }
+    }
     // Removes standalone surrogates (D800-DFFF) while keeping valid pairs
-    const cleaned = str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+    const cleaned = s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
     // Sanitize HTML to prevent XSS
     return DOMPurify.sanitize(cleaned);
 }

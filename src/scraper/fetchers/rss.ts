@@ -9,6 +9,7 @@ import { NewsItem } from '@/lib/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '../utils/date';
 
+// Global parser with robust browser-like headers
 const parser = new Parser({
     timeout: 15000,
     headers: {
@@ -20,18 +21,22 @@ const parser = new Parser({
     },
 });
 
+const DEFAULT_UA = 'Seraphim/1.0 (news aggregator)';
+
 /* Fetches and parses a Reddit subreddit RSS feed */
 export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]> {
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
             headers: {
-                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'User-Agent': DEFAULT_UA,
                 'Accept': 'application/rss+xml, application/xml, text/xml',
             },
             signal: AbortSignal.timeout(15000),
         });
+        
         if (!res.ok) throw new Error(`Status code ${res.status}`);
+
         const text = await res.text();
         const feed = await parser.parseString(text);
 
@@ -48,7 +53,7 @@ export async function fetchRedditFeed(source: RedditSource): Promise<NewsItem[]>
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
     } catch (error) {
-        console.error(`reddit fetch failed for ${source.name}:`, error);
+        console.error(`reddit fetch failed for ${source.name}:`, error instanceof Error ? error.message : error);
         return [];
     }
 }
@@ -102,7 +107,7 @@ export async function fetchSingleFeed(source: RSSSource): Promise<NewsItem[]> {
     try {
         const res = await fetch(source.url, {
             headers: {
-                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'User-Agent': DEFAULT_UA,
                 'Accept': 'application/rss+xml, application/xml, text/xml',
             },
             signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
@@ -151,4 +156,3 @@ export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 }
-

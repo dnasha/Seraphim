@@ -9,6 +9,7 @@
     "lint": "eslint",
     "scrape": "bun run src/scraper/index.ts",
     "test-scraper": "bun run scripts/test-scraper.ts",
+    "test:sources": "bun run scripts/test-fetchers.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:accuracy": "vitest run scripts/tests/geocoding-accuracy.test.ts"

@@ -24,7 +24,7 @@ Pipeline:
 
 import { createClient } from "@supabase/supabase-js";
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "./fetchers/rss";
-import { fetchGNews, fetchOSINTGNews } from "./fetchers/gnews";
+import { fetchGNews } from "./fetchers/gnews";
 import { fetchSocialFeeds } from "./fetchers/social-feeds";
 import { enrichItemsWithLocation } from "./fetchers/geocoding";
 import type { NewsItem } from "@/lib/types";
@@ -459,27 +459,25 @@ async function run(): Promise<void> {
 
   // Step 1: Fetch raw items from all configured sources
   console.log("[scraper] Fetching raw items from all sources...");
-  const [rssItems, redditItems, gnewsItems, osintItems, socialItems] =
+  const [rssItems, redditItems, gnewsItems, socialItems] =
     (await Promise.allSettled([
       fetchAllRSSFeeds(),
       fetchAllRedditFeeds(),
       fetchGNews("general", 20),
-      fetchOSINTGNews(),
       fetchSocialFeeds(),
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
-    )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[], NewsItem[]];
+    )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[]];
 
   const rawItems: NewsItem[] = [
     ...rssItems,
     ...redditItems,
     ...gnewsItems,
-    ...osintItems,
     ...socialItems,
   ];
 
   console.log(
-    `[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length + osintItems.length}, social=${socialItems.length})`,
+    `[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length}, social=${socialItems.length})`,
   );
 
   // Validate that items have URLs as they are required for the conflict key

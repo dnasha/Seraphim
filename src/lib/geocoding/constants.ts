@@ -258,7 +258,7 @@ export const FALSE_POSITIVES = new Set([
     'uss indianapolis', 'uss carney', 'uss gerald r ford', 'uss eisenhower',
     'hms diamond', 'hms queen elizabeth', 'hms prince of wales',
     'man', 'king', 'buy', 'poll', 'powell', 'blackrock', 'pentagon',
-    'nako', 'victoria', 'usa', 'real', 'charlotte', 'murphy', 'bar', 'ray', 'chamber',
+    'nako', 'victoria', 'usa', 'real', 'charlotte', 'murphy', 'bar', 'ray', 'chamber', 'valverde',
     // common English words / person names matching obscure cities
     'can', 'meta', 'sam', 'post', 'battle', 'eagle', 'enterprise',
     'nigel', 'kim', 'pacific', 'aung san', 'golders green',
