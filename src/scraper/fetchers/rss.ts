@@ -13,7 +13,6 @@ import { ensureIsoDate } from '../utils/date';
 const RSS_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-    'Referer': 'https://www.google.com/',
     'Accept-Language': 'en-US,en;q=0.9',
 };
 
@@ -23,7 +22,7 @@ const REDDIT_HEADERS = {
     'Accept': 'application/rss+xml, application/xml, text/xml',
 };
 
-const FEED_TIMEOUT_MS = 7000;
+const FEED_TIMEOUT_MS = 15000;
 
 // Global parser with robust browser-like headers
 const parser = new Parser({
