@@ -7,8 +7,11 @@ FilterBar component provides interface for filtering news by source, category, a
 import { useState } from 'react';
 import styles from './FilterBar.module.css';
 
+import { BRAND_COLORS } from '@/lib/colors';
+
 // Category colors (pending extraction to shared lib/colors)
 const CATEGORY_COLORS: Record<string, string> = {
+    all: BRAND_COLORS.indigo,
     general: '#3b82f6',
     world: '#dc2626',
     crisis: '#b91c1c',
@@ -21,6 +24,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // svg path data matching the map pin icons exactly
 const CATEGORY_ICONS: Record<string, string> = {
+    all: 'M22,9.81a1,1,0,0,0-.83-.69l-5.7-.78L12.88,3.53a1,1,0,0,0-1.76,0L8.57,8.34l-5.7.78a1,1,0,0,0-.82.69,1,1,0,0,0,.28,1l4.09,3.73-1,5.24A1,1,0,0,0,6.88,20.9L12,18.38l5.12,2.52a1,1,0,0,0,.44.1,1,1,0,0,0,1-1.18l-1-5.24,4.09-3.73A1,1,0,0,0,22,9.81Z',
     general: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
     world: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
     crisis: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
@@ -56,11 +60,11 @@ const categoryOptions = [
 ];
 
 const sourceOptions = [
-    { value: 'news', label: 'News', bg: '#3b82f6', color: '#ffffff' },
+    { value: 'news', label: 'News', bg: BRAND_COLORS.indigo, color: '#ffffff' },
     { value: 'reddit', label: 'Reddit', bg: '#ff4500', color: '#ffffff' },
     { value: 'x', label: 'X', bg: '#0f1419', color: '#ffffff' },
     { value: 'telegram', label: 'Telegram', bg: '#0088cc', color: '#ffffff' },
-    { value: 'extra', label: 'Bonus', bg: '#d946ef', color: '#ffffff' },
+    { value: 'extra', label: 'Gnews', bg: '#065f46', color: '#ffffff' },
 ];
 
 const timeOptions = [
@@ -70,6 +74,61 @@ const timeOptions = [
     { value: '1m', label: '1 Month' },
     { value: 'custom', label: 'Custom' },
 ];
+
+const renderSourceIcon = (sourceValue: string) => {
+  const name = sourceValue.toLowerCase();
+
+  if (name === "news") {
+    return (
+      <svg className={styles.sourceIcon} viewBox="0 0 52 46" fill="currentColor">
+        <path d="M50.5,6h-41C8.7,6,8,6.7,8,7.5V38c0,1.2-1.1,2.2-2.3,2c-1-0.2-1.7-1.1-1.7-2.1V16c0-0.6-0.4-1-1-1H1.5
+	C0.7,15,0,15.7,0,16.5V42c0,2.2,1.8,4,4,4h4h40c2.2,0,4-1.8,4-4V7.5C52,6.7,51.3,6,50.5,6z M28,35c0,0.6-0.4,1-1,1H15
+	c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h12c0.6,0,1,0.4,1,1V35z M28,27c0,0.6-0.4,1-1,1H15c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h12
+	c0.6,0,1,0.4,1,1V27z M46,35c0,0.6-0.4,1-1,1H33c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h12c0.6,0,1,0.4,1,1V35z M46,27
+	c0,0.6-0.4,1-1,1H33c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h12c0.6,0,1,0.4,1,1V27z M46,19c0,0.6-0.4,1-1,1H15c-0.6,0-1-0.4-1-1v-6
+	c0-0.6,0.4-1,1-1h30c0.6,0,1,0.4,1,1V19z"/>
+      </svg>
+    );
+  }
+
+  if (name === "reddit") {
+    return (
+      <svg className={styles.sourceIcon} viewBox="0 0 100 100" fill="currentColor">
+        <path d="M94.762,48.994c0-5.688-4.63-10.314-10.315-10.314c-2.463,0-4.767,0.901-6.626,2.477c-0.06,0.037-0.122,0.072-0.181,0.11
+		c-6.707-4.291-15.601-7.031-25.439-7.403l5.872-16.698l14.656,3.504c0.012,4.633,3.781,8.4,8.42,8.4
+		c4.642,0,8.422-3.777,8.422-8.421c0-4.646-3.78-8.423-8.422-8.423c-3.529,0-6.544,2.182-7.794,5.26l-17.364-4.15l-7.211,20.49
+		c-10.259,0.193-19.556,2.969-26.513,7.404c-1.873-1.625-4.21-2.551-6.718-2.551c-5.687,0-10.31,4.627-10.31,10.314
+		c0,3.518,1.815,6.768,4.756,8.66c-0.179,1.025-0.293,2.064-0.293,3.123c0,14.886,18.043,26.997,40.219,26.997
+		c22.18,0,40.224-12.111,40.224-26.997c0-1.027-0.103-2.037-0.272-3.035C92.893,55.863,94.762,52.566,94.762,48.994z M63.598,62.347
+		c-3.5,0-6.334-2.834-6.334-6.338c0-3.498,2.834-6.334,6.334-6.334c3.5,0,6.339,2.836,6.339,6.334
+		C69.937,59.513,67.097,62.347,63.598,62.347z M64.859,73.153c-0.19,0.194-4.733,4.821-15.009,4.821
+		c-10.333,0-14.463-4.689-14.636-4.891c-0.579-0.677-0.5-1.703,0.178-2.283c0.677-0.575,1.692-0.501,2.278,0.166
+		c0.092,0.104,3.54,3.771,12.18,3.771c8.784,0,12.639-3.798,12.68-3.835c0.62-0.636,1.646-0.648,2.284-0.027
+		C65.451,71.494,65.474,72.506,64.859,73.153z M30.809,56.009c0-3.498,2.833-6.334,6.339-6.334c3.494,0,6.334,2.836,6.334,6.334
+		c0,3.504-2.84,6.338-6.334,6.338C33.643,62.347,30.809,59.513,30.809,56.009z"/>
+      </svg>
+    );
+  }
+
+  if (name === "telegram") {
+    return (
+      <svg className={styles.sourceIcon} viewBox="0 0 48 48" fill="currentColor">
+        <path d="M41.4193 7.30899C41.4193 7.30899 45.3046 5.79399 44.9808 9.47328C44.8729 10.9883 43.9016 16.2908 43.1461 22.0262L40.5559 39.0159C40.5559 39.0159 40.3401 41.5048 38.3974 41.9377C36.4547 42.3705 33.5408 40.4227 33.0011 39.9898C32.5694 39.6652 24.9068 34.7955 22.2086 32.4148C21.4531 31.7655 20.5897 30.4669 22.3165 28.9519L33.6487 18.1305C34.9438 16.8319 36.2389 13.8019 30.8426 17.4812L15.7331 27.7616C15.7331 27.7616 14.0063 28.8437 10.7686 27.8698L3.75342 25.7055C3.75342 25.7055 1.16321 24.0823 5.58815 22.459C16.3807 17.3729 29.6555 12.1786 41.4193 7.30899Z" />
+      </svg>
+    );
+  }
+
+  if (name === "x") {
+    return <span className={styles.sourceIconX}>𝕏</span>;
+  }
+
+  // Default (Bonus star)
+  return (
+    <svg className={styles.sourceIcon} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M22,9.81a1,1,0,0,0-.83-.69l-5.7-.78L12.88,3.53a1,1,0,0,0-1.76,0L8.57,8.34l-5.7.78a1,1,0,0,0-.82.69,1,1,0,0,0,.28,1l4.09,3.73-1,5.24A1,1,0,0,0,6.88,20.9L12,18.38l5.12,2.52a1,1,0,0,0,.44.1,1,1,0,0,0,1-1.18l-1-5.24,4.09-3.73A1,1,0,0,0,22,9.81Z" />
+    </svg>
+  );
+};
 
 export default function FilterBar({
     sources,
@@ -143,14 +202,10 @@ export default function FilterBar({
             onCategoriesChange([...withoutAll, category]);
         }
     };
-
     return (
         <div className={styles.filterBar}>
             <div className={styles.scrollableFilters}>
                 <div className={styles.filterSection}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className={styles.filterLabel}>Time</label>
-                    </div>
                     <div className={styles.timeFilterContainer}>
                         <div className={styles.scrollWrapper}>
                             <div className={styles.sourceToggles}>
@@ -236,7 +291,6 @@ export default function FilterBar({
                 </div>
 
                 <div className={styles.filterSection}>
-                    <label className={styles.filterLabel}>Sources</label>
                     <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {sourceOptions.map((option) => {
@@ -252,6 +306,7 @@ export default function FilterBar({
                                             color: isActive ? option.color : undefined,
                                         }}
                                     >
+                                        {renderSourceIcon(option.value)}
                                         {option.label}
                                     </button>
                                 );
@@ -261,7 +316,6 @@ export default function FilterBar({
                 </div>
 
                 <div className={styles.filterSection}>
-                    <label className={styles.filterLabel}>Categories</label>
                     <div className={styles.scrollWrapper}>
                         <div className={styles.categoryToggles}>
                             {categoryOptions.map((cat) => {

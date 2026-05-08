@@ -12,7 +12,6 @@ import { Redis } from "@upstash/redis";
 import { NewsItem, NewsResponse } from "@/lib/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
 import {
-  latestReportTimestamp,
   normalizeSortMode,
   sortNewsItems,
 } from "@/lib/ranking";
@@ -46,7 +45,7 @@ function performL1Cleanup() {
 
 // Server-side cache for news items to reduce database load
 // Key format: "events" or "bbox:{coords}[,cluster][,z:{zoom}][,s:{since}][,u:{until}][,q:{query}]"
-const sourceCache = new Map<string, { data: NewsItem[]; timestamp: number }>();
+const sourceCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
 
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
@@ -57,7 +56,6 @@ const RAW_LIMIT = 2000;
 // Fields selected for list view. Description is excluded and fetched per-item.
 const LIST_SELECT =
   "id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count";
-const LIST_SELECT_WITH_SOURCES = `${LIST_SELECT}, sources`;
 
 export async function GET(request: Request) {
   const now = Date.now();
@@ -103,8 +101,6 @@ export async function GET(request: Request) {
     : RAW_LIMIT;
   const sinceStr = searchParams.get("since");
   const untilStr = searchParams.get("until");
-  const sinceMs = sinceStr ? new Date(sinceStr).getTime() : null;
-  const untilMs = untilStr ? new Date(untilStr).getTime() : null;
   const effectiveLimit = limit;
 
   // Enable server-side clustering only at very low zoom levels to preserve performance.
@@ -165,6 +161,7 @@ export async function GET(request: Request) {
     }
 
     let allItems: NewsItem[];
+    let queryCapped = false;
     const cached = sourceCache.get(cacheKey);
 
     if (
@@ -174,6 +171,7 @@ export async function GET(request: Request) {
       now - cached.timestamp < cacheTtlMs
     ) {
       allItems = cached.data;
+      queryCapped = cached.isCapped;
     } else {
       let rows, error;
 
@@ -206,7 +204,7 @@ export async function GET(request: Request) {
         error = res.error;
       } else {
         // Standard query for unmapped-only view (items without coordinates)
-        let query = supabase.from("events").select(LIST_SELECT_WITH_SOURCES);
+        let query = supabase.from("events").select(LIST_SELECT);
 
         if (sort === "hot") {
           query = query
@@ -232,9 +230,29 @@ export async function GET(request: Request) {
           );
         }
 
+        if (hasBBox && !unmappedOnly) {
+          const latMin = parseFloat(minLat!) - EPSILON;
+          const latMax = parseFloat(maxLat!) + EPSILON;
+          const lngMin = parseFloat(minLng!) - EPSILON;
+          const lngMax = parseFloat(maxLng!) + EPSILON;
+
+          query = query.gte("latitude", latMin).lte("latitude", latMax);
+
+          if (lngMin <= lngMax) {
+            query = query.gte("longitude", lngMin).lte("longitude", lngMax);
+          } else {
+            // Handle International Date Line wrap
+            query = query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
+          }
+        }
+
         const res = await query;
         rows = res.data;
         error = res.error;
+      }
+
+      if (rows && rows.length >= 1990) {
+        queryCapped = true;
       }
 
       if (error) {
@@ -260,6 +278,7 @@ export async function GET(request: Request) {
                   scope: scopeMode,
                   clustered: useServerClustering,
                   zoomBucket: zoom !== null ? Math.floor(zoom) : null,
+                  isCapped: stale.isCapped,
                 },
                 sources: { gnews: true, rss: true, social: true },
               },
@@ -314,34 +333,8 @@ export async function GET(request: Request) {
         return item;
       });
 
-      // Apply time-window semantics against latest source activity, not only story publish time.
-      const hasSince = Number.isFinite(sinceMs);
-      const hasUntil = Number.isFinite(untilMs);
-      if (hasSince || hasUntil) {
-        allItems = allItems.filter((item) => {
-          const ts = latestReportTimestamp(item);
-          if (!Number.isFinite(ts) || ts <= 0) return false;
-          if (hasSince && ts < (sinceMs as number)) return false;
-          if (hasUntil && ts > (untilMs as number)) return false;
-          return true;
-        });
-      }
-
-      // Keep list payload lean while preserving latest-activity semantics for client filters/sorting.
-      allItems = allItems.map((item) => {
-        const ts = latestReportTimestamp(item);
-        return {
-          ...item,
-          latestActivityAt:
-            Number.isFinite(ts) && ts > 0
-              ? new Date(ts).toISOString()
-              : item.publishedAt,
-          sources: undefined,
-        };
-      });
-
-      // RPC results are already sorted and limited, but standard query might not be perfectly aligned.
       // We skip redundant sorting for RPC to minimize Vercel processing.
+      // We no longer calculate latestReportTimestamp in JS as published_at is now synced.
       if (!useServerClustering) {
         allItems = sortNewsItems(allItems, sort);
         if (effectiveLimit < allItems.length) {
@@ -350,7 +343,7 @@ export async function GET(request: Request) {
       }
 
       if (canUseCache) {
-        sourceCache.set(cacheKey, { data: allItems, timestamp: now });
+        sourceCache.set(cacheKey, { data: allItems, isCapped: queryCapped, timestamp: now });
       }
     }
 
@@ -363,7 +356,7 @@ export async function GET(request: Request) {
         scope: scopeMode,
         clustered: useServerClustering,
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
-        isCapped: allItems.length >= RAW_LIMIT,
+        isCapped: queryCapped,
       },
       sources: {
         gnews: true,

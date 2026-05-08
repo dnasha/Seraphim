@@ -34,19 +34,30 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
 
+  /* Fonts */
+  --font-logo: var(--font-space-grotesk);
+  --font-ui: var(--font-inter);
+  --font-news: var(--font-merriweather);
+
   /* Design Tokens - Light Mode */
   --source-gnews: #e65100;
   --source-rss: #0066cc;
 
+  /* Radius Tokens */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
   /* Main Colors */
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-active: #4f46e5;
   --surface: #ffffff;
   --surface-alt: #f3f4f6;
   --border: #e5e7eb;
   --text-primary: #000000;
   --text-secondary: #000000;
-  --text-muted: #1f2937;
+  --text-muted: #64748b; /* Muted slate gray */
   --red: #ef4444;
   --green: #22c55e;
   --sidebar-width: 400px;
@@ -57,14 +68,15 @@ body {
   color: #e5e7eb;
 
   /* Design Tokens - Dark Mode Overrides */
-  --accent: #60a5fa;
-  --accent-hover: #3b82f6;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-active: #4f46e5;
   --surface: #1a1d27;
   --surface-alt: #22252f;
   --border: #2e3140;
   --text-primary: #ffffff;
   --text-secondary: #ffffff;
-  --text-muted: #e5e7eb;
+  --text-muted: #94a3b8;
 }
 
 a {

@@ -7,9 +7,8 @@
 import type { Metadata, Viewport } from "next";
 import {
   Inter,
-  Playfair_Display,
-  Cinzel,
-  Cinzel_Decorative,
+  Space_Grotesk,
+  Merriweather,
 } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
@@ -26,25 +25,18 @@ const inter = Inter({
   display: "swap",
 });
 
-const playfair = Playfair_Display({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["700"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+});
+
+const merriweather = Merriweather({
+  subsets: ["latin"],
+  weight: ["300", "400", "700", "900"],
   style: ["normal", "italic"],
-  variable: "--font-playfair",
-  display: "swap",
-});
-
-const cinzel = Cinzel({
-  subsets: ["latin"],
-  weight: ["700"],
-  variable: "--font-cinzel",
-  display: "swap",
-});
-
-const cinzelDecorative = Cinzel_Decorative({
-  subsets: ["latin"],
-  weight: ["700"],
-  variable: "--font-cinzel-decorative",
+  variable: "--font-merriweather",
   display: "swap",
 });
 
@@ -107,7 +99,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfair.variable} ${cinzel.variable} ${cinzelDecorative.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${merriweather.variable}`}
     >
       <body suppressHydrationWarning>
         <Providers>

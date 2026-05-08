@@ -16,7 +16,7 @@ along with the custom date picker interface.
   padding: 4px 12px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 @media (max-width: 860px) {
@@ -24,7 +24,7 @@ along with the custom date picker interface.
     max-height: 115px;
     overflow-y: auto;
     padding: 2px 10px 6px 10px;
-    gap: 4px;
+    gap: 6px;
   }
 }
 
@@ -35,10 +35,11 @@ along with the custom date picker interface.
 }
 
 .filterLabel {
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-family: var(--font-ui);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   color: var(--text-muted);
 }
 
@@ -63,7 +64,7 @@ along with the custom date picker interface.
   padding: 8px 10px 8px 30px;
   font-size: 0.875rem;
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   transition: border-color 0.15s;
 }
@@ -131,29 +132,67 @@ along with the custom date picker interface.
 .sourceToggle,
 .categoryToggle,
 .timeToggle {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  height: 28px;
-  padding: 0 12px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s;
-  color: var(--text-secondary);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-/* Hover state removed to prevent sticky camouflage on mobile */
+.sourceIcon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.sourceIconX {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sourceToggle:hover,
+.categoryToggle:hover,
+.timeToggle:hover {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+}
+
+.sourceToggle:active,
+.categoryToggle:active,
+.timeToggle:active {
+  transform: scale(0.96);
+  border-color: var(--accent-active);
+}
 
 .sourceToggleActive,
 .timeToggleActive {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+.sourceToggleActive:hover,
+.timeToggleActive:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.sourceToggleActive:active,
+.timeToggleActive:active {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
 }
 
 .categoryToggleActive {
@@ -235,7 +274,7 @@ along with the custom date picker interface.
   background: var(--surface-alt);
   border: 1px solid var(--border);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
   animation: slideDown 0.2s ease-out;
   min-width: 280px;
@@ -253,7 +292,7 @@ along with the custom date picker interface.
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: all 0.15s;
 }
 
@@ -300,7 +339,7 @@ along with the custom date picker interface.
   outline: none;
   cursor: pointer;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   width: 100%;
 }
 
@@ -344,13 +383,20 @@ along with the custom date picker interface.
   border: 1px solid var(--border);
   padding: 4px 10px;
   font-size: 0.7rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-secondary);
   transition: all 0.15s;
 }
 
 .resetBtn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.resetBtn:active {
+  transform: scale(0.95);
+  border-color: var(--accent-active);
   background: var(--surface-alt);
-  border-color: var(--text-muted);
 }

@@ -14,7 +14,7 @@
   position: relative;
   width: 38px;
   height: 38px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-primary);
@@ -56,7 +56,7 @@
   width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
   padding: 14px;
   display: flex;

@@ -3,6 +3,12 @@ Category and source-specific styling constants and utilities.
 Provides color mapping for map pins and UI badges based on news categories and sources.
 */
 
+export const BRAND_COLORS = {
+    indigo: '#6366f1',
+    indigoHover: '#818cf8',
+    indigoActive: '#4f46e5',
+};
+
 export const CATEGORY_COLORS: Record<string, string> = {
     general: '#3b82f6',
     world: '#dc2626',

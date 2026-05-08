@@ -56,11 +56,15 @@ Includes card expansion details and responsive mobile layouts.
   opacity: 0.8;
 }
 
+.logoLink:active {
+  transform: scale(0.98);
+}
+
 .logoLink h1 {
-  font-family: var(--font-cinzel-decorative), cursive;
-  font-size: 1.85rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  font-family: var(--font-logo);
+  font-size: 2.125rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
   color: var(--text-primary);
   text-transform: uppercase;
   margin-left: 12px;
@@ -112,10 +116,11 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .statsSearchInput {
+  font-family: var(--font-ui);
   width: 100%;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 10px 8px 32px;
   font-size: 0.875rem;
   color: var(--text-primary);
@@ -134,16 +139,14 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .statPill {
+  font-family: var(--font-ui);
   font-size: 0.75rem;
-  font-weight: 700;
-  height: 28px;
-  padding: 0 12px;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  border-radius: 6px;
-  background: var(--surface-alt);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .statPillGeo {
@@ -157,17 +160,14 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .lastUpdated {
+  font-family: var(--font-ui);
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
-  background-color: var(--surface-alt);
-  height: 28px;
-  padding: 0 10px;
   display: flex;
   align-items: center;
-  border-radius: 6px;
   text-transform: uppercase;
-  border: 1px solid var(--border);
+  letter-spacing: 0.05em;
 }
 
 .liveStatusWrapper {
@@ -180,10 +180,10 @@ Includes card expansion details and responsive mobile layouts.
 .pulseDot {
   width: 10px;
   height: 10px;
-  background-color: var(--green);
+  background-color: var(--accent);
   border-radius: 50%;
   position: relative;
-  box-shadow: 0 0 0 rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 0 rgba(99, 102, 241, 0.4);
   animation: pulse 2s infinite;
   flex-shrink: 0;
 }
@@ -191,15 +191,15 @@ Includes card expansion details and responsive mobile layouts.
 @keyframes pulse {
   0% {
     transform: scale(0.9);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
   }
   70% {
     transform: scale(1.1);
-    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
   }
   100% {
     transform: scale(0.9);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
   }
 }
 
@@ -207,7 +207,7 @@ Includes card expansion details and responsive mobile layouts.
 .sidebarToggleBtn {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   width: 38px;
   height: 38px;
   display: flex;
@@ -221,6 +221,13 @@ Includes card expansion details and responsive mobile layouts.
 .sidebarToggleBtn:hover {
   background: var(--surface-alt);
   color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.sidebarToggleBtn:active {
+  background: var(--surface-alt);
+  transform: scale(0.95);
+  border-color: var(--accent-active);
 }
 
 .sidebarCollapseBtn {
@@ -344,7 +351,7 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     background 0.15s,
@@ -376,7 +383,7 @@ Includes card expansion details and responsive mobile layouts.
   top: 0;
   bottom: 0;
   width: 4px;
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
 /* main row: thumbnail + body side by side */
@@ -392,7 +399,7 @@ Includes card expansion details and responsive mobile layouts.
   width: 88px;
   height: 66px;
   min-width: 88px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface-alt);
   flex-shrink: 0;
@@ -441,9 +448,10 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardTitle {
-  font-size: 0.9375rem;
+  font-family: var(--font-news);
+  font-size: 1rem; /* 16px */
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.25;
   color: var(--text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -453,7 +461,7 @@ Includes card expansion details and responsive mobile layouts.
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
-  padding-right: 14px; /* Slightly reduced padding as dot moved closer to corner */
+  padding-right: 14px;
 }
 
 .eventCardExpanded .eventCardTitle {
@@ -473,23 +481,29 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardSource {
+  font-family: var(--font-ui);
   font-style: normal;
-  font-weight: 600;
-  font-size: 0.75rem;
+  font-weight: 500;
+  font-size: 0.75rem; /* 12px */
   color: #fff;
   padding: 1px 7px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
 
 .eventCardTime {
+  font-family: var(--font-ui);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
   color: var(--text-muted);
 }
 
 .eventCardLocation {
-  font-size: 0.75rem;
-  color: var(--green);
+  font-family: var(--font-ui);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
+  color: var(--accent);
   display: inline;
 }
 
@@ -528,7 +542,7 @@ Includes card expansion details and responsive mobile layouts.
 .eventCardDetailImg {
   width: 100%;
   max-height: 180px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   margin-bottom: 8px;
   background: var(--surface-alt);
@@ -542,9 +556,10 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardDetailDesc {
-  font-size: 0.875rem;
+  font-family: var(--font-news);
+  font-size: 0.875rem; /* 14px */
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
   margin: 0 0 8px;
 }
 
@@ -605,11 +620,12 @@ Includes card expansion details and responsive mobile layouts.
 
 /* Load More Button */
 .loadMoreButton {
+  font-family: var(--font-ui);
   margin: 12px auto;
   padding: 8px 16px;
   background: var(--surface-alt);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -622,8 +638,15 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .loadMoreButton:hover:not(:disabled) {
-  background: var(--border);
-  border-color: var(--text-muted);
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.loadMoreButton:active:not(:disabled) {
+  background: var(--surface-alt);
+  border-color: var(--accent-active);
+  transform: scale(0.98);
 }
 
 .loadMoreButton:disabled {
@@ -719,6 +742,7 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sortToggleBtn {
+  font-family: var(--font-ui);
   flex: 1;
   display: flex;
   align-items: center;
@@ -735,17 +759,24 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sortToggleBtn:first-child {
-  border-radius: 4px 0 0 4px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   border-right: none;
 }
 
 .sortToggleBtn:last-child {
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .sortToggleBtn:hover:not(.sortToggleBtnActive) {
   background: var(--surface-alt);
   color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.sortToggleBtn:active {
+  background: var(--accent-active);
+  color: #fff;
+  transform: scale(0.98);
 }
 
 .sortToggleBtnActive {
@@ -796,25 +827,24 @@ Includes card expansion details and responsive mobile layouts.
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  padding: 0 10px;
-  border-radius: 12px;
-  white-space: nowrap;
-  background: var(--surface-alt);
-  color: var(--text-secondary);
-  border: 1.5px solid var(--border);
-  height: 24px;
-  min-width: 24px;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
   cursor: help;
   transition: all 0.15s;
   line-height: 1;
 }
 
+.sourceCountBadgeCorner {
+  position: absolute;
+  bottom: 1px;
+  right: 0px;
+  z-index: 5;
+}
+
 .sourceCountBadge:hover {
-  background: var(--surface-hover);
-  border-color: var(--text-muted);
+  color: var(--accent);
 }
 
 .sourceCountBadge svg {
@@ -840,11 +870,12 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .storyTimelineTitle {
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-family: var(--font-ui);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
 }
 
 .timelineList {
@@ -900,10 +931,12 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .timelineEntrySource {
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   font-weight: 600;
+  color: #fff;
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   display: inline-block;
 }
@@ -943,7 +976,7 @@ Includes card expansion details and responsive mobile layouts.
   margin-top: 4px;
   background: none;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 600;

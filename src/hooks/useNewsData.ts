@@ -243,7 +243,9 @@ export function useNewsData({
                 const cachedDetail = detailCache.current.get(cacheKey);
                 return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
-            const isCapped = data.meta?.isCapped || hydrated.length >= 1990; 
+            const apiCapped = data.meta?.isCapped || false;
+            const totalStories = hydrated.reduce((acc, item) => acc + (item.storyCount || 1), 0);
+            const isCapped = apiCapped || hydrated.length >= 1990 || totalStories >= 1990;
             responseCache.set(requestKey, { data: hydrated, isCapped, timestamp: Date.now() });
             return { items: hydrated, isCapped };
         })();

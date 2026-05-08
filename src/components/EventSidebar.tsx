@@ -447,46 +447,42 @@ export default function EventSidebar({
                     </svg>
                   </span>
 
-                  {/* Source count pill */}
-                  {sourceCount > 1 && (
-                    <span
-                      className={styles.sourceCountBadge}
-                      title={`${sourceCount} sources reporting on this`}
-                    >
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
-                      </svg>
-                      {sourceCount}
-                    </span>
-                  )}
-
                   <span className={styles.eventCardTime}>{timeAgo}</span>
                   {item.locationName && (
-                    <>
-                      <span className={styles.eventCardLocation}>
-                        <svg
-                          className={styles.locationIconSvg}
-                          viewBox="0 0 24 24"
-                          width="12"
-                          height="12"
-                          fill="currentColor"
-                          style={{
-                            display: "inline-block",
-                            verticalAlign: "middle",
-                            marginRight: "2px",
-                            marginTop: "-2px",
-                          }}
-                        >
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                        </svg>
-                        {item.locationName}
-                      </span>
-                    </>
+                    <span className={styles.eventCardLocation}>
+                      <svg
+                        className={styles.locationIconSvg}
+                        viewBox="0 0 24 24"
+                        width="12"
+                        height="12"
+                        fill="currentColor"
+                        style={{
+                          display: "inline-block",
+                          verticalAlign: "middle",
+                          marginRight: "2px",
+                          marginTop: "-2px",
+                        }}
+                      >
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                      </svg>
+                      {item.locationName}
+                    </span>
                   )}
                 </div>
                 {!isExpanded && (
                   <span className={styles.eventCardExpandHint}>
                     Click to expand
+                  </span>
+                )}
+                {sourceCount > 1 && (
+                  <span
+                    className={`${styles.sourceCountBadge} ${styles.sourceCountBadgeCorner}`}
+                    title={`${sourceCount} sources reporting on this`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
+                    </svg>
+                    {sourceCount}
                   </span>
                 )}
                 {isTop3 && (
@@ -752,8 +748,10 @@ export default function EventSidebar({
             </div>
           )}
           <span className={styles.statPill}>
-            {totalStoryCount.toLocaleString()}
-            {isCapped ? "+" : ""} stories
+            {isCapped && totalStoryCount >= 1990 && totalStoryCount < 2000
+              ? "2,000"
+              : totalStoryCount.toLocaleString()}
+            {isCapped ? "+" : ""} stories found
           </span>
         </div>
 
