@@ -107,8 +107,9 @@ export async function GET(request: Request) {
   const untilMs = untilStr ? new Date(untilStr).getTime() : null;
   const effectiveLimit = limit;
 
-  // Enable server-side clustering via RPC by default for mapped news
-  const useServerClustering = !unmappedOnly;
+  // Enable server-side clustering only at very low zoom levels to preserve performance.
+  // At zoom 5 and above, we return raw events to allow the client-side engine to cluster organically.
+  const useServerClustering = !unmappedOnly && (zoom === null || zoom < 5);
 
   // Construct a cache key that captures all query parameters
   const bboxKeyPart = ignoreBBox

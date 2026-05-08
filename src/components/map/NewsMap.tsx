@@ -63,14 +63,17 @@ const CATEGORIES = [
  * Deterministic client-side jitter to prevent unclustered pins from stacking.
  * Groups items by coordinate, sorts them by ID, and applies a golden-angle spiral.
  */
-function applyClientJitter(items: NewsItem[]): NewsItem[] {
+function applyClientJitter(
+  items: NewsItem[],
+  selectedId: string | null = null,
+): NewsItem[] {
   const coordGroups = new Map<string, NewsItem[]>();
 
   // Group items by coordinate (rounded to avoid floating point precision issues)
   for (const item of items) {
     if (item.latitude == null || item.longitude == null) continue;
-    // Don't jitter MapLibre-generated clusters (handled by engine)
-    if (item.storyCount && item.storyCount > 1000) continue; // Safety guard
+    // Don't jitter clusters (items with multiple stories)
+    if (item.storyCount && item.storyCount > 1) continue;
 
     const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
     if (!coordGroups.has(key)) coordGroups.set(key, []);
@@ -82,10 +85,15 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
   for (const group of coordGroups.values()) {
     if (group.length <= 1) continue;
 
-    // Sort by canonical story id for deterministic jitter across refresh/zoom transitions
-    group.sort((a, b) =>
-      (a.originalId || a.id).localeCompare(b.originalId || b.id),
-    );
+    // Prioritize the selected item as the anchor (index 0) so it never jumps during selection/zoom.
+    // Everything else at this location jitters around the selected "focus" item.
+    group.sort((a, b) => {
+      const aId = a.originalId || a.id;
+      const bId = b.originalId || b.id;
+      if (aId === selectedId) return -1;
+      if (bId === selectedId) return 1;
+      return aId.localeCompare(bId);
+    });
 
     const baseLat = group[0].latitude!;
     const baseLng = group[0].longitude!;
@@ -93,13 +101,14 @@ function applyClientJitter(items: NewsItem[]): NewsItem[] {
     const lngScale = Math.max(Math.cos(latRad), 0.2); // avoid huge jumps near poles
     const goldenAngle = (137.5 * Math.PI) / 180;
     const kmToLatDeg = (km: number) => km / 111.32;
-    const baseRadius = kmToLatDeg(3.0); // ~3km base jitter
-    const growth = kmToLatDeg(1.2); // ~1.2km additional ring growth
+    const baseRadius = kmToLatDeg(2.2); // ~2.2km base jitter
+    const growth = kmToLatDeg(1.0); // ~1.0km ring growth
 
     for (let i = 0; i < group.length; i++) {
       const item = group[i];
+      // Use a more stable, square-root based growth for an organic feel that resists crowding
       const angle = i * goldenAngle;
-      const radius = baseRadius + i * growth;
+      const radius = baseRadius + Math.sqrt(i) * growth * 1.2;
       const latOffset = radius * Math.cos(angle);
       const lngOffset = (radius * Math.sin(angle)) / lngScale;
 
@@ -307,7 +316,8 @@ export default function NewsMap({
     const valid = items.filter(
       (i) => i.latitude != null && i.longitude != null,
     );
-    const jittered = applyClientJitter(valid);
+    // Passing selectedItemId ensures the focused item stays anchored at the center of its group.
+    const jittered = applyClientJitter(valid, selectedItemId);
 
     // Identify top 3 items based on the current sort mode (viewport-aware)
     const sorted = [...jittered].sort((a, b) => {
@@ -332,7 +342,7 @@ export default function NewsMap({
       // Pulses ONLY follow the current viewport's top 3 to ensure UI consistency
       isTopHot: topIds.has(item.id),
     }));
-  }, [items, sortMode]);
+  }, [items, sortMode, selectedItemId]);
 
   // Emits the current map bounds with a debounce to avoid excessive API calls.
   const emitBounds = useCallback((map: maplibregl.Map) => {
@@ -405,7 +415,7 @@ export default function NewsMap({
         features: [],
       },
       cluster: !forceIndividualPinsRef.current,
-      clusterMaxZoom: 4,
+      clusterMaxZoom: 7,
       clusterRadius: 35,
       clusterProperties: {
         summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
@@ -426,7 +436,7 @@ export default function NewsMap({
             [
               "all",
               [">", ["coalesce", ["get", "storyCount"], 0], 1],
-              ["<", ["zoom"], 5],
+              ["<", ["zoom"], 7],
             ],
           ];
 
@@ -1214,35 +1224,45 @@ export default function NewsMap({
           const currentZoom = map.getZoom();
           const targetZoom = Math.max(currentZoom, 8.5);
 
-          isFlyingRef.current = true;
-          popupRef.current.remove();
+    isFlyingRef.current = true;
+    
+    // Open the popup immediately at the target coordinates for an instant, responsive feel.
+    // MapLibre will handle keeping the popup attached to these coordinates during the flyTo.
+    popupRef.current
+      .setLngLat([item.longitude!, item.latitude!])
+      .setHTML(generatePopupHtml(item))
+      .addTo(map);
 
-          map.once("moveend", () => {
-            if (popupRef.current) {
-              const latestItem =
-                latestGeoItemsRef.current.find(
-                  (i) =>
-                    i.id === selectedItemId || i.originalId === selectedItemId,
-                ) || item;
-              popupRef.current
-                .setLngLat([latestItem.longitude!, latestItem.latitude!])
-                .setHTML(generatePopupHtml(latestItem))
-                .addTo(map);
-            }
-            isFlyingRef.current = false;
-          });
+    map.once("moveend", () => {
+      isFlyingRef.current = false;
+      // Final synchronization at the end of the flight when all jitters and bounding box updates have settled.
+      const finalItem =
+        latestGeoItemsRef.current.find(
+          (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+        ) || item;
 
-          map.flyTo({
-            center: [item.longitude!, item.latitude!],
-            zoom: targetZoom,
-            pitch: animatedEffects && isGlobe ? 45 : 0,
-            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
-            speed: animatedEffects ? 1.5 : 1,
-            curve: animatedEffects ? 1.42 : 1,
-            essential: true,
-            // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
-            padding: { top: targetZoom > 4 ? 250 : 0, bottom: 0, left: 0, right: 0 },
-          });
+      if (popupRef.current && finalItem.latitude != null) {
+        popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
+        // Also perform a final camera adjustment to ensure the pin is perfectly focused.
+        map.easeTo({
+          center: [finalItem.longitude!, finalItem.latitude!],
+          duration: 300,
+          essential: true,
+        });
+      }
+    });
+
+    map.flyTo({
+      center: [item.longitude!, item.latitude!],
+      zoom: targetZoom,
+      pitch: animatedEffects && isGlobe ? 45 : 0,
+      bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+      speed: animatedEffects ? 1.8 : 1.2,
+      curve: animatedEffects ? 1.2 : 1,
+      essential: true,
+      // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
+      padding: { top: targetZoom > 4 ? 250 : 0, bottom: 0, left: 0, right: 0 },
+    });
         }
       }
     } else {
@@ -1281,7 +1301,9 @@ export default function NewsMap({
           Math.pow(currentPos.lng - selectedItem.longitude, 2) +
             Math.pow(currentPos.lat - selectedItem.latitude, 2),
         );
-        if (dist > 0.00001) {
+        // Only re-sync position if the jitter significantly changed and we aren't in the middle of a flight.
+        // This prevents the "vibrating" camera sensation during data refreshes while flying.
+        if (dist > 0.0001 && !isFlyingRef.current) {
           popupRef.current.setLngLat([
             selectedItem.longitude,
             selectedItem.latitude,
