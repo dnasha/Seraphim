@@ -41,8 +41,8 @@ Styles for the main application shell, content area, and top-level action button
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
   z-index: 1000;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -56,8 +56,12 @@ Styles for the main application shell, content area, and top-level action button
 }
 
 .sidebarExpandBtn:hover {
-  background: var(--surface-alt);
+  background: var(--surface-hover);
   transform: scale(1.05);
+}
+
+.sidebarExpandBtn:focus {
+  outline: none;
 }
 
 /* Responsive */
@@ -74,6 +78,8 @@ Styles for the main application shell, content area, and top-level action button
   .sidebarExpandBtn {
     top: 12px;
     left: 12px;
+    width: 44px;
+    height: 44px;
   }
 }
 

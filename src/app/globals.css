@@ -58,6 +58,7 @@ body {
   --text-primary: #000000;
   --text-secondary: #000000;
   --text-muted: #64748b; /* Muted slate gray */
+  --surface-hover: #ecefff; /* Boosted desaturated indigo grey */
   --red: #ef4444;
   --green: #22c55e;
   --sidebar-width: 400px;
@@ -77,6 +78,7 @@ body {
   --text-primary: #ffffff;
   --text-secondary: #ffffff;
   --text-muted: #94a3b8;
+  --surface-hover: #2a2e45; /* Boosted desaturated indigo grey */
 }
 
 a {
@@ -183,5 +185,63 @@ body.is-resizing-sidebar,
 body.is-resizing-sidebar * {
   transition: none !important;
   user-select: none !important;
+}
+
+/* MapLibre Controls - Split individual buttons */
+.maplibregl-ctrl-group {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.maplibregl-ctrl-group button {
+  background: var(--surface) !important;
+  width: 42px !important;
+  height: 42px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  transition: background 0.15s, transform 0.15s !important;
+  outline: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--surface-hover) !important;
+  transform: scale(1.05);
+  z-index: 1;
+}
+
+.maplibregl-ctrl-group button:active {
+  background: var(--surface-alt) !important;
+  transform: scale(0.95);
+  transition: none !important;
+}
+
+.maplibregl-ctrl-group button:focus,
+.maplibregl-ctrl-group button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 860px) {
+  .maplibregl-ctrl-group button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+.maplibregl-ctrl-scale {
+  user-select: none !important;
+}
+
+/* Global Placeholder Selection */
+::placeholder {
+  user-select: none;
 }
 

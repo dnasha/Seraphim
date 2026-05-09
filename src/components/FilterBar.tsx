@@ -202,18 +202,66 @@ export default function FilterBar({
             onCategoriesChange([...withoutAll, category]);
         }
     };
+
+    /**
+     * Converts vertical scroll wheel movement into horizontal scrolling for the filter containers.
+     * This improves UX for desktop users without horizontal-swipe capabilities.
+     */
+    const handleWheelScroll = (e: React.WheelEvent<HTMLDivElement>) => {
+        if (e.deltaY !== 0) {
+            e.currentTarget.scrollLeft += e.deltaY;
+        }
+    };
+
     return (
         <div className={styles.filterBar}>
             <div className={styles.scrollableFilters}>
                 <div className={styles.filterSection}>
+                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                        <div className={styles.categoryToggles}>
+                            {categoryOptions.map((cat) => {
+                                const isActive = categories.includes(cat.value);
+                                const color = CATEGORY_COLORS[cat.value] || '#6b7280';
+                                const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
+                                return (
+                                    <button
+                                        key={cat.value}
+                                        className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
+                                        onClick={() => toggleCategory(cat.value)}
+                                        style={{
+                                            '--btn-color': color,
+                                            borderColor: isActive ? color : undefined,
+                                            background: isActive ? color : undefined,
+                                        } as React.CSSProperties}
+                                    >
+                                        <svg
+                                            className={styles.categoryIconSvg}
+                                            viewBox="0 0 24 24"
+                                            width="15"
+                                            height="15"
+                                            fill={isActive ? '#fff' : color}
+                                            style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
+                                        >
+                                            <path d={iconPath} />
+                                        </svg>
+                                        {cat.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.filterSection}>
                     <div className={styles.timeFilterContainer}>
-                        <div className={styles.scrollWrapper}>
+                        <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
                             <div className={styles.sourceToggles}>
                                 {timeOptions.map((option) => (
                                     <button
                                         key={option.value}
                                         className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
                                         onClick={() => handleTimeToggleClick(option.value)}
+                                        style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {option.value === 'custom' && (
                                             <svg 
@@ -291,7 +339,7 @@ export default function FilterBar({
                 </div>
 
                 <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper}>
+                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
                         <div className={styles.sourceToggles}>
                             {sourceOptions.map((option) => {
                                 const isActive = sources.includes(option.value);
@@ -301,48 +349,14 @@ export default function FilterBar({
                                         className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
                                         onClick={() => toggleSource(option.value)}
                                         style={{
+                                            '--btn-color': option.bg,
                                             backgroundColor: isActive ? option.bg : undefined,
                                             borderColor: isActive ? option.bg : undefined,
                                             color: isActive ? option.color : undefined,
-                                        }}
+                                        } as React.CSSProperties}
                                     >
                                         {renderSourceIcon(option.value)}
                                         {option.label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper}>
-                        <div className={styles.categoryToggles}>
-                            {categoryOptions.map((cat) => {
-                                const isActive = categories.includes(cat.value);
-                                const color = CATEGORY_COLORS[cat.value] || '#6b7280';
-                                const iconPath = CATEGORY_ICONS[cat.value] || CATEGORY_ICONS.general;
-                                return (
-                                    <button
-                                        key={cat.value}
-                                        className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
-                                        onClick={() => toggleCategory(cat.value)}
-                                        style={{
-                                            borderColor: isActive ? color : undefined,
-                                            background: isActive ? color : undefined,
-                                        }}
-                                    >
-                                        <svg
-                                            className={styles.categoryIconSvg}
-                                            viewBox="0 0 24 24"
-                                            width="15"
-                                            height="15"
-                                            fill={isActive ? '#fff' : color}
-                                            style={{ opacity: isActive ? 1 : 0.65, flexShrink: 0 }}
-                                        >
-                                            <path d={iconPath} />
-                                        </svg>
-                                        {cat.label}
                                     </button>
                                 );
                             })}

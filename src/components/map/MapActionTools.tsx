@@ -12,6 +12,7 @@ interface MapActionToolsProps {
     isGlobe: boolean;
     onToggleGlobe: () => void;
     onResetOrientation: () => void;
+    bearing?: number;
 }
 
 const MapActionTools: React.FC<MapActionToolsProps> = ({
@@ -20,9 +21,30 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     isGlobe,
     onToggleGlobe,
     onResetOrientation,
+    bearing = 0,
 }) => {
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
+    const [showBadge, setShowBadge] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        // Only show discovery badge if user hasn't opened overlays before
+        const hasSeen = localStorage.getItem('seraphim_seen_overlays');
+        if (!hasSeen) {
+            // Defer to avoid synchronous cascading render warning
+            requestAnimationFrame(() => {
+                setShowBadge(true);
+            });
+        }
+    }, []);
+
+    const handleOverlayButtonClick = () => {
+        if (showBadge) {
+            localStorage.setItem('seraphim_seen_overlays', 'true');
+            setShowBadge(false);
+        }
+        setOverlayMenuOpen(!overlayMenuOpen);
+    };
 
     // Effect to handle closing the overlay menu when clicking outside of it.
     useEffect(() => {
@@ -82,7 +104,16 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 onClick={onResetOrientation}
                 title="Reset Orientation (North up)"
             >
-                <svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor">
+                <svg 
+                    viewBox="0 0 512 512" 
+                    width="18" 
+                    height="18" 
+                    fill="currentColor"
+                    style={{ 
+                        transform: `rotate(${-bearing - 45}deg)`,
+                        transition: 'transform 0.15s ease-out'
+                    }}
+                >
                     <path d="M256,0C114.6,0,0,114.6,0,256s114.6,256,256,256s256-114.6,256-256S397.4,0,256,0z M256,472.6
                         c-119.6,0-216.6-97-216.6-216.6S136.4,39.4,256,39.4s216.6,97,216.6,216.6S375.6,472.6,256,472.6z M118.2,393.8l187.1-88.6
                         l88.6-187.1l-187.1,88.6L118.2,393.8z M285.5,285.5l-118.2,59.1l59.1-118.2L285.5,285.5z"/>
@@ -99,12 +130,13 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
 
             <button
                 className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}`}
-                onClick={() => setOverlayMenuOpen(!overlayMenuOpen)}
+                onClick={handleOverlayButtonClick}
                 title="Environmental Overlays"
             >
                 <svg viewBox="0 0 1200 1200" width="20" height="20" fill="currentColor">
                     <path d="M381.64,1200C135.779,1061.434,71.049,930.278,108.057,751.148 c27.321-132.271,116.782-239.886,125.36-371.903c38.215,69.544,54.183,119.691,58.453,192.364 C413.413,422.695,493.731,216.546,498.487,0c0,0,316.575,186.01,337.348,466.98c27.253-57.913,40.972-149.892,13.719-209.504 c81.757,59.615,560.293,588.838-64.818,942.524c117.527-228.838,30.32-537.611-173.739-680.218 c13.628,61.319-10.265,290.021-100.542,390.515c25.014-167.916-23.8-238.918-23.8-238.918s-16.754,94.054-81.758,189.065 C345.537,947.206,304.407,1039.291,381.64,1200L381.64,1200z"/>
                 </svg>
+                {showBadge && <div className={styles.btnBadgeDot} />}
             </button>
         </div>
     );

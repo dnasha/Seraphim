@@ -14,48 +14,6 @@
 }
 
 /* MapLibre zoom control overrides to match application theme */
-:global(.maplibregl-ctrl-group) {
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-:global(.maplibregl-ctrl-group button) {
-  width: 38px !important;
-  height: 38px !important;
-  background: var(--surface) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-md) !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-  transition: background 0.15s, transform 0.15s !important;
-  cursor: pointer;
-}
-
-:global(.maplibregl-ctrl-group button + button) {
-  margin-top: 0 !important;
-  border-top: none !important;
-}
-
-:global(.maplibregl-ctrl-group button:hover) {
-  background: var(--surface) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-  transform: scale(1.05);
-}
-
-:global(.maplibregl-ctrl-group button:active) {
-  background: var(--surface-alt) !important;
-  border-color: var(--accent-active) !important;
-  transform: scale(0.95);
-}
 
 /* zoom icons in dark mode */
 :global([data-theme="dark"]) :global(.maplibregl-ctrl-icon) {
@@ -69,7 +27,7 @@
 }
 
 :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
-  margin-top: calc(38px + max(12px, env(safe-area-inset-top)) + 8px) !important;
+  margin-top: calc(42px + max(12px, env(safe-area-inset-top)) + 8px) !important;
   margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
@@ -488,7 +446,7 @@
   }
 
   :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
-    margin-top: calc(38px + 12px + 8px) !important;
+    margin-top: calc(42px + 12px + 8px) !important;
   }
 }
 

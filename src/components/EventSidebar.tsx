@@ -732,31 +732,6 @@ export default function EventSidebar({
       </div>
 
       <div className={styles.eventSidebarStats}>
-        <div className={styles.statsInfo}>
-          {/* Prevents hydration mismatch for time strings */}
-          {(newestEventTime || isLoading) && (
-            <div className={styles.liveStatusWrapper}>
-              <span className={styles.pulseDot} />
-              <span className={styles.lastUpdated} suppressHydrationWarning>
-                LAST UPDATED AT:{" "}
-                {newestEventTime && mounted
-                  ? new Date(newestEventTime).toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                      hour12: true,
-                    })
-                  : "--:-- --"}
-              </span>
-            </div>
-          )}
-          <span className={styles.statPill}>
-            {isCapped && appliedLimit
-              ? appliedLimit.toLocaleString()
-              : totalStoryCount.toLocaleString()}
-            {isCapped ? "+" : ""} stories found
-          </span>
-        </div>
-
         <div className={styles.statsSearch}>
           <svg
             className={styles.statsSearchIcon}
@@ -769,7 +744,7 @@ export default function EventSidebar({
           </svg>
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={`Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className={styles.statsSearchInput}
@@ -781,36 +756,55 @@ export default function EventSidebar({
 
       {/* Hot / New sort toggle */}
       <div className={styles.sortToggleRow}>
-        <button
-          className={`${styles.sortToggleBtn} ${sortMode === "new" ? styles.sortToggleBtnActive : ""}`}
-          onClick={() => onSortModeChange("new")}
-          aria-pressed={sortMode === "new"}
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-            <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
-          </svg>
-          New
-        </button>
-        <button
-          className={`${styles.sortToggleBtn} ${sortMode === "hot" ? styles.sortToggleBtnActive : ""}`}
-          onClick={() => onSortModeChange("hot")}
-          aria-pressed={sortMode === "hot"}
-        >
-          <svg
-            viewBox="0 0 46.11 46.11"
-            width="14"
-            height="14"
-            fill="currentColor"
+        {/* Prevents hydration mismatch for time strings */}
+        {(newestEventTime || isLoading) && (
+          <div className={styles.liveStatusWrapper}>
+            <span className={styles.pulseDot} />
+            <span className={styles.lastUpdated} suppressHydrationWarning>
+              UPDATED{" "}
+              {newestEventTime && mounted
+                ? new Date(newestEventTime).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })
+                : "--:-- --"}
+            </span>
+          </div>
+        )}
+
+        <div className={styles.sortToggleGroup}>
+          <button
+            className={`${styles.sortToggleBtn} ${sortMode === "new" ? styles.sortToggleBtnActive : ""}`}
+            onClick={() => onSortModeChange("new")}
+            aria-pressed={sortMode === "new"}
           >
-            <g>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+            </svg>
+            New
+          </button>
+          <button
+            className={`${styles.sortToggleBtn} ${sortMode === "hot" ? styles.sortToggleBtnActive : ""}`}
+            onClick={() => onSortModeChange("hot")}
+            aria-pressed={sortMode === "hot"}
+          >
+            <svg
+              viewBox="0 0 46.11 46.11"
+              width="14"
+              height="14"
+              fill="currentColor"
+            >
               <g>
-                <path d="M23.054,0C10.342,0,0,10.342,0,23.055C0,35.768,10.342,46.11,23.055,46.11S46.11,35.768,46.11,23.055 C46.11,10.342,35.768,0,23.054,0z M23.054,39.11C14.201,39.11,7,31.908,7,23.055C7,14.202,14.201,7,23.054,7 c8.853,0,16.056,7.202,16.056,16.055C39.11,31.908,31.907,39.11,23.054,39.11z" />
-                <circle cx="23.054" cy="23.055" r="7.555" />
+                <g>
+                  <path d="M23.054,0C10.342,0,0,10.342,0,23.055C0,35.768,10.342,46.11,23.055,46.11S46.11,35.768,46.11,23.055 C46.11,10.342,35.768,0,23.054,0z M23.054,39.11C14.201,39.11,7,31.908,7,23.055C7,14.202,14.201,7,23.054,7 c8.853,0,16.056,7.202,16.056,16.055C39.11,31.908,31.907,39.11,23.054,39.11z" />
+                  <circle cx="23.054" cy="23.055" r="7.555" />
+                </g>
               </g>
-            </g>
-          </svg>
-          Hot
-        </button>
+            </svg>
+            Hot
+          </button>
+        </div>
       </div>
 
       <div

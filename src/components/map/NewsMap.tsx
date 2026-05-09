@@ -147,6 +147,7 @@ export default function NewsMap({
   initialZoom,
   sortMode,
 }: NewsMapProps) {
+  const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pulseAnimationFrameRef = useRef<number | null>(null);
@@ -922,6 +923,10 @@ export default function NewsMap({
             });
           }
 
+          map.on("move", () => {
+            setMapBearing(map.getBearing());
+          });
+
           map.on("moveend", () => {
             // Don't emit bounds if we're in the middle of a container resize
             if (!isResizingRef.current) {
@@ -1252,23 +1257,38 @@ export default function NewsMap({
       }
     });
 
-    map.flyTo({
-      center: [item.longitude!, item.latitude!],
-      zoom: targetZoom,
-      pitch: animatedEffects && isGlobe ? 45 : 0,
-      bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
-      speed: animatedEffects ? 1.8 : 1.2,
-      curve: animatedEffects ? 1.2 : 1,
-      essential: true,
-      // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
-      padding: { top: targetZoom > 4 ? 250 : 0, bottom: 0, left: 0, right: 0 },
-    });
+          const containerHeight = containerRef.current?.clientHeight || 800;
+          // Dynamically adjust padding to avoid pushing the pin off-screen on small/mobile displays.
+          const responsivePadding = Math.min(250, Math.floor(containerHeight * 0.25));
+
+          map.flyTo({
+            center: [item.longitude!, item.latitude!],
+            zoom: targetZoom,
+            pitch: animatedEffects && isGlobe ? 45 : 0,
+            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+            speed: animatedEffects ? 1.8 : 1.2,
+            curve: animatedEffects ? 1.2 : 1,
+            essential: true,
+            // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
+            padding: {
+              top: targetZoom > 4 ? responsivePadding : 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+            },
+          });
         }
       }
     } else {
       if (!isFlyingRef.current) {
         popupRef.current?.remove();
-
+        // Reset padding when deselected to prevent cumulative viewport offsets.
+        if (map.getPadding().top !== 0) {
+          map.easeTo({
+            padding: { top: 0, bottom: 0, left: 0, right: 0 },
+            duration: 500,
+          });
+        }
       }
       lastFlownSelectionRef.current = null;
       lastFlownVersionRef.current = 0;
@@ -1409,6 +1429,7 @@ export default function NewsMap({
     mapRef.current.easeTo({
       pitch: 0,
       bearing: 0,
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
       duration: 1000,
       easing: (t) => t * (2 - t),
     });
@@ -1474,6 +1495,7 @@ export default function NewsMap({
             isGlobe={isGlobe}
             onToggleGlobe={() => setIsGlobe((v) => !v)}
             onResetOrientation={handleResetOrientation}
+            bearing={mapBearing}
           />
         </>
       )}

@@ -12,8 +12,8 @@
 
 .actionBtn {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -26,11 +26,33 @@
   transition:
     background 0.15s,
     transform 0.15s;
+  user-select: none;
 }
 
 .actionBtn:hover {
-  background: var(--surface-alt);
+  background: var(--surface-hover);
   transform: scale(1.05);
+}
+
+.actionBtn:focus {
+  outline: none;
+}
+
+.actionBtn:active {
+  transform: scale(0.95);
+  box-shadow: none;
+}
+
+.btnBadgeDot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  border: 1.5px solid var(--surface);
+  box-shadow: 0 0 4px rgba(99, 102, 241, 0.4);
 }
 
 .actionBtnActive {
@@ -52,7 +74,7 @@
 /* Overlay menu layout */
 .overlayMenu {
   position: absolute;
-  right: 46px; /* Width of button + gap */
+  right: 50px; /* Width of button + gap */
   width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);

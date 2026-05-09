@@ -13,17 +13,17 @@ along with the custom date picker interface.
 }
 
 .scrollableFilters {
-  padding: 4px 12px 12px 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 @media (max-width: 860px) {
   .scrollableFilters {
     max-height: 115px;
     overflow-y: auto;
-    padding: 2px 10px 6px 10px;
+    padding: 6px 10px;
     gap: 6px;
   }
 }
@@ -67,6 +67,7 @@ along with the custom date picker interface.
   border-radius: var(--radius-md);
   color: var(--text-primary);
   transition: border-color 0.15s;
+  user-select: none;
 }
 
 .searchInput:focus {
@@ -81,52 +82,25 @@ along with the custom date picker interface.
   gap: 6px;
 }
 
-.sourceToggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex: 1;
+.scrollWrapper {
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
 }
 
+.scrollWrapper::-webkit-scrollbar {
+  display: none; /* Webkit/Chrome/Safari */
+}
+
+.sourceToggles,
 .categoryToggles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-@media (max-width: 860px) {
-  .scrollWrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-  }
-
-
-
-  .sourceToggles,
-  .categoryToggles {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 6px;
-    gap: 8px;
-    width: 100%;
-  }
-
-  /* Hide scrollbars but keep functionality */
-  .sourceToggles::-webkit-scrollbar,
-  .categoryToggles::-webkit-scrollbar {
-    display: none;
-  }
-
-  .sourceToggle,
-  .categoryToggle,
-  .timeToggle {
-    flex-shrink: 0;
-    white-space: nowrap;
-    height: 32px;
-  }
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: max-content;
+  padding-bottom: 2px;
 }
 
 .sourceToggle,
@@ -140,7 +114,7 @@ along with the custom date picker interface.
   padding: 0 14px;
   border-radius: var(--radius-md);
   font-family: var(--font-ui);
-  font-size: 0.8125rem; /* 13px */
+  font-size: 0.8125rem;
   font-weight: 500;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -148,6 +122,8 @@ along with the custom date picker interface.
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
 }
 
 .sourceIcon {
@@ -165,15 +141,21 @@ along with the custom date picker interface.
 .sourceToggle:hover,
 .categoryToggle:hover,
 .timeToggle:hover {
-  border-color: var(--accent);
-  background: var(--surface-alt);
+  background: color-mix(in srgb, var(--btn-color) 15%, transparent);
+  transform: scale(1.05);
+}
+
+.sourceToggle:focus,
+.categoryToggle:focus,
+.timeToggle:focus {
+  outline: none;
 }
 
 .sourceToggle:active,
 .categoryToggle:active,
 .timeToggle:active {
-  transform: scale(0.96);
-  border-color: var(--accent-active);
+  transform: scale(0.95);
+  transition: none;
 }
 
 .sourceToggleActive,
@@ -187,12 +169,15 @@ along with the custom date picker interface.
 .timeToggleActive:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  transform: scale(1.05);
 }
 
 .sourceToggleActive:active,
 .timeToggleActive:active {
   background: var(--accent-active);
   border-color: var(--accent-active);
+  transform: scale(0.95);
+  transition: none;
 }
 
 .categoryToggleActive {
@@ -228,33 +213,12 @@ along with the custom date picker interface.
     gap: 3px;
   }
 
-  .sourceRow {
-    flex-wrap: wrap;
-  }
-
-  .sourceToggles {
-    flex-wrap: wrap;
-  }
-
-  .categoryToggles {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
   .sourceToggle,
   .categoryToggle,
   .timeToggle {
     height: 32px;
     padding: 0 12px;
     font-size: 0.75rem;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .filterSection:has(.timeToggle) > div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
   }
 }
 

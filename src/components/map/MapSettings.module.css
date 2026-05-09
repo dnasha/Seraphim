@@ -9,8 +9,8 @@
 .mapSettingsBtn {
   position: relative;
   z-index: 1000;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -26,20 +26,29 @@
 }
 
 .mapSettingsBtn:hover {
-  background: var(--surface-alt);
+  background: var(--surface-hover);
   transform: scale(1.05);
 }
 
-.btnRedDot {
+.mapSettingsBtn:focus {
+  outline: none;
+}
+
+.mapSettingsBtn:active {
+  transform: scale(0.95);
+  box-shadow: none;
+}
+
+.btnBadgeDot {
   position: absolute;
   top: 3px;
   right: 3px;
   width: 8px;
   height: 8px;
-  background-color: var(--red);
+  background-color: var(--accent);
   border-radius: 50%;
   border: 1.5px solid var(--surface);
-  box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 4px rgba(99, 102, 241, 0.4);
 }
 
 /* Settings panel layout and animation */
@@ -47,7 +56,7 @@
   position: absolute;
   z-index: 1100;
   top: 0;
-  right: 46px;
+  right: 50px;
   width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -166,8 +175,12 @@
 
 /* Responsive adjustments */
 @media (max-width: 860px) {
+  .mapSettingsBtn {
+    width: 44px;
+    height: 44px;
+  }
   .mapSettingsPanel {
-    right: 46px;
+    right: 52px;
     width: min(220px, 65vw);
   }
 }

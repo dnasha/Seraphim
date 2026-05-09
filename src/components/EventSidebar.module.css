@@ -17,6 +17,7 @@ Includes card expansion details and responsive mobile layouts.
   z-index: 1000;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform, width;
+  outline: none;
 }
 
 .isResizing {
@@ -50,6 +51,7 @@ Includes card expansion details and responsive mobile layouts.
   text-decoration: none;
   flex: 1;
   transition: opacity 0.2s ease;
+  user-select: none;
 }
 
 .logoLink:hover {
@@ -88,15 +90,8 @@ Includes card expansion details and responsive mobile layouts.
 .eventSidebarStats {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px 12px;
-}
-
-.statsInfo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  padding: 8px 12px;
 }
 
 .statsSearch {
@@ -125,6 +120,7 @@ Includes card expansion details and responsive mobile layouts.
   font-size: 0.875rem;
   color: var(--text-primary);
   transition: all 0.2s ease;
+  user-select: none;
 }
 
 .statsSearchInput:focus {
@@ -138,16 +134,6 @@ Includes card expansion details and responsive mobile layouts.
   opacity: 0.7;
 }
 
-.statPill {
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
 
 .statPillGeo {
   color: var(--green);
@@ -173,13 +159,12 @@ Includes card expansion details and responsive mobile layouts.
 .liveStatusWrapper {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-left: 10px;
+  gap: 12px;
 }
 
 .pulseDot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   background-color: var(--accent);
   border-radius: 50%;
   position: relative;
@@ -208,8 +193,8 @@ Includes card expansion details and responsive mobile layouts.
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -219,15 +204,19 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sidebarToggleBtn:hover {
-  background: var(--surface-alt);
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--accent);
+  transform: scale(1.05);
+}
+
+.sidebarToggleBtn:focus {
+  outline: none;
 }
 
 .sidebarToggleBtn:active {
   background: var(--surface-alt);
   transform: scale(0.95);
-  border-color: var(--accent-active);
+  border-color: var(--border);
 }
 
 .sidebarCollapseBtn {
@@ -248,6 +237,8 @@ Includes card expansion details and responsive mobile layouts.
   will-change: transform;
   backface-visibility: hidden;
   overflow: hidden; /* Ensure list content doesn't bleed */
+  direction: rtl; /* Moves Virtuoso scrollbar to the left */
+  margin-left: 3px; /* Small gap between sidebar edge and scrollbar */
 }
 
 /* Resize Handle */
@@ -261,6 +252,7 @@ Includes card expansion details and responsive mobile layouts.
   z-index: 100;
   display: flex;
   justify-content: center;
+  outline: none;
 }
 
 .resizeHandle::after {
@@ -296,6 +288,7 @@ Includes card expansion details and responsive mobile layouts.
   text-align: center;
   color: var(--text-muted);
   flex: 1;
+  direction: ltr;
 }
 
 .eventListLoading .loadingSpinner {
@@ -363,6 +356,7 @@ Includes card expansion details and responsive mobile layouts.
   width: 100%;
   font-family: inherit;
   color: inherit;
+  direction: ltr;
 }
 
 .eventCard:hover {
@@ -393,7 +387,7 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 10px 8px 12px;
+  padding: 8px 10px 8px 8px; /* Reduced left padding to bring cards closer to scrollbar */
   width: 100%;
 }
 
@@ -729,6 +723,7 @@ Includes card expansion details and responsive mobile layouts.
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    direction: rtl;
   }
 }
 
@@ -738,20 +733,25 @@ Includes card expansion details and responsive mobile layouts.
 
 .sortToggleRow {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.sortToggleGroup {
+  display: flex;
   gap: 0;
-  padding: 0 16px;
-  margin-top: 8px;
-  margin-bottom: 4px;
+  margin-left: auto;
 }
 
 .sortToggleBtn {
   font-family: var(--font-ui);
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 5px 0;
+  padding: 4px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -759,6 +759,7 @@ Includes card expansion details and responsive mobile layouts.
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  user-select: none;
 }
 
 .sortToggleBtn:first-child {
