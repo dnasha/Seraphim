@@ -16,23 +16,23 @@
 /* MapLibre zoom control overrides to match application theme */
 
 /* zoom icons in dark mode */
-:global([data-theme="dark"]) :global(.maplibregl-ctrl-icon) {
+.mapWrapper :global([data-theme="dark"]) :global(.maplibregl-ctrl-icon) {
   filter: invert(1) brightness(1.8);
 }
 
 /* Positioning for zoom controls */
-:global(.maplibregl-ctrl-top-right) {
+.mapWrapper :global(.maplibregl-ctrl-top-right) {
   top: 0;
   right: 0;
 }
 
-:global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+.mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
   margin-top: calc(42px + max(12px, env(safe-area-inset-top)) + 8px) !important;
   margin-right: max(12px, env(safe-area-inset-right)) !important;
 }
 
 /* Discrete attribution control in the bottom right */
-:global(.maplibregl-ctrl-attrib) {
+.mapWrapper :global(.maplibregl-ctrl-attrib) {
   background: transparent !important;
   border: none !important;
   margin: 0 !important;
@@ -50,32 +50,32 @@
   pointer-events: auto !important;
 }
 
-:global(.maplibregl-ctrl-attrib:hover) {
+.mapWrapper :global(.maplibregl-ctrl-attrib:hover) {
   opacity: 1;
 }
 
-:global(.maplibregl-ctrl-attrib a) {
+.mapWrapper :global(.maplibregl-ctrl-attrib a) {
   color: inherit !important;
   text-decoration: none !important;
   transition: color 0.15s ease;
 }
 
-:global(.maplibregl-ctrl-attrib a:hover) {
+.mapWrapper :global(.maplibregl-ctrl-attrib a:hover) {
   text-decoration: underline !important;
   color: var(--accent) !important;
 }
 
-:global(.maplibregl-ctrl-attrib-inner) {
+.mapWrapper :global(.maplibregl-ctrl-attrib-inner) {
   padding: 0 !important;
   display: inline-block !important;
 }
 
-:global(.maplibregl-ctrl-attrib-button) {
+.mapWrapper :global(.maplibregl-ctrl-attrib-button) {
   display: none !important;
 }
 
 /* Custom styling for the scale bar to match theme */
-:global(.maplibregl-ctrl-scale) {
+.mapWrapper :global(.maplibregl-ctrl-scale) {
   background: var(--surface) !important;
   color: var(--text-primary) !important;
   border: 1px solid var(--border) !important;
@@ -91,23 +91,23 @@
 
 
 /* Clean up default MapLibre focus states */
-:global(.maplibregl-ctrl button:focus),
-:global(.maplibregl-ctrl button:active),
-:global(.maplibregl-ctrl-attrib button:focus) {
+.mapWrapper :global(.maplibregl-ctrl button:focus),
+.mapWrapper :global(.maplibregl-ctrl button:active),
+.mapWrapper :global(.maplibregl-ctrl-attrib button:focus) {
   outline: none !important;
   box-shadow: none !important;
 }
 
-:global(.maplibregl-map) {
+.mapWrapper :global(.maplibregl-map) {
   background: var(--surface-alt) !important;
 }
 
 /* Custom popup container styles */
-:global(.news-popup-container) {
+.mapWrapper :global(.news-popup-container) {
   z-index: 900;
 }
 
-:global(.news-popup-container .maplibregl-popup-content) {
+.mapWrapper :global(.news-popup-container .maplibregl-popup-content) {
   background: var(--surface);
   color: var(--text-primary);
   border-radius: var(--radius-lg);
@@ -117,11 +117,11 @@
   border: 1px solid var(--border);
 }
 
-:global(.news-popup-container .maplibregl-popup-tip) {
+.mapWrapper :global(.news-popup-container .maplibregl-popup-tip) {
   border-top-color: var(--surface);
 }
 
-:global(.news-popup-container .maplibregl-popup-close-button) {
+.mapWrapper :global(.news-popup-container .maplibregl-popup-close-button) {
   color: #ef4444 !important;
   width: 28px;
   height: 28px;
@@ -141,26 +141,26 @@
   outline: none !important;
 }
 
-:global(.news-popup-container .maplibregl-popup-close-button:hover) {
+.mapWrapper :global(.news-popup-container .maplibregl-popup-close-button:hover) {
   color: #b91c1c !important;
   transform: scale(1.2);
 }
 
 /* News popup internal layout */
-:global(.news-popup) {
+.mapWrapper :global(.news-popup) {
   display: flex;
   flex-direction: column;
   width: 400px;
   background: var(--surface);
 }
-:global(.news-popup-header) {
+.mapWrapper :global(.news-popup-header) {
   padding: 16px 32px 10px 18px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-:global(.news-popup-title) {
+.mapWrapper :global(.news-popup-title) {
   font-family: var(--font-news);
   font-size: 1rem; /* 16px */
   font-weight: 600;
@@ -171,7 +171,7 @@
   word-break: break-word;
 }
 
-:global(.news-popup-meta) {
+.mapWrapper :global(.news-popup-meta) {
   font-family: var(--font-ui);
   display: flex;
   align-items: center;
@@ -182,7 +182,7 @@
   overflow-wrap: anywhere;
 }
 
-:global(.news-popup-source) {
+.mapWrapper :global(.news-popup-source) {
   font-family: var(--font-ui);
   font-style: normal;
   font-weight: 500;
@@ -192,7 +192,7 @@
   white-space: nowrap;
 }
 
-:global(.news-popup-category) {
+.mapWrapper :global(.news-popup-category) {
   display: inline-block;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
@@ -202,28 +202,28 @@
   text-transform: capitalize;
 }
 
-:global(.news-popup-time) {
+.mapWrapper :global(.news-popup-time) {
   color: var(--text-muted);
 }
 
-:global(.news-popup-location) {
+.mapWrapper :global(.news-popup-location) {
   color: var(--accent);
   display: inline-flex;
   align-items: center;
 }
 
-:global(.news-popup-meta-sep) {
+.mapWrapper :global(.news-popup-meta-sep) {
   color: var(--text-muted);
   opacity: 0.5;
 }
 
 /* News popup content area */
-:global(.news-popup-content) {
+.mapWrapper :global(.news-popup-content) {
   padding: 0 18px 16px;
   border-top: none;
 }
 
-:global(.news-popup-img-container) {
+.mapWrapper :global(.news-popup-img-container) {
   width: 100%;
   max-height: 180px;
   border-radius: var(--radius-md);
@@ -231,14 +231,14 @@
   background: var(--surface-alt);
 }
 
-:global(.news-popup-img) {
+.mapWrapper :global(.news-popup-img) {
   width: 100%;
   max-height: 180px;
   object-fit: cover;
   display: block;
 }
 
-:global(.news-popup-summary) {
+.mapWrapper :global(.news-popup-summary) {
   font-family: var(--font-news);
   font-size: 0.875rem; /* 14px */
   color: var(--text-secondary);
@@ -249,7 +249,7 @@
   padding-right: 4px;
 }
 
-:global(.news-popup-link) {
+.mapWrapper :global(.news-popup-link) {
   display: block;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -261,13 +261,13 @@
   outline: none !important;
 }
 
-:global(.news-popup-link:hover) {
+.mapWrapper :global(.news-popup-link:hover) {
   text-decoration: underline;
   opacity: 0.8;
   color: var(--accent-hover);
 }
 
-:global(.news-popup-link:active) {
+.mapWrapper :global(.news-popup-link:active) {
   color: var(--accent-active);
   transform: translateY(1px);
 }
@@ -278,14 +278,14 @@
   100% { background-position:  200% 0; }
 }
 
-:global(.news-popup-summary--loading) {
+.mapWrapper :global(.news-popup-summary--loading) {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 4px 0 6px;
 }
 
-:global(.popup-skeleton-line) {
+.mapWrapper :global(.popup-skeleton-line) {
   height: 10px;
   width: 100%;
   border-radius: 4px;
@@ -299,7 +299,7 @@
   animation: popup-shimmer 1.4s ease-in-out infinite;
 }
 
-:global(.location-icon-svg) {
+.mapWrapper :global(.location-icon-svg) {
   display: inline-block;
   vertical-align: middle;
   margin-right: 2px;
@@ -311,12 +311,12 @@
    ═══════════════════════════════════════════════════════════ */
 
 /* Tier 1 Diamond Blue top border removed */
-:global(.news-popup-tier1) {
+.mapWrapper :global(.news-popup-tier1) {
   border-top: none;
 }
 
 /* Credibility badge in popup meta (round icon) */
-:global(.news-popup-credibility) {
+.mapWrapper :global(.news-popup-credibility) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -329,11 +329,11 @@
   line-height: 0;
 }
 
-:global(.news-popup-credibility:hover) {
+.mapWrapper :global(.news-popup-credibility:hover) {
   transform: scale(1.1);
 }
 
-:global(.news-popup-credibility svg) {
+.mapWrapper :global(.news-popup-credibility svg) {
   width: 11px;
   height: 11px;
   display: block;
@@ -341,7 +341,7 @@
 }
 
 /* Source count badge in popup meta (round pill) */
-:global(.news-popup-source-count) {
+.mapWrapper :global(.news-popup-source-count) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -361,12 +361,12 @@
   line-height: 1;
 }
 
-:global(.news-popup-source-count:hover) {
+.mapWrapper :global(.news-popup-source-count:hover) {
   background: var(--surface-hover);
   border-color: var(--text-muted);
 }
 
-:global(.news-popup-source-count svg) {
+.mapWrapper :global(.news-popup-source-count svg) {
   width: 10px;
   height: 10px;
   display: block;
@@ -375,12 +375,12 @@
 }
 
 /* Sources & Timeline section in popup */
-:global(.news-popup-sources-section) {
+.mapWrapper :global(.news-popup-sources-section) {
   border-top: 1px solid var(--border);
   padding: 10px 18px 14px;
 }
 
-:global(.news-popup-sources-header) {
+.mapWrapper :global(.news-popup-sources-header) {
   font-family: var(--font-ui);
   font-size: 0.75rem; /* 12px */
   font-weight: 600;
@@ -390,20 +390,20 @@
   margin-bottom: 8px;
 }
 
-:global(.news-popup-sources-list) {
+.mapWrapper :global(.news-popup-sources-list) {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-:global(.news-popup-source-entry) {
+.mapWrapper :global(.news-popup-source-entry) {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-:global(.news-popup-source-name) {
+.mapWrapper :global(.news-popup-source-name) {
   font-size: 0.6875rem;
   font-weight: 600;
   padding: 1px 6px;
@@ -411,7 +411,7 @@
   white-space: nowrap;
 }
 
-:global(.news-popup-source-link) {
+.mapWrapper :global(.news-popup-source-link) {
   font-size: 0.75rem;
   color: var(--accent);
   text-decoration: none;
@@ -422,12 +422,12 @@
   outline: none !important;
 }
 
-:global(.news-popup-source-link:hover) {
+.mapWrapper :global(.news-popup-source-link:hover) {
   text-decoration: underline;
   opacity: 0.85;
 }
 
-:global(.news-popup-source-time) {
+.mapWrapper :global(.news-popup-source-time) {
   font-size: 0.625rem;
   color: var(--text-muted);
   white-space: nowrap;
@@ -435,17 +435,17 @@
 
 /* Responsive adjustments for mobile devices */
 @media (max-width: 860px) {
-  :global(.news-popup) {
+  .mapWrapper :global(.news-popup) {
     width: calc(100vw - 48px);
     max-width: 320px;
   }
 
-  :global(.news-popup-container .maplibregl-popup-content) {
+  .mapWrapper :global(.news-popup-container .maplibregl-popup-content) {
     max-width: calc(100vw - 32px);
     width: auto !important;
   }
 
-  :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+  .mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
     margin-top: calc(42px + 12px + 8px) !important;
   }
 }
