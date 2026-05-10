@@ -74,23 +74,12 @@ export const metadata: Metadata = {
       { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/favicon.ico" },
     ],
-    apple: [
-      { url: "/apple-touch-icon-180x180.png", sizes: "180x180", type: "image/png" },
-    ],
   },
   openGraph: {
     title: "Seraphim",
     description: "Real-time OSINT aggregator and mapper - know the world!",
     url: "https://seraphi.me",
     siteName: "Seraphim",
-    images: [
-      {
-        url: "/icon-512x512.png",
-        width: 512,
-        height: 512,
-        alt: "Seraphim - Real-time OSINT aggregator and mapper",
-      },
-    ],
     locale: "en_US",
     type: "website",
   },
@@ -98,7 +87,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Seraphim",
     description: "Real-time OSINT aggregator and mapper - know the world!",
-    images: ["/icon-512x512.png"],
   },
 };
 
