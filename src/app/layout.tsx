@@ -74,7 +74,9 @@ export const metadata: Metadata = {
       { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/favicon.ico" },
     ],
-    apple: "/apple-touch-icon-180x180.png",
+    apple: [
+      { url: "/apple-touch-icon-180x180.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "Seraphim",
