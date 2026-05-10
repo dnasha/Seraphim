@@ -52,6 +52,7 @@ Includes card expansion details and responsive mobile layouts.
   flex: 1;
   transition: opacity 0.2s ease;
   user-select: none;
+  outline: none;
 }
 
 .logoLink:hover {
@@ -73,11 +74,25 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sidebarLogoImg {
-  transition: filter 0.3s ease;
+  transition: transform 0.3s ease;
 }
 
-[data-theme="dark"] .sidebarLogoImg {
-  filter: invert(1);
+.logoFill {
+  fill: #000;
+  transition: fill 0.3s ease;
+}
+
+[data-theme="dark"] .logoFill {
+  fill: #fff;
+}
+
+.logoStroke {
+  stroke: #000;
+  transition: stroke 0.3s ease;
+}
+
+[data-theme="dark"] .logoStroke {
+  stroke: #fff;
 }
 
 .eventSidebarActions {
@@ -357,6 +372,7 @@ Includes card expansion details and responsive mobile layouts.
   font-family: inherit;
   color: inherit;
   direction: ltr;
+  outline: none;
 }
 
 .eventCard:hover {
@@ -569,6 +585,7 @@ Includes card expansion details and responsive mobile layouts.
   text-align: right;
   margin-top: 4px;
   transition: opacity 0.15s, color 0.15s;
+  outline: none;
 }
 
 .eventCardDetailLink:visited {
@@ -760,6 +777,7 @@ Includes card expansion details and responsive mobile layouts.
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
+  outline: none;
 }
 
 .sortToggleBtn:first-child {
@@ -955,6 +973,7 @@ Includes card expansion details and responsive mobile layouts.
   word-break: break-word;
   max-width: 100%;
   margin-top: 1px;
+  outline: none;
 }
 
 .timelineEntryLink:hover {
@@ -986,6 +1005,7 @@ Includes card expansion details and responsive mobile layouts.
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  outline: none;
 }
 
 .showAllToggle:hover {

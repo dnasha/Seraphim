@@ -312,12 +312,8 @@ along with the custom date picker interface.
 }
 
 .dateInput::-webkit-calendar-picker-indicator {
-  filter: invert(0.8);
+  filter: invert(43%) sepia(80%) saturate(3665%) hue-rotate(221deg) brightness(98%) contrast(97%);
   cursor: pointer;
-}
-
-:global(.dark) .dateInput::-webkit-calendar-picker-indicator {
-  filter: invert(1);
 }
 
 @media (max-width: 860px) {
@@ -351,6 +347,7 @@ along with the custom date picker interface.
   cursor: pointer;
   color: var(--text-secondary);
   transition: all 0.15s;
+  outline: none;
 }
 
 .resetBtn:hover {

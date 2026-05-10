@@ -12,27 +12,27 @@ export const MAP_STYLES: Record<
 > = {
   standard: {
     url: "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
     label: "Standard",
   },
   dark: {
     url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
     label: "Dark",
   },
   light: {
     url: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
     label: "Light",
   },
   satellite: {
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "&copy; Esri - Esri, DeLorme, NAVTEQ",
+    attribution: "&copy; Seraphim 2026 &copy; Esri - Esri, DeLorme, NAVTEQ",
     label: "Satellite",
   },
   topographic: {
     url: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap contributors, &copy; OpenTopoMap",
+    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors, &copy; OpenTopoMap",
     label: "Terrain",
   },
 };

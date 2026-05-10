@@ -47,6 +47,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  themeColor: "#6366f1",
 };
 
 // Global metadata for SEO and social sharing
@@ -62,9 +63,18 @@ export const metadata: Metadata = {
     "world news",
     "map",
   ],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Seraphim",
+  },
   icons: {
-    icon: "/logo.webp",
-    apple: "/logo.webp",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+    apple: "/apple-touch-icon-180x180.png",
   },
   openGraph: {
     title: "Seraphim",
@@ -73,9 +83,9 @@ export const metadata: Metadata = {
     siteName: "Seraphim",
     images: [
       {
-        url: "/logo.webp",
-        width: 562,
-        height: 562,
+        url: "/icon-512x512.png",
+        width: 512,
+        height: 512,
         alt: "Seraphim - Real-time OSINT aggregator and mapper",
       },
     ],
@@ -86,7 +96,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Seraphim",
     description: "Real-time OSINT aggregator and mapper - know the world!",
-    images: ["/logo.webp"],
+    images: ["/icon-512x512.png"],
   },
 };
 
@@ -104,6 +114,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <Providers>
           {children}
+        
         </Providers>
         <SpeedInsights />
         <Analytics />
@@ -111,4 +122,3 @@ export default function RootLayout({
     </html>
   );
 }
-

@@ -297,7 +297,7 @@ export default function FilterBar({
                                         return (
                                             <>
                                                 <div className={styles.dateInputGroup}>
-                                                    <label>Start</label>
+                                                    <label>From</label>
                                                     <input
                                                         type="datetime-local"
                                                         className={styles.dateInput}
@@ -308,7 +308,7 @@ export default function FilterBar({
                                                     />
                                                 </div>
                                                 <div className={styles.dateInputGroup}>
-                                                    <label>End</label>
+                                                    <label>Until</label>
                                                     <input
                                                         type="datetime-local"
                                                         className={styles.dateInput}
