@@ -30,6 +30,7 @@ import { enrichItemsWithLocation } from "./fetchers/geocoding";
 import type { NewsItem } from "@/lib/types";
 import type { DbEvent, DbEventSource } from "@/types";
 import { newsItemToDbEvent } from "./utils/transforms";
+import { calculateMergedStory } from "./utils/merging";
 import {
   generateEmbeddings,
   buildEmbeddingText,
@@ -72,13 +73,13 @@ async function fetchRecentEmbeddings(): Promise<
     latitude?: number;
     longitude?: number;
     location_name?: string;
-    title?: string;
+    title: string;
     description?: string;
-    credibility_tier?: number;
-    impact_score?: number;
-    event_count?: number;
-    source?: string;
-    url?: string;
+    credibility_tier: number;
+    impact_score: number;
+    event_count: number;
+    source: string;
+    url: string;
     published_at: string;
   }[]
 > {
@@ -156,6 +157,7 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
       source?: string;
       url?: string;
       credibility_tier?: number;
+      published_at?: string;
       event_count?: number;
       impact_score?: number;
     }
@@ -259,7 +261,7 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
           event.longitude,
           candidate.latitude,
           candidate.longitude,
-        );
+          );
         if (dist <= MAX_MERGE_DISTANCE_KM) {
           shouldMerge = true;
         }
@@ -273,124 +275,38 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
 
     if (bestMatchId) {
       const matchedCandidate = candidates.find((c) => c.id === bestMatchId)!;
-
-      // Smart Selection: If the NEW incoming item is higher quality, swap it into the master
-      let updateContent = false;
-      const currentTier = matchedCandidate.credibility_tier || 3;
-      const incomingTier = event.credibility_tier || 3;
-
-      if (incomingTier < currentTier) {
-        updateContent = true;
-      } else if (incomingTier === currentTier) {
-        const currentLen =
-          (matchedCandidate.description?.length || 0) +
-          (matchedCandidate.title?.length || 0);
-        const incomingLen =
-          (event.description?.length || 0) + (event.title?.length || 0);
-        if (incomingLen > currentLen) updateContent = true;
-      }
-
-      // Always pick the latest publication time for the master card
-      // Normalization: Also check against the candidate's existing sources just in case
-      let candidateLatestTime = new Date(
-        matchedCandidate.published_at,
-      ).getTime();
-      for (const s of matchedCandidate.sources) {
-        const sourceTime = new Date(s.discovered_at).getTime();
-        if (sourceTime > candidateLatestTime) {
-          candidateLatestTime = sourceTime;
-        }
-      }
-
-      const incomingTime = new Date(event.published_at).getTime();
-
-      // Check if we already have an even newer time in the current merge set
       const existingMerge = merges.get(bestMatchId);
-      const currentSetTime = existingMerge?.published_at
-        ? new Date(existingMerge.published_at).getTime()
-        : -1;
-
-      const maxTime = Math.max(
-        incomingTime,
-        candidateLatestTime,
-        currentSetTime,
-      );
-
-      let latestPublishedAt = matchedCandidate.published_at;
-      if (maxTime === incomingTime) latestPublishedAt = event.published_at;
-      else if (maxTime === currentSetTime)
-        latestPublishedAt = existingMerge!.published_at!;
-      // else it stays matchedCandidate.published_at (or whichever was the source of candidateLatestTime)
-      // if candidateLatestTime came from a source, we should use that string
-      if (
-        maxTime === candidateLatestTime &&
-        candidateLatestTime !==
-          new Date(matchedCandidate.published_at).getTime()
-      ) {
-        const latestSource = matchedCandidate.sources.find(
-          (s) => new Date(s.discovered_at).getTime() === candidateLatestTime,
-        );
-        if (latestSource) latestPublishedAt = latestSource.discovered_at;
-      }
-
-      const newSource: DbEventSource = {
-        name: event.source,
-        url: event.url,
-        source_type: event.source_type,
-        discovered_at: event.published_at,
-      };
+      
+      // Use the helper to calculate the new merged state
+      const storyState = existingMerge 
+        ? { ...matchedCandidate, ...existingMerge } 
+        : matchedCandidate;
 
       const sourceExists = matchedCandidate.sources.some(s => s.url === event.url);
       
       if (!sourceExists) {
-        const updatedSources = existingMerge ? [...existingMerge.sources, newSource] : [...matchedCandidate.sources, newSource];
-        const bestTier = Math.min(currentTier, incomingTier);
-        const eventCount = updatedSources.length;
+        const mergedResult = calculateMergedStory(storyState, event);
         
-        const impactScore = eventCount * (5.0 - bestTier);
-
-        if (existingMerge) {
-          existingMerge.sources = updatedSources;
-          existingMerge.published_at = latestPublishedAt;
-          existingMerge.event_count = eventCount;
-          existingMerge.impact_score = impactScore;
-          if (updateContent) {
-            existingMerge.title = event.title;
-            existingMerge.description = event.description;
-            existingMerge.source = event.source;
-            existingMerge.url = event.url;
-            existingMerge.credibility_tier = incomingTier;
-          }
-        } else {
-          merges.set(bestMatchId, {
-            sources: updatedSources,
-            published_at: latestPublishedAt,
-            event_count: eventCount,
-            impact_score: impactScore,
-            ...(updateContent ? {
-              title: event.title,
-              description: event.description,
-              source: event.source,
-              url: event.url,
-              credibility_tier: incomingTier
-            } : {})
-          });
-        }
+        // Update the merges map (we omit 'id' as it's the key)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: _id, ...mergeData } = mergedResult;
+        merges.set(bestMatchId, mergeData);
         mergeCount++;
       } else {
-        // Source exists, but we still update the timestamp if the incoming version is newer.
-        // This handles cases where an article URL is updated with a newer publication date.
-        if (existingMerge) {
-          if (new Date(latestPublishedAt).getTime() > new Date(existingMerge.published_at!).getTime()) {
-            existingMerge.published_at = latestPublishedAt;
+        // Source exists, handle potential timestamp refresh if article updated
+        const incomingTime = new Date(event.published_at).getTime();
+        const currentPubTime = new Date(storyState.published_at).getTime();
+        if (incomingTime > currentPubTime) {
+          if (existingMerge) {
+            existingMerge.published_at = event.published_at;
+          } else {
+            merges.set(bestMatchId, {
+              sources: matchedCandidate.sources,
+              published_at: event.published_at,
+              event_count: matchedCandidate.event_count || matchedCandidate.sources.length,
+              impact_score: matchedCandidate.impact_score || 0
+            });
           }
-        } else if (new Date(latestPublishedAt).getTime() > new Date(matchedCandidate.published_at).getTime()) {
-          merges.set(bestMatchId, {
-            sources: matchedCandidate.sources,
-            published_at: latestPublishedAt,
-            event_count: matchedCandidate.sources.length,
-            impact_score: matchedCandidate.impact_score || 0
-          });
         }
       }
     } else {

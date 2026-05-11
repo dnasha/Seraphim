@@ -136,6 +136,7 @@ export default function EventSidebar({
         return () => cancelAnimationFrame(rafId);
       }
     }
+    return;
   }, []);
 
   const startResizing = useCallback((e: React.MouseEvent) => {

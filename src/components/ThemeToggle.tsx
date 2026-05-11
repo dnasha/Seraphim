@@ -5,19 +5,19 @@ ThemeToggle component provides a user interface for switching between light and 
 It utilizes next-themes for theme management and handles client-side hydration.
 */
 
-import React, { useEffect, useState } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { useTheme } from 'next-themes';
 import styles from './ThemeToggle.module.css';
 
 const ThemeToggle: React.FC = () => {
     const { setTheme, resolvedTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        /* Set mounted state to true to handle hydration mismatch with next-themes */
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMounted(true);
-    }, []);
+    
+    // Official React 18+ way to detect hydration/client-side status without cascading renders
+    const mounted = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false
+    );
 
     if (!mounted) {
         /* Return placeholder during SSR and initial hydration to prevent flicker */

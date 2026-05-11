@@ -301,7 +301,7 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
             title: 'Latest event',
             publishedAt: new Date(NOW - 1000 * 60).toISOString(),
             impactScore: 10,
-            eventCount: 4,
+            sourcesCount: 4,
         });
         const cluster = makeItem({
             id: 'cluster-z4-12.0000-13.0000-4',
@@ -309,7 +309,7 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
             title: 'Cluster event',
             publishedAt: new Date(NOW - 1000 * 60 * 5).toISOString(),
             impactScore: 8,
-            eventCount: 4,
+            sourcesCount: 4,
         });
 
         const result = applyNewsFilters([cluster, base], defaultOpts({ sortMode: 'hot' }));

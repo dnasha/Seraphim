@@ -3,16 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H localhost --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev -H localhost --turbo",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "scrape": "bun run src/scraper/index.ts",
     "test-scraper": "bun run scripts/test-scraper.ts",
     "test:sources": "bun run scripts/test-fetchers.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:accuracy": "vitest run scripts/tests/geocoding-accuracy.test.ts"
+    "test": "bun x vitest run",
+    "test:watch": "bun x vitest",
+    "test:accuracy": "bun x vitest run scripts/tests/geocoding-accuracy.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

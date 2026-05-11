@@ -111,19 +111,11 @@ describe('geocoding accuracy regression', () => {
 
             /*
               Verification Logic
-              For approved items, we accept either a perfect match or a
-              graceful null (if the location is intentionally not geocoded).
+              Ensure that the actual geocoded result matches the expected ground truth.
+              Previously, approved items allowed a 'null' result to pass, which hid
+              regressions where the engine failed to find a previously identified location.
             */
-            let isCorrect = false;
-            if (isApproved) {
-                if (normActual === null || normActual === normExpected) {
-                    isCorrect = true;
-                }
-            } else {
-                if (normActual === normExpected) {
-                    isCorrect = true;
-                }
-            }
+            const isCorrect = normActual === normExpected;
 
             if (isCorrect) passCount++;
 

@@ -413,6 +413,7 @@ export function useNewsData({
         }
         
         coordinateLoad();
+        return;
     }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, coordinateLoad]);
 
     const fetchEventDetails = useCallback(async (id: string) => {

@@ -7,12 +7,18 @@ export function normalizeSortMode(mode?: string | null): SortMode {
 }
 
 export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sources' | 'latestActivityAt'>): number {
-    const latestActivityMs = item.latestActivityAt ? Number(new Date(item.latestActivityAt).getTime()) : 0;
-    const publishedAtMs = Number(new Date(item.publishedAt).getTime()) || 0;
+    const parseDate = (d: string | undefined | null) => {
+        if (!d) return 0;
+        const ts = new Date(d).getTime();
+        return Number.isFinite(ts) ? ts : 0;
+    };
+
+    const latestActivityMs = parseDate(item.latestActivityAt);
+    const publishedAtMs = parseDate(item.publishedAt);
     let latestSourceMs = 0;
 
     for (const source of item.sources ?? []) {
-        const discoveredAtMs = Number(new Date(source.discoveredAt).getTime()) || 0;
+        const discoveredAtMs = parseDate(source.discoveredAt);
         if (discoveredAtMs > latestSourceMs) {
             latestSourceMs = discoveredAtMs;
         }
@@ -24,7 +30,7 @@ export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sour
 export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
     // Check all possible count field variations to be extremely robust against API/RPC mismatches
     const raw = item as unknown as Record<string, unknown>;
-    const sCount = Number(
+    const rawCount = (
         item.sourcesCount ?? 
         raw.sourceCount ?? 
         raw.event_count ?? 
@@ -32,11 +38,13 @@ export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCoun
         raw.eventCount ?? 
         0
     );
+    const sCount = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+    const safeSCount = Number.isFinite(sCount) ? sCount : 0;
     const sourcesLen = item.sources?.length || 0;
 
     // Reporting strength is strictly based on actual sources (event_count or sources array length)
     // We explicitly IGNORE map cluster count (storyCount) for this metric.
-    const count = Math.max(sCount, sourcesLen);
+    const count = Math.max(safeSCount, sourcesLen);
     return count > 0 ? count : 1;
 }
 

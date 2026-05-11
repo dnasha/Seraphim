@@ -8,6 +8,7 @@ import {
 } from '../../src/scraper/utils/vectorize';
 import type { DbEventSource } from '../../src/types';
 import dotenv from 'dotenv';
+import { calculateMergedStory } from '../../src/scraper/utils/merging';
 
 dotenv.config();
 
@@ -211,47 +212,10 @@ async function reClusterHistoricalData() {
                     if (shouldMerge) {
                         console.log(`[re-cluster] MERGE: "${event.title.slice(0, 40)}..." (Master) <-- "${matchedEvent.title.slice(0, 40)}..." (Sim: ${match.similarity.toFixed(2)})`);
                         
-                        const currentTier = event.credibility_tier || 3;
-                        const matchTier = matchedEvent.credibility_tier || 3;
+                        const mergedResult = calculateMergedStory(event, matchedEvent);
                         
-                        // Always track the most recent timestamp for the master card
-                        const eventTime = new Date(event.published_at).getTime();
-                        const matchTime = new Date(matchedEvent.published_at).getTime();
-                        const latestPublishedAt = matchTime > eventTime ? matchedEvent.published_at : event.published_at;
-
-                        let isBetter = false;
-                        if (matchTier < currentTier) {
-                            isBetter = true;
-                        } else if (matchTier === currentTier) {
-                            const currentLen = (event.description?.length || 0) + (event.title?.length || 0);
-                            const matchLen = (matchedEvent.description?.length || 0) + (matchedEvent.title?.length || 0);
-                            if (matchLen > currentLen) isBetter = true;
-                        }
-
-                        if (isBetter) {
-                            console.log(`[re-cluster]   └─ Content Win: Matched event has better ${matchTier < currentTier ? 'tier' : 'length'}. Updating Master.`);
-                            event.title = matchedEvent.title;
-                            event.description = matchedEvent.description;
-                            event.source = matchedEvent.source;
-                            event.url = matchedEvent.url;
-                            event.credibility_tier = matchedEvent.credibility_tier;
-                        }
-
-                        // Ensure we always keep the most recent time
-                        event.published_at = latestPublishedAt;
-
-                        const matchSources = matchedEvent.sources || [{
-                            name: matchedEvent.source,
-                            url: matchedEvent.url,
-                            source_type: matchedEvent.source_type,
-                            discovered_at: matchedEvent.published_at
-                        }];
-
-                        for (const s of matchSources) {
-                            if (!currentSources.some((cs: { url: string }) => cs.url === s.url)) {
-                                currentSources.push(s);
-                            }
-                        }
+                        // Update the local event object with merged state
+                        Object.assign(event, mergedResult);
 
                         idsToDelete.push(matchedEvent.id);
                         processedIds.add(matchedEvent.id);
