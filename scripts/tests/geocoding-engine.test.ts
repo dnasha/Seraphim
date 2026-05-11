@@ -7,7 +7,7 @@
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { extractLocation, geocodeLocation, ensureInitialized, KNOWN_LOCATIONS } from '../../src/lib/geocoding';
+import { extractLocation, geocodeLocation, ensureInitialized, KNOWN_LOCATIONS } from '@/lib/geocoding';
 
 /*
   Dictionary Initialization

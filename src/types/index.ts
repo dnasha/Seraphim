@@ -7,7 +7,7 @@ Exported from @/types to decouple the directory structures.
 Re-export everything from the lib types so existing frontend code
 that still imports from @/lib/types continues to compile unchanged.
 */
-export * from '@/lib/types';
+export * from '@/lib/core/types';
 
 /*
 Database event interface matches Supabase events table.
@@ -48,7 +48,7 @@ export interface DbEvent {
   sources?: DbEventSource[];
   }
 
-  import { NewsItem } from '@/lib/types';
+  import { NewsItem } from '@/lib/core/types';
 
   /*
   Helper function to map a DbEvent row to a NewsItem.

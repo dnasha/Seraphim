@@ -5,7 +5,7 @@
 */
 
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 import { DbEvent } from '@/types';
 
 // In-memory cache for event descriptions to reduce database load

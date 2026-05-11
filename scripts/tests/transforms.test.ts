@@ -8,10 +8,10 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { cleanString, newsItemToDbEvent } from '../../src/scraper/utils/transforms';
-import { dbEventToNewsItem } from '../../src/types';
-import type { NewsItem } from '../../src/lib/types';
-import type { DbEvent } from '../../src/types';
+import { cleanString, newsItemToDbEvent } from '@/scraper/utils/transforms';
+import { dbEventToNewsItem } from '@/types';
+import type { NewsItem } from '@/lib/core/types';
+import type { DbEvent } from '@/types';
 
 /*
   makeNewsItem

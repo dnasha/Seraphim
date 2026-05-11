@@ -5,7 +5,7 @@
 */
 
 import { Suspense } from 'react';
-import { HomeContent } from '@/components/HomeContent';
+import { HomeContent } from '@/components/layout/HomeContent';
 
 export default function Home() {
     return (

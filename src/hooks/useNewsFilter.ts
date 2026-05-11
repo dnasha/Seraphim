@@ -7,9 +7,8 @@ a memoized filtered list based on user preferences and search queries.
 */
 
 import { useState, useEffect, useMemo } from 'react';
-import { NewsItem } from '@/lib/types';
-import { applyNewsFilters, SortMode } from '@/lib/filters';
-import { BBox } from '@/lib/geo';
+import { NewsItem, BBox } from '@/lib/core/types';
+import { SortMode, applyNewsFilters } from '@/lib/utils/filters';
 
 export function useNewsFilter(
     news: NewsItem[],

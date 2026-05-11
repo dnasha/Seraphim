@@ -7,8 +7,8 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { applyNewsFilters, FilterOptions } from '../../src/lib/filters';
-import type { NewsItem } from '../../src/lib/types';
+import { applyNewsFilters, FilterOptions } from '@/lib/utils/filters';
+import type { NewsItem } from '@/lib/core/types';
 
 /*
   Test Data Factory

@@ -4,7 +4,7 @@
   when multiple items share the same location coordinates.
 */
 
-import { NewsItem } from '../types';
+import { NewsItem } from '@/lib/core/types';
 import { extractLocation, geocodeLocation } from './engine';
 import { NEWS_SOURCE_DEFAULTS } from './constants';
 

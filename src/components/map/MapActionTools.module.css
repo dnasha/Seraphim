@@ -29,9 +29,11 @@
   user-select: none;
 }
 
-.actionBtn:hover {
-  background: var(--surface-hover);
-  transform: scale(1.05);
+@media (hover: hover) {
+  .actionBtn:hover {
+    background: var(--surface-hover);
+    transform: scale(1.05);
+  }
 }
 
 .actionBtn:focus {
@@ -61,8 +63,10 @@
   border-color: var(--accent);
 }
 
-.actionBtnActive:hover {
-  background: var(--accent);
+@media (hover: hover) {
+  .actionBtnActive:hover {
+    background: var(--accent);
+  }
 }
 
 .btnText {

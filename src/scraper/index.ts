@@ -22,15 +22,15 @@ Pipeline:
 7. Upsert new events and update merged stories in Supabase.
 */
 
-import { createClient } from "@supabase/supabase-js";
-import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "./fetchers/rss";
-import { fetchGNews } from "./fetchers/gnews";
-import { fetchSocialFeeds } from "./fetchers/social-feeds";
-import { enrichItemsWithLocation } from "./fetchers/geocoding";
-import type { NewsItem } from "@/lib/types";
+import { supabaseAdmin as supabase } from "@/lib/core/supabase";
+import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "@/lib/api/rss";
+import { fetchGNews } from "@/lib/api/gnews";
+import { fetchSocialFeeds } from "@/lib/api/social";
+import { enrichItemsWithLocation } from '@/lib/geocoding';
+import { NewsItem } from "@/lib/core/types";
 import type { DbEvent, DbEventSource } from "@/types";
 import { newsItemToDbEvent } from "./utils/transforms";
-import { calculateMergedStory } from "./utils/merging";
+import { calculateMergedStory } from "@/lib/utils/merging";
 import {
   generateEmbeddings,
   buildEmbeddingText,
@@ -40,24 +40,20 @@ import {
   SIMILARITY_THRESHOLD_PLACE_ANCHORED,
   SIMILARITY_THRESHOLD_PROXIMITY,
   MAX_MERGE_DISTANCE_KM,
-} from "./utils/vectorize";
+} from "@/lib/utils/vectorize";
 
 /* Configuration */
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DRY_RUN = process.env.DRY_RUN === "true";
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+if (!supabase) {
   console.error(
     "[scraper] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.",
   );
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const db = supabase!;
 
 /* ─── Semantic Merge Logic ─── */
 
@@ -85,7 +81,7 @@ async function fetchRecentEmbeddings(): Promise<
 > {
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("events")
     .select(
       "id, embedding, sources, latitude, longitude, title, description, credibility_tier, impact_score, event_count, source, url, published_at",
@@ -384,7 +380,7 @@ async function run(): Promise<void> {
 
   for (let i = 0; i < incomingUrls.length; i += DEDUPE_CHUNK_SIZE) {
     const chunk = incomingUrls.slice(i, i + DEDUPE_CHUNK_SIZE);
-    dedupePromises.push(supabase.rpc("check_urls_exist", {
+    dedupePromises.push(db.rpc("check_urls_exist", {
       p_urls: chunk,
     }));
   }
@@ -466,7 +462,7 @@ async function run(): Promise<void> {
   let merged_count = 0;
 
   try {
-    const { data: ingestResult, error: ingestError } = await supabase.rpc('bulk_ingest_events', {
+    const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
       p_new_events: newEvents,
       p_merges: mergePayload
     });
@@ -479,7 +475,7 @@ async function run(): Promise<void> {
         
         // Fallback: Process merges individually
         for (const merge of mergePayload) {
-          const { error: mErr } = await supabase
+          const { error: mErr } = await db
             .from('events')
             .update(merge as Partial<DbEvent>)
             .eq('id', merge.id);
@@ -492,7 +488,7 @@ async function run(): Promise<void> {
 
         // Fallback: Process new events individually
         for (const event of newEvents) {
-          const { error: iErr } = await supabase
+          const { error: iErr } = await db
             .from('events')
             .insert(event);
           if (!iErr) {

@@ -6,15 +6,15 @@
 */
 
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/core/supabase";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { NewsItem, NewsResponse } from "@/lib/types";
+import { NewsItem, NewsResponse } from "@/lib/core/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
 import {
   normalizeSortMode,
   sortNewsItems,
-} from "@/lib/ranking";
+} from "@/lib/utils/ranking";
 
 // Global rate limiter using Upstash Redis
 const redis = Redis.fromEnv();
@@ -96,8 +96,8 @@ export async function GET(request: Request) {
     parseFloat(minLng!) <= -179 &&
     parseFloat(maxLng!) >= 179;
 
-  // Global search or global view overrides bounding box constraints
-  const ignoreBBox = !!searchQuery || unmappedOnly || isGlobalBBox;
+  // Spatial constraints are applied unless explicitly global or searching unmapped news
+  const ignoreBBox = (scopeMode === 'global') || unmappedOnly || isGlobalBBox;
 
   // Zoom level used to determine whether to apply server-side clustering
   const zoomStr = searchParams.get("zoom");

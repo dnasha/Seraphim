@@ -16,9 +16,7 @@
 /* MapLibre zoom control overrides to match application theme */
 
 /* zoom icons in dark mode */
-.mapWrapper :global([data-theme="dark"]) :global(.maplibregl-ctrl-icon) {
-  filter: invert(1) brightness(1.8);
-}
+
 
 /* Positioning for zoom controls */
 .mapWrapper :global(.maplibregl-ctrl-top-right) {
@@ -50,8 +48,10 @@
   pointer-events: auto !important;
 }
 
-.mapWrapper :global(.maplibregl-ctrl-attrib:hover) {
-  opacity: 1;
+@media (hover: hover) {
+  .mapWrapper :global(.maplibregl-ctrl-attrib:hover) {
+    opacity: 1;
+  }
 }
 
 .mapWrapper :global(.maplibregl-ctrl-attrib a) {
@@ -60,9 +60,11 @@
   transition: color 0.15s ease;
 }
 
-.mapWrapper :global(.maplibregl-ctrl-attrib a:hover) {
-  text-decoration: underline !important;
-  color: var(--accent) !important;
+@media (hover: hover) {
+  .mapWrapper :global(.maplibregl-ctrl-attrib a:hover) {
+    text-decoration: underline !important;
+    color: var(--accent) !important;
+  }
 }
 
 .mapWrapper :global(.maplibregl-ctrl-attrib-inner) {
@@ -141,9 +143,11 @@
   outline: none !important;
 }
 
-.mapWrapper :global(.news-popup-container .maplibregl-popup-close-button:hover) {
-  color: #b91c1c !important;
-  transform: scale(1.2);
+@media (hover: hover) {
+  .mapWrapper :global(.news-popup-container .maplibregl-popup-close-button:hover) {
+    color: #b91c1c !important;
+    transform: scale(1.2);
+  }
 }
 
 /* News popup internal layout */
@@ -225,16 +229,16 @@
 
 .mapWrapper :global(.news-popup-img-container) {
   width: 100%;
+  aspect-ratio: 16 / 9;
   max-height: 180px;
   border-radius: var(--radius-md);
   margin: 4px 0 4px;
   background: var(--surface-alt);
+  position: relative;
+  overflow: hidden;
 }
 
 .mapWrapper :global(.news-popup-img) {
-  width: 100%;
-  max-height: 180px;
-  object-fit: cover;
   display: block;
 }
 
@@ -261,10 +265,12 @@
   outline: none !important;
 }
 
-.mapWrapper :global(.news-popup-link:hover) {
-  text-decoration: underline;
-  opacity: 0.8;
-  color: var(--accent-hover);
+@media (hover: hover) {
+  .mapWrapper :global(.news-popup-link:hover) {
+    text-decoration: underline;
+    opacity: 0.8;
+    color: var(--accent-hover);
+  }
 }
 
 .mapWrapper :global(.news-popup-link:active) {
@@ -329,8 +335,10 @@
   line-height: 0;
 }
 
-.mapWrapper :global(.news-popup-credibility:hover) {
-  transform: scale(1.1);
+@media (hover: hover) {
+  .mapWrapper :global(.news-popup-credibility:hover) {
+    transform: scale(1.1);
+  }
 }
 
 .mapWrapper :global(.news-popup-credibility svg) {
@@ -361,9 +369,11 @@
   line-height: 1;
 }
 
-.mapWrapper :global(.news-popup-source-count:hover) {
-  background: var(--surface-hover);
-  border-color: var(--text-muted);
+@media (hover: hover) {
+  .mapWrapper :global(.news-popup-source-count:hover) {
+    background: var(--surface-hover);
+    border-color: var(--text-muted);
+  }
 }
 
 .mapWrapper :global(.news-popup-source-count svg) {
@@ -422,9 +432,11 @@
   outline: none !important;
 }
 
-.mapWrapper :global(.news-popup-source-link:hover) {
-  text-decoration: underline;
-  opacity: 0.85;
+@media (hover: hover) {
+  .mapWrapper :global(.news-popup-source-link:hover) {
+    text-decoration: underline;
+    opacity: 0.85;
+  }
 }
 
 .mapWrapper :global(.news-popup-source-time) {

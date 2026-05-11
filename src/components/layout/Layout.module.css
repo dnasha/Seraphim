@@ -1,0 +1,151 @@
+/* 
+Layout.module.css
+Styles for the main application shell, content area, and top-level action buttons.
+*/
+
+.appLayout {
+  display: flex;
+  height: 100vh; /* fallback */
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+}
+
+.mainContent {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: margin-left;
+}
+
+.mainContentCollapsed {
+  margin-left: 0;
+}
+
+.topActions {
+  position: absolute;
+  top: 12px;
+  right: 62px;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+}
+
+.sidebarExpandBtn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 1000;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+}
+
+@media (hover: hover) {
+  .sidebarExpandBtn:hover {
+    background: var(--surface-hover);
+    transform: scale(1.05);
+  }
+}
+
+.sidebarExpandBtn:focus {
+  outline: none;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .appLayout {
+    flex-direction: row;
+    position: relative;
+  }
+
+  .topActions {
+    display: none;
+  }
+
+  .sidebarExpandBtn {
+    top: 12px;
+    left: 12px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.errorOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 23, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 2rem;
+  text-align: center;
+}
+
+.errorIcon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 1.5rem;
+  color: var(--red, #ef4444);
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.3));
+  opacity: 0.9;
+}
+
+.errorOverlay p {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.errorOverlay button {
+  padding: 0.75rem 2rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+@media (hover: hover) {
+  .errorOverlay button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+    filter: brightness(1.1);
+  }
+}
+
+.errorOverlay button:active {
+  transform: translateY(0);
+}
+
+:global(.light-mode) .errorOverlay {
+  background: rgba(255, 255, 255, 0.85);
+}

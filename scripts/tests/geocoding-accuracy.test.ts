@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { extractLocation, geocodeLocation, ensureInitialized } from '../../src/lib/geocoding';
+import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geocoding';
 
 /*
   ACCURACY_THRESHOLD

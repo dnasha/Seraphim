@@ -13,7 +13,7 @@ import {
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 
-import { Providers } from "@/components/Providers";
+import { Providers } from "@/components/layout/Providers";
 
 import "./globals.css";
 

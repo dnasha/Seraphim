@@ -21,11 +21,7 @@ html {
 }
 
 body {
-  font-family:
-    var(--font-inter),
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-ui), system-ui, -apple-system, sans-serif;
   background: #fafafa;
   color: #111;
   line-height: 1.5;
@@ -211,10 +207,17 @@ body.is-resizing-sidebar * {
   justify-content: center !important;
 }
 
-.maplibregl-ctrl-group button:hover {
-  background: var(--surface-hover) !important;
-  transform: scale(1.05);
-  z-index: 1;
+@media (hover: hover) {
+  .maplibregl-ctrl-group button:hover {
+    background: var(--surface-hover) !important;
+    transform: scale(1.05);
+    z-index: 1;
+  }
+}
+
+/* Dark mode zoom icons */
+[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1) brightness(1.8);
 }
 
 .maplibregl-ctrl-group button:active {

@@ -8,9 +8,9 @@
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { enrichItemsWithLocation } from '../../src/lib/geocoding/enricher';
-import { ensureInitialized } from '../../src/lib/geocoding';
-import type { NewsItem } from '../../src/lib/types';
+import { enrichItemsWithLocation } from '@/lib/geocoding/enricher';
+import { ensureInitialized } from '@/lib/geocoding';
+import type { NewsItem } from '@/lib/core/types';
 
 beforeAll(() => {
     ensureInitialized();

@@ -1,7 +1,7 @@
 import DOMPurify from 'isomorphic-dompurify';
-import type { NewsItem } from '@/lib/types';
+import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
-import { ensureIsoDate } from './date';
+import { ensureIsoDate } from '@/lib/utils/date';
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 
 /* Build a static lookup map: source name → credibility_tier */

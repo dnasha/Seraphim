@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "scrape": "bun run src/scraper/index.ts",
-    "test-scraper": "bun run scripts/test-scraper.ts",
-    "test:sources": "bun run scripts/test-fetchers.ts",
+    "test-scraper": "bun run scripts/diagnostics/test-scraper.ts",
+    "test:sources": "bun run scripts/diagnostics/test-fetchers.ts",
     "test": "bun x vitest run",
     "test:watch": "bun x vitest",
     "test:accuracy": "bun x vitest run scripts/tests/geocoding-accuracy.test.ts"

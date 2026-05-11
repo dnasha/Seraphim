@@ -1,0 +1,82 @@
+import { NewsItem } from "@/lib/core/types";
+
+export const CLUSTER_MAX_ZOOM = 7;
+
+export const CATEGORIES = [
+  "general",
+  "world",
+  "crisis",
+  "nation",
+  "business",
+  "technology",
+  "science",
+  "health",
+];
+
+/**
+ * Deterministic client-side jitter to prevent unclustered pins from stacking.
+ * Groups items by coordinate, sorts them by ID, and applies a golden-angle spiral.
+ */
+export function applyClientJitter(
+  items: NewsItem[],
+  selectedId: string | null = null,
+): NewsItem[] {
+  const coordGroups = new Map<string, NewsItem[]>();
+
+  for (const item of items) {
+    if (item.latitude == null || item.longitude == null) continue;
+    if (item.storyCount && item.storyCount > 1) continue;
+
+    const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
+    if (!coordGroups.has(key)) coordGroups.set(key, []);
+    coordGroups.get(key)!.push(item);
+  }
+
+  const jitteredMap = new Map<string, { lat: number; lng: number }>();
+
+  for (const group of coordGroups.values()) {
+    if (group.length <= 1) continue;
+
+    group.sort((a, b) => {
+      const aId = a.originalId || a.id;
+      const bId = b.originalId || b.id;
+      if (aId === selectedId) return -1;
+      if (bId === selectedId) return 1;
+      return aId.localeCompare(bId);
+    });
+
+    const baseLat = group[0].latitude!;
+    const baseLng = group[0].longitude!;
+    const latRad = (baseLat * Math.PI) / 180;
+    const lngScale = Math.max(Math.cos(latRad), 0.2);
+    const goldenAngle = (137.5 * Math.PI) / 180;
+    const kmToLatDeg = (km: number) => km / 111.32;
+    const baseRadius = kmToLatDeg(2.2);
+    const growth = kmToLatDeg(1.0);
+
+    for (let i = 0; i < group.length; i++) {
+      const item = group[i];
+      const angle = i * goldenAngle;
+      const radius = baseRadius + Math.sqrt(i) * growth * 1.2;
+      const latOffset = radius * Math.cos(angle);
+      const lngOffset = (radius * Math.sin(angle)) / lngScale;
+
+      const jitteredLat = Math.max(-85, Math.min(85, baseLat + latOffset));
+      const jitteredLngRaw = baseLng + lngOffset;
+      const jitteredLng = ((((jitteredLngRaw + 180) % 360) + 360) % 360) - 180;
+
+      jitteredMap.set(item.id, {
+        lat: jitteredLat,
+        lng: jitteredLng,
+      });
+    }
+  }
+
+  return items.map((item) => {
+    const jittered = jitteredMap.get(item.id);
+    if (jittered) {
+      return { ...item, latitude: jittered.lat, longitude: jittered.lng };
+    }
+    return item;
+  });
+}

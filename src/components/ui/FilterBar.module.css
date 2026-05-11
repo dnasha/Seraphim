@@ -1,0 +1,371 @@
+/* 
+FilterBar.module.css
+Styles for the filter bar, including source, category, and time range toggles,
+along with the custom date picker interface.
+*/
+
+.filterBar {
+  background: var(--surface-alt);
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.scrollableFilters {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 860px) {
+  .scrollableFilters {
+    max-height: 115px;
+    overflow-y: auto;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+}
+
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filterLabel {
+  font-family: var(--font-ui);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+/* Search */
+.searchInputContainer {
+  position: relative;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.searchInput {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 8px 10px 8px 30px;
+  font-size: 0.875rem;
+  width: 100%;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  transition: border-color 0.15s;
+  user-select: none;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Toggle rows */
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scrollWrapper {
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+
+.scrollWrapper::-webkit-scrollbar {
+  display: none; /* Webkit/Chrome/Safari */
+}
+
+.sourceToggles,
+.categoryToggles {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: max-content;
+  padding-bottom: 2px;
+}
+
+.sourceToggle,
+.categoryToggle,
+.timeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.sourceIcon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.sourceIconX {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@media (hover: hover) {
+  .sourceToggle:hover,
+  .categoryToggle:hover,
+  .timeToggle:hover {
+    background: color-mix(in srgb, var(--btn-color) 15%, transparent);
+    transform: scale(1.05);
+  }
+}
+
+.sourceToggle:focus,
+.categoryToggle:focus,
+.timeToggle:focus {
+  outline: none;
+}
+
+.sourceToggle:active,
+.categoryToggle:active,
+.timeToggle:active {
+  transform: scale(0.95);
+  transition: none;
+}
+
+.sourceToggleActive,
+.timeToggleActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .sourceToggleActive:hover,
+  .timeToggleActive:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    transform: scale(1.05);
+  }
+}
+
+.sourceToggleActive:active,
+.timeToggleActive:active {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+  transform: scale(0.95);
+  transition: none;
+}
+
+.categoryToggleActive {
+  color: #fff;
+}
+
+.filterDivider {
+  width: 1px;
+  height: 16px;
+  background: var(--text-muted);
+  opacity: 0.4;
+  margin: 0 6px;
+  align-self: center;
+}
+
+/* category icon SVG inside filter buttons */
+.categoryIconSvg {
+  display: inline-block;
+  flex-shrink: 0;
+  transition: fill 0.15s;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .filterBar {
+    padding: 8px 10px;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow-x: hidden;
+  }
+
+  .filterSection {
+    gap: 3px;
+  }
+
+  .sourceToggle,
+  .categoryToggle,
+  .timeToggle {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 0.75rem;
+  }
+}
+
+.timeFilterContainer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Date Picker - Floating */
+.customDateContainer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  margin-top: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.2s ease-out;
+  min-width: 280px;
+}
+
+.closePickerBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+
+@media (hover: hover) {
+  .closePickerBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translate(-50%, -60%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+.customDateRow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dateInputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dateInputGroup label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dateInput {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  width: 100%;
+}
+
+.dateInput:focus {
+  border-color: var(--accent);
+}
+
+.dateInput::-webkit-calendar-picker-indicator {
+  filter: invert(43%) sepia(80%) saturate(3665%) hue-rotate(221deg) brightness(98%) contrast(97%);
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .customDateContainer {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    bottom: auto;
+    right: auto;
+    width: 90%;
+    max-width: 320px;
+    min-width: 0;
+    margin-top: 0;
+    animation: fadeInScale 0.2s ease-out;
+  }
+}
+
+.pickerFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.resetBtn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  outline: none;
+}
+
+@media (hover: hover) {
+  .resetBtn:hover {
+    background: var(--surface);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+.resetBtn:active {
+  transform: scale(0.95);
+  border-color: var(--accent-active);
+  background: var(--surface-alt);
+}

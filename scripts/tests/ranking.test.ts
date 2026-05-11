@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { latestReportTimestamp, canonicalEventCount } from '../../src/lib/ranking';
-import { NewsItem } from '../../src/lib/types';
+import { latestReportTimestamp, canonicalEventCount } from '@/lib/utils/ranking';
+import { NewsItem } from '@/lib/core/types';
 
 describe('Ranking Logic Robustness', () => {
     describe('latestReportTimestamp', () => {

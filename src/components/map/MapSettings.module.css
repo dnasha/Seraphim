@@ -25,9 +25,11 @@
     transform 0.15s;
 }
 
-.mapSettingsBtn:hover {
-  background: var(--surface-hover);
-  transform: scale(1.05);
+@media (hover: hover) {
+  .mapSettingsBtn:hover {
+    background: var(--surface-hover);
+    transform: scale(1.05);
+  }
 }
 
 .mapSettingsBtn:focus {
@@ -113,9 +115,11 @@
   transition: all 0.15s;
 }
 
-.settingsStyleBtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+@media (hover: hover) {
+  .settingsStyleBtn:hover:not(.settingsStyleBtnActive) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 }
 
 .settingsStyleBtnActive {

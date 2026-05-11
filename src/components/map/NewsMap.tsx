@@ -7,20 +7,17 @@ popups, overlays, and camera animations.
 "use client";
 
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { NewsItem } from "@/lib/types";
+import { createPortal } from "react-dom";
+import { NewsItem, BBox } from "@/lib/core/types";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { BBox } from "@/lib/geo";
+import MapPopup from "./MapPopup";
 
-import {
-  getMapLibreStyle,
-  generateCategoryIcon,
-  formatTimeAgo,
-  getSourceBadgeColor,
-  getCategoryColor,
-  getCredibilityStyle,
-} from "./MapConstants";
-import { canonicalEventCount, latestReportTimestamp } from "@/lib/ranking";
+import { getMapLibreStyle } from "./MapConstants";
+import { canonicalEventCount, latestReportTimestamp } from "@/lib/utils/ranking";
+import { applyClientJitter } from "./utils";
+import { useMapLayers } from "./useMapLayers";
+import { useMapCamera } from "./useMapCamera";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
@@ -47,90 +44,6 @@ type ExtendedMap = maplibregl.Map & {
   setProjection?: (projection: { type: string }) => void;
   setFog?: (fog: unknown) => void;
 };
-
-const CATEGORIES = [
-  "general",
-  "world",
-  "crisis",
-  "nation",
-  "business",
-  "technology",
-  "science",
-  "health",
-];
-
-/**
- * Deterministic client-side jitter to prevent unclustered pins from stacking.
- * Groups items by coordinate, sorts them by ID, and applies a golden-angle spiral.
- */
-function applyClientJitter(
-  items: NewsItem[],
-  selectedId: string | null = null,
-): NewsItem[] {
-  const coordGroups = new Map<string, NewsItem[]>();
-
-  // Group items by coordinate (rounded to avoid floating point precision issues)
-  for (const item of items) {
-    if (item.latitude == null || item.longitude == null) continue;
-    // Don't jitter clusters (items with multiple stories)
-    if (item.storyCount && item.storyCount > 1) continue;
-
-    const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
-    if (!coordGroups.has(key)) coordGroups.set(key, []);
-    coordGroups.get(key)!.push(item);
-  }
-
-  const jitteredMap = new Map<string, { lat: number; lng: number }>();
-
-  for (const group of coordGroups.values()) {
-    if (group.length <= 1) continue;
-
-    // Prioritize the selected item as the anchor (index 0) so it never jumps during selection/zoom.
-    // Everything else at this location jitters around the selected "focus" item.
-    group.sort((a, b) => {
-      const aId = a.originalId || a.id;
-      const bId = b.originalId || b.id;
-      if (aId === selectedId) return -1;
-      if (bId === selectedId) return 1;
-      return aId.localeCompare(bId);
-    });
-
-    const baseLat = group[0].latitude!;
-    const baseLng = group[0].longitude!;
-    const latRad = (baseLat * Math.PI) / 180;
-    const lngScale = Math.max(Math.cos(latRad), 0.2); // avoid huge jumps near poles
-    const goldenAngle = (137.5 * Math.PI) / 180;
-    const kmToLatDeg = (km: number) => km / 111.32;
-    const baseRadius = kmToLatDeg(2.2); // ~2.2km base jitter
-    const growth = kmToLatDeg(1.0); // ~1.0km ring growth
-
-    for (let i = 0; i < group.length; i++) {
-      const item = group[i];
-      // Use a more stable, square-root based growth for an organic feel that resists crowding
-      const angle = i * goldenAngle;
-      const radius = baseRadius + Math.sqrt(i) * growth * 1.2;
-      const latOffset = radius * Math.cos(angle);
-      const lngOffset = (radius * Math.sin(angle)) / lngScale;
-
-      const jitteredLat = Math.max(-85, Math.min(85, baseLat + latOffset));
-      const jitteredLngRaw = baseLng + lngOffset;
-      const jitteredLng = ((((jitteredLngRaw + 180) % 360) + 360) % 360) - 180;
-
-      jitteredMap.set(item.id, {
-        lat: jitteredLat,
-        lng: jitteredLng,
-      });
-    }
-  }
-
-  return items.map((item) => {
-    const jittered = jitteredMap.get(item.id);
-    if (jittered) {
-      return { ...item, latitude: jittered.lat, longitude: jittered.lng };
-    }
-    return item;
-  });
-}
 
 export default function NewsMap({
   items,
@@ -166,6 +79,14 @@ export default function NewsMap({
     noaa: false,
     eonet: false,
   });
+  // Initialize popup container element once safely
+  const popupContainer = useMemo(() => {
+    if (typeof document !== 'undefined') {
+      return document.createElement('div');
+    }
+    return null;
+  }, []);
+
   const [isGlobe, setIsGlobe] = useState(false);
   const isGlobeRef = useRef(isGlobe);
   const currentStyleRef = useRef(currentStyle);
@@ -188,61 +109,12 @@ export default function NewsMap({
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Calculate initial view state based on resolution via interpolation between known ideal points.
-  const getInitialViewState = useCallback(() => {
-    if (typeof window === "undefined")
-      return { center: [11.2907, 36.2494] as [number, number], zoom: 1.1 };
-    
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const isMobile = width <= 860;
-    
-    // Sidebar is 400px wide on desktop, 0px (overlay) on mobile
-    const mapWidth = isMobile ? width : width - 400;
 
-    // Ideal points for resolution-aware scaling:
-    // P1 (1080p): 1920x1080 display -> 1520 map width -> zoom 1.1
-    // P2 (2K): 2560x1440 display -> 2160 map width -> zoom 2.1
-    
-    const baseWidth = 1520;
-    const targetWidth = 2160;
-    const baseZoom = 1.1;
-    const targetZoom = 2.1;
-    
-    // Calculate interpolation factor 't' based on current map width relative to P1 and P2.
-    const tW = (mapWidth - baseWidth) / (targetWidth - baseWidth);
-    const tH = (height - 1080) / (1440 - 1080);
-    
-    // We take the max growth to ensure we don't zoom out too much on narrow or tall displays.
-    // Clamping t at -0.2 prevents extreme zoom-outs on smaller 1K/16:10 screens.
-    const t = Math.max(-0.2, Math.max(isNaN(tW) ? 0 : tW, isNaN(tH) ? 0 : tH));
-    
-    // Center point persists across all resolutions as requested.
-    const center: [number, number] = [11.2907, 36.2494];
-    
-    // Extrapolate zoom
-    const zoom = baseZoom + t * (targetZoom - baseZoom);
-
-    // Apply healthy clamping: 
-    // - On desktop, we use a floor of 1.2 to get closer to the requested 'global' look,
-    //   while still providing enough height to minimize the 'snap-to-equator' effect.
-    const finalZoom = Math.max(isMobile ? 0.9 : 1.2, Math.min(zoom, 4.0));
-
-    return {
-      center,
-      zoom: finalZoom,
-    };
-  }, []);
-
-  // Track the last selection to prevent redundant camera animations during re-renders.
-  const lastFlownSelectionRef = useRef<string | null>(null);
-  const lastFlownVersionRef = useRef(0);
 
   // Cache for GeoJSON data to restore it after map style reloads.
   const pendingGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
 
-  // Guard to prevent deselecting items when the popup is programmatically removed during flyTo.
-  const isFlyingRef = useRef(false);
+
 
   // Track active resizing to suppress data updates/emissions
   const isResizingRef = useRef(false);
@@ -345,6 +217,13 @@ export default function NewsMap({
     }));
   }, [items, sortMode, selectedItemId]);
 
+  const selectedItem = useMemo(() => {
+    if (!selectedItemId) return null;
+    return geoItems.find(
+      (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+    ) || null;
+  }, [geoItems, selectedItemId]);
+
   // Emits the current map bounds with a debounce to avoid excessive API calls.
   const emitBounds = useCallback((map: maplibregl.Map) => {
     if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
@@ -365,377 +244,33 @@ export default function NewsMap({
     }, 150);
   }, []);
 
-  // Registers icons, sources, and layers. Called on map initialization and style changes.
-  const addSourcesAndLayers = useCallback(async (map: maplibregl.Map) => {
-    // Register category icons (idempotent and async-safe)
-    const iconsToLoad = CATEGORIES.flatMap((cat) => [
-      { name: `${cat}_inactive`, active: false, cat },
-      { name: `${cat}_active`, active: true, cat },
-    ]).filter((item) => !map.hasImage(item.name));
 
-    if (iconsToLoad.length > 0) {
-      const loaded = await Promise.all(
-        iconsToLoad.map(async (item) => ({
-          name: item.name,
-          img: await generateCategoryIcon(item.cat, item.active),
-        })),
-      );
 
-      for (const { name, img } of loaded) {
-        if (!map.hasImage(name)) {
-          try {
-            map.addImage(name, img);
-          } catch {
-            /* ignore race-condition errors if style reloaded during load */
-          }
-        }
-      }
-    }
+  const latestGeoItemsRef = useRef(geoItems);
+  useEffect(() => {
+    latestGeoItemsRef.current = geoItems;
+  }, [geoItems]);
 
-    // Configure GeoJSON source with client-side clustering.
-    // Explicitly remove source and layers if they exist to force a clean reload with new clustering settings
-    if (map.getSource("news-events")) {
-      // Layers must be removed before the source
-      const layers = [
-        "clusters-count",
-        "clusters-circle",
-        "hot-story-pulse",
-        "unclustered-point-active",
-        "unclustered-point",
-      ];
-      for (const l of layers) {
-        if (map.getLayer(l)) map.removeLayer(l);
-      }
-      map.removeSource("news-events");
-    }
+  const { addSourcesAndLayers } = useMapLayers({
+    forceIndividualPinsRef,
+    overlaysRef,
+    pendingGeoJsonRef,
+  });
 
-    map.addSource("news-events", {
-      type: "geojson",
-      data: pendingGeoJsonRef.current || {
-        type: "FeatureCollection",
-        features: [],
-      },
-      cluster: !forceIndividualPinsRef.current,
-      clusterMaxZoom: 7,
-      clusterRadius: 35,
-      clusterProperties: {
-        summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
-        hasTopHot: ["max", ["case", ["==", ["get", "isTopHot"], true], 1, 0]],
-      },
-    });
-
-    const clusterCheck: maplibregl.FilterSpecification =
-      forceIndividualPinsRef.current
-        ? [
-            "all",
-            ["has", "point_count"],
-            ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"],
-          ]
-        : [
-            "any",
-            ["has", "point_count"],
-            [
-              "all",
-              [">", ["coalesce", ["get", "storyCount"], 0], 1],
-              ["<", ["zoom"], 7],
-            ],
-          ];
-
-    // Circle layer for clustered news items
-    if (!map.getLayer("clusters-circle")) {
-      map.addLayer({
-        id: "clusters-circle",
-        type: "circle",
-        source: "news-events",
-        filter: clusterCheck,
-        layout: {
-          "circle-sort-key": [
-            "coalesce",
-            ["get", "summedStoryCount"],
-            ["get", "storyCount"],
-            0,
-          ],
-        },
-        paint: {
-          "circle-color": [
-            "step",
-            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-            "#fca5a5",
-            10,
-            "#f87171",
-            25,
-            "#ef4444",
-            50,
-            "#dc2626",
-            100,
-            "#b91c1c",
-            250,
-            "#991b1b",
-            500,
-            "#7f1d1d",
-          ],
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-            2,
-            14,
-            10,
-            18,
-            50,
-            22,
-            100,
-            26,
-            250,
-            28,
-            500,
-            32,
-            1000,
-            36,
-          ],
-          "circle-opacity": [
-            "interpolate",
-            ["linear"],
-            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-            2,
-            0.8,
-            20,
-            0.85,
-            100,
-            0.9,
-            500,
-            0.93,
-            1000,
-            0.95,
-          ],
-          "circle-stroke-width": 0,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-    }
-
-    // Pulse animation layer for global top-3 hot stories.
-    // We add this AFTER clusters-circle to ensure it pulses OVER the red cluster background
-    // but BEFORE the count labels so it doesn't obscure text.
-    if (map.getLayer("hot-story-pulse")) map.removeLayer("hot-story-pulse");
-
-    map.addLayer({
-      id: "hot-story-pulse",
-      type: "circle",
-      source: "news-events",
-      filter: [
-        "any",
-        ["==", ["get", "hasTopHot"], 1],
-        ["==", ["get", "isTopHot"], true],
-      ],
-      paint: {
-        "circle-radius": 0,
-        "circle-color": [
-          "case",
-          ["has", "point_count"],
-          "#ef4444",
-          [
-            "match",
-            ["get", "category"],
-            "world",
-            "#dc2626",
-            "crisis",
-            "#b91c1c",
-            "nation",
-            "#2563eb",
-            "business",
-            "#d97706",
-            "technology",
-            "#0891b2",
-            "science",
-            "#059669",
-            "health",
-            "#7c3aed",
-            "#3b82f6",
-          ],
-        ],
-        "circle-opacity": 0,
-        "circle-blur": 0,
-        "circle-stroke-width": 0,
-      },
-    });
-
-    map.setPaintProperty("hot-story-pulse", "circle-radius-transition", {
-      duration: 0,
-    });
-    map.setPaintProperty("hot-story-pulse", "circle-opacity-transition", {
-      duration: 0,
-    });
-    map.setPaintProperty("hot-story-pulse", "circle-blur-transition", {
-      duration: 0,
-    });
-
-    // Numeric labels for news clusters.
-    if (!map.getLayer("clusters-count")) {
-      map.addLayer({
-        id: "clusters-count",
-        type: "symbol",
-        source: "news-events",
-        filter: clusterCheck,
-        layout: {
-          "symbol-sort-key": [
-            "*",
-            -1,
-            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-          ],
-          "text-field": [
-            "to-string",
-            ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"]],
-          ],
-          "text-size": 12,
-          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-          "text-allow-overlap": false,
-          "text-ignore-placement": false,
-          "text-padding": 6,
-        },
-        paint: {
-          "text-color": "#ffffff",
-        },
-      });
-    }
-
-    // Layer for inactive individual news pins.
-    if (!map.getLayer("unclustered-point")) {
-      map.addLayer({
-        id: "unclustered-point",
-        type: "symbol",
-        source: "news-events",
-        filter: ["all", ["!", clusterCheck], ["!=", ["get", "id"], ""]],
-        layout: {
-          "icon-image": [
-            "concat",
-            ["coalesce", ["get", "category"], "general"],
-            "_inactive",
-          ],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-        },
-        paint: {
-          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 8, 1.0],
-        },
-      });
-    }
-
-    // Layer for the currently selected news pin.
-    if (!map.getLayer("unclustered-point-active")) {
-      map.addLayer({
-        id: "unclustered-point-active",
-        type: "symbol",
-        source: "news-events",
-        filter: ["all", ["!", clusterCheck], ["==", ["get", "id"], ""]],
-        layout: {
-          "icon-image": [
-            "concat",
-            ["coalesce", ["get", "category"], "general"],
-            "_active",
-          ],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-        },
-        paint: {
-          "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
-        },
-      });
-    }
-
-    // USGS Earthquake live overlay.
-    if (!map.getSource("overlay-usgs")) {
-      map.addSource("overlay-usgs", {
-        type: "geojson",
-        data: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
-      });
-    }
-    if (!map.getLayer("overlay-usgs-point")) {
-      map.addLayer(
-        {
-          id: "overlay-usgs-point",
-          type: "circle",
-          source: "overlay-usgs",
-          layout: {
-            visibility: overlaysRef.current["usgs"] ? "visible" : "none",
-          },
-          paint: {
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["get", "mag"],
-              1,
-              4,
-              5,
-              12,
-              8,
-              24,
-            ],
-            "circle-color": "#f59e0b",
-            "circle-opacity": 0.6,
-            "circle-stroke-width": 1,
-            "circle-stroke-color": "#ffffff",
-          },
-        },
-        "clusters-circle",
-      );
-    }
-
-    // NOAA Weather Radar live overlay.
-    if (!map.getSource("overlay-noaa")) {
-      map.addSource("overlay-noaa", {
-        type: "raster",
-        tiles: [
-          "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
-          "https://mesonet1.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
-          "https://mesonet2.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
-          "https://mesonet3.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
-        ],
-        tileSize: 256,
-      });
-    }
-    if (!map.getLayer("overlay-noaa-raster")) {
-      map.addLayer(
-        {
-          id: "overlay-noaa-raster",
-          type: "raster",
-          source: "overlay-noaa",
-          layout: {
-            visibility: overlaysRef.current["noaa"] ? "visible" : "none",
-          },
-          paint: { "raster-opacity": 0.6 },
-        },
-        "clusters-circle",
-      );
-    }
-
-    // NASA EONET (Disasters) live overlay.
-    if (!map.getSource("overlay-eonet")) {
-      map.addSource("overlay-eonet", {
-        type: "geojson",
-        data: "https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods",
-      });
-    }
-    if (!map.getLayer("overlay-eonet-point")) {
-      map.addLayer(
-        {
-          id: "overlay-eonet-point",
-          type: "circle",
-          source: "overlay-eonet",
-          layout: {
-            visibility: overlaysRef.current["eonet"] ? "visible" : "none",
-          },
-          paint: {
-            "circle-color": "#ef4444",
-            "circle-radius": 5,
-            "circle-stroke-width": 1,
-            "circle-stroke-color": "#ffffff",
-          },
-        },
-        "clusters-circle",
-      );
-    }
-  }, []);
+  const { getInitialViewState, handleResetOrientation, isFlyingRef } = useMapCamera({
+    mapRef,
+    mapReady,
+    popupRef,
+    popupContainer,
+    selectedItemId,
+    selectionVersion,
+    geoItems,
+    latestGeoItemsRef,
+    animatedEffects,
+    isGlobe,
+    forceIndividualPinsRef,
+    containerRef,
+  });
 
   // Effect to initialize the map and wire up event listeners.
   useEffect(() => {
@@ -1049,347 +584,6 @@ export default function NewsMap({
     if (source) source.setData(geojson);
   }, [geoItems, mapReady]);
 
-  const latestGeoItemsRef = useRef(geoItems);
-  useEffect(() => {
-    latestGeoItemsRef.current = geoItems;
-  }, [geoItems]);
-
-  const generatePopupHtml = useCallback((item: NewsItem) => {
-    const pinColor = getCategoryColor(item.category);
-    const credStyle = getCredibilityStyle(item.credibilityTier);
-    const sourceCount = canonicalEventCount(item);
-
-    const latestSource = item.sources?.length
-      ? [...item.sources].sort(
-          (a, b) =>
-            new Date(b.discoveredAt).getTime() -
-            new Date(a.discoveredAt).getTime(),
-        )[0]
-      : null;
-    const displayDate = latestSource
-      ? latestSource.discoveredAt
-      : (item.latestActivityAt || item.publishedAt);
-
-    const categoryLabel = item.category
-      ? `<span class="news-popup-category" style="background:${pinColor}">${item.category}</span>`
-      : "";
-
-    const credBadgeHtml = `<span class="news-popup-credibility" style="background:${credStyle.bg};color:${credStyle.color}" title="${credStyle.label} source"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-6.45 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span>`;
-
-    const sourceCountHtml =
-      sourceCount > 1
-        ? `<span class="news-popup-source-count" title="${sourceCount} sources reporting on this"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z"/></svg>${sourceCount}</span>`
-        : "";
-
-    const descriptionHtml =
-      item.description != null
-        ? item.description
-          ? `<p class="news-popup-summary" data-event-id="${item.originalId || item.id}">${item.description}</p>`
-          : ""
-        : `<div class="news-popup-summary news-popup-summary--loading" data-event-id="${item.originalId || item.id}">
-                <div class="popup-skeleton-line"></div>
-                <div class="popup-skeleton-line" style="width:90%"></div>
-                <div class="popup-skeleton-line" style="width:75%"></div>
-              </div>`;
-
-    /* Build source list HTML for multi-source stories */
-    let sourcesListHtml = "";
-    if (sourceCount > 1 && item.sources) {
-      const sorted = [...item.sources].sort(
-        (a, b) =>
-          new Date(b.discoveredAt).getTime() -
-          new Date(a.discoveredAt).getTime(),
-      );
-      const sourceEntries = sorted
-        .map((src) => {
-          const srcColor = getSourceBadgeColor(src.name);
-          const srcTime = formatTimeAgo(src.discoveredAt);
-          return `<div class="news-popup-source-entry">
-            <span class="news-popup-source-name" style="background:${srcColor};color:#fff">${src.name}</span>
-            <a class="news-popup-source-link" href="${src.url}" target="_blank" rel="noopener noreferrer">${new URL(src.url).hostname}</a>
-            ${srcTime ? `<span class="news-popup-source-time">${srcTime}</span>` : ""}
-          </div>`;
-        })
-        .join("");
-      sourcesListHtml = `<div class="news-popup-sources-section">
-        <div class="news-popup-sources-header">Sources & Timeline</div>
-        <div class="news-popup-sources-list">${sourceEntries}</div>
-      </div>`;
-    }
-
-    const singleLinkHtml =
-      sourceCount <= 1
-        ? `<a class="news-popup-link" href="${item.url}" target="_blank" rel="noopener noreferrer">View source \u2192</a>`
-        : "";
-
-    return `
-            <div class="news-popup">
-                <div class="news-popup-header">
-                    <h3 class="news-popup-title">${item.title}</h3>
-                    <div class="news-popup-meta">
-                        <span class="news-popup-source" style="background:${getSourceBadgeColor(item.source)};color:#fff">${item.source}</span>
-                        ${credBadgeHtml}
-                        ${categoryLabel}
-                        ${sourceCountHtml}
-                        <span class="news-popup-time">${formatTimeAgo(displayDate)}</span>
-                        ${
-                          item.locationName
-                            ? `
-                            <span class="news-popup-meta-sep">\u2022</span>
-                            <span class="news-popup-location">
-                                <svg class="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                                </svg>
-                                ${item.locationName}
-                            </span>
-                        `
-                            : ""
-                        }
-                    </div>
-                </div>
-                <div class="news-popup-content">
-                    ${
-                      item.imageUrl
-                        ? `
-                        <div class="news-popup-img-container">
-                            <img class="news-popup-img" src="${item.imageUrl}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
-                        </div>
-                    `
-                        : ""
-                    }
-                    ${descriptionHtml}
-                    ${singleLinkHtml}
-                </div>
-                ${sourcesListHtml}
-            </div>
-        `;
-  }, []);
-
-  // Manages selection state, camera flyTo animations, and popup visibility.
-  useEffect(() => {
-    if (!mapReady || !mapRef.current || !popupRef.current) return;
-    const map = mapRef.current;
-
-    // Sync layer filters with current selection.
-    if (
-      map.getLayer("unclustered-point") &&
-      map.getLayer("unclustered-point-active")
-    ) {
-      const activeId = selectedItemId || "";
-      const clusterCheck: maplibregl.FilterSpecification =
-        forceIndividualPinsRef.current
-          ? [
-              "all",
-              ["has", "point_count"],
-              ["==", ["get", "id"], "___FORCE_HIDE_CLUSTERS___"],
-            ]
-          : [
-              "any",
-              ["has", "point_count"],
-              [
-                "all",
-                [">", ["coalesce", ["get", "storyCount"], 0], 1],
-                ["<", ["zoom"], 5],
-              ],
-            ];
-
-      map.setFilter("unclustered-point", [
-        "all",
-        ["!", clusterCheck],
-        ["!=", ["get", "id"], activeId],
-      ]);
-      map.setFilter("unclustered-point-active", [
-        "all",
-        ["!", clusterCheck],
-        ["==", ["get", "id"], activeId],
-      ]);
-
-      if (map.getLayer("clusters-circle")) {
-        map.setFilter("clusters-circle", clusterCheck);
-      }
-      if (map.getLayer("clusters-count")) {
-        map.setFilter("clusters-count", clusterCheck);
-      }
-    }
-
-    if (selectedItemId) {
-      const item = geoItems.find(
-        (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-      );
-      if (item) {
-        // Only animate camera if selection is new or version changed.
-        const isNewSelection =
-          lastFlownSelectionRef.current !== selectedItemId ||
-          lastFlownVersionRef.current !== selectionVersion;
-
-        if (isNewSelection) {
-          lastFlownSelectionRef.current = selectedItemId;
-          lastFlownVersionRef.current = selectionVersion;
-
-          const currentZoom = map.getZoom();
-          const targetZoom = Math.max(currentZoom, 8.5);
-
-    isFlyingRef.current = true;
-    
-    // Open the popup immediately at the target coordinates for an instant, responsive feel.
-    // MapLibre will handle keeping the popup attached to these coordinates during the flyTo.
-    popupRef.current
-      .setLngLat([item.longitude!, item.latitude!])
-      .setHTML(generatePopupHtml(item))
-      .addTo(map);
-
-    map.once("moveend", () => {
-      isFlyingRef.current = false;
-      // Final synchronization at the end of the flight when all jitters and bounding box updates have settled.
-      const finalItem =
-        latestGeoItemsRef.current.find(
-          (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-        ) || item;
-
-      if (popupRef.current && finalItem.latitude != null) {
-        popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
-        // Also perform a final camera adjustment to ensure the pin is perfectly focused.
-        map.easeTo({
-          center: [finalItem.longitude!, finalItem.latitude!],
-          duration: 300,
-          essential: true,
-        });
-      }
-    });
-
-          const containerHeight = containerRef.current?.clientHeight || 800;
-          // Dynamically adjust padding to avoid pushing the pin off-screen on small/mobile displays.
-          const responsivePadding = Math.min(250, Math.floor(containerHeight * 0.25));
-
-          map.flyTo({
-            center: [item.longitude!, item.latitude!],
-            zoom: targetZoom,
-            pitch: animatedEffects && isGlobe ? 45 : 0,
-            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
-            speed: animatedEffects ? 1.8 : 1.2,
-            curve: animatedEffects ? 1.2 : 1,
-            essential: true,
-            // Apply padding only at higher zoom levels to keep the globe centered during wide transitions.
-            padding: {
-              top: targetZoom > 4 ? responsivePadding : 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-            },
-          });
-        }
-      }
-    } else {
-      if (!isFlyingRef.current) {
-        popupRef.current?.remove();
-        // Reset padding when deselected to prevent cumulative viewport offsets.
-        if (map.getPadding().top !== 0) {
-          map.easeTo({
-            padding: { top: 0, bottom: 0, left: 0, right: 0 },
-            duration: 500,
-          });
-        }
-      }
-      lastFlownSelectionRef.current = null;
-      lastFlownVersionRef.current = 0;
-    }
-  }, [
-    selectedItemId,
-    selectionVersion,
-    geoItems,
-    mapReady,
-    generatePopupHtml,
-    animatedEffects,
-    isGlobe,
-  ]);
-
-  useEffect(() => {
-    if (!mapReady || !popupRef.current || !popupRef.current.isOpen()) return;
-
-    // Sync popup position if the item's jittered coordinates have updated.
-    if (selectedItemId) {
-      const selectedItem = geoItems.find(
-        (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-      );
-      if (
-        selectedItem &&
-        selectedItem.latitude != null &&
-        selectedItem.longitude != null
-      ) {
-        const currentPos = popupRef.current.getLngLat();
-        const dist = Math.sqrt(
-          Math.pow(currentPos.lng - selectedItem.longitude, 2) +
-            Math.pow(currentPos.lat - selectedItem.latitude, 2),
-        );
-        // Only re-sync position if the jitter significantly changed and we aren't in the middle of a flight.
-        // This prevents the "vibrating" camera sensation during data refreshes while flying.
-        if (dist > 0.0001 && !isFlyingRef.current) {
-          popupRef.current.setLngLat([
-            selectedItem.longitude,
-            selectedItem.latitude,
-          ]);
-        }
-      }
-    }
-
-    const el = popupRef.current.getElement();
-    if (!el) return;
-
-    geoItems.forEach((item) => {
-      const popupContainer = el.querySelector<HTMLElement>(".news-popup");
-      if (!popupContainer) return;
-
-      const skeleton =
-        popupContainer.querySelector<HTMLElement>(
-          `div[data-event-id="${item.id}"].news-popup-summary--loading`,
-        ) ||
-        (item.originalId
-          ? popupContainer.querySelector<HTMLElement>(
-              `div[data-event-id="${item.originalId}"].news-popup-summary--loading`,
-            )
-          : null);
-
-      if (skeleton && item.description !== undefined) {
-        // Update description
-        skeleton.outerHTML = item.description
-          ? `<p class="news-popup-summary" data-event-id="${item.originalId || item.id}">${item.description}</p>`
-          : "";
-
-        // Also check if we need to update the sources list now that we have data
-        const sourceCount = canonicalEventCount(item);
-        if (
-          sourceCount > 1 &&
-          item.sources &&
-          !popupContainer.querySelector(".news-popup-sources-section")
-        ) {
-          const sorted = [...item.sources].sort(
-            (a, b) =>
-              new Date(b.discoveredAt).getTime() -
-              new Date(a.discoveredAt).getTime(),
-          );
-          const sourceEntries = sorted
-            .map((src) => {
-              const srcColor = getSourceBadgeColor(src.name);
-              const srcTime = formatTimeAgo(src.discoveredAt);
-              return `<div class="news-popup-source-entry">
-                <span class="news-popup-source-name" style="background:${srcColor};color:#fff">${src.name}</span>
-                <a class="news-popup-source-link" href="${src.url}" target="_blank" rel="noopener noreferrer">${new URL(src.url).hostname}</a>
-                ${srcTime ? `<span class="news-popup-source-time">${srcTime}</span>` : ""}
-              </div>`;
-            })
-            .join("");
-
-          const sourcesSection = document.createElement("div");
-          sourcesSection.className = "news-popup-sources-section";
-          sourcesSection.innerHTML = `
-            <div class="news-popup-sources-header">Sources & Timeline</div>
-            <div class="news-popup-sources-list">${sourceEntries}</div>
-          `;
-          popupContainer.appendChild(sourcesSection);
-        }
-      }
-    });
-  }, [geoItems, mapReady, selectedItemId]);
 
   // Handles closing the settings panel when clicking outside.
   useEffect(() => {
@@ -1424,16 +618,7 @@ export default function NewsMap({
     setVis("overlay-eonet-point", overlays["eonet"]);
   }, [overlays, mapReady, currentStyle]);
 
-  const handleResetOrientation = useCallback(() => {
-    if (!mapRef.current) return;
-    mapRef.current.easeTo({
-      pitch: 0,
-      bearing: 0,
-      padding: { top: 0, bottom: 0, left: 0, right: 0 },
-      duration: 1000,
-      easing: (t) => t * (2 - t),
-    });
-  }, []);
+
 
   // Handles projection and fog toggling without reloading the map style.
   useEffect(() => {
@@ -1505,6 +690,12 @@ export default function NewsMap({
         className={styles.newsMapContainer}
         style={{ backfaceVisibility: "hidden", transform: "translateZ(0)" }}
       />
+      
+      {/* Portals for MapLibre popups to enable React rendering and updates */}
+      {selectedItem && popupContainer && createPortal(
+        <MapPopup item={selectedItem} />,
+        popupContainer
+      )}
     </div>
   );
 }

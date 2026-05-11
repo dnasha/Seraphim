@@ -5,7 +5,7 @@ import {
     SIMILARITY_THRESHOLD_PLACE_ANCHORED,
     SIMILARITY_THRESHOLD_PROXIMITY, 
     MAX_MERGE_DISTANCE_KM 
-} from '../../src/scraper/utils/vectorize';
+} from '@/lib/utils/vectorize';
 
 interface MergeCandidate {
     title: string;

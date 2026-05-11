@@ -6,10 +6,10 @@ It keeps a persistent client entity store to avoid dropping items on bbox change
 */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { NewsItem, NewsResponse } from '@/lib/types';
-import { supabase } from '@/lib/supabase';
-import { BBox, snapBBox, isWithinBBox } from '@/lib/geo';
-import { normalizeSortMode, sortNewsItems } from '@/lib/ranking';
+import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
+import { supabase } from "@/lib/core/supabase";
+import { snapBBox, isWithinBBox } from "@/lib/utils/geo";
+import { normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
 
 const CLUSTER_ZOOM_THRESHOLD = 5;
 const LOCAL_RESPONSE_TTL_MS = 60_000;

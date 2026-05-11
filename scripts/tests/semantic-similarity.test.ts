@@ -7,7 +7,7 @@ import {
     SIMILARITY_THRESHOLD_PROXIMITY,
     MAX_MERGE_DISTANCE_KM,
     buildEmbeddingText 
-} from '../../src/scraper/utils/vectorize';
+} from '@/lib/utils/vectorize';
 
 describe('Story Model: Spatial + Semantic Merge Logic', () => {
     beforeAll(async () => {

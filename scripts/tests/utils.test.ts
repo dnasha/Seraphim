@@ -7,9 +7,9 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { normalizeAccents, toTitleCase, cleanCandidate } from '../../src/lib/geocoding/utils';
-import { ensureIsoDate } from '../../src/scraper/utils/date';
-import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } from '../../src/lib/colors';
+import { normalizeAccents, toTitleCase, cleanCandidate } from '@/lib/geocoding/utils';
+import { ensureIsoDate } from '@/lib/utils/date';
+import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } from '@/lib/styles/colors';
 
 /*
   normalizeAccents
@@ -183,8 +183,8 @@ describe('getCategoryColor', () => {
 */
 describe('getSourceStyle', () => {
     it('returns black bg for X/Twitter sources', () => {
-        expect(getSourceStyle('OSINTdefender (X)').bg).toBe('#0f1419');
-        expect(getSourceStyle('Some Twitter Account').bg).toBe('#0f1419');
+        expect(getSourceStyle('OSINTdefender (X)').bg).toBe('#000000');
+        expect(getSourceStyle('Some Twitter Account').bg).toBe('#000000');
     });
 
     it('returns Reddit orange for Reddit sources', () => {
@@ -196,12 +196,12 @@ describe('getSourceStyle', () => {
     });
 
     it('returns tech teal for tech sources', () => {
-        expect(getSourceStyle('Ars Technica').bg).toBe('#0369a1');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#0369a1');
+        expect(getSourceStyle('Ars Technica').bg).toBe('#0284c7');
+        expect(getSourceStyle('BleepingComputer').bg).toBe('#0284c7');
     });
 
     it('returns fallback grey for unknown sources', () => {
-        expect(getSourceStyle('BBC News').bg).toBe('#3b82f6');
+        expect(getSourceStyle('BBC News').bg).toBe('#6366f1');
     });
 });
 
