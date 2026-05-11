@@ -9,14 +9,21 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL) {
     throw new Error(
-        'Missing Supabase public configuration. ' +
-        'Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in .env.local'
+        'Missing Supabase URL configuration. ' +
+        'Ensure NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL is set in the environment.'
+    );
+}
+
+if (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+        'Missing Supabase credentials. ' +
+        'Ensure NEXT_PUBLIC_SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY is set.'
     );
 }
 
@@ -24,12 +31,16 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
  * Shared Supabase client instance using the Public Anonymous Key.
  * Suitable for client side data fetching and unauthenticated operations.
  */
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { 
-        persistSession: false, 
-        autoRefreshToken: false 
-    },
-});
+export const supabase = createClient(
+    SUPABASE_URL, 
+    SUPABASE_ANON_KEY || 'missing_anon_key', 
+    {
+        auth: { 
+            persistSession: false, 
+            autoRefreshToken: false 
+        },
+    }
+);
 
 /**
  * Administrative Supabase client instance using the Service Role Key.
