@@ -36,6 +36,7 @@ export function toTitleCase(s: string): string {
  * from raw extraction candidates to prepare them for dictionary lookup.
  */
 export function cleanCandidate(raw: string): string {
+    if (typeof raw !== 'string') return '';
     let s = raw.trim();
     s = s.replace(/['\u2019]s\b/g, '');
     s = s.replace(/['\u2019]s$/g, '');

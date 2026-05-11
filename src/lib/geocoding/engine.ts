@@ -144,11 +144,16 @@ function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
     for (const word of words) {
         const lower = word.toLowerCase().replace(/[^a-z]/g, '');
-        if (DEMONYM_MAP[lower]) {
-            return DEMONYM_MAP[lower];
+        const mapped = DEMONYM_MAP[lower];
+        if (typeof mapped === 'string') {
+            return mapped;
         }
-        if (lower.endsWith('s') && DEMONYM_MAP[lower.slice(0, -1)]) {
-            return DEMONYM_MAP[lower.slice(0, -1)];
+        if (lower.endsWith('s')) {
+            const singular = lower.slice(0, -1);
+            const mappedSingular = DEMONYM_MAP[singular];
+            if (typeof mappedSingular === 'string') {
+                return mappedSingular;
+            }
         }
     }
     return null;
@@ -162,7 +167,7 @@ function extractCountryAbbrev(text: string): string | null {
     for (const token of tokens) {
         const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
         const mapped = COUNTRY_ABBREV_MAP[cleaned];
-        if (mapped && mapped !== '__skip__') {
+        if (typeof mapped === 'string' && mapped !== '__skip__') {
             return mapped;
         }
     }
