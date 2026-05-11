@@ -407,7 +407,7 @@ async function run(): Promise<void> {
     If the transaction times out (typically due to complex spatial/vector index updates),
     it falls back to individual processing to ensure data consistency.
   */
-  console.log(`[scraper] Ingesting ${newEvents.length} new events and ${merges.size} merges...`);
+  console.log(`[scraper] Ingesting ${newEvents.length} new events and ${merges.size} merges in chunks...`);
   
   const mergePayload = Array.from(merges.entries()).map(([id, data]) => ({
     id,
@@ -417,39 +417,62 @@ async function run(): Promise<void> {
   let upserted_count = 0;
   let merged_count = 0;
 
+  const CHUNK_SIZE = 15;
+  
+  const eventChunks = [];
+  for (let i = 0; i < newEvents.length; i += CHUNK_SIZE) {
+    eventChunks.push(newEvents.slice(i, i + CHUNK_SIZE));
+  }
+  if (eventChunks.length === 0) eventChunks.push([]);
+
+  const mergeChunks = [];
+  for (let i = 0; i < mergePayload.length; i += CHUNK_SIZE) {
+    mergeChunks.push(mergePayload.slice(i, i + CHUNK_SIZE));
+  }
+  if (mergeChunks.length === 0) mergeChunks.push([]);
+
+  const numChunks = Math.max(eventChunks.length, mergeChunks.length);
+
   try {
-    const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
-      p_new_events: newEvents,
-      p_merges: mergePayload
-    });
-
-    if (ingestError) {
-      const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
+    for (let i = 0; i < numChunks; i++) {
+      const eChunk = eventChunks[i] || [];
+      const mChunk = mergeChunks[i] || [];
       
-      if (isTimeout) {
-        console.warn('[scraper] Bulk RPC timed out. Executing sequential fallback...');
-        
-        for (const merge of mergePayload) {
-          const { error: mErr } = await db
-            .from('events')
-            .update(merge as Partial<DbEvent>)
-            .eq('id', merge.id);
-          if (!mErr) merged_count++;
-        }
+      console.log(`[scraper] Processing chunk ${i + 1}/${numChunks} (${eChunk.length} events, ${mChunk.length} merges)...`);
 
-        for (const event of newEvents) {
-          const { error: iErr } = await db
-            .from('events')
-            .insert(event);
-          if (!iErr) upserted_count++;
+      const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
+        p_new_events: eChunk,
+        p_merges: mChunk
+      });
+
+      if (ingestError) {
+        const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
+        
+        if (isTimeout) {
+          console.warn(`[scraper] Chunk ${i + 1} RPC timed out. Executing sequential fallback...`);
+          
+          for (const merge of mChunk) {
+            const { error: mErr } = await db
+              .from('events')
+              .update(merge as Partial<DbEvent>)
+              .eq('id', merge.id);
+            if (!mErr) merged_count++;
+          }
+
+          for (const event of eChunk) {
+            const { error: iErr } = await db
+              .from('events')
+              .insert(event);
+            if (!iErr) upserted_count++;
+          }
+        } else {
+          throw new Error(`Bulk ingestion failed on chunk ${i + 1}: ${ingestError.message}`);
         }
       } else {
-        throw new Error(`Bulk ingestion failed: ${ingestError.message}`);
+        const result = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
+        upserted_count += result.upserted_count;
+        merged_count += result.merged_count;
       }
-    } else {
-      const result = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
-      upserted_count = result.upserted_count;
-      merged_count = result.merged_count;
     }
   } catch (err) {
     console.error('[scraper] Ingestion error:', err instanceof Error ? err.message : String(err));
