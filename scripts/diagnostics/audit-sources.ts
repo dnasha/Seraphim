@@ -1,3 +1,8 @@
+/**
+ * Purpose: Audits all configured data sources (RSS, Social, Reddit) to identify structural anomalies or data type mismatches in fetched items.
+ * Usage: bun run scripts/diagnostics/audit-sources.ts
+ */
+
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { fetchSingleFeed, fetchRedditFeed } from '@/lib/api/rss';
 import { scrapeTelegramChannel, fetchXFeed } from '@/lib/api/social';
@@ -11,7 +16,8 @@ async function auditSources() {
     console.log('Starting Source Audit...');
     const allItems: AuditedItem[] = [];
 
-    // RSS
+    // Perform sequential fetching across all source types to gather a representative sample of data.
+    
     console.log('Auditing RSS...');
     for (const s of RSS_SOURCES) {
         try {
@@ -21,7 +27,6 @@ async function auditSources() {
         } catch {}
     }
 
-    // Reddit
     console.log('Auditing Reddit...');
     for (const s of REDDIT_SOURCES) {
         try {
@@ -31,7 +36,6 @@ async function auditSources() {
         } catch {}
     }
 
-    // Telegram & X
     console.log('Auditing Social...');
     for (const s of TELEGRAM_CHANNELS) {
         try {
@@ -50,6 +54,7 @@ async function auditSources() {
 
     console.log(`Total items fetched for audit: ${allItems.length}`);
     
+    // The anomaly detection loop validates that core fields conform to expected types, preventing runtime errors in downstream processing or UI rendering.
     const anomalies: { source: string; field: string; type: string; value: unknown }[] = [];
     for (const item of allItems) {
         if (typeof item.title !== 'string' && item.title !== undefined) {

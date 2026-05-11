@@ -1,15 +1,7 @@
-/*
-Seraphim Source Validator
-Tests every individual news source (RSS, Reddit, Social, GNews) to ensure 
-approaches and connectivity are working.
-
-- No geocoding
-- No database writes
-- Granular per-source reporting
-- Timeout-aware
-
-Usage: bun run scripts/test-fetchers.ts
-*/
+/**
+ * Purpose: Individually tests each configured news source (RSS, Reddit, Social, GNews) to verify connectivity, throughput, and response integrity without performing geocoding or database writes.
+ * Usage: bun run scripts/diagnostics/test-fetchers.ts
+ */
 
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS, RSSSource, SocialSource } from '@/data/sources';
 import { fetchSingleFeed, fetchRedditFeed } from '@/lib/api/rss';
@@ -34,7 +26,7 @@ async function testSource<T>(
 ): Promise<TestResult> {
     const start = Date.now();
     try {
-        // We use Promise.race to enforce a strict timeout for this test
+        // Promise.race is employed to ensure that a single unresponsive source does not hang the entire diagnostic suite.
         const items = await Promise.race([
             fetchFn(),
             new Promise<never>((_, reject) => 
@@ -75,37 +67,35 @@ async function run() {
     console.log('[1/5] Testing GNews API...');
     results.push(await testSource('GNews General', 'gnews', () => fetchGNews('general', 5)));
 
-    // 2. Test RSS Sources (Sample or all?)
-    // Testing all might be slow but it's what "checking if our sources are working" implies.
-    // We'll run them in parallel chunks to be efficient.
+    // 2. Test RSS Sources
+    // RSS sources are tested in parallel to minimize overall test duration.
     console.log('[2/5] Testing RSS Feeds...');
     const rssPromises = RSS_SOURCES.map((s: RSSSource) => testSource(s.name, 'rss', () => fetchSingleFeed(s)));
     const rssResults = await Promise.all(rssPromises);
     results.push(...rssResults);
 
     // 3. Test Reddit
+    // Reddit feeds are processed sequentially with a delay to respect platform-specific rate limits and prevent 429 responses.
     console.log('[3/5] Testing Reddit RSS (Sequential)...');
     for (const s of REDDIT_SOURCES) {
         results.push(await testSource(s.name, 'reddit', () => fetchRedditFeed(s)));
-        // Small delay to be safe
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // 4. Test Telegram
+    // Telegram scraping is performed in parallel as it relies on distinct channel endpoints.
     console.log('[4/5] Testing Telegram Scraping...');
     const tgPromises = TELEGRAM_CHANNELS.map((s: SocialSource) => testSource(s.name, 'telegram', () => scrapeTelegramChannel(s)));
     const tgResults = await Promise.all(tgPromises);
     results.push(...tgResults);
 
     // 5. Test X (Twitter) fallbacks
+    // X (Twitter) endpoints are highly sensitive to rate limiting; testing is restricted to a representative sample.
     console.log('[5/5] Testing X (Twitter) Fallbacks...');
-    // X is often blocked/rate-limited, so we test them sequentially or in small batches 
-    // to avoid triggering more blocks.
-    for (const s of X_ACCOUNTS.slice(0, 5)) { // Test first 5 as representative sample
+    for (const s of X_ACCOUNTS.slice(0, 5)) { 
         results.push(await testSource(s.name, 'x', () => fetchXFeed(s)));
     }
 
-    // --- Report ---
     console.log('\n======================= REPORT =======================');
     console.log(`${'STATUS'.padEnd(8)} | ${'TYPE'.padEnd(10)} | ${'SOURCE'.padEnd(30)} | ${'ITEMS'.padEnd(6)} | ${'TIME'}`);
     console.log('-'.repeat(75));
@@ -133,7 +123,7 @@ async function run() {
     console.log('=======================================================');
 
     if (failed > 0 || timedOut > 0) {
-        process.exit(0); // Exit with success but show report
+        process.exit(0); 
     }
 }
 

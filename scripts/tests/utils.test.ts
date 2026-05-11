@@ -1,9 +1,9 @@
 /*
   Seraphim Utility Function Tests
+  Verifies core utilities for normalization, date parsing, and UI color mapping.
+  These functions are fundamental to the geocoding and scraping pipelines.
 
-  This suite verifies the core utility functions used for data normalization,
-  string cleaning, date parsing, and UI color mapping. These utilities are
-  foundational to the geocoding and scraping pipelines.
+  Usage: bun test scripts/tests/utils.test.ts
 */
 
 import { describe, it, expect } from 'vitest';
@@ -13,8 +13,7 @@ import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } 
 
 /*
   normalizeAccents
-  Tests the removal of diacritics from strings to ensure consistent
-  dictionary matching regardless of regional spelling variations.
+  Tests removal of diacritics to ensure consistent dictionary matching.
 */
 describe('normalizeAccents', () => {
     it('strips diacritics from accented characters', () => {
@@ -39,8 +38,7 @@ describe('normalizeAccents', () => {
 
 /*
   toTitleCase
-  Verifies proper capitalization of location names, including
-  handling of specific abbreviations like DC and hyphenated names.
+  Verifies proper capitalization, including abbreviations like DC and hyphenated names.
 */
 describe('toTitleCase', () => {
     it('capitalizes each word', () => {
@@ -68,8 +66,7 @@ describe('toTitleCase', () => {
 
 /*
   cleanCandidate
-  Tests the sanitization of potential location strings extracted from text,
-  ensuring punctuation and possessives are removed before geocoding.
+  Tests sanitization of potential location strings extracted from text.
 */
 describe('cleanCandidate', () => {
     it('strips possessives', () => {
@@ -107,8 +104,7 @@ describe('cleanCandidate', () => {
 
 /*
   ensureIsoDate
-  Validates the normalization of various date formats into a standard
-  ISO string for database storage.
+  Validates normalization of various date formats into standard ISO strings.
 */
 describe('ensureIsoDate', () => {
     it('returns valid ISO for a standard ISO string', () => {
@@ -157,7 +153,7 @@ describe('ensureIsoDate', () => {
 
 /*
   getCategoryColor
-  Tests the mapping of news categories to their respective UI colors.
+  Tests mapping of news categories to UI colors.
 */
 describe('getCategoryColor', () => {
     it('returns correct hex for known categories', () => {
@@ -178,8 +174,7 @@ describe('getCategoryColor', () => {
 
 /*
   getSourceStyle
-  Verifies consistent styling (colors and backgrounds) for known news
-  sources to aid in visual identification on the map.
+  Verifies consistent styling (colors and backgrounds) for known news sources.
 */
 describe('getSourceStyle', () => {
     it('returns black bg for X/Twitter sources', () => {
@@ -204,4 +199,5 @@ describe('getSourceStyle', () => {
         expect(getSourceStyle('BBC News').bg).toBe('#6366f1');
     });
 });
+
 

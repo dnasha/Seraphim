@@ -1,10 +1,7 @@
-/*
-Seraphim Benchmark Generator
-Consolidated utility to pull latest events from the database and run them through
-the current production geocoding engine to generate a grading/benchmark file.
-
-Usage: npx tsx scripts/generate-benchmark.ts --limit 100 --out scripts/results/new-grading-100.json
-*/
+/**
+ * Purpose: Fetches recent events from the database and processes them through the current geocoding engine to generate a fresh benchmark dataset for grading.
+ * Usage: bun run scripts/diagnostics/generate-benchmark.ts --limit 100 --out scripts/results/new-grading-100.json
+ */
 
 import { supabaseAdmin as supabase } from '@/lib/core/supabase';
 import { NewsItem } from '@/lib/core/types';
@@ -22,7 +19,7 @@ if (!supabase) {
 
 const db = supabase!;
 
-// Basic argument parser for CLI flags
+// Parse CLI flags to control sample size and output destination for the generated benchmark.
 const args = process.argv.slice(2);
 const limitArg = args.indexOf('--limit');
 const LIMIT = limitArg !== -1 ? parseInt(args[limitArg + 1], 10) : 100;
@@ -56,7 +53,7 @@ async function run() {
     console.log(`Retrieved ${events.length} events.`);
     console.log(`\nRe-running geocoding engine on fresh data...`);
 
-    // Map database events back to NewsItem format for the enricher
+    // Map database records back to the NewsItem structure required by the enrichment engine.
     const newsItems: NewsItem[] = events.map((e) => ({
         id: e.id,
         title: e.title,
@@ -67,15 +64,13 @@ async function run() {
         url: e.url
     }));
 
-    // Run items through the production geocoding pipeline
+    // Re-process items to capture current engine output for performance comparison.
     const enrichedItems = await enrichItemsWithLocation(newsItems);
 
     const results = enrichedItems.map((item, idx) => {
         const original = events[idx];
-        
         const found_locations = item.foundLocations || [];
 
-        // Format geocoded results for comparison
         const current_engine_result = (item.locationName) 
             ? {
                 lat: item.latitude,
@@ -89,13 +84,13 @@ async function run() {
             db_id: original.id,
             title: item.title,
             description: item.description || '',
-            // The location currently stored in the DB (for reference)
+            // Retain original database location for point-in-time drift analysis.
             db_location: original.latitude ? {
                 lat: original.latitude,
                 lon: original.longitude,
                 displayName: original.location_name
             } : null,
-            // What the engine produces at this moment
+            // Capture latest engine heuristics output.
             engine_result: current_engine_result,
             found_candidates: found_locations
         };
@@ -119,4 +114,3 @@ run().catch(err => {
     console.error("Benchmark generation failed:", err);
     process.exit(1);
 });
-

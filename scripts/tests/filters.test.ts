@@ -1,9 +1,9 @@
 /*
   Seraphim News Filtering Tests
+  Verifies the applyNewsFilters function for client-side filtering.
+  Tests source, category, time range, search query, and mapped-only filters.
 
-  This suite verifies the applyNewsFilters function, which is responsible
-  for client-side filtering of news items based on source, category,
-  time range, and search queries.
+  Usage: bun test scripts/tests/filters.test.ts
 */
 
 import { describe, it, expect } from 'vitest';
@@ -12,8 +12,7 @@ import type { NewsItem } from '@/lib/core/types';
 
 /*
   Test Data Factory
-  Provides a consistent way to generate mock news items for testing
-  various filter combinations.
+  Generates mock news items for filter validation.
 */
 const NOW = new Date('2026-04-15T12:00:00Z').getTime();
 
@@ -47,8 +46,7 @@ function defaultOpts(overrides: Partial<FilterOptions> = {}): FilterOptions {
 
 /*
   Source Filtering
-  Validates that items are correctly filtered based on their source
-  type (RSS, GNews, Social Media).
+  Validates filtering based on sourceType (RSS, GNews, Social Media).
 */
 describe('applyNewsFilters - source filtering', () => {
     const rssItem = makeItem({ sourceType: 'rss' });
@@ -102,8 +100,7 @@ describe('applyNewsFilters - source filtering', () => {
 
 /*
   Category Filtering
-  Verifies that items are correctly categorized and filtered based
-  on their assigned category or lack thereof.
+  Validates classification-based filtering.
 */
 describe('applyNewsFilters - category filtering', () => {
     const crisisItem = makeItem({ category: 'crisis' });
@@ -133,8 +130,7 @@ describe('applyNewsFilters - category filtering', () => {
 
 /*
   Time Range Filtering
-  Tests the temporal filtering of items, ensuring only news within
-  the specified window (1d, 3d, 1w) is displayed.
+  Validates temporal filtering for various windows (1d, 3d, 1w).
 */
 describe('applyNewsFilters - time range filtering', () => {
     const recentItem = makeItem({ publishedAt: new Date(NOW - 1000 * 60 * 60).toISOString() }); // 1h ago
@@ -201,8 +197,7 @@ describe('applyNewsFilters - time range filtering', () => {
 
 /*
   Search Query Filtering
-  Validates the text-based search functionality across titles,
-  descriptions, and location names.
+  Validates text-based search across titles, descriptions, and locations.
 */
 describe('applyNewsFilters - search query', () => {
     const item1 = makeItem({ title: 'Ukraine war update: Kyiv defenses hold' });
@@ -237,8 +232,7 @@ describe('applyNewsFilters - search query', () => {
 
 /*
   Mapped Only Filter
-  Ensures that users can toggle the visibility of items that lack
-  geographic coordinates.
+  Ensures toggle visibility for items lacking geographic coordinates.
 */
 describe('applyNewsFilters - mapped only', () => {
     const mappedItem = makeItem({ latitude: 50.45, longitude: 30.52 });
@@ -257,8 +251,7 @@ describe('applyNewsFilters - mapped only', () => {
 
 /*
   Combined Filters
-  Tests the intersection logic when multiple filters are applied
-  simultaneously.
+  Validates intersection logic when multiple filters are active.
 */
 describe('applyNewsFilters - combined', () => {
     it('applies multiple filters as intersection', () => {
@@ -279,7 +272,7 @@ describe('applyNewsFilters - combined', () => {
 
 /*
   Edge Cases
-  Verifies robustness against empty inputs and pre-hydration states.
+  Handles pre-hydration and empty input states.
 */
 describe('applyNewsFilters - edge cases', () => {
     it('returns unfiltered items when now=0 (pre-hydration)', () => {
@@ -329,4 +322,5 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
         expect(globalResult.map((i) => i.id).sort()).toEqual(['in-view', 'out-of-view']);
     });
 });
+
 

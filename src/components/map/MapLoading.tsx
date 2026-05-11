@@ -1,3 +1,10 @@
+/**
+ * MapLoading Component
+ * 
+ * Provides a visual splash state during the initial loading and setup of the 
+ * MapLibre engine. Used to prevent layout shifts before the map is ready for interaction.
+ */
+
 'use client';
 
 import styles from './MapLoading.module.css';

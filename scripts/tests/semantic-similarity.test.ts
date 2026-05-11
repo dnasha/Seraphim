@@ -1,3 +1,11 @@
+/*
+  Seraphim Semantic Similarity Tests
+  Verifies spatial and semantic merge logic for story consolidation.
+  Tests strict semantic matching, proximity-based merging, and distance gating.
+
+  Usage: bun test scripts/tests/semantic-similarity.test.ts
+*/
+
 import { describe, it, expect, beforeAll } from 'vitest';
 import { 
     generateEmbeddings, 
@@ -9,7 +17,11 @@ import {
     buildEmbeddingText 
 } from '@/lib/utils/vectorize';
 
-describe('Story Model: Spatial + Semantic Merge Logic', () => {
+describe('Story Model: Spatial and Semantic Merge Logic', () => {
+    /*
+      Warmup
+      Initializes the local embedding model (all-MiniLM-L6-v2) for vectorization.
+    */
     beforeAll(async () => {
         await generateEmbeddings(['Warmup']);
     }, 30000);
@@ -22,7 +34,9 @@ describe('Story Model: Spatial + Semantic Merge Logic', () => {
     };
 
     /* 
-       Helper to simulate the scraper's merge decision logic
+      shouldMerge
+      Simulates the decision logic for merging two events based on
+      semantic similarity and geographic distance.
     */
     const shouldMerge = (sim: number, distKm: number | null): boolean => {
         if (sim >= SIMILARITY_THRESHOLD_STRICT) return true;
@@ -30,7 +44,7 @@ describe('Story Model: Spatial + Semantic Merge Logic', () => {
         return false;
     };
 
-    it('should merge rephrased stories in the same location (Rostov Strike)', async () => {
+    it('should merge rephrased stories in the same location', async () => {
         const sim = await getSim(
             'Russia-Ukraine war: Drones strike oil refinery in Rostov',
             'A large fire broke out at an oil refinery in Russia\'s Rostov region after a suspected drone attack.',
@@ -38,17 +52,14 @@ describe('Story Model: Spatial + Semantic Merge Logic', () => {
             'Kiev sources claim successful strike on strategic energy infrastructure in the Rostov area.'
         );
         
-        // Rostov to Rostov distance is 0km
+        // Co-located events with similarity > 0.60 should merge.
         const merged = shouldMerge(sim, 0);
         
-        console.log(`[Test] Rostov Strike - Sim: ${sim.toFixed(4)}, Dist: 0km -> Merge: ${merged}`);
-        
-        // It should merge now because 0.64 > 0.60 (Proximity Threshold)
         expect(sim).toBeGreaterThan(SIMILARITY_THRESHOLD_PROXIMITY);
         expect(merged).toBe(true);
     });
 
-    it('should NOT merge similar events in different locations (Protests)', async () => {
+    it('should NOT merge similar events in different locations', async () => {
         const sim = await getSim(
             'Thousands protest in London against climate change',
             'Demonstrators marched through central London calling for immediate government action.',
@@ -56,13 +67,11 @@ describe('Story Model: Spatial + Semantic Merge Logic', () => {
             'Protesters gathered at the Place de la République to demand stricter environmental laws.'
         );
         
-        // London to Paris is ~340km
+        // London to Paris is approximately 340km.
         const dist = calculateDistance(51.507, -0.127, 48.856, 2.352);
         const merged = shouldMerge(sim, dist);
         
-        console.log(`[Test] Protests - Sim: ${sim.toFixed(4)}, Dist: ${dist.toFixed(0)}km -> Merge: ${merged}`);
-        
-        // Similarity is high (0.70) but distance is > 50km, so it should NOT merge
+        // High similarity (0.70) but distance > 50km should prevent merging.
         expect(sim).toBeGreaterThan(SIMILARITY_THRESHOLD_PROXIMITY);
         expect(dist).toBeGreaterThan(MAX_MERGE_DISTANCE_KM);
         expect(merged).toBe(false);
@@ -76,11 +85,11 @@ describe('Story Model: Spatial + Semantic Merge Logic', () => {
             'The World Health Organization has declared a new public health emergency of international concern.'
         );
         
-        // Even if locations are far apart (e.g. source location varies), identical text merges
+        // Identical wire service reports should merge even if coordinates differ.
         const merged = shouldMerge(sim, 5000); 
         
-        console.log(`[Test] Strict Match - Sim: ${sim.toFixed(4)}, Dist: 5000km -> Merge: ${merged}`);
         expect(sim).toBeGreaterThan(SIMILARITY_THRESHOLD_STRICT);
         expect(merged).toBe(true);
     });
 });
+

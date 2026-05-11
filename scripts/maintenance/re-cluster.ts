@@ -1,3 +1,14 @@
+/*
+  Seraphim Historical Re-Clustering Script
+  Consolidates redundant pins by merging semantically similar events into stories.
+  Uses vector similarity, location anchoring, and spatial gating.
+
+  Usage: bun run scripts/maintenance/re-cluster.ts
+  Environment Variables:
+    - DRY_RUN: set to 'true' to simulate changes without writing to DB.
+    - START_DATE: optional ISO date to begin re-clustering from.
+*/
+
 import { supabaseAdmin as supabase } from '@/lib/core/supabase';
 import { 
     calculateDistance, 
@@ -12,7 +23,7 @@ import { calculateMergedStory } from '@/lib/utils/merging';
 
 dotenv.config();
 
-// Explicitly check for 'true' string, default to false if unset or anything else
+// Default to false unless explicitly set to 'true'.
 const DRY_RUN = String(process.env.DRY_RUN).toLowerCase() === 'true';
 
 if (!supabase) {
@@ -23,11 +34,11 @@ if (!supabase) {
 const db = supabase!;
 
 async function reClusterHistoricalData() {
-    console.log(`[re-cluster] Initializing historical story consolidation... (DRY_RUN=${DRY_RUN})`);
+    console.log(`[re-cluster] Initializing historical story consolidation (DRY_RUN=${DRY_RUN})`);
 
     const startTime = Date.now();
     
-    // Step 0: Get total count for progress tracking
+    // Fetch total event count for progress tracking.
     const { count: totalEvents, error: countErr } = await db
         .from('events')
         .select('*', { count: 'exact', head: true });
@@ -49,8 +60,8 @@ async function reClusterHistoricalData() {
         const batchStartMs = Date.now();
         
         /* 
-           Step 1: Fetch a batch of events.
-           We use a sliding window on published_at to safely paginate the entire DB.
+           Batch Fetch
+           Uses a sliding window on published_at to paginate through the archive.
         */
         const { data: events, error: fetchError } = await db
             .from('events')
@@ -65,11 +76,11 @@ async function reClusterHistoricalData() {
         }
 
         if (!events || events.length === 0) {
-            console.log('[re-cluster] SUCCESS: Reached the end of the archive.');
+            console.log('[re-cluster] SUCCESS: Reached end of archive.');
             break;
         }
 
-        // Progress Calculation
+        // Calculate progress and estimated time.
         totalProcessed += events.length;
         const progressPercent = ((totalProcessed / (totalEvents || 1)) * 100).toFixed(2);
         const elapsedSec = (Date.now() - startTime) / 1000;
@@ -77,9 +88,9 @@ async function reClusterHistoricalData() {
         const remainingItems = (totalEvents || 0) - totalProcessed;
         const etaMin = remainingItems > 0 ? (remainingItems / itemsPerSec / 60).toFixed(1) : '0';
 
-        console.log(`\n[re-cluster] --- Batch Progress: ${progressPercent}% (${totalProcessed.toLocaleString()} / ${totalEvents?.toLocaleString()}) ---`);
-        console.log(`[re-cluster] Batch: ${events.length} items | Speed: ${itemsPerSec.toFixed(1)} items/s | ETA: ${etaMin}m`);
-        console.log(`[re-cluster] Date Window: ${lastDate} -> ${events[events.length - 1].published_at}`);
+        console.log(`\n[re-cluster] Progress: ${progressPercent}% (${totalProcessed.toLocaleString()} / ${totalEvents?.toLocaleString()})`);
+        console.log(`[re-cluster] Batch Speed: ${itemsPerSec.toFixed(1)} items/s | ETA: ${etaMin}m`);
+        console.log(`[re-cluster] Window: ${lastDate} -> ${events[events.length - 1].published_at}`);
         
         lastDate = events[events.length - 1].published_at;
 
@@ -105,7 +116,7 @@ async function reClusterHistoricalData() {
         for (let i = 0; i < events.length; i += CONCURRENCY) {
             const chunk = events.slice(i, i + CONCURRENCY);
             
-            // Step 2a: Run vector searches in parallel for the chunk
+            // Execute vector similarity searches in parallel for the chunk.
             const matchPromises = chunk.map(async (event) => {
                 if (processedIds.has(event.id) || !event.embedding) return null;
                 
@@ -129,7 +140,7 @@ async function reClusterHistoricalData() {
 
             const chunkResults = await Promise.all(matchPromises);
 
-            // Step 2b: Bulk fetch missing matches
+            // Fetch missing events identified as potential matches.
             const missingIds = new Set<string>();
             for (const res of chunkResults) {
                 if (!res) continue;
@@ -153,7 +164,7 @@ async function reClusterHistoricalData() {
                 }
             }
 
-            // Step 2c: Process sequentially to preserve newer-absorbs-older logic
+            // Process matches sequentially to maintain causal merge order.
             for (const res of chunkResults) {
                 if (!res) continue;
                 const { event, matches } = res;
@@ -167,7 +178,7 @@ async function reClusterHistoricalData() {
                     discovered_at: event.published_at
                 }];
 
-                // Normalization Fix: Ensure the top-level timestamp is the latest among EXISTING sources
+                // Synchronize top-level timestamp with latest source activity.
                 for (const s of currentSources) {
                     if (new Date(s.discovered_at).getTime() > new Date(event.published_at).getTime()) {
                         event.published_at = s.discovered_at;
@@ -187,10 +198,12 @@ async function reClusterHistoricalData() {
                     const matchTime = new Date(matchedEvent.published_at).getTime();
                     const sevenDays = 7 * 24 * 60 * 60 * 1000;
                     
+                    // Skip if temporal distance exceeds 7 days.
                     if (Math.abs(eventTime - matchTime) > sevenDays) {
                         continue;
                     }
 
+                    // Multi-tiered merge decision logic.
                     if (match.similarity >= SIMILARITY_THRESHOLD_STRICT) {
                         shouldMerge = true;
                     } else if (match.similarity >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
@@ -207,11 +220,9 @@ async function reClusterHistoricalData() {
                     }
 
                     if (shouldMerge) {
-                        console.log(`[re-cluster] MERGE: "${event.title.slice(0, 40)}..." (Master) <-- "${matchedEvent.title.slice(0, 40)}..." (Sim: ${match.similarity.toFixed(2)})`);
+                        console.log(`[re-cluster] MERGE: "${event.title.slice(0, 40)}..." <- "${matchedEvent.title.slice(0, 40)}..." (Sim: ${match.similarity.toFixed(2)})`);
                         
                         const mergedResult = calculateMergedStory(event, matchedEvent);
-                        
-                        // Update the local event object with merged state
                         Object.assign(event, mergedResult);
 
                         idsToDelete.push(matchedEvent.id);
@@ -241,13 +252,12 @@ async function reClusterHistoricalData() {
             }
         }
 
-        // --- Execute Bulk DB Operations for the Batch ---
-
+        // Execute bulk database updates and deletions for the batch.
         if (idsToDelete.length > 0) {
             if (DRY_RUN) {
-                console.log(`[re-cluster]   └─ Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
+                console.log(`[re-cluster] Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
             } else {
-                console.log(`[re-cluster]   └─ Action: Deleting ${idsToDelete.length} merged items.`);
+                console.log(`[re-cluster] Action: Deleting ${idsToDelete.length} merged items.`);
                 const DELETE_CHUNK_SIZE = 500;
                 for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
                     const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
@@ -261,9 +271,9 @@ async function reClusterHistoricalData() {
 
         if (masterUpdates.length > 0) {
             if (DRY_RUN) {
-                console.log(`[re-cluster]   └─ Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
+                console.log(`[re-cluster] Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
             } else {
-                console.log(`[re-cluster]   └─ Action: Updating ${masterUpdates.length} master stories.`);
+                console.log(`[re-cluster] Action: Updating ${masterUpdates.length} master stories.`);
                 const UPDATE_CHUNK_SIZE = 50;
                 for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
                     const chunk = masterUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
@@ -286,3 +296,4 @@ async function reClusterHistoricalData() {
 }
 
 reClusterHistoricalData();
+

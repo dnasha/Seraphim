@@ -1,10 +1,9 @@
 /*
   Seraphim Enricher Pipeline Tests
+  Verifies the enrichItemsWithLocation function for bulk geocoding of news items.
+  Tests coordinate attachment, source-based defaults, and jitter logic for map visualization.
 
-  This suite verifies the enrichItemsWithLocation function, which handles
-  the bulk geocoding of news items. It tests coordinate attachment,
-  source-based defaults, and the jitter logic used to prevent pin
-  stacking on the map.
+  Usage: bun test scripts/tests/enricher.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -18,8 +17,7 @@ beforeAll(() => {
 
 /*
   makeItem
-  Helper factory for creating mock NewsItem objects with random IDs
-  to ensure test isolation.
+  Factory for mock NewsItem objects with random IDs for test isolation.
 */
 function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
     return {
@@ -36,8 +34,7 @@ function makeItem(overrides: Partial<NewsItem> = {}): NewsItem {
 
 /*
   Coordinate Attachment
-  Tests the core functionality of extracting and attaching lat/lon
-  coordinates to a news item based on its title.
+  Tests extraction and attachment of latitude and longitude from titles.
 */
 describe('enrichItemsWithLocation - coordinate attachment', () => {
     it('attaches lat/lon for a clear location in title', async () => {
@@ -58,8 +55,7 @@ describe('enrichItemsWithLocation - coordinate attachment', () => {
 
 /*
   Pre-Geocoded Passthrough
-  Ensures that items already containing coordinate data are not
-  re-geocoded, preserving existing location precision.
+  Ensures items with existing coordinates are not re-processed.
 */
 describe('enrichItemsWithLocation - passthrough', () => {
     it('preserves pre-existing coordinates without re-geocoding', async () => {
@@ -76,8 +72,8 @@ describe('enrichItemsWithLocation - passthrough', () => {
 
 /*
   Source Default Fallback
-  Verifies that items from specific sources (e.g., NASA) default to
-  their headquarters location if no specific location is found in the text.
+  Verifies source-specific location defaults (e.g. NASA to Washington DC)
+  when no specific location is identified in the text.
 */
 describe('enrichItemsWithLocation - source defaults', () => {
     it('falls back to NASA source default (Washington DC)', async () => {
@@ -96,8 +92,7 @@ describe('enrichItemsWithLocation - source defaults', () => {
 
 /*
   Golden-Angle Spiral Jitter
-  Tests the mathematical jitter applied to items at the same
-  location, ensuring they are visually distinct on the map.
+  Tests mathematical jitter applied to co-located items to prevent pin stacking.
 */
 describe('enrichItemsWithLocation - jitter', () => {
     it('applies jitter to prevent coordinate stacking', async () => {
@@ -123,7 +118,7 @@ describe('enrichItemsWithLocation - jitter', () => {
 
 /*
   Edge Cases
-  Handles scenarios like empty input arrays to ensure pipeline stability.
+  Ensures stability with empty inputs.
 */
 describe('enrichItemsWithLocation - edge cases', () => {
     it('returns empty array for empty input', async () => {
@@ -131,4 +126,5 @@ describe('enrichItemsWithLocation - edge cases', () => {
         expect(result).toEqual([]);
     });
 });
+
 

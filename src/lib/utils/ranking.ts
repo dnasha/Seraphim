@@ -1,11 +1,25 @@
+/**
+ * Ranking and sorting utilities for news items.
+ * This module handles the logic for ordering stories based on recency (New) or impact (Hot),
+ * and provides robust methods for calculating event counts and timestamps from multiple sources.
+ */
+
 import { NewsItem } from '@/lib/core/types';
 
 export type SortMode = 'new' | 'hot';
 
+/**
+ * Normalizes a sort mode string to a valid SortMode. Defaults to 'new'.
+ */
 export function normalizeSortMode(mode?: string | null): SortMode {
     return mode === 'hot' ? 'hot' : 'new';
 }
 
+/**
+ * Determines the most recent timestamp associated with a story.
+ * It checks latestActivityAt, publishedAt, and the discoveredAt time of all individual sources.
+ * This ensures that active or updated stories are correctly surfaced.
+ */
 export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sources' | 'latestActivityAt'>): number {
     const parseDate = (d: string | undefined | null) => {
         if (!d) return 0;
@@ -27,8 +41,12 @@ export function latestReportTimestamp(item: Pick<NewsItem, 'publishedAt' | 'sour
     return Math.max(latestActivityMs, publishedAtMs, latestSourceMs);
 }
 
+/**
+ * Calculates a robust event count by checking multiple potential source count fields.
+ * This is necessary to handle variations in API responses and RPC mismatches.
+ * It explicitly ignores map cluster counts (storyCount) to focus on the count of actual sources.
+ */
 export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
-    // Check all possible count field variations to be extremely robust against API/RPC mismatches
     const raw = item as unknown as Record<string, unknown>;
     const rawCount = (
         item.sourcesCount ?? 
@@ -42,42 +60,52 @@ export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCoun
     const safeSCount = Number.isFinite(sCount) ? sCount : 0;
     const sourcesLen = item.sources?.length || 0;
 
-    // Reporting strength is strictly based on actual sources (event_count or sources array length)
-    // We explicitly IGNORE map cluster count (storyCount) for this metric.
     const count = Math.max(safeSCount, sourcesLen);
     return count > 0 ? count : 1;
 }
 
+/**
+ * Alias for canonicalEventCount representing the reporting strength of a story.
+ */
 export function eventStrength(item: Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
     return canonicalEventCount(item);
 }
 
+/**
+ * Extracts the number of stories within a map cluster.
+ */
 export function clusterStoryCount(item: Pick<NewsItem, 'storyCount'>): number {
     const count = Number(item.storyCount);
     return (Number.isFinite(count) && count > 0) ? count : 1;
 }
 
+/**
+ * Core comparison logic for sorting news items.
+ * Hot Mode: Prioritizes impact score, then actual source count, then recency.
+ * New Mode: Prioritizes recency.
+ * Tiebreaks are handled by credibility tier and unique ID stability.
+ */
 export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): number {
     if (mode === 'hot') {
-        // 1. Impact Score (DESC)
+        // 1. Impact Score (Descending)
         const rawA = a as unknown as Record<string, unknown>;
         const rawB = b as unknown as Record<string, unknown>;
         const scoreA = (a.impactScore ?? rawA.impact_score) as number || 0;
         const scoreB = (b.impactScore ?? rawB.impact_score) as number || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
 
-        // 2. Real Event Count (Sources) (DESC)
+        // 2. Source Count (Descending)
         const countA = canonicalEventCount(a);
         const countB = canonicalEventCount(b);
         if (countB !== countA) return countB - countA;
     }
 
-    // 3. Recency (DESC)
+    // 3. Recency (Descending)
     const timeA = latestReportTimestamp(a);
     const timeB = latestReportTimestamp(b);
     if (timeB !== timeA) return timeB - timeA;
 
-    // Final tiebreaks for stable sorting
+    // Stable tiebreaks
     const credA = a.credibilityTier || 3;
     const credB = b.credibilityTier || 3;
     if (credB !== credA) return credA - credB;
@@ -85,6 +113,9 @@ export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): numb
     return (a.originalId || a.id).localeCompare(b.originalId || b.id);
 }
 
+/**
+ * Returns a sorted copy of the provided news items based on the specified sort mode.
+ */
 export function sortNewsItems(items: NewsItem[], mode: SortMode): NewsItem[] {
     return [...items].sort((a, b) => compareNewsItems(a, b, mode));
 }

@@ -1,7 +1,15 @@
-/*
-MapActionTools component for managing environmental overlays.
-Provides a menu to toggle live data layers such as earthquakes, weather, and disasters.
-*/
+/**
+ * MapActionTools Component
+ * 
+ * Provides a specialized interface for managing map-specific environment overlays,
+ * toggling 3D globe mode, and resetting map orientation.
+ * 
+ * Features:
+ * - Environment overlay toggles (Earthquakes, Weather, Disasters).
+ * - Orientation reset (North-up alignment).
+ * - 2D/3D projection switching.
+ * - Discovery badge system for first-time user interaction.
+ */
 
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './MapActionTools.module.css';
@@ -28,10 +36,13 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Only show discovery badge if user hasn't opened overlays before
+        /**
+         * Discovery badge logic:
+         * Checks local storage to determine if the user has previously interacted with
+         * the overlay menu. If not, a discovery badge is displayed.
+         */
         const hasSeen = localStorage.getItem('seraphim_seen_overlays');
         if (!hasSeen) {
-            // Defer to avoid synchronous cascading render warning
             requestAnimationFrame(() => {
                 setShowBadge(true);
             });
@@ -39,6 +50,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     }, []);
 
     const handleOverlayButtonClick = () => {
+        // Dismiss the discovery badge upon the first interaction
         if (showBadge) {
             localStorage.setItem('seraphim_seen_overlays', 'true');
             setShowBadge(false);
@@ -46,7 +58,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
         setOverlayMenuOpen(!overlayMenuOpen);
     };
 
-    // Effect to handle closing the overlay menu when clicking outside of it.
+    /**
+     * Click-outside handler:
+     * Closes the overlay menu when the user clicks anywhere outside the component.
+     */
     useEffect(() => {
         if (!overlayMenuOpen) return;
         const handleClick = (e: MouseEvent) => {

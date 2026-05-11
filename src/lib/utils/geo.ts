@@ -1,16 +1,38 @@
+/*
+  Geographic Utilities
+  
+  Provides core functions for coordinate manipulation, bounding box 
+  calculations, and spatial visibility checks. These utilities ensure
+  consistent map behavior across the antimeridian and optimize 
+  network performance through grid-based snapping.
+*/
+
 import { NewsItem, BBox } from '@/lib/core/types';
 
+/**
+ * Normalizes a longitude value to the range [-180, 180].
+ * Uses a double modulo approach to handle both positive and negative 
+ * wraparound cases correctly.
+ */
 function normalizeLng(lng: number): number {
     return ((lng + 180) % 360 + 360) % 360 - 180;
 }
 
 /**
- * Snaps a bounding box to a grid to maximize cache hits on the backend.
+ * Snaps a bounding box to a resolution-aware grid.
+ * 
+ * This increases the likelihood of cache hits on the backend by 
+ * consolidating slightly different viewports into a single canonical 
+ * grid square. The grid size decreases as the user zooms in to 
+ * maintain precision.
  */
 export function snapBBox(b: BBox): BBox {
     const z = b.zoom || 5;
     
-    // At low zoom levels, fetch the entire globe to ensure no continents are cropped by viewport bounds
+    /** 
+     * Global View: At low zoom levels, we fetch the entire globe to 
+     * prevent continents from being partially hidden at the edges.
+     */
     if (z < 3) {
         return {
             ...b,
@@ -22,6 +44,7 @@ export function snapBBox(b: BBox): BBox {
         };
     }
 
+    /** Grid sizing logic based on zoom level */
     const grid = z < 4 ? 20 : z < 7 ? 10 : z < 10 ? 5 : 2;
     
     const snappedMinLat = Math.max(-90, Math.floor(b.minLat / grid) * grid);
@@ -30,7 +53,10 @@ export function snapBBox(b: BBox): BBox {
     const snappedMinLngRaw = Math.floor(b.minLng / grid) * grid;
     const snappedMaxLngRaw = Math.ceil(b.maxLng / grid) * grid;
 
-    // If the box width is >= 360, the viewport sees the whole world (or more).
+    /** 
+     * Wraparound Guard: If the box width exceeds 360 degrees, 
+     * we treat it as a full-globe request.
+     */
     if (snappedMaxLngRaw - snappedMinLngRaw >= 360) {
         return {
             ...b,
@@ -53,15 +79,25 @@ export function snapBBox(b: BBox): BBox {
 }
 
 /**
- * Checks if a news item's coordinates fall within a bounding box.
- * Also handles search query filtering if present in the bbox options.
+ * Determines if a news item's location is within the specified bounding box.
+ * 
+ * Handles complex edge cases including:
+ * 1. Global Viewports: Bypasses longitude checks when the whole world is visible.
+ * 2. Antimeridian Crossing: Correctly identifies visibility when the bounding 
+ *    box spans from positive to negative longitudes (e.g., across the Pacific).
+ * 3. Real-time Filtering: Applies search query matches if a query is present.
  */
 export function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
-    // Unmapped items are considered "global" and are handled by the mappedOnly filter instead.
+    /** 
+     * Unmapped items are technically global but are usually handled 
+     * by higher-level filters.
+     */
     if (item.latitude == null || item.longitude == null) return true;
     
-    // If a query is present, it must match. Note that applyNewsFilters also handles this, 
-    // but we keep it here for real-time ingestion checks in useNewsData.
+    /** 
+     * Text Search: Item must match the query string in title, 
+     * location, or description.
+     */
     if (bbox.query) {
         const q = bbox.query.toLowerCase();
         const matchesQuery = item.title.toLowerCase().includes(q) || 
@@ -70,7 +106,10 @@ export function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
         if (!matchesQuery) return false;
     }
     
-    // At low zoom levels or full width, bypass longitude checks so no wrapped continents are hidden
+    /** 
+     * Wide Viewport Optimization: Skip longitude checks if the zoom 
+     * is low or the width covers the globe.
+     */
     if ((bbox.zoom !== undefined && bbox.zoom < 3) || (bbox.maxLng - bbox.minLng >= 360)) {
         return item.latitude >= bbox.minLat && item.latitude <= bbox.maxLat;
     }
@@ -79,7 +118,10 @@ export function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
     const minLng = normalizeLng(bbox.minLng);
     const maxLng = normalizeLng(bbox.maxLng);
     
-    // Handle antimeridian crossing (minLng > maxLng)
+    /** 
+     * Antimeridian Logic: If minLng > maxLng, the box crosses the 180/-180 line.
+     * Visibility is determined by being either >= minLng OR <= maxLng.
+     */
     if (minLng > maxLng) {
         return (item.latitude >= bbox.minLat && item.latitude <= bbox.maxLat) &&
                (itemLng >= minLng || itemLng <= maxLng);

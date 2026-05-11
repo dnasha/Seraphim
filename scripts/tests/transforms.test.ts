@@ -1,10 +1,9 @@
 /*
   Seraphim Data Transformation Tests
+  Verifies mapping between NewsItem (frontend) and DbEvent (database) objects.
+  Tests string sanitization, URL validation, and coordinate normalization.
 
-  This suite verifies the bi-directional mapping between NewsItem objects
-  (used in the frontend) and DbEvent objects (used in the database). It
-  also tests string cleaning logic for handling invalid characters and
-  orphaned surrogates.
+  Usage: bun test scripts/tests/transforms.test.ts
 */
 
 import { describe, it, expect } from 'vitest';
@@ -15,7 +14,7 @@ import type { DbEvent } from '@/types';
 
 /*
   makeNewsItem
-  Helper factory for creating minimal valid NewsItem objects for tests.
+  Factory for minimal valid NewsItem objects for testing.
 */
 function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     return {
@@ -33,8 +32,7 @@ function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
 
 /*
   cleanString
-  Validates the sanitization of strings, specifically ensuring that
-  orphaned UTF-16 surrogates are removed to prevent database errors.
+  Validates sanitization, specifically removal of orphaned UTF-16 surrogates.
 */
 describe('cleanString', () => {
     it('returns empty string for null/undefined', () => {
@@ -68,9 +66,7 @@ describe('cleanString', () => {
 
 /*
   newsItemToDbEvent
-  Verifies the transformation of frontend-ready news items into
-  database-compatible event records. Includes validation for URLs,
-  tags, and coordinate normalization.
+  Verifies transformation of news items into database-compatible records.
 */
 describe('newsItemToDbEvent', () => {
     it('converts a valid NewsItem to DbEvent', () => {
@@ -111,7 +107,7 @@ describe('newsItemToDbEvent', () => {
         expect(event!.url).toBe('http://example.com/article');
     });
 
-    it('normalizes tags: filters empty/whitespace-only strings', () => {
+    it('normalizes tags by filtering empty strings', () => {
         const item = makeNewsItem({ tags: ['valid', '', '  ', 'also-valid'] });
         const event = newsItemToDbEvent(item);
         expect(event!.tags).toEqual(['valid', 'also-valid']);
@@ -167,8 +163,7 @@ describe('newsItemToDbEvent', () => {
 
 /*
   dbEventToNewsItem
-  Verifies the conversion of database event records back into
-  NewsItem objects for use in the frontend UI.
+  Verifies conversion of database records back into frontend NewsItem objects.
 */
 describe('dbEventToNewsItem', () => {
     function makeDbEvent(overrides: Partial<DbEvent> = {}): DbEvent {
@@ -229,4 +224,5 @@ describe('dbEventToNewsItem', () => {
         expect(item.locationName).toBeUndefined();
     });
 });
+
 

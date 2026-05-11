@@ -1,23 +1,35 @@
-/*
-  Regex patterns for geographic location extraction and event detection.
-  Contains patterns for datelines, emojis, metadata, and spatial context verbs.
-*/
+/**
+ * EXTRACTION PATTERNS
+ * 
+ * This module defines the regular expressions used by the geocoding engine
+ * to identify geographic entities and event contexts. Patterns are categorized
+ * by their confidence level and intended extraction phase.
+ */
 
-// regex for standard datelines (e.g. "WASHINGTON (Reuters) - ")
+/**
+ * Standard journalistic datelines (e.g., "WASHINGTON (Reuters) - ").
+ * These provide extremely high confidence for the primary location of a report.
+ */
 export const DATELINE_PATTERN = /^(?:\[[^\]]+\]\s*)?([A-Z][A-Za-z\s]+?)\s*(?:\([^)]+\))?\s*(?:-|—|–|:)\s+/;
 
-// optimized module-level regexes to avoid re-compilation
 export const EMOJI_STRIP = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{FE0E}]/gu;
 export const METADATA_COUNTRY_REGEX = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})/;
 
-// "City, State" or "City, Country" comma-pair pattern
+/**
+ * Common comma-separated pairs (e.g., "Kyiv, Ukraine").
+ * Used to resolve ambiguous city names via their parent region.
+ */
 export const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g;
 
-// unicode-aware letter class for location capture groups
-const L = '[a-zA-Z\u00C0-\u024F]'; // a single letter including accented
-const LOC = `[A-Z\u00C0-\u024F]${L}+(?:\\s+[A-Z\u00C0-\u024F]${L}+){0,3}`; // multi-word location
+// Unicode-aware letter class for robust location capture
+const L = '[a-zA-Z\u00C0-\u024F]';
+const LOC = `[A-Z\u00C0-\u024F]${L}+(?:\\s+[A-Z\u00C0-\u024F]${L}+){0,3}`;
 
-// spatial context patterns (e.g., "in [Place]", "near [Place]")
+/**
+ * General spatial context patterns (e.g., "in [Location]", "near [Location]").
+ * These are used as a secondary pass to capture locations mentioned within
+ * sentences when structured datelines are missing.
+ */
 export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ii]n\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ii]n\\s+[Tt]he\\s+(${LOC})`, 'g'),
@@ -33,7 +45,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Oo]n\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:[Cc]ity|[Tt]own|[Pp]rovince|[Ss]tate|[Rr]egion|[Vv]illage|[Cc]enter|[Cc]entre)\\s+[Oo]f\\s+(${LOC})`, 'g'),
 
-    // active conflict and event verbs
+    // Event-specific verbs used to identify conflict zones
     new RegExp(`\\b[Hh]its?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ss]trikes?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]ttacks?\\s+(?:[Oo]n\\s+)?(${LOC})`, 'g'),
@@ -52,7 +64,6 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ff]lees?\\s+to\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Dd]eploys?\\s+to\\s+(${LOC})`, 'g'),
 
-    // past-tense variants
     new RegExp(`\\b[Aa]ttacked\\s+in\\s+(?:the\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]argeted\\s+(?:in\\s+)?(?:the\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\bagainst\\s+(${LOC})`, 'g'),
@@ -60,14 +71,12 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ss]helled\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Bb]ombed\\s+(${LOC})`, 'g'),
 
-    // extraction / movement patterns
     new RegExp(`\\b[Oo]ut\\s+[Oo]f\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Rr]eturning\\s+(?:to|from)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ll]aunched\\s+from\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ee]scapes?\\s+from\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Hh]eading\\s+(?:to|for|towards?)\\s+(${LOC})`, 'g'),
 
-    // kill/casualty event patterns
     new RegExp(`\\b[Kk]ills?\\s+(?:\\w+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ww]ounded?\\s+(?:in|near)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Dd]ead\\s+(?:in|near)\\s+(${LOC})`, 'g'),
@@ -79,13 +88,11 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ss]hot\\s+down\\s+over\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ii]ntercepts?\\s+(?:\\w+\\s+)?(?:over|in|near)\\s+(${LOC})`, 'g'),
 
-    // “X attacking Y” — capture Y (the target)
     new RegExp(`\\b[Aa]ttacking\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Vv]isits?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]rrives?\\s+in\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Mm]eets?\\s+(?:with\\s+)?(?:[A-Z]\\w+\\s+)?in\\s+(${LOC})`, 'g'),
 
-    // “Pope’s X visit highlights” / “Amid crisis in X” patterns
     new RegExp(`\\b[Aa]mid\\s+(?:\\w+\\s+){0,3}(?:in|across)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:reopening|reopens|reopened)\\s+(?:the\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\b(?:blockade|blockading|blockaded)\\s+(?:of|on)?\\s+(${LOC})`, 'g'),
@@ -93,10 +100,11 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b(?:protests?|demonstrations?|unrest|clashes)\\s+in\\s+(${LOC})`, 'g'),
 ];
 
-/*
-  Specific event-target relationship patterns.
-  These have higher confidence than general spatial patterns.
-*/
+/**
+ * High-confidence action-target patterns.
+ * These are prioritized because they describe the recipient of an action
+ * (e.g., "Missile hits Kyiv"), which is usually the intended map subject.
+ */
 export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
@@ -114,16 +122,17 @@ export const ACTION_TARGET_PATTERNS = [
     new RegExp(`\\b[Ww]eapons\\s+on\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]ir\\s+[Ss]trikes?\\s+(?:on|in|against|over)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:intercept(?:s|ed|ing)?)\\s+(${LOC})`, 'g'),
-    // additional high-confidence target patterns
     new RegExp(`\\b(?:downs?|downed|shot\\s+down)\\s+(?:[Ff]-\\d+|drone|aircraft|jet|plane|helicopter|UAV)\\s+(?:over|in|near)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:kills?|killed)\\s+(?:\\d+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:injur(?:es?|ed|ing))\\s+(?:\\d+\\s+)?(?:in|near|at)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:hits?|struck)\\s+(?:\\w+\\s+)?(?:in|central|southern|northern|eastern|western)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:blockade|blockaded|blockading)\\s+(?:of|on)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:reopen(?:s|ed|ing)?)\\s+(?:the\\s+)?(${LOC})`, 'g'),
-    /*
-      Actor-action-target patterns.
-      Example: "Russian forces strike Kyiv" - capture Kyiv to prevent actor from winning over target.
-    */
+    
+    /**
+     * Actor-Action-Target pattern.
+     * Prevents the actor (e.g., "Russian forces") from being extracted instead
+     * of the target (e.g., "Kyiv").
+     */
     new RegExp(`(?:[A-Z]\\w+(?:i|an|ese|ish)\\s+)?(?:forces?|troops|military|army|navy|jets?)\\s+(?:attack(?:s|ed)?|bomb(?:s|ed)?|strike(?:s)?|struck|shell(?:s|ed)?)\\s+(?:\\w+\\s+)?(?:in|near)?\\s*(${LOC})`, 'g'),
 ];

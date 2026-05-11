@@ -1,7 +1,10 @@
-/*
-MapSettings component for the Seraphim OSINT dashboard.
-Provides a configuration panel to toggle map styles, clustering, and visibility filters.
-*/
+/**
+ * MapSettings Component
+ * 
+ * Provides a configuration interface for customizing the map experience.
+ * Users can adjust visual styles, toggle performance-heavy features, and 
+ * apply visibility filters to surface specific data subsets.
+ */
 
 import React from 'react';
 import { MAP_STYLES } from './MapConstants';
@@ -37,10 +40,12 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     const [showBadge, setShowBadge] = React.useState(false);
 
     React.useEffect(() => {
-        // Only show discovery badge if user hasn't opened settings before
+        /**
+         * Discovery badge logic:
+         * Displays a notification dot if the user hasn't interacted with settings before.
+         */
         const hasSeen = localStorage.getItem('seraphim_seen_settings');
         if (!hasSeen) {
-            // Defer to avoid synchronous cascading render warning
             requestAnimationFrame(() => {
                 setShowBadge(true);
             });
@@ -48,6 +53,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     }, []);
 
     const handleButtonClick = () => {
+        // Dismiss the discovery badge upon first interaction
         if (showBadge) {
             localStorage.setItem('seraphim_seen_settings', 'true');
             setShowBadge(false);
@@ -71,7 +77,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
             {isOpen && (
                 <div className={styles.mapSettingsPanel}>
-                    {/* Map style selection grid */}
+                    {/* Map style selection: Allows switching between raster providers. */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Map Style</div>
                         <div className={styles.settingsStyleGrid}>
@@ -89,7 +95,11 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
                     <div className={styles.settingsDivider} />
 
-                    {/* Toggle for disabling client-side clustering */}
+                    {/**
+                     * Display Mode:
+                     * 'Force individual pins' disables client-side clustering. 
+                     * Useful for high-density inspection or debugging.
+                     */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
                         <div className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} style={{ cursor: 'pointer' }}>
@@ -102,7 +112,11 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
                     <div className={styles.settingsDivider} />
 
-                    {/* Filter for showing ONLY news items without geographic coordinates */}
+                    {/**
+                     * Visibility - Unmapped only:
+                     * Filters the view to show only news items that failed geocoding.
+                     * Used by OSINT analysts to identify data gaps or manual geocoding needs.
+                     */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Visibility</div>
                         <div className={styles.settingsToggle} onClick={() => onUnmappedOnlyChange(!unmappedOnly)} style={{ cursor: 'pointer' }}>
@@ -115,7 +129,11 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
                     <div className={styles.settingsDivider} />
 
-                    {/* Toggle for high-performance pulse animations on global hot stories */}
+                    {/**
+                     * Visuals - Animated effects:
+                     * Toggles high-performance CSS/SVG animations (e.g., pulsing hot stories).
+                     * Can be disabled for lower-end hardware.
+                     */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Visuals</div>
                         <div className={styles.settingsToggle} onClick={() => onAnimatedEffectsChange(!animatedEffects)} style={{ cursor: 'pointer' }}>

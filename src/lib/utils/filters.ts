@@ -1,3 +1,9 @@
+/**
+ * UI filtering logic for news items.
+ * This module provides a pure function to apply various filter criteria (sources, categories, 
+ * time range, search query, and geography) to a list of news items.
+ */
+
 import { NewsItem, BBox } from '@/lib/core/types';
 import { isWithinBBox } from './geo';
 import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked } from './ranking';
@@ -21,7 +27,7 @@ export interface FilterOptions {
 
 /**
  * Applies all filter criteria to a list of news items.
- * Pure function: no React dependencies, no side effects.
+ * This is a pure function with no React dependencies or side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
     const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true } = options;
@@ -30,13 +36,19 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
     let filtered = items;
     if (now === 0) return filtered;
 
-    // 0. BBox Viewport filtering (to sync sidebar with map view)
-    // BBox filter is bypassed if unmappedOnly is true to allow viewing global unmapped news
+    /**
+     * 0. Viewport Filtering
+     * Synchronizes the sidebar list with the current map bounding box.
+     * This filter is bypassed when viewing global unmapped news.
+     */
     if (bbox && respectBBox && !unmappedOnly) {
         filtered = filtered.filter(item => isWithinBBox(item, bbox));
     }
 
-    // 1. Source filtering (RSS, GNews, Social)
+    /**
+     * 1. Source Filtering
+     * Filters by source type (RSS, GNews, Social) and specific social platforms.
+     */
     filtered = filtered.filter(item => {
         if (sources.includes('news') && item.sourceType === 'rss') return true;
         if (sources.includes('extra') && item.sourceType === 'gnews') return true;
@@ -45,23 +57,26 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
             if (sources.includes('reddit') && s.includes('reddit')) return true;
             if (sources.includes('x') && (s.includes('(x)') || s.includes('twitter'))) return true;
             if (sources.includes('telegram') && s.includes('telegram')) return true;
-            // If they have all defaults selected, don't drop unknown social sources
             if (sources.includes('reddit') && sources.includes('x') && sources.includes('telegram')) return true;
         }
         return false;
     });
 
-    // 2. Category filtering
+    /**
+     * 2. Category Filtering
+     */
     if (categories.length > 0 && !categories.includes('all')) {
         filtered = filtered.filter(item =>
             item.category ? categories.includes(item.category) : categories.includes('general')
         );
     }
 
-    // 3. Time range filtering
+    /**
+     * 3. Time Range Filtering
+     * Handles both relative (e.g., 1d, 1w) and custom date range filters.
+     */
     if (timeRange === 'custom') {
         const sinceTime = customStartDate ? new Date(customStartDate).getTime() : -Infinity;
-        // End date should include the full day
         const untilDate = customEndDate ? new Date(customEndDate) : null;
         if (untilDate) {
             untilDate.setUTCHours(23, 59, 59, 999);
@@ -84,7 +99,10 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         filtered = filtered.filter(item => (now - latestReportTimestamp(item)) <= rangeMs);
     }
 
-    // 4. Search query filtering (title, description, location)
+    /**
+     * 4. Search Query Filtering
+     * Performs a case-insensitive search across title, description, and location name.
+     */
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         filtered = filtered.filter(item =>
@@ -94,14 +112,21 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         );
     }
 
-    // 5. Geographical filter (items with/without coordinates)
+    /**
+     * 5. Geographical Visibility Filter
+     */
     if (unmappedOnly) {
         filtered = filtered.filter(n => n.latitude == null);
     } else if (mappedOnly) {
         filtered = filtered.filter(n => n.latitude != null);
     }
 
-    // 6. Canonical dedupe to prevent duplicate cards/pins when both cluster and original exist.
+    /**
+     * 6. Canonical Deduplication
+     * Prevents duplicate cards or pins when both a cluster and its original stories exist 
+     * in the same result set. It uses the originalId (or id as fallback) to keep only 
+     * the most relevant version of a story based on the current sort mode.
+     */
     const deduped = new Map<string, NewsItem>();
     for (const item of filtered) {
         const key = item.originalId || item.id;
@@ -115,6 +140,8 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         }
     }
 
-    // 7. Sort by mode
+    /**
+     * 7. Final Sorting
+     */
     return sortRanked(Array.from(deduped.values()), mode);
 }

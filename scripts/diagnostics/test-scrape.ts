@@ -1,19 +1,17 @@
-/*
-Seraphim Scraper Fetcher Diagnostics
-Tests raw data ingestion performance and counts without database or geocoding overhead.
-
-Usage: bun run scripts/test-scrape.ts
-*/
+/**
+ * Purpose: Tests raw data ingestion performance and item counts across all fetchers (RSS, Reddit, GNews, Social) without database or geocoding overhead.
+ * Usage: bun run scripts/diagnostics/test-scrape.ts
+ */
 
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from '@/lib/api/rss';
 import { fetchGNews, fetchOSINTGNews } from '@/lib/api/gnews';
 import { fetchSocialFeeds } from '@/lib/api/social';
 import { NewsItem } from '@/lib/core/types';
 
-/*
-Measures the performance of a specific scraper fetcher.
-Outputs a summary table of items retrieved per source.
-*/
+/**
+ * Measures the performance of a specific scraper fetcher.
+ * Outputs a summary table of items retrieved per source to identify high-volume endpoints.
+ */
 async function measureScrape(name: string, fetcher: () => Promise<NewsItem[]>) {
     console.log(`\nStarting scrape: ${name}`);
     const startMs = Date.now();
@@ -22,7 +20,7 @@ async function measureScrape(name: string, fetcher: () => Promise<NewsItem[]>) {
         const duration = ((Date.now() - startMs) / 1000).toFixed(2);
         console.log(`[${name}] Complete in ${duration}s. Items retrieved: ${items.length}`);
         
-        // Aggregate item counts per source
+        // Aggregate item counts per source to visualize the distribution of incoming data across different providers.
         const sourceCounts = items.reduce((acc: Record<string, number>, curr) => {
             acc[curr.source] = (acc[curr.source] || 0) + 1;
             return acc;
@@ -44,7 +42,7 @@ async function runTest() {
 
     const totalStartMs = Date.now();
 
-    // Run fetchers sequentially for cleaner console logging
+    // Fetchers are executed sequentially to maintain clear and readable console output logs during the diagnostic run.
     const rssItems = await measureScrape('RSS Feeds', fetchAllRSSFeeds);
     const redditItems = await measureScrape('Reddit Feeds', fetchAllRedditFeeds);
     const gnewsGeneral = await measureScrape('GNews General', () => fetchGNews('general', 30));
@@ -73,7 +71,7 @@ async function runTest() {
     console.log(`Total retrieved:   ${allItems.length}`);
     console.log('=============================================');
     
-    // Show a preview of the most recent results
+    // Sort and display the most recent items to verify timestamp integrity and retrieval recency.
     if (allItems.length > 0) {
         console.log('\nPreview of top 3 global items recently published:');
         const sorted = allItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -89,4 +87,3 @@ runTest().catch((err) => {
     console.error('Fatal scrape test error:', err);
     process.exit(1);
 });
-

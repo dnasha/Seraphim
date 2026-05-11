@@ -1,3 +1,10 @@
+/**
+ * MapError Component
+ * 
+ * A fallback UI displayed when the MapLibre engine fails to initialize or encounters
+ * a critical runtime error. Provides users with an error message and a retry mechanism.
+ */
+
 'use client';
 
 import styles from './MapError.module.css';

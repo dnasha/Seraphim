@@ -1,25 +1,17 @@
 /*
-Seraphim Scraper - Main ingestion worker
+Seraphim Scraper
+Main ingestion worker for processing news from multiple sources.
 
-Local execution:
+Usage:
 bun run src/scraper/index.ts
 
-Dry run (no database writes, prints payload):
-DRY_RUN=true bun run src/scraper/index.ts
+Execution Modes:
+- Standard: Fetches, geocodes, vectorizes, and commits to Supabase.
+- Dry Run: Set DRY_RUN=true to skip database writes and view proposed payloads.
 
-Environment variables:
-SUPABASE_URL: Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY: Service-role key for bypassing RLS
-GNEWS_API_KEY: Optional API key for GNews.io
-
-Pipeline:
-1. Fetch raw items from RSS, GNews, Reddit, and social channels.
-2. Pre-fetch known URLs from database to avoid redundant processing.
-3. Filter out existing items.
-4. Geocode new items via the local NLP engine.
-5. Generate semantic embeddings (all-MiniLM-L6-v2, local ONNX).
-6. Match against recent events — merge if similarity > 0.85 (Story model).
-7. Upsert new events and update merged stories in Supabase.
+Requirements:
+- SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for database access.
+- GNEWS_API_KEY for GNews integration.
 */
 
 import { supabaseAdmin as supabase } from "@/lib/core/supabase";
@@ -42,8 +34,6 @@ import {
   MAX_MERGE_DISTANCE_KM,
 } from "@/lib/utils/vectorize";
 
-/* Configuration */
-
 const DRY_RUN = process.env.DRY_RUN === "true";
 
 if (!supabase) {
@@ -55,11 +45,9 @@ if (!supabase) {
 
 const db = supabase!;
 
-/* ─── Semantic Merge Logic ─── */
-
 /*
-Fetches recent events that already have embeddings from Supabase.
-Only pulls id, embedding, sources, latitude, and longitude.
+Fetches events from the last 48 hours that contain vector embeddings.
+This window provides a balance between historical context and performance.
 */
 async function fetchRecentEmbeddings(): Promise<
   {
@@ -138,9 +126,11 @@ async function fetchRecentEmbeddings(): Promise<
 }
 
 /*
-Applies the Story merge logic with Spatial gating:
-  1. Strict Match: Similarity > 0.85 (always merge)
-  2. Proximity Match: Similarity > 0.60 AND distance < 50km
+Resolves semantic merges between new events and existing database records.
+Uses a tiered matching strategy:
+1. Strict Semantic: High cosine similarity (0.85+) suggests near-identical content.
+2. Anchored Place: Moderate similarity (0.75+) combined with exact location name match.
+3. Proximity: Lower similarity (0.60+) but within tight geographic distance (50km).
 */
 async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
   newEvents: DbEvent[];
@@ -182,10 +172,7 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
   console.log(
     `[vectorize] Generating embeddings for ${dbEvents.length} items...`,
   );
-  /* 
-       CRITICAL FIX: We build texts from dbEvents directly to ensure 1:1 alignment 
-       with the items we are assigning embeddings to. 
-    */
+  
   const texts = dbEvents.map((event) =>
     buildEmbeddingText(event.title, event.description),
   );
@@ -194,13 +181,9 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
   let embeddings: number[][];
   try {
     embeddings = await generateEmbeddings(texts);
-  } catch (err) {
+  } catch {
     console.error(
-      "[vectorize] FATAL: Embedding generation failed. Items will be inserted without vectors.",
-    );
-    console.error(
-      "[vectorize] Error details:",
-      err instanceof Error ? err.message : String(err),
+      "[vectorize] Embedding generation failed. Items will be inserted without vectors.",
     );
     return { newEvents: dbEvents, merges };
   }
@@ -211,7 +194,7 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
 
   const candidates = await fetchRecentEmbeddings();
   console.log(
-    `[vectorize] ${candidates.length} recent candidates loaded for similarity matching`,
+    `[vectorize] ${candidates.length} candidates loaded for matching`,
   );
 
   let mergeCount = 0;
@@ -222,30 +205,23 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
 
     event.embedding = `[${embedding.join(",")}]`;
 
-    /* Find best match among candidates */
     let bestMatchId: string | null = null;
     let highestSim = -1;
 
     for (const candidate of candidates) {
       const sim = cosineSimilarity(embedding, candidate.embedding);
-
       let shouldMerge = false;
 
-      // Strategy 1: Strict semantic (highly identical text)
       if (sim >= SIMILARITY_THRESHOLD_STRICT) {
         shouldMerge = true;
-      }
-      // Strategy 1.5: Place Name Anchoring (exact location name match)
-      else if (
+      } else if (
         sim >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
         event.location_name &&
         candidate.location_name &&
         event.location_name === candidate.location_name
       ) {
         shouldMerge = true;
-      }
-      // Strategy 2: Proximity semantic (related text in same location)
-      else if (
+      } else if (
         sim >= SIMILARITY_THRESHOLD_PROXIMITY &&
         event.latitude != null &&
         event.longitude != null &&
@@ -273,7 +249,6 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
       const matchedCandidate = candidates.find((c) => c.id === bestMatchId)!;
       const existingMerge = merges.get(bestMatchId);
       
-      // Use the helper to calculate the new merged state
       const storyState = existingMerge 
         ? { ...matchedCandidate, ...existingMerge } 
         : matchedCandidate;
@@ -283,13 +258,13 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
       if (!sourceExists) {
         const mergedResult = calculateMergedStory(storyState, event);
         
-        // Update the merges map (we omit 'id' as it's the key)
+        // Remove ID from the update payload
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id: _id, ...mergeData } = mergedResult;
         merges.set(bestMatchId, mergeData);
         mergeCount++;
       } else {
-        // Source exists, handle potential timestamp refresh if article updated
+        // Refresh timestamp if the incoming item is newer than the stored version
         const incomingTime = new Date(event.published_at).getTime();
         const currentPubTime = new Date(storyState.published_at).getTime();
         if (incomingTime > currentPubTime) {
@@ -315,30 +290,25 @@ async function resolveStoryMerges(dbEvents: DbEvent[]): Promise<{
   return { newEvents, merges };
 }
 
-/*
-Applies source merges to existing events in Supabase.
-Each merge is a single UPDATE setting the expanded sources array.
-Batched into individual updates to avoid complex SQL.
-*/
-/*
-Removed applyMerges in favor of bulk_ingest_events RPC 
-*/
-
 interface BulkIngestResult {
   upserted_count: number;
   merged_count: number;
 }
 
-/* ─── Main Pipeline ─── */
-
+/* 
+Main execution pipeline:
+1. Fetch from RSS, GNews, Reddit, and social feeds.
+2. Deduplicate against existing primary and merged URLs.
+3. Geocode new items using NLP heuristics.
+4. Resolve semantic clusters to merge related stories.
+5. Ingest results via bulk RPC with sequential fallback.
+*/
 async function run(): Promise<void> {
   const startMs = Date.now();
   console.log(
     `[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`,
   );
 
-  // Step 1: Fetch raw items from all configured sources
-  console.log("[scraper] Fetching raw items from all sources...");
   const [rssItems, redditItems, gnewsItems, socialItems] =
     (await Promise.allSettled([
       fetchAllRSSFeeds(),
@@ -360,20 +330,18 @@ async function run(): Promise<void> {
     `[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length}, social=${socialItems.length})`,
   );
 
-  // Validate that items have URLs as they are required for the conflict key
   const itemsWithUrl = rawItems.filter((item) => !!item.url);
 
-  // Step 2: Pre-fetch known URLs from database to skip redundant processing
+  /*
+    Deep Deduplication:
+    Uses the check_urls_exist RPC to scan both primary 'url' columns and 
+    nested 'sources' JSONB arrays. This prevents duplication of articles
+    that were previously merged into larger stories.
+  */
   console.log(
-    "[scraper] Fetching recent known URLs from Supabase (Deep Deduplication)...",
+    "[scraper] Running deep deduplication check...",
   );
   const incomingUrls = itemsWithUrl.map((i) => i.url);
-
-  /*
-    We use the check_urls_exist RPC to check both the 'url' column and 
-    the 'sources' JSONB array. This prevents duplicating items that 
-    have already been merged into other stories.
-    */
   const knownUrls = new Set<string>();
   const DEDUPE_CHUNK_SIZE = 1000;
   const dedupePromises = [];
@@ -389,7 +357,7 @@ async function run(): Promise<void> {
   dedupeResults.forEach((res, i) => {
     if (res.error) {
       console.error(
-        `[scraper] Deep deduplication check failed for chunk ${i + 1}:`,
+        `[scraper] Deduplication check failed for chunk ${i + 1}:`,
         res.error.message,
       );
     } else if (res.data) {
@@ -399,9 +367,6 @@ async function run(): Promise<void> {
     }
   });
 
-  console.log(`[scraper] Known URLs (Primary + Merged): ${knownUrls.size}`);
-
-  // Step 3: Filter for new items only
   const newItems = itemsWithUrl.filter((item) => !knownUrls.has(item.url));
   console.log(`[scraper] New items to process: ${newItems.length}`);
 
@@ -410,8 +375,7 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Step 4: Extract geographic data from new items
-  console.log("[scraper] Running NLP geocoding on new items...");
+  console.log("[scraper] Running NLP geocoding...");
   const enrichedItems = await enrichItemsWithLocation(newItems);
 
   const geocodedCount = enrichedItems.filter((i) => i.latitude != null).length;
@@ -419,39 +383,31 @@ async function run(): Promise<void> {
     `[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`,
   );
 
-  // Step 5: Convert items to database schema
   const dbEvents: DbEvent[] = enrichedItems
     .map(newsItemToDbEvent)
     .filter((e): e is DbEvent => e !== null);
 
-  // Step 6: Vectorize and resolve story merges
-  console.log("[scraper] Running semantic vectorization pipeline...");
+  console.log("[scraper] Running semantic vectorization...");
   const { newEvents, merges } = await resolveStoryMerges(dbEvents);
 
   if (DRY_RUN) {
-    console.log("[scraper] DRY RUN — would upsert the following events:");
+    console.log("[scraper] DRY RUN Proposed Events:");
     for (const event of newEvents) {
       console.log(`  * [${event.source_type}] ${event.title.slice(0, 80)}`);
-      if (event.latitude)
-        console.log(
-          `    Location: ${event.location_name} (${event.latitude.toFixed(3)}, ${event.longitude!.toFixed(3)})`,
-        );
-      if (event.embedding) {
-        const embStr =
-          typeof event.embedding === "string"
-            ? event.embedding
-            : JSON.stringify(event.embedding);
-        console.log(`    Embedding: [${embStr.slice(0, 40)}...]`);
-      }
     }
     console.log(
-      `[scraper] DRY RUN — ${newEvents.length} new events, ${merges.size} story merges`,
+      `[scraper] DRY RUN Summary: ${newEvents.length} new events, ${merges.size} merges`,
     );
     return;
   }
 
-  // Step 7: Bulk Ingest (Updates + Upserts) in a single RPC call
-  console.log(`[scraper] Ingesting ${newEvents.length} new events and ${merges.size} merges via RPC...`);
+  /*
+    Bulk Ingestion:
+    Attempts to process all updates and inserts in a single RPC transaction.
+    If the transaction times out (typically due to complex spatial/vector index updates),
+    it falls back to individual processing to ensure data consistency.
+  */
+  console.log(`[scraper] Ingesting ${newEvents.length} new events and ${merges.size} merges...`);
   
   const mergePayload = Array.from(merges.entries()).map(([id, data]) => ({
     id,
@@ -471,34 +427,23 @@ async function run(): Promise<void> {
       const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
       
       if (isTimeout) {
-        console.warn('[scraper] Bulk ingestion RPC timed out. Falling back to sequential ingestion...');
+        console.warn('[scraper] Bulk RPC timed out. Executing sequential fallback...');
         
-        // Fallback: Process merges individually
         for (const merge of mergePayload) {
           const { error: mErr } = await db
             .from('events')
             .update(merge as Partial<DbEvent>)
             .eq('id', merge.id);
-          if (!mErr) {
-            merged_count++;
-          } else {
-            console.error(`[scraper] Individual merge failed for ${merge.id}:`, mErr.message);
-          }
+          if (!mErr) merged_count++;
         }
 
-        // Fallback: Process new events individually
         for (const event of newEvents) {
           const { error: iErr } = await db
             .from('events')
             .insert(event);
-          if (!iErr) {
-            upserted_count++;
-          } else if (!iErr.message.includes('duplicate key')) {
-            console.error(`[scraper] Individual insertion failed for ${event.url}:`, iErr.message);
-          }
+          if (!iErr) upserted_count++;
         }
       } else {
-        console.error('[scraper] Bulk ingestion RPC failed:', ingestError.message);
         throw new Error(`Bulk ingestion failed: ${ingestError.message}`);
       }
     } else {
@@ -507,21 +452,15 @@ async function run(): Promise<void> {
       merged_count = result.merged_count;
     }
   } catch (err) {
-    if (err instanceof Error && (err.message.includes('timeout') || err.message.includes('canceling statement'))) {
-       // already handled or logged above, but just in case of fetch-level timeout
-       console.error('[scraper] Ingestion network/timeout error:', err.message);
-    } else {
-       throw err;
-    }
+    console.error('[scraper] Ingestion error:', err instanceof Error ? err.message : String(err));
   }
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(
-    `[scraper] Finished ingestion in ${elapsed}s. Events upserted: ${upserted_count}, Stories merged: ${merged_count}`,
+    `[scraper] Finished in ${elapsed}s. Upserted: ${upserted_count}, Merged: ${merged_count}`,
   );
 }
 
-// Process entry point
 run().catch((err) => {
   console.error("[scraper] Unhandled error:", err);
   process.exit(1);

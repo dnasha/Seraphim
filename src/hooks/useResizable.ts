@@ -1,3 +1,9 @@
+/**
+ * useResizable hook provides logic for creating resizable UI components 
+ * with persistence and performance optimizations. It is primarily used 
+ * for the application sidebar.
+ */
+
 import { useState, useRef, useEffect, useCallback, RefObject } from "react";
 
 interface UseResizableOptions {
@@ -19,7 +25,9 @@ export function useResizable({
   const [isResizing, setIsResizing] = useState(false);
   const lastWidthRef = useRef(defaultWidth);
 
-  /* Load persisted width on mount */
+  /** 
+   * Loads the previously saved sidebar width from localStorage on mount.
+   */
   useEffect(() => {
     const saved = localStorage.getItem(localStorageKey);
     if (saved) {
@@ -49,15 +57,18 @@ export function useResizable({
     setSidebarWidth(lastWidthRef.current);
   }, [localStorageKey]);
 
+  /**
+   * Performance Optimization: Instead of updating React state during every 
+   * mouse movement (which triggers expensive re-renders), we directly 
+   * manipulate the CSS variable on the DOM element for smooth resizing.
+   */
   const resize = useCallback(
     (e: MouseEvent) => {
       if (!isResizing) return;
 
-      /* Clamp width between min and max */
       const newWidth = Math.max(minWidth, Math.min(maxWidth, e.clientX));
       lastWidthRef.current = newWidth;
 
-      /* Direct DOM manipulation for maximum performance during drag */
       if (sidebarRef.current) {
         sidebarRef.current.style.setProperty(
           "--sidebar-width",
@@ -68,6 +79,9 @@ export function useResizable({
     [isResizing, minWidth, maxWidth, sidebarRef],
   );
 
+  /**
+   * Manages global event listeners and body styling during a resize operation.
+   */
   useEffect(() => {
     if (isResizing) {
       window.addEventListener("mousemove", resize);

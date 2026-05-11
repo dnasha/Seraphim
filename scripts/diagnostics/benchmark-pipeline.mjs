@@ -1,17 +1,14 @@
-/*
-Seraphim Pipeline Benchmark (Modernized)
-Profiles actual production code stages to identify performance bottlenecks.
-Updated to align with the current Bun-based ingestion architecture.
-
-Usage: npx tsx scripts/benchmark-pipeline.mjs [--skip-social] [--skip-gnews] [--quick]
-*/
+/**
+ * Purpose: Profiles the execution time of each stage in the ingestion pipeline (geodata loading, sourcing, GNews API, social feeds, and location extraction) to identify performance bottlenecks.
+ * Usage: bun run scripts/diagnostics/benchmark-pipeline.mjs [--skip-social] [--skip-gnews] [--quick]
+ */
 
 import { performance } from 'node:perf_hooks';
 import { statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Dynamically resolve project root
+// Dynamically resolve project root to ensure file path reliability across different execution environments.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
@@ -30,7 +27,7 @@ const c = {
   bgRed: '\x1b[41m'
 };
 
-// Parse command line arguments
+// Parse command line arguments to allow for selective stage execution and faster debugging cycles.
 const args = new Set(process.argv.slice(2).map(a => a.toLowerCase()));
 const SKIP_SOCIAL = args.has('--skip-social');
 const SKIP_GNEWS  = args.has('--skip-gnews');
@@ -67,10 +64,10 @@ class Timer {
   get(label) { return this.marks[label] || 0; }
 }
 
-/*
-Stage 1: Geodata Loading
-Measures the time required to import and initialize the geocoding dictionary.
-*/
+/**
+ * Stage 1: Geodata Loading
+ * Measures the time required to import and initialize the geocoding dictionary.
+ */
 async function benchmarkGeodataLoad(timer) {
   sectionHeader('Stage 1 Geodata Loading');
 
@@ -97,10 +94,10 @@ async function benchmarkGeodataLoad(timer) {
   return KNOWN_LOCATIONS;
 }
 
-/*
-Stage 2: RSS & Reddit Sourcing
-Measures retrieval performance using the production scraper fetchers.
-*/
+/**
+ * Stage 2: RSS & Reddit Sourcing
+ * Measures retrieval performance using the production scraper fetchers.
+ */
 async function benchmarkSourcing(timer) {
   sectionHeader('Stage 2 Sourcing (RSS & Reddit)');
 
@@ -125,10 +122,10 @@ async function benchmarkSourcing(timer) {
   return [...rssItems, ...redditItems];
 }
 
-/*
-Stage 3: GNews Sourcing
-Profiles API performance for headlines and OSINT queries.
-*/
+/**
+ * Stage 3: GNews Sourcing
+ * Profiles API performance for headlines and OSINT queries.
+ */
 async function benchmarkGNews(timer) {
   sectionHeader('Stage 3 GNews API');
 
@@ -158,10 +155,10 @@ async function benchmarkGNews(timer) {
   return [...headlines, ...osint];
 }
 
-/*
-Stage 4: Social Feeds
-Measures multi-strategy resolution performance for Telegram and X sources.
-*/
+/**
+ * Stage 4: Social Feeds
+ * Measures multi-strategy resolution performance for Telegram and X sources.
+ */
 async function benchmarkSocial(timer) {
   sectionHeader('Stage 4 Social Feeds');
 
@@ -182,10 +179,10 @@ async function benchmarkSocial(timer) {
   return items;
 }
 
-/*
-Stage 5: Location Extraction
-Profiles the production enrichment pipeline.
-*/
+/**
+ * Stage 5: Location Extraction
+ * Profiles the production enrichment pipeline.
+ */
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 Location Extraction');
 
@@ -242,7 +239,7 @@ function printSummary(timer) {
 }
 
 async function main() {
-  // Bypass 'server-only' protection for the benchmark script
+  // Bypass 'server-only' protection to allow the benchmark script to access internal libraries directly.
   process.env.IS_BENCHMARK = 'true';
 
   banner('SERAPHIM PIPELINE BENCHMARK');
@@ -251,23 +248,22 @@ async function main() {
 
   const timer = new Timer();
 
-  // Stage 1
+  // Load geodata into memory and initialize the extraction engine.
   await benchmarkGeodataLoad(timer);
 
-  // Stage 2
+  // Retrieve items from standard RSS and Reddit endpoints.
   const sourceItems = await benchmarkSourcing(timer);
 
-  // Stage 3
+  // Fetch items from the GNews API headlines and OSINT search queries.
   const gnewsItems = await benchmarkGNews(timer);
 
-  // Stage 4
+  // Fetch items from social platforms using scraping and API strategies.
   const socialItems = await benchmarkSocial(timer);
 
-  // Merge items
   const allItems = [...sourceItems, ...gnewsItems, ...socialItems];
   console.log(`\n  ${c.bold}Total articles collected: ${c.cyan}${allItems.length}${c.reset}`);
 
-  // Stage 5
+  // Process collected articles through the geocoding extraction engine to measure NLP and lookup performance.
   if (allItems.length > 0) {
     const itemsToProcess = QUICK_MODE ? allItems.slice(0, 50) : allItems;
     if (QUICK_MODE) console.log(`  ${c.dim}Quick mode: benchmarking extraction on first 50 items only${c.reset}`);

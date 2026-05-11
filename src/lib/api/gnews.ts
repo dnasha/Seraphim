@@ -1,9 +1,9 @@
-/*
-GNews API client library.
-Unified implementation for both the Next.js frontend and the background scraper.
-Provides functions for fetching top headlines, performing searches, and 
-specialized OSINT keyword-driven queries.
-*/
+/**
+ * GNews API Integration
+ * 
+ * Provides functions for fetching top headlines and performing targeted keyword searches.
+ * Implements specialized OSINT discovery logic using advanced search operators.
+ */
 
 import { NewsItem } from '@/lib/core/types';
 
@@ -27,7 +27,7 @@ interface GNewsResponse {
 }
 
 /**
- * Fetches top headlines from GNews by category.
+ * Fetches top headlines from GNews filtered by category.
  */
 export async function fetchGNews(
     category: string = 'general',
@@ -78,7 +78,7 @@ export async function fetchGNews(
 }
 
 /**
- * Searches GNews articles using a specific query string.
+ * Executes a text-based search against the GNews index.
  */
 export async function searchGNews(
     query: string, 
@@ -127,7 +127,9 @@ export async function searchGNews(
     }
 }
 
-/* OSINT-specific keyword search queries */
+/**
+ * Targeted OSINT search queries.
+ */
 const OSINT_QUERIES: { query: string; tags: string[] }[] = [
     { query: '"geolocated" OR "satellite imagery"', tags: ['OSINT', 'imagery'] },
     { query: '"confirmed strike" OR "explosion reported"', tags: ['OSINT', 'strike'] },
@@ -136,7 +138,10 @@ const OSINT_QUERIES: { query: string; tags: string[] }[] = [
 ];
 
 /**
- * Specialized search for OSINT-related content using combined queries to optimize API quota usage.
+ * Specialized OSINT content discovery.
+ * Aggregates multiple high-signal queries into a single API call to optimize quota 
+ * consumption. Results are then post-processed to assign granular tags based 
+ * on keyword matches within the returned text.
  */
 export async function fetchOSINTGNews(
     maxResults: number = 20,
@@ -144,7 +149,7 @@ export async function fetchOSINTGNews(
 ): Promise<NewsItem[]> {
     if (!GNEWS_API_KEY) return [];
 
-    // Combine queries to minimize API calls
+    // Combine distinct OSINT queries with OR operators to minimize billing events
     const combinedQuery = OSINT_QUERIES.map(q => q.query).join(' OR ');
     
     try {
@@ -154,8 +159,8 @@ export async function fetchOSINTGNews(
             const matchedTags = new Set<string>(['OSINT']);
             const text = (item.title + ' ' + (item.description || '')).toLowerCase();
             
+            // Re-apply tag logic locally since GNews does not return source query mapping
             for (const { query, tags } of OSINT_QUERIES) {
-                // Check for keywords within title or description
                 const keywords = query.toLowerCase().replace(/"/g, '').split(' or ');
                 if (keywords.some(k => text.includes(k.trim()))) {
                     tags.forEach(t => matchedTags.add(t));

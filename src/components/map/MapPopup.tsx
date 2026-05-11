@@ -1,3 +1,11 @@
+/**
+ * MapPopup Component
+ * 
+ * Renders the interactive content for map markers. This component replaces legacy 
+ * string-based popups with a reactive React-based UI, providing better security 
+ * and support for complex data structures like multi-source timelines.
+ */
+
 'use client';
 
 import Image from "next/image";
@@ -14,15 +22,16 @@ interface MapPopupProps {
     item: NewsItem;
 }
 
-/**
- * Modern React-based popup content for MapLibre markers.
- * Replaces legacy string concatenation to prevent XSS and enable reactive updates.
- */
 export default function MapPopup({ item }: MapPopupProps) {
     const pinColor = getCategoryColor(item.category);
     const credStyle = getCredibilityStyle(item.credibilityTier);
     const sourceCount = canonicalEventCount(item);
 
+    /**
+     * Source sorting:
+     * Identifies the most recent update within a clustered event by sorting 
+     * its contributing sources by their discovery timestamp.
+     */
     const latestSource = item.sources?.length
         ? [...item.sources].sort(
             (a, b) =>
@@ -31,6 +40,11 @@ export default function MapPopup({ item }: MapPopupProps) {
         )[0]
         : null;
     
+    /**
+     * Date selection logic:
+     * Prioritizes the latest source's discovery date, falling back to 
+     * general activity or publication dates if source-specific data is missing.
+     */
     const displayDate = latestSource
         ? latestSource.discoveredAt
         : (item.latestActivityAt || item.publishedAt);

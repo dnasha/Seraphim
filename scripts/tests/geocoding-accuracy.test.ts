@@ -1,9 +1,9 @@
 /*
   Seraphim Geocoding Accuracy Regression Suite
+  Benchmarks the geocoding pipeline against a manually graded ground truth dataset.
+  Ensures NLP heuristics and GeoNames dictionary changes do not regress accuracy.
 
-  This suite benchmarks the geocoding pipeline against a manually graded
-  dataset (ground truth). It ensures that changes to NLP heuristics or
-  the GeoNames dictionary do not regress the overall accuracy.
+  Usage: bun test scripts/tests/geocoding-accuracy.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -13,8 +13,7 @@ import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geoco
 
 /*
   ACCURACY_THRESHOLD
-  The minimum percentage of correctly geocoded items required for the
-  test suite to pass.
+  Minimum percentage of correctly geocoded items required for the suite to pass.
 */
 const ACCURACY_THRESHOLD = 70;
 
@@ -35,8 +34,7 @@ interface GradedResult {
 
 /*
   normalize
-  Standardizes strings for comparison by trimming, lowercasing,
-  and handling 'null' string literals.
+  Standardizes strings for comparison by trimming, lowercasing, and handling null literals.
 */
 function normalize(val: unknown): string | null {
     if (val === null || val === undefined) return null;
@@ -51,7 +49,7 @@ beforeAll(() => {
     ensureInitialized();
 
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
-        console.warn(`Graded results file not found at ${GRADED_RESULTS_PATH} - skipping accuracy tests.`);
+        console.warn(`Graded results file not found at ${GRADED_RESULTS_PATH}. Skipping accuracy tests.`);
         return;
     }
     gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
@@ -65,8 +63,8 @@ describe('geocoding accuracy regression', () => {
 
     /*
       Accuracy Benchmark
-      Iterates through the graded dataset, executes the live geocoding
-      pipeline, and compares the results against the expected locations.
+      Iterates through the graded dataset, executes the geocoding pipeline,
+      and compares results against ground truth.
     */
     it(`maintains accuracy above ${ACCURACY_THRESHOLD}%`, async () => {
         let passCount = 0;
@@ -76,11 +74,10 @@ describe('geocoding accuracy regression', () => {
 
         for (const item of gradedResults) {
             const isApproved = item.graded_status === 'approved';
-            
+
             /*
-              Determine the expected location from the graded item.
-              Approved items use the final mapped location; otherwise,
-              we use the manually specified expected location.
+              Determine expected location.
+              Approved items use final mapped location; others use manually specified location.
             */
             const rawExpected = isApproved
                 ? (item.final_mapped_location?.displayName || item.db_location?.displayName || null)
@@ -88,7 +85,7 @@ describe('geocoding accuracy regression', () => {
 
             const normExpected = normalize(rawExpected);
 
-            // Skip items flagged for exclusion
+            // Skip items flagged for exclusion.
             if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
                 skipCount++;
                 continue;
@@ -96,7 +93,7 @@ describe('geocoding accuracy regression', () => {
 
             totalCount++;
 
-            // Run the live geocoding pipeline
+            // Execute geocoding pipeline.
             const ext = extractLocation(item.title, item.desc || '');
             let actualLocationFullName: string | null = null;
 
@@ -111,9 +108,7 @@ describe('geocoding accuracy regression', () => {
 
             /*
               Verification Logic
-              Ensure that the actual geocoded result matches the expected ground truth.
-              Previously, approved items allowed a 'null' result to pass, which hid
-              regressions where the engine failed to find a previously identified location.
+              Ensures actual geocoded result matches the expected ground truth.
             */
             const isCorrect = normActual === normExpected;
 
@@ -134,26 +129,25 @@ describe('geocoding accuracy regression', () => {
 
         const percentage = totalCount > 0 ? (passCount / totalCount) * 100 : 0;
 
-        // Print accuracy summary to console for CI visibility
+        // Log accuracy summary for CI visibility.
         const failures = testResults.filter(r => !r.correct);
         const misses = failures.filter(f => f.type === 'MISS').length;
         const wrongs = failures.filter(f => f.type === 'WRONG').length;
         const falsePos = failures.filter(f => f.type === 'FALSE_POS').length;
 
-        console.log('\n--- Geocoding Accuracy Report ---');
+        console.log('\nGeocoding Accuracy Report');
         console.log(`  Total:      ${totalCount} (skipped: ${skipCount})`);
         console.log(`  Passed:     ${passCount}/${totalCount} (${percentage.toFixed(1)}%)`);
         console.log(`  Failures:   ${failures.length}`);
         console.log(`    No match: ${misses}`);
         console.log(`    Wrong:    ${wrongs}`);
-        console.log(`    False+:   ${falsePos}`);
-        console.log('----------------------------------');
+        console.log(`    False+:   ${falsePos}\n`);
 
         if (failures.length > 0) {
-            console.log('\n  Top failures:');
+            console.log('Top failures:');
             for (const f of failures.slice(0, 5)) {
                 console.log(`  [${f.type}] ${f.title.slice(0, 80)}`);
-                console.log(`         expected: ${f.expected || 'null'} → got: ${f.actual || 'null'}`);
+                console.log(`         expected: ${f.expected || 'null'} -> got: ${f.actual || 'null'}`);
             }
         }
 

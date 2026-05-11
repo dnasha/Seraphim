@@ -1,6 +1,6 @@
-/*
-Index file for the map component.
-Exports the primary NewsMap component for use in the application.
-*/
+/**
+ * Map Module Entry Point
+ * Provides a clean interface for the application to consume the interactive news map component.
+ */
 
 export { default as NewsMap } from './NewsMap';

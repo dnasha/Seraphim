@@ -1,11 +1,11 @@
 'use client';
 
-/*
-useViewState hook — bidirectional URL ↔ app state synchronization.
-Reads initial map center, zoom, search query, time range, and filter state from
-URL search parameters and exposes an `updateURL` function to sync changes back.
-Uses `replaceState` to avoid polluting browser history.
-*/
+/**
+ * useViewState hook provides bidirectional synchronization between the URL 
+ * search parameters and the application state. It manages map coordinates, 
+ * zoom levels, search queries, and filter preferences, using replaceState 
+ * to maintain a clean browser history.
+ */
 
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
@@ -33,8 +33,7 @@ const DEFAULT_SOURCES = ['news', 'reddit', 'x', 'telegram', 'extra'];
 const DEFAULT_CATEGORIES = ['all'];
 
 /**
- * Reads the initial view state from URL search parameters.
- * Returns only the fields that were explicitly provided.
+ * Reads the initial view state from URL search parameters on hook initialization.
  */
 function parseInitialState(params: URLSearchParams): ViewState {
     const state: ViewState = {};
@@ -62,28 +61,21 @@ function parseInitialState(params: URLSearchParams): ViewState {
     return state;
 }
 
-/**
- * Returns the initial view state from the URL (read once on mount) and
- * an `updateURL(partial)` callback that debounce-writes changes back.
- */
 export function useViewState() {
     const searchParams = useSearchParams();
     const pathname = usePathname();
 
-    // Memoize the initial state parsed from the search params.
-    // useSearchParams is stable and SSR-safe in Next.js App Router.
     const initialState = useMemo(() => {
         return parseInitialState(new URLSearchParams(searchParams.toString()));
     }, [searchParams]);
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    // Keep a running snapshot of the full state to merge partial updates into.
     const currentState = useRef<ViewState>({ ...initialState });
 
     /**
-     * Merges a partial state update and syncs the URL via replaceState.
-     * Debounced to 300ms to avoid thrashing during rapid map pans.
+     * Updates the URL search parameters to reflect the current application state.
+     * Uses a 300ms debounce to prevent performance degradation and excessive 
+     * browser history operations during rapid map interactions.
      */
     const updateURL = useCallback((partial: Partial<ViewState>) => {
         currentState.current = { ...currentState.current, ...partial };
@@ -100,7 +92,10 @@ export function useViewState() {
             if (s.q) params.set('q', s.q);
             if (s.t && s.t !== '1d') params.set('t', s.t);
 
-            // Only encode filters if they deviate from defaults
+            /**
+             * Only encode source and category filters if they deviate from the 
+             * default set to keep the URL concise.
+             */
             if (s.src) {
                 const srcArr = s.src.split(',').sort();
                 const defArr = [...DEFAULT_SOURCES].sort();
@@ -127,7 +122,6 @@ export function useViewState() {
         }, 300);
     }, [pathname]);
 
-    // Cleanup debounce timer on unmount
     useEffect(() => {
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);

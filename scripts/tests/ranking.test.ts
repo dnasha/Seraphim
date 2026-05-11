@@ -1,8 +1,21 @@
+/*
+  Seraphim Ranking Logic Robustness Tests
+  Verifies temporal ranking and source counting logic for stories.
+  Ensures graceful handling of malformed dates and non-numeric fields.
+
+  Usage: bun test scripts/tests/ranking.test.ts
+*/
+
 import { describe, it, expect } from 'vitest';
 import { latestReportTimestamp, canonicalEventCount } from '@/lib/utils/ranking';
 import { NewsItem } from '@/lib/core/types';
 
 describe('Ranking Logic Robustness', () => {
+    /*
+      latestReportTimestamp
+      Ensures the latest activity or publication date is correctly identified
+      even when some input fields are corrupted.
+    */
     describe('latestReportTimestamp', () => {
         it('handles malformed publishedAt gracefully', () => {
             const item = {
@@ -47,6 +60,11 @@ describe('Ranking Logic Robustness', () => {
         });
     });
 
+    /*
+      canonicalEventCount
+      Verifies that story source counts are accurately calculated
+      from both sourcesCount and individual source lists.
+    */
     describe('canonicalEventCount', () => {
         it('handles NaN in sourcesCount gracefully', () => {
             const item = {
@@ -75,3 +93,4 @@ describe('Ranking Logic Robustness', () => {
         });
     });
 });
+

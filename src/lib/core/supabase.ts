@@ -1,7 +1,11 @@
-/*
-Supabase client initialization.
-Provides a shared client instance for frontend and edge functions using the public anonymous key.
-*/
+/**
+ * Supabase client initialization for the Seraphim platform.
+ * 
+ * Provides unified client instances for both frontend and administrative 
+ * operations. The standard client uses the public anonymous key for 
+ * client side requests, while the admin client is reserved for 
+ * server side and scraper operations requiring elevated permissions.
+ */
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,7 +20,10 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     );
 }
 
-/* Shared Supabase client instance using the Anon Key. */
+/**
+ * Shared Supabase client instance using the Public Anonymous Key.
+ * Suitable for client side data fetching and unauthenticated operations.
+ */
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { 
         persistSession: false, 
@@ -25,8 +32,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /**
- * Shared Supabase Admin client instance using the Service Role Key.
- * Only available in server-side/scraper contexts.
+ * Administrative Supabase client instance using the Service Role Key.
+ * This client bypasses Row Level Security (RLS) and should only be used 
+ * in secure, server side environments like the ingestion scraper.
  */
 export const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY 
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -38,8 +46,9 @@ export const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
     : null;
 
 /**
- * Validation for administrative tasks that require the Service Role Key.
- * Throws if the key is missing.
+ * Validates the existence of administrative configuration.
+ * Throws an error if the service role key is missing, ensuring 
+ * that administrative tasks do not fail silently.
  */
 export function validateServiceRoleConfig() {
     if (!SUPABASE_SERVICE_ROLE_KEY) {

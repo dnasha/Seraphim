@@ -1,6 +1,11 @@
 /*
-  Data sources configuration for news aggregation.
-  Contains definitions for RSS feeds, Reddit subreddits, Telegram channels, and X accounts.
+Seraphim Data Sources Registry
+Central configuration for all news ingestion channels including RSS, Reddit, Telegram, and X.
+
+Credibility Tier System:
+- Tier 1: Primary news agencies, verified official channels, and institutional sources.
+- Tier 2: Specialized OSINT accounts, independent investigative journalists, and regional experts.
+- Tier 3: Raw social media feeds, community-driven reports, and unverified breaking news.
 */
 
 export interface RSSSource {
@@ -27,9 +32,8 @@ export interface SocialSource {
     credibility_tier: 1 | 2 | 3;
 }
 
-// curated feeds for world news, crisis, national, business, tech, science, health
 export const RSS_SOURCES: RSSSource[] = [
-    // --- WORLD NEWS (Tier 1: Major Agencies) ---
+    // WORLD NEWS: Tier 1 (Major Agencies)
     { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'world', credibility_tier: 1, region: 'global' },
     { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', category: 'world', credibility_tier: 1, region: 'global' },
     { name: 'NYT World', url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', category: 'world', credibility_tier: 1, region: 'global' },
@@ -48,7 +52,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'SBS News Australia', url: 'https://www.sbs.com.au/news/topic/australia/feed', category: 'world', credibility_tier: 1, region: 'oceania' },
     { name: 'The Guardian Australia', url: 'https://www.theguardian.com/australia-news/rss', category: 'world', credibility_tier: 1, region: 'oceania' },
 
-    // --- WORLD NEWS (Tier 2: Specialized/Regional Gap-Fillers) ---
+    // WORLD NEWS: Tier 2 (Specialized/Regional)
     { name: 'The Astana Times', url: 'https://astanatimes.com/feed/', category: 'world', credibility_tier: 2, region: 'asia' },
     { name: 'Balkan Insight', url: 'https://balkaninsight.com/feed/', category: 'world', credibility_tier: 2, region: 'europe' },
     { name: 'The Geopost', url: 'https://thegeopost.com/en/feed/', category: 'world', credibility_tier: 2, region: 'europe' },
@@ -67,7 +71,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'The Tico Times', url: 'https://ticotimes.net/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'Mexico News Daily', url: 'https://mexiconewsdaily.com/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
 
-    // --- CRISIS & GEOPOLITICS (Tier 1/2) ---
+    // CRISIS & GEOPOLITICS: Tier 1/2
     { name: 'USGS Earthquakes', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.atom', category: 'crisis', credibility_tier: 1, region: 'global' },
     { name: 'ISW Daily Updates', url: 'https://news.google.com/rss/search?q=site:understandingwar.org&hl=en', category: 'crisis', credibility_tier: 2, region: 'global' },
     { name: 'ICG CrisisWatch', url: 'https://www.crisisgroup.org/rss', category: 'crisis', credibility_tier: 2, region: 'global' },
@@ -81,7 +85,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Geopolitical Futures', url: 'https://geopoliticalfutures.com/feed', category: 'world', credibility_tier: 2, region: 'global' },
     { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', category: 'world', credibility_tier: 2, region: 'global' },
 
-    // --- NATIONAL / NATION ---
+    // NATIONAL NEWS
     { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'ABC Australia', url: 'https://www.abc.net.au/news/feed/51120/rss.xml', category: 'nation', credibility_tier: 1, region: 'oceania' },
     { name: 'NDTV India', url: 'https://feeds.feedburner.com/ndtvnews-top-stories', category: 'nation', credibility_tier: 1, region: 'asia' },
@@ -92,36 +96,36 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Daily News Egypt', url: 'https://www.dailynewsegypt.com/feed/', category: 'nation', credibility_tier: 1, region: 'africa' },
     { name: 'Japan Today', url: 'https://japantoday.com/feed', category: 'nation', credibility_tier: 2, region: 'asia' },
 
-    // --- Regional OSINT Deep-Dives ---
+    // Regional OSINT
     { name: 'Dawn Pakistan', url: 'https://www.dawn.com/feeds/home', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Daily Star Bangladesh', url: 'https://www.thedailystar.net/frontpage/rss.xml', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Ada Derana Sri Lanka', url: 'http://www.adaderana.lk/rss.php', category: 'world', credibility_tier: 2, region: 'asia' },
     { name: 'Defence24 Poland', url: 'https://defence24.com/rss', category: 'crisis', credibility_tier: 2, region: 'europe' },
     { name: 'Romania Insider', url: 'https://www.romania-insider.com/feed', category: 'world', credibility_tier: 2, region: 'europe' },
 
-    // --- BUSINESS ---
+    // BUSINESS
     { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', category: 'business', credibility_tier: 1, region: 'global' },
     { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/', category: 'business', credibility_tier: 1, region: 'global' },
 
-    // --- TECHNOLOGY & CYBER ---
+    // TECHNOLOGY & CYBER
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'technology', credibility_tier: 1, region: 'global' },
     { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'technology', credibility_tier: 1, region: 'global' },
     { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', category: 'technology', credibility_tier: 1, region: 'global' },
     { name: 'The Hacker News', url: 'https://feeds.feedburner.com/TheHackersNews', category: 'technology', credibility_tier: 1, region: 'global' },
     { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'technology', credibility_tier: 1, region: 'global' },
 
-    // --- SCIENCE ---
+    // SCIENCE
     { name: 'NASA', url: 'https://www.nasa.gov/news-release/feed/', category: 'science', credibility_tier: 1, region: 'global' },
     { name: 'Nature', url: 'https://www.nature.com/nature.rss', category: 'science', credibility_tier: 1, region: 'global' },
     { name: 'ScienceDaily', url: 'https://www.sciencedaily.com/rss/all.xml', category: 'science', credibility_tier: 1, region: 'global' },
     { name: 'Science Magazine', url: 'https://www.science.org/rss/express.xml', category: 'science', credibility_tier: 1, region: 'global' },
     { name: 'Phys.org', url: 'https://phys.org/rss-feed/', category: 'science', credibility_tier: 1, region: 'global' },
 
-    // --- HEALTH ---
+    // HEALTH
     { name: 'WHO News', url: 'https://www.who.int/rss-feeds/news-english.xml', category: 'health', credibility_tier: 1, region: 'global' },
     { name: 'Stat News', url: 'https://www.statnews.com/feed/', category: 'health', credibility_tier: 1, region: 'global' },
 
-    // --- NORTH AMERICA REGIONAL (US States & Canada) ---
+    // NORTH AMERICA REGIONAL
     { name: 'NYT New York', url: 'https://rss.nytimes.com/services/xml/rss/nyt/NYRegion.xml', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'WBUR News', url: 'https://www.wbur.org/rss', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'WHYY News', url: 'https://whyy.org/feed/', category: 'nation', credibility_tier: 1, region: 'north_america' },
@@ -140,33 +144,32 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Global News Canada', url: 'https://globalnews.ca/canada/feed/', category: 'world', credibility_tier: 1, region: 'north_america' },
     { name: 'National Post', url: 'https://nationalpost.com/feed/', category: 'world', credibility_tier: 1, region: 'north_america' },
 
-    // --- LATIN AMERICA (Expanded) ---
+    // LATIN AMERICA
     { name: 'Buenos Aires Times', url: 'https://www.batimes.com.ar/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'The Santiago Times', url: 'https://santiagotimes.cl/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'Colombia Reports', url: 'https://colombiareports.com/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'InSight Crime', url: 'https://insightcrime.org/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
 
-    // --- AFRICA (Expanded) ---
+    // AFRICA
     { name: 'Daily Maverick', url: 'https://www.dailymaverick.co.za/dmrss/', category: 'world', credibility_tier: 1, region: 'africa' },
     { name: 'The EastAfrican', url: 'https://www.theeastafrican.co.ke/rss.xml', category: 'world', credibility_tier: 1, region: 'africa' },
     { name: 'Vanguard News', url: 'https://www.vanguardngr.com/feed/', category: 'world', credibility_tier: 1, region: 'africa' },
 
-    // --- MIDDLE EAST (Expanded) ---
+    // MIDDLE EAST
     { name: 'Anadolu Agency', url: 'https://www.aa.com.tr/en/rss/default?cat=guncel', category: 'world', credibility_tier: 1, region: 'middle_east' },
     { name: 'Al-Monitor', url: 'https://www.al-monitor.com/rss', category: 'world', credibility_tier: 1, region: 'middle_east' },
 
-    // --- ASIA (Expanded) ---
+    // ASIA
     { name: 'Japan Times', url: 'https://www.japantimes.co.jp/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Yonhap News', url: 'https://en.yna.co.kr/RSS/news.xml', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'VNExpress International', url: 'https://e.vnexpress.net/rss/news.rss', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Indian Express', url: 'https://indianexpress.com/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
 
-    // --- OCEANIA & PACIFIC (Expanded) ---
+    // OCEANIA & PACIFIC
     { name: 'Cook Islands News', url: 'https://www.cookislandsnews.com/feed', category: 'world', credibility_tier: 1, region: 'oceania' },
     { name: 'Post Courier', url: 'https://postcourier.com.pg/feed/', category: 'world', credibility_tier: 1, region: 'oceania' },
 ];
 
-// reddit feeds
 export const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit CombatFootage', subreddit: 'CombatFootage', category: 'crisis', credibility_tier: 3, region: 'global' },
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis', credibility_tier: 2, region: 'global' },

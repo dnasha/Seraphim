@@ -1,10 +1,7 @@
-/*
-Seraphim Geocoding Accuracy Validator
-Compares current extraction results against a hand-graded ground truth dataset
-to identify regressions and evaluate overall engine performance.
-
-Usage: npx tsx scripts/evaluate-accuracy.mjs
-*/
+/**
+ * Purpose: Evaluates the geocoding engine's performance by comparing current extraction results against a hand-graded ground truth dataset.
+ * Usage: bun run scripts/diagnostics/evaluate-accuracy.mjs
+ */
 
 import fs from 'fs';
 import { performance } from 'perf_hooks';
@@ -12,10 +9,10 @@ import { performance } from 'perf_hooks';
 const GRADED_RESULTS_PATH = 'scripts/results/graded-results.json';
 const FAILURES_PATH = 'scripts/results/accuracy-failures.txt';
 
-/*
-Normalizes a location name or coordinate value for consistent comparison.
-Handles null/undefined and string representations of 'null'.
-*/
+/**
+ * Normalizes a location name or coordinate value for consistent comparison.
+ * Handles null/undefined and string representations of 'null'.
+ */
 function normalize(val) {
   if (val === null || val === undefined) return null;
   if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
@@ -33,7 +30,7 @@ async function run() {
       return;
     }
 
-    // Parse the hand-graded results
+    // Parse the hand-graded results containing truth data for each test case.
     const gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
 
     let passCount = 0;
@@ -50,7 +47,7 @@ async function run() {
         : item.expected_location;
       const normExpected = normalize(rawExpected);
       
-      // Skip items with 'ignore' or 'default' in the expected notes
+      // Items marked with 'ignore' or 'default' are excluded from accuracy metrics as they typically represent ambiguous cases.
       if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
         skippedCount++;
         continue;
@@ -58,15 +55,11 @@ async function run() {
 
       totalCount++;
 
-      /*
-      Live rerun logic: Replicate the logic in extractLocation to determine
-      the actual location based on current heuristics.
-      */
+      // Re-run the extraction logic against current heuristics to detect regressions or improvements.
       const ext = extractLocation(item.title, item.description || '');
       let placeName = ext.match;
       const candidates = ext.candidates;
 
-      // Determine actual location based on current logic
       let actualLocationFullName = null;
       if (placeName) {
         const geo = await geocodeLocation(placeName);
@@ -77,13 +70,13 @@ async function run() {
       
       const normActual = normalize(actualLocationFullName);
 
+      // Aliases allow for lenient matching between different naming conventions of the same geographical entity.
       const ALIASES = {
         'uk': 'united kingdom',
         'usa': 'united states',
         'u.s.': 'united states',
         'america': 'united states',
         'britain': 'united kingdom',
-        // Canonicalize capitals to countries for lenient matching
         'moscow': 'russia',
         'berlin': 'germany',
         'budapest': 'hungary',
@@ -103,12 +96,12 @@ async function run() {
 
       let isCorrect = false;
       if (isApproved) {
-        // If already approved, check if current engine still matches or is null
+        // Approved items pass if they match the expected result or if they return null (indicating a safe skip).
         if (normActual === null || evalActual === evalExpected) {
           isCorrect = true;
         }
       } else {
-        // For denied or manual entries, require an exact match
+        // Denied or manual entries require an exact match against the correction.
         if (evalActual === evalExpected) {
           isCorrect = true;
         }
@@ -141,7 +134,6 @@ async function run() {
     const falsePosCount = failures.filter(f => f.actual && !f.expected).length;
     
 
-    // Output results to console
     console.log(`Accuracy Report:`);
     console.log(`================`);
     console.log(`Pass Count:     ${passCount} / ${totalCount}`);
@@ -170,7 +162,7 @@ async function run() {
         console.log(`... and ${failures.length - 10} more failures.`);
       }
 
-      // Write all failures to a file for complete inspection
+      // Record detailed failure logs to facilitate manual review of problematic cases.
       const failureOutput = failures.map((f) => {
         const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
         const indentedDesc = f.description ? f.description.replace(/\n/g, '\n                ') : 'null';
@@ -189,4 +181,3 @@ async function run() {
 }
 
 run();
-

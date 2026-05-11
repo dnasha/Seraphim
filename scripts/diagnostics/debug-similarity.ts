@@ -1,3 +1,7 @@
+/**
+ * Purpose: Compares two specific database events to analyze their semantic similarity and spatial distance, validating the clustering and consolidation logic.
+ * Usage: bun run scripts/diagnostics/debug-similarity.ts
+ */
 
 import { supabaseAdmin as supabase } from '@/lib/core/supabase';
 import { 
@@ -14,6 +18,7 @@ if (!supabase) {
 
 const db = supabase!;
 
+// Specific event IDs to compare. These should be updated to target specific pairs for debugging.
 const eventId1 = '5469f13c-5d40-436b-9232-c409f91fe57a';
 const eventId2 = '90a04ade-d004-4c52-bf4a-bd82298e9247';
 
@@ -55,7 +60,7 @@ async function debug() {
     console.log('Coords:', e2.latitude, e2.longitude);
     console.log('Published At:', e2.published_at);
 
-    // Compare with and without descriptions
+    // Build comparison strings using both combined text and title-only strategies to assess embedding sensitivity.
     const textsWithDesc = [
         buildEmbeddingText(e1.title, e1.description),
         buildEmbeddingText(e2.title, e2.description)
@@ -75,6 +80,7 @@ async function debug() {
     const freshEmbsWithDesc = await generateEmbeddings(textsWithDesc);
     const freshEmbsTitleOnly = await generateEmbeddings(textsTitleOnly);
 
+    // Calculate cosine similarity for both strategies to determine which provides more reliable clustering signals.
     const simWithDesc = cosineSimilarity(freshEmbsWithDesc[0], freshEmbsWithDesc[1]);
     const simTitleOnly = cosineSimilarity(freshEmbsTitleOnly[0], freshEmbsTitleOnly[1]);
 
@@ -87,6 +93,13 @@ async function debug() {
         console.log('Distance:', dist.toFixed(2), 'km');
     }
 
+    /**
+     * Consolidation Check Logic:
+     * This section simulates the tiered merge strategy used by the production consolidator.
+     * 1. Strict Semantic: High similarity alone justifies a merge.
+     * 2. Anchored Semantic: Moderate similarity + exact location match.
+     * 3. Spatial Semantic: Lower similarity + geographical proximity.
+     */
     console.log('\n--- Consolidation Check (TITLE ONLY) ---');
     const sim = simTitleOnly;
     

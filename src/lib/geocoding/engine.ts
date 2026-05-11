@@ -1,8 +1,16 @@
-/*
-  Core geocoding engine for NLP-based location extraction and disambiguation.
-  Processes news titles and descriptions to identify geographic entities
-  using a dictionary-based approach combined with heuristic scoring.
-*/
+/**
+ * CORE GEOCODING ENGINE
+ * 
+ * This module provides the primary logic for extracting geographic locations from
+ * unstructured news text. it utilizes a tiered dictionary lookup (Cities > Admin1 > Countries),
+ * custom NLP heuristics, and a scoring system to disambiguate and rank candidates.
+ * 
+ * Key Features:
+ * - Tiered location dictionary from GeoNames.
+ * - Heuristic scoring based on placement (Title vs Description) and source (Action-Target regex > Dateline > NLP).
+ * - Automatic disambiguation of demonyms and country abbreviations.
+ * - Hierarchical boosting for cities within mentioned countries.
+ */
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.env.IS_BENCHMARK && !process.versions?.bun) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -62,69 +70,76 @@ let isInitialized = false;
 export const KNOWN_LOCATIONS: Record<string, LocationEntry> = {};
 let MULTI_WORD_LOC_SET: Set<string>;
 
+/**
+ * Ensures the location dictionaries are populated from static geodata.
+ * Implements a priority-based loading strategy where specific landmarks and
+ * high-population cities take precedence over generic administrative regions.
+ */
 export function ensureInitialized() {
     if (isInitialized) return;
 
-    // load GeoNames cities: largest population wins on collision
+    // Load cities: larger population wins on collision to ensure major hubs are preferred
     for (const [key, city] of Object.entries(geoCities)) {
         if (key.length <= 2) continue;
         KNOWN_LOCATIONS[key] = { lat: city.lat, lon: city.lon, pop: city.pop, type: 'city', cc: city.cc };
     }
 
-    // Load admin1 regions (states/provinces), respecting existing city pop density
+    // Load admin1 regions (states/provinces)
     for (const [key, region] of Object.entries(geoAdmin1)) {
         if (key.length <= 2) continue;
         const existing = KNOWN_LOCATIONS[key];
-        // don't overwrite a city with > 500k pop with an admin1 region
+        // Protection: do not let a generic region overwrite a major city (> 500k pop)
         if (existing && existing.pop > 500000) continue;
         KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1', cc: region.cc };
     }
 
-    // load country centroids from geonames
+    // Load country centroids
     for (const [name, data] of Object.entries(geoCountries)) {
         if (name.length <= 2) continue;
         KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: 'country', cc: data.cc };
     }
 
-    // load manual overrides
+    // Load manual overrides for high-priority or edge-case locations
     for (const [name, data] of Object.entries(OVERRIDE_LOCATIONS)) {
         KNOWN_LOCATIONS[name] = { lat: data.lat, lon: data.lon, pop: 0, type: data.type };
     }
 
-    // load hardcoded landmarks and conflict zones
+    // Load conflict-specific landmarks (e.g., border crossings, nuclear plants)
     const REGION_SUFFIX = /\b(oblast|region|province|krai|raion|governorate)$/i;
     for (const [name, coords] of Object.entries(LANDMARKS)) {
-        // entries with region-like suffixes get admin1 type for correct priority scoring
         const entryType = REGION_SUFFIX.test(name) ? 'admin1' : 'landmark';
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: entryType as 'landmark' | 'admin1' };
     }
 
-    // continent-level fallbacks
+    // Global fallbacks for broad regions
     for (const [name, coords] of Object.entries(CONTINENT_FALLBACKS)) {
         KNOWN_LOCATIONS[name] = { lat: coords.lat, lon: coords.lon, pop: 0, type: 'landmark' };
     }
 
-    // build dependent sets
     MULTI_WORD_LOC_SET = new Set(Object.keys(KNOWN_LOCATIONS).filter(k => k.includes(' ')));
 
     isInitialized = true;
 }
 
-// exact match check: looks up candidates in the normalized location dictionary
+/**
+ * Normalizes a candidate string and attempts to find a dictionary match.
+ * Supports accent normalization (e.g., "Irán" -> "iran").
+ */
 function disambiguate(candidate: string): string {
     ensureInitialized();
     const key = candidate.toLowerCase().trim();
     if (KNOWN_LOCATIONS[key]) return candidate;
-    // try accent-normalized form (e.g. "Irán" to "iran")
+    
     const normalized = normalizeAccents(key);
     if (normalized !== key && KNOWN_LOCATIONS[normalized]) {
-        // return the display name that matches the dictionary key
         return normalizeAccents(candidate);
     }
     return candidate;
 }
 
-// try to resolve a demonym ("chinese" to "china")
+/**
+ * Resolves demonyms to their base country (e.g., "Chinese" -> "China").
+ */
 function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
     for (const word of words) {
@@ -139,13 +154,12 @@ function extractDemonym(text: string): string | null {
     return null;
 }
 
-// try to resolve country abbreviations in text ("u.s." to "united states")
-// keeps periods so we can match "u.s." properly, unlike demonyms which strip punctuation
+/**
+ * Resolves common country abbreviations (e.g., "U.S." -> "United States").
+ */
 function extractCountryAbbrev(text: string): string | null {
-    // split on whitespace and hyphens
     const tokens = text.split(/[\s\-]+/);
     for (const token of tokens) {
-        // normalize: lowercase, strip trailing commas/colons/semicolons but keep periods
         const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
         const mapped = COUNTRY_ABBREV_MAP[cleaned];
         if (mapped && mapped !== '__skip__') {
@@ -155,7 +169,10 @@ function extractCountryAbbrev(text: string): string | null {
     return null;
 }
 
-// assigns priority scores (lower is better/more specific)
+/**
+ * Assigns a specificity priority score. Lower scores represent more granular locations.
+ * Landmarks (0) > Major Cities (2) > Minor Cities (4) > Countries (6) > Regions (8).
+ */
 function locationPriority(key: string): number {
     ensureInitialized();
     const entry = KNOWN_LOCATIONS[key];
@@ -175,54 +192,54 @@ interface Candidate {
     placement: 'title' | 'description';
 }
 
-// strip known media attribution, social-media trailers, and clean hashtag-fused text
+/**
+ * Removes metadata noise, social media trailers, and attribution suffixes
+ * to prevent false positive location matches from source names or hashtags.
+ */
 function preprocessText(text: string): string {
-    // strip social media trailers first (longer matches)
     text = text.replace(SOCIAL_MEDIA_TRAILER, '');
-    // strip "GeoConfirmed [Country]." OSINT prefix (e.g., "GeoConfirmed Iran.\n" to "")
     text = text.replace(/^GeoConfirmed\s+\w+\.?\s*/i, '');
-    // normalize smart/curly quotes to straight quotes for consistent tokenization
     text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
-    // extract abbreviation before possessive eats it: "UK's" to "UK ", "U.S.'s" to "U.S." etc.
     text = text.replace(/\b(U\.S\.|U\.K\.|U\.A\.E\.|NK|EU|NATO|UK|US|UAE)['\u2019]s\b/gi, '$1 ');
-    // split fused hashtag+text: "#NKNorth Korea" to "North Korea", "#USAPresident" to "President"
     text = text.replace(HASHTAG_FUSED_PATTERN, '$2');
-    // remove remaining hashtags
     text = text.replace(/#\w+/g, '');
-    // strip trailing media source attribution (" - Reuters", " - Middle East Eye")
     text = text.replace(MEDIA_ATTRIBUTION_SUFFIX, '');
     return text.trim();
 }
 
+/**
+ * Performs a multi-pass extraction process on news items.
+ * Uses tiered heuristics to identify the most relevant geographic location.
+ */
 export function extractLocation(title: string, description: string): { match: string | null; candidates: string[] } {
     ensureInitialized();
-    // strip emoji and normalize whitespace
+    
     title = title.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
     description = description.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
-    // clean media attribution and hashtag noise before extraction
+    
     title = preprocessText(title);
     description = preprocessText(description);
 
     const candidates: Candidate[] = [];
 
-    // helper: check if a dateline candidate is a genuine geographic dateline
+    /**
+     * Validates if a string looks like a standard geographic dateline.
+     * Rejects common noise words and broad continent headers.
+     */
     function isGenuineDateline(raw: string): boolean {
         const words = raw.toLowerCase().split(/\s+/);
-        // reject section labels ("Iran Live Updates:")
         if (words.some(w => DATELINE_NOISE_WORDS.has(w))) return false;
-        // reject continent-level datelines ("Africa: Morocco...")
         const key = raw.toLowerCase().trim();
         if (CONTINENT_NAMES.has(key)) return false;
         return true;
     }
 
-    // 1a. structured metadata pattern (ReliefWeb, humanitarian feeds)
+    // Pass 1: Structured metadata and datelines (Highest confidence)
     let metaMatch = METADATA_COUNTRY_REGEX.exec(title);
     if (metaMatch) candidates.push({ name: metaMatch[1].trim(), source: 'dateline', placement: 'title' });
     metaMatch = METADATA_COUNTRY_REGEX.exec(description);
     if (metaMatch) candidates.push({ name: metaMatch[1].trim(), source: 'dateline', placement: 'description' });
 
-    // 1b. dateline from title or description (highest confidence)
     const titleDateline = DATELINE_PATTERN.exec(title);
     if (titleDateline && isGenuineDateline(titleDateline[1])) {
         candidates.push({ name: titleDateline[1].trim(), source: 'dateline', placement: 'title' });
@@ -232,7 +249,7 @@ export function extractLocation(title: string, description: string): { match: st
         candidates.push({ name: descDateline[1].trim(), source: 'dateline', placement: 'description' });
     }
 
-    // 1c. title-subject country extraction
+    // Pass 1c: Subject extraction from title start
     {
         const strippedTitle = title.replace(/^[^a-zA-Z\u00C0-\u024F]+/, '');
         const titleWords = strippedTitle.split(/\s+/);
@@ -247,7 +264,7 @@ export function extractLocation(title: string, description: string): { match: st
         }
     }
 
-    // 2. comma-pair extraction ("Austin, Texas")
+    // Pass 2: Comma-pair resolution ("City, Region")
     COMMA_PAIR_PATTERN.lastIndex = 0;
     let commaMatch;
     while ((commaMatch = COMMA_PAIR_PATTERN.exec(title)) !== null) {
@@ -260,11 +277,10 @@ export function extractLocation(title: string, description: string): { match: st
         candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'description' });
     }
 
-    // pass 3: optimized multi-word dictionary scan
+    // Pass 3: Optimized dictionary scanning
     const fastDictionaryScan = (text: string, placement: 'title' | 'description') => {
         const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
         for (let i = 0; i < words.length; i++) {
-            // single word scan
             const word = words[i];
             if (word !== word.toLowerCase() || word.length <= 3) {
                 const cleanedWord = cleanCandidate(word);
@@ -272,7 +288,7 @@ export function extractLocation(title: string, description: string): { match: st
                     const keyWord = normalizeAccents(cleanedWord.toLowerCase());
                     const entry = KNOWN_LOCATIONS[keyWord];
                     if (entry && !MULTI_WORD_LOC_SET.has(keyWord) && !STOP_WORDS.has(keyWord) && !FALSE_POSITIVES.has(keyWord)) {
-                        // Only allow single-word matches for specific, unambiguous, or major locations
+                        // Unambiguous single-word matches are restricted to countries, major cities, or landmarks
                         const isMajor = entry.type === 'country' || entry.type === 'landmark' || entry.type === 'admin1' || entry.pop > 500000;
                         if (isMajor) {
                             candidates.push({ name: cleanedWord, source: 'direct_scan', placement });
@@ -281,11 +297,8 @@ export function extractLocation(title: string, description: string): { match: st
                 }
             }
 
-            // multi word scan
             for (let len = Math.min(4, words.length - i); len >= 2; len--) {
                 const slice = words.slice(i, i + len).join(' ');
-                // if the entire slice is lowercase, it's very likely a common noun phrase (e.g. "la paz" = "the peace")
-                // except for certain small connecting words, but even then, a location should usually have some capitalization.
                 if (slice === slice.toLowerCase()) continue;
                 
                 const cleaned = cleanCandidate(slice);
@@ -300,7 +313,7 @@ export function extractLocation(title: string, description: string): { match: st
     fastDictionaryScan(title, 'title');
     fastDictionaryScan(description, 'description');
 
-    // pass 4: regex-based extraction from both title and description
+    // Pass 4: Spatial context and event-target regex patterns
     for (const pattern of LOCATION_PATTERNS) {
         pattern.lastIndex = 0;
         let match;
@@ -313,7 +326,6 @@ export function extractLocation(title: string, description: string): { match: st
         }
     }
 
-    // 4b. action-target patterns (highest confidence for event location)
     for (const pattern of ACTION_TARGET_PATTERNS) {
         pattern.lastIndex = 0;
         let match;
@@ -326,8 +338,7 @@ export function extractLocation(title: string, description: string): { match: st
         }
     }
 
-    // pass 4b: possessive-linked location extraction: "Indonesia's Bali" to extract Bali
-    // pattern: [Word]'s [Title-cased word(s)] that exist in the dictionary
+    // Pass 4b: Possessive focus (e.g., "Israel's Tel Aviv")
     const POSSESSIVE_LOC = /(?:[A-Za-z]+)['\u2019]s\s+([A-Z][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u024F]+){0,2})/g;
     const scanPossessive = (text: string, placement: 'title' | 'description') => {
         POSSESSIVE_LOC.lastIndex = 0;
@@ -336,7 +347,6 @@ export function extractLocation(title: string, description: string): { match: st
             const inner = cleanCandidate(m[1]);
             const key = normalizeAccents(inner.toLowerCase());
             if (key.length > 2 && KNOWN_LOCATIONS[key] && !STOP_WORDS.has(key) && !FALSE_POSITIVES.has(key)) {
-                // give it a high priority source: it is a directly named location inside a possessive
                 candidates.push({ name: inner, source: 'possessive_focus', placement });
             }
         }
@@ -344,7 +354,7 @@ export function extractLocation(title: string, description: string): { match: st
     scanPossessive(title, 'title');
     scanPossessive(description, 'description');
 
-    // 5. early fallback promotions
+    // Pass 5: Abbreviations and Demonyms
     const titleAbbrev = extractCountryAbbrev(title);
     if (titleAbbrev) candidates.push({ name: titleAbbrev, source: 'abbrev', placement: 'title' });
     const descAbbrev = extractCountryAbbrev(description);
@@ -355,7 +365,7 @@ export function extractLocation(title: string, description: string): { match: st
     const descDemonym = extractDemonym(description);
     if (descDemonym) candidates.push({ name: descDemonym, source: 'demonym', placement: 'description' });
 
-    // pass 6: scanning for known high-priority landmarks
+    // Pass 6: Landmark-specific dictionary scan
     const scanLandmarks = (text: string, placement: 'title' | 'description') => {
         const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
         for (let i = 0; i < words.length; i++) {
@@ -372,7 +382,6 @@ export function extractLocation(title: string, description: string): { match: st
     scanLandmarks(title, 'title');
     scanLandmarks(description, 'description');
 
-    // score and sort candidates
     interface ScoredCandidate {
         name: string;
         key: string;
@@ -382,6 +391,11 @@ export function extractLocation(title: string, description: string): { match: st
         cc?: string;
     }
 
+    /**
+     * Ranks candidates using a weighted scoring model.
+     * Factors include: placement (Title vs Description), source confidence,
+     * location type (Specificity), and hierarchical relationship.
+     */
     function computeScored(candidateList: Candidate[]): ScoredCandidate[] {
         const scored: ScoredCandidate[] = [];
 
@@ -395,7 +409,7 @@ export function extractLocation(title: string, description: string): { match: st
             const loc = disambiguate(candidate);
             let key = normalizeAccents(loc.toLowerCase());
 
-            // strip administrative suffixes to resolve "Belgorod Oblast" to "Belgorod"
+            // Handle administrative suffixes (e.g., "Gaza Strip" vs "Gaza")
             if (!KNOWN_LOCATIONS[key]) {
                 const stripped = key.replace(ADMIN_SUFFIX_PATTERN, '').trim();
                 if (stripped !== key && stripped.length > 2 && KNOWN_LOCATIONS[stripped]) {
@@ -409,22 +423,16 @@ export function extractLocation(title: string, description: string): { match: st
                 const rawWords = raw.split(/\s+/);
                 let found = false;
                 
-                /*
-                  Handle multi-word candidates: verify prefix matches and avoid surname collisions.
-                  Check if a sub-phrase of the candidate exists in the dictionary.
-                */
+                // Partial phrase matching to handle compound names vs person names
                 for (let len = words.length - 1; len >= 1; len--) {
                     const sub = words.slice(0, len).join(' ');
                     if (sub.length > 2 && !STOP_WORDS.has(sub) && !FALSE_POSITIVES.has(sub) && KNOWN_LOCATIONS[sub]) {
-                        // potential match. Check if the next word looks like a surname.
-                        // if the next word exists, is capitalized in original text, and isn't a known location/noise word
+                        // Heuristic: reject if the following word looks like a capitalized surname
                         const nextWordRaw = rawWords[len];
                         if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
                             const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
-                            // if the next word is NOT a known location and NOT a common location suffix (City, State, etc)
                             if (!KNOWN_LOCATIONS[nextWordLower] && 
                                 !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
-                                // probably a name like "Heba Morayef" or "Graham Harris"
                                 continue; 
                             }
                         }
@@ -437,7 +445,7 @@ export function extractLocation(title: string, description: string): { match: st
                 if (!found && source !== 'abbrev' && source !== 'demonym') continue;
             }
 
-            // filter out noisy topic headers (e.g., "Israel War", "Gaza Update")
+            // Reject noise words in topic headers
             const lowKey = raw.toLowerCase();
             if (lowKey.endsWith(' war') || lowKey.endsWith(' update') ||
                 lowKey.endsWith(' report') || lowKey.endsWith(' brief') ||
@@ -448,7 +456,11 @@ export function extractLocation(title: string, description: string): { match: st
 
             const finalEntry = KNOWN_LOCATIONS[key];
             const displayName = toTitleCase(key);
+            
+            // Placement weight
             const wPlacement = placement === 'title' ? 0 : 12;
+            
+            // Source confidence weight
             let wSource = 0;
             switch(source) {
                 case 'possessive_focus': wSource = -15; break;
@@ -462,7 +474,11 @@ export function extractLocation(title: string, description: string): { match: st
                 case 'direct_scan': wSource = placement === 'title' ? 6 : 12; break;
                 case 'nlp': wSource = 15; break;
             }
+            
+            // specificity weight
             const wType = locationPriority(key);
+            
+            // Regional and entity-type penalties
             const continentPenalty = CONTINENT_NAMES.has(key) ? 40 : 0;
             const regionPenalty = (key === 'middle east' || key === 'west asia' || key === 'southeast asia') ? 25 : 0;
             const superpowerPenalty = SUPERPOWER_KEYS.has(key) ? 20 : 0;
@@ -479,30 +495,21 @@ export function extractLocation(title: string, description: string): { match: st
             });
         }
 
-        /*
-          Second pass: boost specific locations (cities/landmarks) if their parent country
-          is also present in the text.
-        */
+        // Hierarchical Boosting: cities/landmarks within a mentioned country/region get priority
         const foundCountries = new Set(scored.filter(s => KNOWN_LOCATIONS[s.key]?.type === 'country').map(s => s.cc));
         const foundAdmin1CCs = new Set(scored.filter(s => KNOWN_LOCATIONS[s.key]?.type === 'admin1').map(s => KNOWN_LOCATIONS[s.key]?.cc));
         for (const s of scored) {
             const entry = KNOWN_LOCATIONS[s.key];
             if (!entry) continue;
             if ((entry.type === 'city' || entry.type === 'landmark') && s.cc && foundCountries.has(s.cc)) {
-                s.score -= 10; // Hierarchical boost: city/landmark within a mentioned country
+                s.score -= 10;
             }
-            // boost city when its parent admin1 region is also present BUT no country-level boost already applied
-            // (prevents double-stacking that would over-promote cities like São Paulo over Brazil)
             if (entry.type === 'city' && entry.cc && foundAdmin1CCs.has(entry.cc) && !foundCountries.has(entry.cc)) {
-                s.score -= 8; // city is more specific than its parent region
+                s.score -= 8;
             }
         }
 
-        /*
-          Third pass: title-country priority.
-          If a superpower country appears in the title but would lose to a description-only country,
-          reduce its penalty to prevent description noise from overshadowing the headline subject.
-        */
+        // Superpower Balancing: prevent generic description noise from overshadowing title subjects
         const titleCountries = scored.filter(s =>
             s.placement === 'title' && KNOWN_LOCATIONS[s.key]?.type === 'country' && SUPERPOWER_KEYS.has(s.key)
         );
@@ -514,7 +521,6 @@ export function extractLocation(title: string, description: string): { match: st
             );
             for (const descC of descOnlyCountries) {
                 if (descC.score < bestTitleCountry.score) {
-                    // a description-only country is beating a title superpower: boost the title one
                     bestTitleCountry.score -= 15;
                     break;
                 }
@@ -533,6 +539,7 @@ export function extractLocation(title: string, description: string): { match: st
 
     let bestCandidates = computeScored(candidates);
 
+    // Final fallback: use compromise NLP if tiered heuristics failed
     if (bestCandidates.length === 0) {
         const titlePlaces = nlp(title).places().out('array');
         if (titlePlaces && titlePlaces.length > 0) {
@@ -560,6 +567,7 @@ export function extractLocation(title: string, description: string): { match: st
         };
     }
 
+    // Last resort fallback scans
     const scanCountries = (text: string) => {
         const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
         for (let i = 0; i < words.length; i++) {
@@ -598,7 +606,6 @@ export function extractLocation(title: string, description: string): { match: st
     const continentMatch = scanContinents(title) || scanContinents(description);
     if (continentMatch) return continentMatch;
 
-    // pass 7: last-resort news source defaults
     const combinedText = (title + ' ' + description).toLowerCase();
     for (const [source, location] of Object.entries(NEWS_SOURCE_DEFAULTS)) {
         if (new RegExp(`\\b${source}\\b`).test(combinedText)) {
@@ -610,13 +617,16 @@ export function extractLocation(title: string, description: string): { match: st
     return { match: null, candidates: [] };
 }
 
-// Aliases: when a short landmark name is found, return the canonical full name
+// Canonical display overrides for ambiguous landmark names
 const LANDMARK_DISPLAY_ALIASES: Record<string, string> = {
     'hormuz': 'Strait of Hormuz',
     'bab el-mandeb': 'Bab El-Mandeb',
     'kiryat shmona': 'Qiryat Shemona',
 };
 
+/**
+ * Resolves a location name to geographic coordinates.
+ */
 export async function geocodeLocation(
     placeName: string
 ): Promise<{ lat: number; lon: number; displayName: string } | null> {
@@ -624,7 +634,6 @@ export async function geocodeLocation(
     const key = normalizeAccents(placeName.toLowerCase().trim());
     const known = KNOWN_LOCATIONS[key];
     if (known) {
-        // use canonical display alias if one exists
         const displayName = LANDMARK_DISPLAY_ALIASES[key] || placeName;
         return { lat: known.lat, lon: known.lon, displayName };
     }

@@ -1,10 +1,17 @@
 /*
-Seraphim Geodata Builder
-Processes GeoNames datasets and custom country/location mappings
-to produce a compact JSON database for the extraction pipeline.
-Specifically uses cities5000.txt and admin1CodesASCII.txt.
-
-Usage: node scripts/build-geodata.mjs
+  Seraphim Geodata Builder
+  
+  This script processes raw GeoNames datasets (cities5000.txt and admin1CodesASCII.txt)
+  along with custom country mappings to produce a optimized JSON database for the
+  geocoding extraction pipeline.
+  
+  The output is saved to 'data/geonames.json' and is designed to be lightweight
+  for server-side NLP tasks.
+  
+  Usage: 
+  bun scripts/build/build-geodata.mjs
+  OR
+  node scripts/build/build-geodata.mjs
 */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -14,8 +21,11 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', 'data');
 
-// ISO 3166-1 alpha-2 country mappings
-// Each country maps to one or more recognizable names and a canonical centroid.
+/**
+ * ISO 3166-1 alpha-2 country mappings.
+ * Each entry provides canonical names, common aliases, and centroid coordinates
+ * for high-level geographic resolution.
+ */
 const COUNTRY_DATA = {
     'AD': [['andorra', 42.55, 1.60]],
     'AE': [['united arab emirates', 23.42, 53.85], ['uae', 23.42, 53.85]],
@@ -214,14 +224,16 @@ const COUNTRY_DATA = {
     'ZA': [['south africa', -30.56, 22.94]],
     'ZM': [['zambia', -13.13, 27.85]],
     'ZW': [['zimbabwe', -19.02, 29.15]],
-    // territories / regions often in news
     'HK': [['hong kong', 22.32, 114.17]],
     'PR': [['puerto rico', 18.22, -66.59]],
     'GZ': [['gaza', 31.35, 34.31]],
 };
 
-// --- Stage 1: Process cities ---
-// We use cities5000.txt which includes cities with population > 5000.
+/**
+ * Processing Stage 1: Parse City Data
+ * We use cities5000.txt which filters for settlements with >5000 inhabitants.
+ * If multiple cities share a name, the more populous one is selected.
+ */
 console.log('Reading cities5000.txt...');
 const citiesRaw = readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8');
 const citiesLines = citiesRaw.split('\n').filter(l => l.trim());
@@ -245,7 +257,7 @@ for (const line of citiesLines) {
 
     const key = (asciiName || name).toLowerCase();
 
-    // keep the city with the highest population if names collide
+    // Priority Selection: Keep the city with the highest population if names collide.
     const existing = cityMap.get(key);
     if (!existing || population > existing.pop) {
         cityMap.set(key, { lat, lon, pop: population, cc: countryCode });
@@ -259,7 +271,10 @@ for (const line of citiesLines) {
         }
     }
 
-    // track the most populous city in each admin1 region as a fallback centroid
+    /**
+     * Regional Fallbacks: Track the most populous city in each administrative
+     * region to use as a fallback centroid if a city name is missing.
+     */
     if (admin1Code) {
         const a1key = `${countryCode}.${admin1Code}`;
         const existA1 = admin1Centroids.get(a1key);
@@ -271,7 +286,11 @@ for (const line of citiesLines) {
 
 console.log(`  Parsed ${cityMap.size} unique city names`);
 
-// --- Stage 2: Process admin1 regions (states/provinces) ---
+/**
+ * Processing Stage 2: Parse Administrative Regions
+ * Maps state/province codes to names and associates them with the regional
+ * centroids calculated in Stage 1.
+ */
 console.log('Reading admin1CodesASCII.txt...');
 const admin1Raw = readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8');
 const admin1Lines = admin1Raw.split('\n').filter(l => l.trim());
@@ -294,7 +313,10 @@ for (const line of admin1Lines) {
 
     const key = (asciiName || name).toLowerCase();
 
-    // prioritize major cities over admin1 regions if names are identical
+    /**
+     * Collision Strategy: Prioritize major world cities (>500k) over regional
+     * names to ensure "Paris" refers to the city and not a minor region.
+     */
     const existingCity = cityMap.get(key);
     if (existingCity && existingCity.pop > 500000) continue;
 
@@ -311,7 +333,10 @@ for (const line of admin1Lines) {
 
 console.log(`  Parsed ${admin1Map.size} admin1 regions`);
 
-// build countries from comprehensive mapping
+/**
+ * Processing Stage 3: Build Country Data
+ * Compiles the canonical country list into the final format.
+ */
 console.log('Building country data...');
 const countriesOut = {};
 let countryCount = 0;
@@ -319,7 +344,7 @@ let countryCount = 0;
 for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
     for (const [name, lat, lon] of entries) {
         if (name.length <= 2) continue;
-        // round coordinates to reduce JSON size
+        /** Round coordinates to 2 decimal places to minimize payload size */
         countriesOut[name] = { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100, cc };
         countryCount++;
     }
@@ -327,7 +352,10 @@ for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
 
 console.log(`  ${countryCount} country name entries`);
 
-// --- Stage 3: Assemble final dataset ---
+/**
+ * Processing Stage 4: Assemble and Export
+ * Flattens the maps into a single JSON structure and writes to disk.
+ */
 const cities = {};
 for (const [key, val] of cityMap.entries()) {
     if (key.length <= 2) continue;

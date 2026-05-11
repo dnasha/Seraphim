@@ -1,8 +1,9 @@
-/*
-Main Map component for the Seraphim OSINT aggregator.
-Renders an interactive map using MapLibre GL JS, handles news item clustering,
-popups, overlays, and camera animations.
-*/
+/**
+ * NewsMap Component
+ * The central interactive map for the Seraphim OSINT dashboard.
+ * Manages MapLibre GL JS lifecycle, client-side clustering, live data overlays,
+ * and seamless synchronization between map state and application UI.
+ */
 
 "use client";
 
@@ -40,6 +41,9 @@ interface NewsMapProps {
   sortMode: "new" | "hot";
 }
 
+/**
+ * Extended Map type to support MapLibre 5.0+ features like Globe projection and Fog.
+ */
 type ExtendedMap = maplibregl.Map & {
   setProjection?: (projection: { type: string }) => void;
   setFog?: (fog: unknown) => void;
@@ -79,7 +83,8 @@ export default function NewsMap({
     noaa: false,
     eonet: false,
   });
-  // Initialize popup container element once safely
+
+  // Initialize popup container element once to prevent hydration mismatches and redundant DOM operations.
   const popupContainer = useMemo(() => {
     if (typeof document !== 'undefined') {
       return document.createElement('div');
@@ -109,14 +114,10 @@ export default function NewsMap({
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-
-
-  // Cache for GeoJSON data to restore it after map style reloads.
+  // Cache for GeoJSON data to ensure persistence across style reloads or container resizes.
   const pendingGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
 
-
-
-  // Track active resizing to suppress data updates/emissions
+  // Track resizing state to suppress API calls and jittering during intensive DOM changes.
   const isResizingRef = useRef(false);
   const resizeEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -138,7 +139,8 @@ export default function NewsMap({
     overlaysRef.current = overlays;
   }, [overlays]);
 
-  // Animation loop for pulsing global top-3 hot stories
+  // Main animation loop for hot story pulses.
+  // Performs low-level paint property updates for high-performance visual feedback.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -155,11 +157,8 @@ export default function NewsMap({
       const duration = 2000;
       const t = (timestamp % duration) / duration;
 
-      // Tighter growth: starts at 20 and expands to 55 (at full scale)
       const radius = 20 + t * 35;
-      // Stronger opacity with a linear-ish decay for better visibility
       const opacity = Math.max(0, 0.6 * (1 - t));
-      // Perfectly sharp edges
       const blur = 0;
 
       if (map.getLayer("hot-story-pulse")) {
@@ -178,33 +177,31 @@ export default function NewsMap({
     };
   }, [mapReady]);
 
-  // Sync style with dark mode changes
+  // Handle style switching based on global theme state.
   const [prevIsDarkMode, setPrevIsDarkMode] = useState(isDarkMode);
   if (prevIsDarkMode !== isDarkMode) {
     setPrevIsDarkMode(isDarkMode);
     setCurrentStyle(isDarkMode ? "dark" : "standard");
   }
 
+  // Pre-process items for the map: filter valid coords, apply jitter, and identify top stories.
   const geoItems = useMemo(() => {
     const valid = items.filter(
       (i) => i.latitude != null && i.longitude != null,
     );
-    // Passing selectedItemId ensures the focused item stays anchored at the center of its group.
     const jittered = applyClientJitter(valid, selectedItemId);
 
-    // Identify top 3 items based on the current sort mode (viewport-aware)
     const sorted = [...jittered].sort((a, b) => {
       if (sortMode === "hot") {
         const scoreA = a.impactScore || 0;
         const scoreB = b.impactScore || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
-        
+
         const countA = canonicalEventCount(a);
         const countB = canonicalEventCount(b);
         if (countB !== countA) return countB - countA;
       }
 
-      // Fallback for Hot mode tiebreak OR primary for New mode
       return latestReportTimestamp(b) - latestReportTimestamp(a);
     });
 
@@ -212,7 +209,6 @@ export default function NewsMap({
 
     return jittered.map((item) => ({
       ...item,
-      // Pulses ONLY follow the current viewport's top 3 to ensure UI consistency
       isTopHot: topIds.has(item.id),
     }));
   }, [items, sortMode, selectedItemId]);
@@ -224,7 +220,7 @@ export default function NewsMap({
     ) || null;
   }, [geoItems, selectedItemId]);
 
-  // Emits the current map bounds with a debounce to avoid excessive API calls.
+  // Emit current viewport bounds to the parent with a debounce to minimize network traffic.
   const emitBounds = useCallback((map: maplibregl.Map) => {
     if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
     boundsDebounceRef.current = setTimeout(() => {
@@ -243,8 +239,6 @@ export default function NewsMap({
       onBoundsChangeRef.current?.(bbox);
     }, 150);
   }, []);
-
-
 
   const latestGeoItemsRef = useRef(geoItems);
   useEffect(() => {
@@ -272,7 +266,7 @@ export default function NewsMap({
     containerRef,
   });
 
-  // Effect to initialize the map and wire up event listeners.
+  // Core map initialization and event wiring.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -283,7 +277,8 @@ export default function NewsMap({
       const isNum = (v: number | undefined | null): v is number =>
         typeof v === "number" && Number.isFinite(v);
 
-      // Airtight fallback chain for center and zoom
+      // Implementation of an airtight fallback chain for initial position.
+      // Prioritizes: Initial props > Resolution-aware interpolation > Hardcoded center.
       const fallbackCenter: [number, number] = [9.8454, 7.8751];
       const finalCenter: [number, number] =
         initialCenter && isNum(initialCenter[0]) && isNum(initialCenter[1])
@@ -309,7 +304,7 @@ export default function NewsMap({
         maxZoom: 18,
         attributionControl: false,
         trackResize: false,
-        // @ts-expect-error - Supported by MapLibre but may be missing from types
+        // @ts-expect-error - Internal property used for high-fidelity screenshots/rendering
         preserveDrawingBuffer: true,
       });
     } catch (err) {
@@ -323,10 +318,10 @@ export default function NewsMap({
     }
 
     map.on("error", (e) => {
-      // Only set error if it's a critical map-loading error, not just a missing icon/tile
-      // Ignore 503/404 errors from optional third-party overlays (NASA, USGS, NOAA)
       const errorMsg =
         e.error?.message || (typeof e.error === "string" ? e.error : "");
+
+      // Filter non-critical errors from optional third-party overlays to prevent UI disruption.
       const isOverlayError =
         errorMsg.includes("eonet.gsfc.nasa.gov") ||
         errorMsg.includes("earthquake.usgs.gov") ||
@@ -367,22 +362,18 @@ export default function NewsMap({
     });
 
     popupRef.current.on("close", () => {
-      // Avoid deselection if the popup was removed programmatically during an animation.
       if (!isFlyingRef.current) {
         onSelectItemRef.current(null);
       }
     });
 
-    // Handles layer re-initialization after the map style is loaded.
     map.on("style.load", () => {
-      // Enable Globe projection if in 3D mode. 
-      // We use defensive checks and a local type extension to support MapLibre 5 features while satisfying strict linting rules.
+      // Configuration of Globe and Fog properties using local type extensions for MapLibre 5 compatibility.
       const extMap = map as ExtendedMap;
       if (extMap.setProjection) {
         extMap.setProjection({ type: isGlobeRef.current ? "globe" : "mercator" });
       }
 
-      // Add atmospheric fog for 3D depth if in 3D mode.
       if (extMap.setFog) {
         if (isGlobeRef.current) {
           extMap.setFog({
@@ -427,11 +418,10 @@ export default function NewsMap({
                     : undefined,
                 zoom,
                 speed: 1.5,
-                curve: 1, // Faster zoom in for clusters
+                curve: 1,
                 essential: true,
               });
             } else {
-              // Zoom in if it's a server-side cluster.
               map.flyTo({
                 center:
                   features[0].geometry.type === "Point"
@@ -444,7 +434,6 @@ export default function NewsMap({
             }
           });
 
-          // Cursor feedback for interactive layers.
           for (const layer of [
             "clusters-circle",
             "unclustered-point",
@@ -463,7 +452,6 @@ export default function NewsMap({
           });
 
           map.on("moveend", () => {
-            // Don't emit bounds if we're in the middle of a container resize
             if (!isResizingRef.current) {
               emitBounds(map);
             }
@@ -475,7 +463,8 @@ export default function NewsMap({
 
     mapRef.current = map;
 
-    // Use ResizeObserver for synchronous layout synchronization
+    // Use ResizeObserver for synchronous layout synchronization.
+    // This prevents the common visual lag between the DOM container and the WebGL canvas during sidebar transitions.
     const resizeObserver = new ResizeObserver(() => {
       isResizingRef.current = true;
       if (resizeEndTimeoutRef.current)
@@ -484,7 +473,6 @@ export default function NewsMap({
         isResizingRef.current = false;
       }, 150);
 
-      // Calling resize synchronously prevents the 1-frame lag between DOM and Canvas
       map.resize();
     });
 
@@ -511,12 +499,10 @@ export default function NewsMap({
   const handleRetry = useCallback(() => {
     setMapError(null);
     setMapReady(false);
-    // Incrementing retryCount triggers the main initialization effect to re-run.
-    // The previous map instance will be cleaned up by the effect's return function.
     setRetryCount((prev) => prev + 1);
   }, []);
 
-  // Force initial view injection after map readiness to overcome MapLibre early clamping/snapping.
+  // Force a view adjustment after the map is ready to overcome early clamping by the map engine.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const timer = setTimeout(() => {
@@ -533,19 +519,17 @@ export default function NewsMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady]);
 
-  // Sync bounds when individual pins are toggled.
   useEffect(() => {
     if (mapReady && mapRef.current) emitBounds(mapRef.current);
   }, [forceIndividualPins, mapReady, emitBounds]);
 
-  // Handles map style and clustering toggle updates.
   useEffect(() => {
     if (!mapRef.current) return;
     setMapReady(false);
     mapRef.current.setStyle(getMapLibreStyle(currentStyle), { diff: false });
   }, [currentStyle, forceIndividualPins]);
 
-  // Updates the GeoJSON source when news items change.
+  // Transform news items into a FeatureCollection for high-performance batch rendering.
   useEffect(() => {
     if (!mapReady || !mapRef.current || isResizingRef.current) return;
 
@@ -584,8 +568,6 @@ export default function NewsMap({
     if (source) source.setData(geojson);
   }, [geoItems, mapReady]);
 
-
-  // Handles closing the settings panel when clicking outside.
   useEffect(() => {
     if (!settingsOpen) return;
     const handleClick = (e: MouseEvent) => {
@@ -602,7 +584,6 @@ export default function NewsMap({
     };
   }, [settingsOpen]);
 
-  // Toggles visibility of active live overlays.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -618,9 +599,7 @@ export default function NewsMap({
     setVis("overlay-eonet-point", overlays["eonet"]);
   }, [overlays, mapReady, currentStyle]);
 
-
-
-  // Handles projection and fog toggling without reloading the map style.
+  // Handle runtime toggling of 3D Globe and atmospheric fog.
   useEffect(() => {
     if (!mapReady || !mapRef.current || !mapRef.current.isStyleLoaded()) return;
     const map = mapRef.current as ExtendedMap;
@@ -641,12 +620,10 @@ export default function NewsMap({
       }
     }
 
-    // When toggling 3D off, instantly reset pitch and bearing for a clean orthogonal 2D view.
     if (!isGlobe) {
       map.jumpTo({ pitch: 0, bearing: 0 });
     }
 
-    // Force a resize to ensure the globe/mercator transition is perfectly centered in the container.
     map.resize();
   }, [isGlobe, mapReady, currentStyle]);
 
@@ -690,8 +667,7 @@ export default function NewsMap({
         className={styles.newsMapContainer}
         style={{ backfaceVisibility: "hidden", transform: "translateZ(0)" }}
       />
-      
-      {/* Portals for MapLibre popups to enable React rendering and updates */}
+
       {selectedItem && popupContainer && createPortal(
         <MapPopup item={selectedItem} />,
         popupContainer

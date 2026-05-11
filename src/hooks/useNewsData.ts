@@ -1,9 +1,11 @@
 'use client';
 
-/*
-useNewsData hook manages fetching/caching/merging of news events.
-It keeps a persistent client entity store to avoid dropping items on bbox changes.
-*/
+/**
+ * useNewsData hook manages the lifecycle of news event data, including fetching, 
+ * local caching, and deduplication. It maintains a persistent entity store 
+ * that allows for seamless transitions between different map viewports 
+ * without losing previously fetched data.
+ */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
@@ -28,12 +30,15 @@ function computeUntil(timeRange: string, customEndDate?: string): string | null 
     return (timeRange === 'custom' && customEndDate) ? new Date(customEndDate).toISOString() : null;
 }
 
+/**
+ * Merges an incoming news item with an existing one in the store.
+ * It prioritizes the highest source count and preserves impact scores.
+ * This prevents data downgrades when receiving partial updates from the API.
+ */
 function mergeNewsItem(existing: NewsItem | undefined, incoming: NewsItem): NewsItem {
     if (!existing) return incoming;
     
-    // Reporting strength is strictly based on actual sources (event_count or sources array length)
-    // We explicitly prefer the highest known source count to prevent "hot" stories from being 
-    // downgraded by partial or newer raw updates that haven't been aggregated in the DB yet.
+    // Reporting strength is determined by the maximum known source count across all updates.
     const raw = incoming as unknown as Record<string, unknown>;
     const sCount = Number(
         incoming.sourcesCount ?? 
@@ -110,12 +115,14 @@ export function useNewsData({
 
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'new');
 
+    /**
+     * Synchronizes the public news state with the internal entity store.
+     * Filters items to ensure the sidebar only shows events relevant to 
+     * the current map viewport or active search result set.
+     */
     const syncNewsFromStore = useCallback((mode: string | undefined) => {
         const normalizedMode = normalizeSortMode(mode);
         
-        // Filter the persistent store down to only the items intended for the current view.
-        // This prevents the sidebar from 'bloating' with items from previous pans/zooms
-        // while allowing the store to keep them cached for performance.
         const activeItems = Array.from(entitiesRef.current.values())
             .filter(item => {
                 const key = item.originalId || item.id;
@@ -126,6 +133,10 @@ export function useNewsData({
         setAppliedSortMode(normalizedMode);
     }, []);
 
+    /**
+     * Removes stale items from the entity store based on a least-recently-touched 
+     * policy when the store exceeds the maximum entity count.
+     */
     const pruneEntityStore = useCallback(() => {
         const store = entitiesRef.current;
         if (store.size <= MAX_ENTITY_COUNT) return;
@@ -147,17 +158,20 @@ export function useNewsData({
         }
     }, []);
 
+    /**
+     * Merges a batch of news items into the internal entity store.
+     * Uses canonical IDs for deduplication and hydrates items with
+     * previously fetched details if they exist in the local detail cache.
+     */
     const mergeItemsIntoStore = useCallback((items: NewsItem[]) => {
         const now = Date.now();
 
         for (const item of items) {
-            // Use canonical key (representative UUID) for deduplication
             const key = item.originalId || item.id;
             const existing = entitiesRef.current.get(key);
             
             const merged = mergeNewsItem(existing, item);
             
-            // Hydrate from detail cache if available
             const cached = detailCache.current.get(key);
             if (cached) {
                 merged.description = cached.description;
@@ -168,7 +182,6 @@ export function useNewsData({
             entityTouchedAtRef.current.set(key, now);
         }
 
-        // Evict stale items...
         for (const key of entitiesRef.current.keys()) {
             if (key.startsWith('cluster-') && !visibleMapIdsRef.current.has(key)) {
                 entitiesRef.current.delete(key);
@@ -181,6 +194,10 @@ export function useNewsData({
 
     useEffect(() => { newsRef.current = news; }, [news]);
 
+    /**
+     * Internal data fetcher that handles API communication and local 
+     * result caching to minimize redundant network requests.
+     */
     const _performFetch = useCallback(async (options: {
         isRefresh?: boolean;
         bbox?: BBox;
@@ -210,7 +227,6 @@ export function useNewsData({
             if (bbox.until) params.append('until', bbox.until);
             if (bbox.query) params.append('query', bbox.query);
         } else {
-            // Global scope for unmapped or search-only queries
             params.append('scope', 'global');
             const since = computeSince(timeRange, customStartDate);
             const until = computeUntil(timeRange, customEndDate);
@@ -249,7 +265,6 @@ export function useNewsData({
                 return cachedDetail ? { ...item, ...cachedDetail } : item;
             });
             const apiCapped = data.meta?.isCapped || false;
-            // Since limits are dynamic and controlled by the server, we trust the apiCapped flag.
             const isCapped = apiCapped;
             const appliedLimit = data.meta?.appliedLimit;
             responseCache.set(requestKey, { data: hydrated, isCapped, appliedLimit, timestamp: Date.now() });
@@ -264,6 +279,10 @@ export function useNewsData({
         }
     }, [unmappedOnly, searchQuery, sortMode, timeRange, customStartDate, customEndDate]);
 
+    /**
+     * Orchestrates the data loading sequence. It handles bounding box 
+     * snapping, parameter change detection, and store synchronization.
+     */
     const coordinateLoad = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
         const requestVersion = ++requestVersionRef.current;
         if (abortControllerRef.current) {
@@ -276,19 +295,16 @@ export function useNewsData({
 
         if (isRefresh) {
             responseCache.clear();
-            detailCache.current.clear(); // Full refresh clears detail cache too
+            detailCache.current.clear();
         }
 
         const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
 
-        // Prevent useless initial fetch on map view before map provides a bounding box
         if (!bbox && !unmappedOnly && !searchQuery) {
             setIsLoading(false);
             return;
         }
 
-        // Performance optimization: Skip fetch if parameters haven't changed.
-        // If unmappedOnly is true, we ignore BBox changes entirely.
         const prev = lastFetchParamsRef.current;
         const isSameBBox = unmappedOnly || (!bbox && !prev?.bbox) || (
             bbox && prev?.bbox &&
@@ -318,7 +334,6 @@ export function useNewsData({
             sortMode
         } : undefined;
 
-        // Construct the cache key
         const params = new URLSearchParams();
         if (unmappedOnly) params.append('unmapped_only', 'true');
         if (sortMode) params.append('sort', sortMode);
@@ -343,8 +358,10 @@ export function useNewsData({
         const now = Date.now();
         const cached = responseCache.get(requestKey);
 
-        // Cache hit path: If we have fresh data for this specific snapped BBox,
-        // just update visibility and sync without clearing the global store.
+        /**
+         * Cache Hit Optimization: If fresh data exists for this specific snapped 
+         * bounding box, we update visibility sets and sync without a network request.
+         */
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
             const visibleIds = new Set(cached.data.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
@@ -377,7 +394,6 @@ export function useNewsData({
 
             if (requestVersion !== requestVersionRef.current) return;
 
-            // Update the visibility set before syncing the store
             const visibleIds = new Set(mapResults.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
             visibleSidebarIdsRef.current = new Set(visibleIds);
@@ -416,11 +432,14 @@ export function useNewsData({
         return;
     }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, coordinateLoad]);
 
+    /**
+     * Lazy-loads heavy event details (description, sources) for a specific item.
+     * Updates the entity store and triggers a UI sync upon completion.
+     */
     const fetchEventDetails = useCallback(async (id: string) => {
         if (!id || fetchingDetailsRef.current.has(id)) return;
         
         let targetId = id;
-        // Skip UUIDs that are obviously client-side or server-side hybrid cluster IDs.
         if (id.startsWith('cluster-')) {
             const item = newsRef.current.find(i => i.id === id);
             if (item?.originalId) {
@@ -436,12 +455,8 @@ export function useNewsData({
         fetchingDetailsRef.current.add(targetId);
 
         try {
-            console.log(`[useNewsData] Fetching details for ${targetId}`);
             const res = await fetch(`/api/news/${targetId}`);
-            if (!res.ok) {
-                console.error(`[useNewsData] Failed to fetch details for ${targetId}: ${res.status} ${res.statusText}`);
-                return;
-            }
+            if (!res.ok) return;
             const { description, sources } = await res.json() as { description?: string; sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>; };
             const descriptionValue = typeof description === 'string' ? description : '';
             const mappedSources = Array.isArray(sources)

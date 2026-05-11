@@ -1,8 +1,9 @@
 /*
-Seraphim Supabase Bridge Test
-Verifies read/write connectivity to the database using mock events.
+  Seraphim Supabase Bridge Test
+  Verifies read/write connectivity to the database using mock events.
+  Tests upsert operations, read-back verification, and connection stability.
 
-Usage: bun run scripts/diagnostics/test-supabase.ts
+  Usage: bun run scripts/diagnostics/test-supabase.ts
 */
 
 import { supabaseAdmin as supabase } from "@/lib/core/supabase";
@@ -16,7 +17,7 @@ if (!supabase) {
 
 const db = supabase!;
 
-// Prepare mock events for testing (uses URL as unique identifier)
+// Mock events for connection validation.
 const mockEvents = [
   {
     title: "[TEST] Drone activity reported near Kyiv infrastructure",
@@ -32,7 +33,7 @@ const mockEvents = [
   {
     title: "[TEST] Pentagon briefing on Eastern European force posture",
     description:
-      "Senior DoD officials held a closed briefing with congressional members regarding NATO\u2019s eastern flank reinforcement strategy amid ongoing tensions.",
+      "Senior DoD officials held a closed briefing with congressional members regarding NATO strategy in the eastern flank.",
     source: "Seraphim Mock",
     url: "https://seraphim.test/mock/pentagon-brief-001",
     category: "world",
@@ -54,10 +55,10 @@ const mockEvents = [
 ];
 
 async function run() {
-  // Step 1: Write mock data
   console.log("Starting Supabase connection test...");
   console.log("Upserting 3 mock events...");
 
+  // Write mock data to database.
   const { data: upserted, error: writeError } = await db
     .from("events")
     .upsert(mockEvents, { onConflict: "url", ignoreDuplicates: false })
@@ -70,7 +71,7 @@ async function run() {
 
   console.log(`Upserted ${upserted?.length ?? 0} row(s).`);
 
-  // Step 2: Read back and verify
+  // Verify data integrity by reading back test rows.
   console.log("Reading back test rows...");
 
   const { data: rows, error: readError } = await db

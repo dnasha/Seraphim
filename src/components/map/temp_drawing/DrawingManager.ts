@@ -1,12 +1,20 @@
-/*
-DrawingManager — Native MapLibre GL drawing engine.
-Handles geometric drawing (polygons, rectangles, circles, freehand) directly on the map
-using MapLibre event handlers and GeoJSON source/layer management.
-*/
+/**
+ * DrawingManager Class
+ * 
+ * A native MapLibre GL drawing engine that handles geometric data creation directly 
+ * on the map. Supports polygons, rectangles, circles, and freehand drawing.
+ * 
+ * Implementation Details:
+ * - Uses GeoJSON sources and layers for high-performance rendering.
+ * - Approximates circles using 64-step polygons to ensure zoom-independent scaling.
+ * - Implements the Haversine formula for accurate geographic distance calculations.
+ */
 
 import maplibregl from 'maplibre-gl';
 
-// Types for drawing modes and features.
+/**
+ * Supported drawing modes and feature structures.
+ */
 export type DrawMode = 'polygon' | 'rectangle' | 'circle' | 'freehand' | 'select' | null;
 
 interface DrawnFeature {
@@ -16,7 +24,9 @@ interface DrawnFeature {
     color: string;
 }
 
-// Map source and layer identifiers.
+/**
+ * Map source and layer identifiers for drawing management.
+ */
 const SOURCE_COMPLETED = 'drawing-completed';
 const SOURCE_PREVIEW = 'drawing-preview';
 const LAYER_FILLS = 'drawing-fills';
@@ -28,12 +38,21 @@ const LAYER_SELECT_HIGHLIGHT = 'drawing-select-highlight';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-// Generates a unique ID for drawn features.
 function uid(): string {
     return 'draw-' + Math.random().toString(36).slice(2, 10);
 }
 
-// Approximates a circle with a polygon given center and radius.
+/**
+ * makeCirclePolygon
+ * 
+ * Approximates a circle with a polygon. This is necessary because MapLibre's 
+ * native circle layer uses pixel-fixed radii, whereas OSINT analysis often 
+ * requires geographic radii (kilometers) that scale correctly with zoom.
+ * 
+ * @param center The [longitude, latitude] center of the circle.
+ * @param radiusKm The radius in kilometers.
+ * @param steps Number of vertices to generate for the polygon.
+ */
 function makeCirclePolygon(center: [number, number], radiusKm: number, steps = 64): GeoJSON.Position[] {
     const coords: GeoJSON.Position[] = [];
     for (let i = 0; i <= steps; i++) {
@@ -45,7 +64,12 @@ function makeCirclePolygon(center: [number, number], radiusKm: number, steps = 6
     return coords;
 }
 
-// Calculates distance between two points in kilometers using the Haversine formula.
+/**
+ * haversineKm
+ * 
+ * Calculates the great-circle distance between two points on a sphere given 
+ * their longitudes and latitudes.
+ */
 function haversineKm(a: [number, number], b: [number, number]): number {
     const toRad = (d: number) => (d * Math.PI) / 180;
     const dLat = toRad(b[1] - a[1]);
@@ -62,15 +86,15 @@ export class DrawingManager {
     private mode: DrawMode = null;
     private color: string = '#ef4444';
 
-    // In-progress drawing state
+    // Internal state for in-progress drawings
     private vertices: GeoJSON.Position[] = [];
     private isDragging = false;
     private dragOrigin: [number, number] | null = null;
 
-    // Currently selected feature
+    // Selection state
     private selectedId: string | null = null;
 
-    // Bound event handlers for lifecycle management
+    // Event handler references for cleanup
     private _onClick: (e: maplibregl.MapMouseEvent) => void;
     private _onMouseMove: (e: maplibregl.MapMouseEvent) => void;
     private _onMouseDown: (e: maplibregl.MapMouseEvent) => void;
@@ -93,7 +117,9 @@ export class DrawingManager {
         this._onContextMenu = this.handleContextMenu.bind(this);
     }
 
-    // Lifecycle methods to attach and detach map event listeners.
+    /**
+     * Attaches drawing event listeners to the map and ensures required layers exist.
+     */
     attach(): void {
         if (this._attached) return;
         this._attached = true;
@@ -109,6 +135,9 @@ export class DrawingManager {
         document.addEventListener('keydown', this._onKeyDown);
     }
 
+    /**
+     * Detaches all event listeners and removes drawing layers from the map.
+     */
     detach(): void {
         if (!this._attached) return;
         this._attached = false;
@@ -125,9 +154,11 @@ export class DrawingManager {
         this.removeSources();
     }
 
-    // Public API for controlling the drawing state.
+    /**
+     * Switches the current drawing mode. 
+     * Switching modes automatically finishes any in-progress shapes.
+     */
     setMode(newMode: DrawMode): void {
-        // Finish any in-progress drawing before switching
         if (this.vertices.length > 0) {
             this.finishCurrent();
         }
@@ -170,7 +201,10 @@ export class DrawingManager {
         }
     }
 
-    // Re-creates sources and layers, useful after a map style change.
+    /**
+     * Re-initializes layers and sources. 
+     * Required when the map style changes, as MapLibre wipes custom layers during style swaps.
+     */
     reattachLayers(): void {
         this.ensureSources();
         this.renderCompleted();

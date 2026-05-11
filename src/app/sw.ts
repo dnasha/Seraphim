@@ -1,3 +1,11 @@
+/**
+ * Service Worker configuration for Seraphim PWA support.
+ * 
+ * Utilizes Serwist (a forks of Workbox) to manage precaching, runtime caching, 
+ * and offline capabilities. This ensures the application remains performant 
+ * and accessible under varying network conditions.
+ */
+
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";

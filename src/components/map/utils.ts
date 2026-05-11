@@ -1,3 +1,9 @@
+/**
+ * Map Utilities
+ * Provides helper functions for map-related data processing, 
+ * including client-side coordinate jittering and constant definitions.
+ */
+
 import { NewsItem } from "@/lib/core/types";
 
 export const CLUSTER_MAX_ZOOM = 7;
@@ -14,8 +20,13 @@ export const CATEGORIES = [
 ];
 
 /**
- * Deterministic client-side jitter to prevent unclustered pins from stacking.
- * Groups items by coordinate, sorts them by ID, and applies a golden-angle spiral.
+ * Deterministic client-side jitter to prevent unclustered pins from stacking perfectly.
+ * 
+ * Logic:
+ * 1. Groups items by coordinate (rounded to 5 decimal places).
+ * 2. If a group has multiple items, it sorts them by ID (anchoring the selected item at the center).
+ * 3. Applies a Golden-Angle Spiral (approx. 137.5 degrees) to distribute pins outward.
+ * 4. Accounts for Mercator projection distortion by scaling longitude offsets based on latitude.
  */
 export function applyClientJitter(
   items: NewsItem[],
@@ -25,6 +36,7 @@ export function applyClientJitter(
 
   for (const item of items) {
     if (item.latitude == null || item.longitude == null) continue;
+    // Skip items that are part of a server-side cluster as they shouldn't be individual pins.
     if (item.storyCount && item.storyCount > 1) continue;
 
     const key = `${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}`;
@@ -48,8 +60,12 @@ export function applyClientJitter(
     const baseLat = group[0].latitude!;
     const baseLng = group[0].longitude!;
     const latRad = (baseLat * Math.PI) / 180;
+    
+    // Scale longitude offset to maintain circular appearance across latitudes.
     const lngScale = Math.max(Math.cos(latRad), 0.2);
     const goldenAngle = (137.5 * Math.PI) / 180;
+    
+    // Convert kilometers to approximate degrees for visual spacing.
     const kmToLatDeg = (km: number) => km / 111.32;
     const baseRadius = kmToLatDeg(2.2);
     const growth = kmToLatDeg(1.0);
@@ -57,12 +73,14 @@ export function applyClientJitter(
     for (let i = 0; i < group.length; i++) {
       const item = group[i];
       const angle = i * goldenAngle;
+      // Square root growth ensures an even density as the spiral expands.
       const radius = baseRadius + Math.sqrt(i) * growth * 1.2;
       const latOffset = radius * Math.cos(angle);
       const lngOffset = (radius * Math.sin(angle)) / lngScale;
 
       const jitteredLat = Math.max(-85, Math.min(85, baseLat + latOffset));
       const jitteredLngRaw = baseLng + lngOffset;
+      // Wrap longitude correctly around the dateline.
       const jitteredLng = ((((jitteredLngRaw + 180) % 360) + 360) % 360) - 180;
 
       jitteredMap.set(item.id, {

@@ -1,9 +1,10 @@
 'use client';
 
-/*
-Providers component wraps the application with necessary context providers.
-Currently manages the ThemeProvider for application-wide theme state.
-*/
+/**
+ * Providers component serves as the root wrapper for application-wide 
+ * context providers. It currently configures the next-themes Provider 
+ * for consistent theme management.
+ */
 
 import { ThemeProvider } from 'next-themes';
 

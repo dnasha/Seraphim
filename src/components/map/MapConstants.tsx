@@ -1,7 +1,9 @@
-/*
-Map configuration constants and utilities.
-Provides map styles, category icons, and helper functions for formatting and icon generation.
-*/
+/**
+ * MapConstants and Utilities
+ * 
+ * Centralized configuration for the MapLibre engine, including base layer definitions,
+ * dynamic icon generation, and temporal formatting.
+ */
 
 import { 
     getCategoryColor, 
@@ -10,7 +12,12 @@ import {
     CATEGORY_ICONS 
 } from '@/lib/styles/colors';
 
-// Definitions for available map base layers and their attributions.
+/**
+ * Available Map Base Layers
+ * 
+ * Defines the raster tile URLs and attributions for various map styles.
+ * Voyager is used as the default 'standard' style.
+ */
 export const MAP_STYLES: Record<
   string,
   { url: string; labelsUrl?: string; attribution: string; label: string }
@@ -44,12 +51,16 @@ export const MAP_STYLES: Record<
 
 export { getCategoryColor, getSourceBadgeColor, getCredibilityStyle };
 
-
-
-/*
-Generates a category icon as an HTMLImageElement by wrapping an SVG path in a circle.
-Returns a Promise that resolves with the generated image.
-*/
+/**
+ * generateCategoryIcon
+ * 
+ * Generates a dynamic SVG marker icon as an HTMLImageElement.
+ * The icon consists of a colored circle base with a white category-specific glyph.
+ * 
+ * @param category The event category determining the color and icon path.
+ * @param isActive Whether the marker is in a selected/active state (affects size).
+ * @returns A promise resolving to the generated image element for MapLibre consumption.
+ */
 export async function generateCategoryIcon(
   category?: string,
   isActive?: boolean,
@@ -58,6 +69,7 @@ export async function generateCategoryIcon(
   const iconPath =
     CATEGORY_ICONS[category || "general"] || CATEGORY_ICONS.general;
 
+  // Configuration for marker dimensions and scaling
   const containerSize = isActive ? 34 : 26;
   const r = containerSize / 2 - 2;
   const cx = containerSize / 2;
@@ -82,10 +94,15 @@ export async function generateCategoryIcon(
   });
 }
 
-/*
-Returns a MapLibre style object for the requested style key.
-Fallback to standard style if the key is not recognized.
-*/
+/**
+ * getMapLibreStyle
+ * 
+ * Constructs a valid MapLibre Style Specification object for raster tile sources.
+ * This is used to dynamically switch base layers without reloading the entire map instance.
+ * 
+ * @param styleKey The key identifying the style in MAP_STYLES.
+ * @returns A MapLibre compatible style object.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getMapLibreStyle(styleKey: string): any {
   const style = MAP_STYLES[styleKey] || MAP_STYLES.standard;
@@ -112,7 +129,12 @@ export function getMapLibreStyle(styleKey: string): any {
   };
 }
 
-// Formats a date string into a relative time string (e.g., "5m ago", "2h ago").
+/**
+ * formatTimeAgo
+ * 
+ * Converts an ISO date string into a concise human-readable relative time string.
+ * Optimized for dashboard density (e.g., '5m ago', '2h ago').
+ */
 export function formatTimeAgo(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();

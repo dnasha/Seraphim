@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * HomeContent is the primary layout component for the application.
+ * It orchestrates state between the map, sidebar, and filters, while synchronizing with the URL.
+ */
+
 import React, { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
@@ -12,12 +17,12 @@ import { BBox } from '@/lib/core/types';
 import { SortMode } from '@/lib/utils/ranking';
 import styles from './Layout.module.css';
 
-// Dynamically import NewsMap to prevent SSR issues with MapLibre library
+/** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 
 export function HomeContent() {
     const { resolvedTheme } = useTheme();
-    // Official React 18+ way to detect hydration/client-side status without cascading renders
+    /** Hydration guard to detect client-side mounting without triggering cascading renders */
     const mounted = useSyncExternalStore(
         () => () => {},
         () => true,
@@ -27,27 +32,25 @@ export function HomeContent() {
     const isFirstMount = React.useRef(true);
     const [filterVersion, setFilterVersion] = useState(0);
     
-    // Filtering and time range state (initialized from initialState/URL for persistence)
+    /** Global filter and UI state initialized from URL params for persistence */
     const [unmappedOnly, setUnmappedOnly] = useState(false);
     const [animatedEffects, setAnimatedEffects] = useState(true);
     const [timeRange, setTimeRange] = useState(initialState.t || '1d');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     
-    // Search and debounce state (initialized from initialState/URL for persistence)
     const [searchQuery, setSearchQuery] = useState(initialState.q || '');
     const [debouncedSearch, setDebouncedSearch] = useState(initialState.q || '');
     const [sortMode, setSortMode] = useState<SortMode>((initialState.s as SortMode) || 'new');
     const [currentBBox, setCurrentBBox] = useState<BBox | null>(null);
     
-    // Map initial view state from initialState/URL
     const initialCenter: [number, number] | undefined = (initialState.lat != null && initialState.lng != null)
         ? [initialState.lng, initialState.lat]
         : undefined;
     
     const validInitialZoom = initialState.zoom;
 
-    // Effect to debounce search input to minimize API calls
+    /** Debounces search input to prevent excessive API requests during typing */
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchQuery);
@@ -55,7 +58,6 @@ export function HomeContent() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Data fetching and filtering hooks
     const { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 
         timeRange,
@@ -74,14 +76,13 @@ export function HomeContent() {
         mapNews,
     } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
 
-    // UI and interaction state
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     const isDarkMode = resolvedTheme === 'dark';
 
-    // Sync UI state from URL when it changes externally (e.g. logo click, back/forward navigation)
+    /** Syncs local UI state when the URL state changes (e.g., via browser navigation) */
     const [prevInitialState, setPrevInitialState] = useState(initialState);
     if (initialState !== prevInitialState) {
         setPrevInitialState(initialState);
@@ -92,37 +93,34 @@ export function HomeContent() {
         setSelectedItemId(initialState.eventId || null);
     }
 
-    // Callback to handle item selection from map or sidebar
     const handleSelectItem = useCallback((id: string | null) => {
         setSelectedItemId(id);
         setSelectionVersion(v => v + 1);
         updateURL({ eventId: id || undefined });
     }, [updateURL, setSelectedItemId, setSelectionVersion]);
 
-    // Handle filter/sort changes: reset scroll, expansion, and selection
+    /** Resets scroll, expansion, and selection when filters change to ensure a clean state */
     useEffect(() => {
         if (isFirstMount.current) {
             isFirstMount.current = false;
             return;
         }
-        // Use requestAnimationFrame to avoid synchronous cascading renders
         requestAnimationFrame(() => {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
         });
     }, [sources, categories, timeRange, debouncedSearch, sortMode, unmappedOnly, handleSelectItem]);
 
-    // Handle bbox changes: reset sidebar scroll to top if no item is selected or if the selected item is panned out
+    /**
+     * Handles BBox changes by resetting sidebar scroll if the selected item is panned out.
+     * This prevents the sidebar from jumping or showing stale data during map navigation.
+     */
     useEffect(() => {
         if (isFirstMount.current) return;
         
-        // Check if a selected item is still visible in the current result set
         const isVisible = selectedItemId && filteredNews.some(i => i.id === selectedItemId || i.originalId === selectedItemId);
         
-        // If we don't have a visible selected item, we want to reset the scroll to the top of the new viewport results.
-        // This prevents the sidebar from "jumping around" as items shift during panning.
         if (!isVisible) {
-            // Use requestAnimationFrame to avoid synchronous cascading renders
             requestAnimationFrame(() => {
                 setFilterVersion(v => v + 1);
             });

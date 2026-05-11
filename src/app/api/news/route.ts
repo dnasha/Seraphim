@@ -1,9 +1,10 @@
-/*
-  Primary news feed API route.
-  Handles fetching news events from Supabase with support for bounding box filtering,
-  server-side clustering, search queries, and time-window filtering.
-  Implements a multi-tier rate limiting strategy and in-memory caching.
-*/
+/**
+ * Primary News Feed API
+ * 
+ * Orchestrates event retrieval from Supabase with support for geographic 
+ * bounding boxes, server-side clustering, and temporal filtering.
+ * Implements a resilient multi-tier rate limiting and fail-open caching strategy.
+ */
 
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/core/supabase";
@@ -16,7 +17,9 @@ import {
   sortNewsItems,
 } from "@/lib/utils/ranking";
 
-// Global rate limiter using Upstash Redis
+/**
+ * Global L2 rate limiter using Upstash Redis for cross-instance state.
+ */
 const redis = Redis.fromEnv();
 const ratelimit = new Ratelimit({
   redis,
@@ -25,14 +28,17 @@ const ratelimit = new Ratelimit({
   prefix: "@upstash/ratelimit/seraphim",
 });
 
-// Local L1 Rate Limiter (Memory) to minimize Upstash overhead for frequent requests
+/**
+ * Local L1 rate limiter (Memory) to minimize network overhead for high-frequency 
+ * clients. Short-circuits requests before hitting the L2 Redis limiter.
+ */
 const localL1Limit = new Map<string, { count: number; reset: number }>();
 let lastL1Cleanup = Date.now();
-const L1_CLEANUP_INTERVAL = 60000; // 1 minute
+const L1_CLEANUP_INTERVAL = 60000;
 
-/* 
-  Periodically clears expired entries from the local rate limit map.
-*/
+/**
+ * Purges expired entries from the L1 rate limit map to prevent memory leaks.
+ */
 function performL1Cleanup() {
   const now = Date.now();
   if (now - lastL1Cleanup < L1_CLEANUP_INTERVAL) return;
@@ -43,17 +49,22 @@ function performL1Cleanup() {
   lastL1Cleanup = now;
 }
 
-// Server-side cache for news items to reduce database load
-// Key format: "events" or "bbox:{coords}[,cluster][,z:{zoom}][,s:{since}][,u:{until}][,q:{query}]"
+/**
+ * Server-side cache for news aggregates.
+ * Keys are derived from serialized query parameters to ensure granular hit rates.
+ */
 const sourceCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
 
 const refreshThrottle = new Map<string, number>();
-const REFRESH_COOLDOWN = 60 * 1000; // 1 minute
+const REFRESH_COOLDOWN = 60000;
 
-// Maximum number of raw event rows to return in a single request
 const RAW_LIMIT = 1000;
 
-// Fields selected for list view. Description is excluded and fetched per-item.
+/**
+ * Optimized column selection. 
+ * Heavy JSONB and text columns (like description) are omitted for list views 
+ * to reduce egress costs and improve parsing speed.
+ */
 const LIST_SELECT =
   "id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count";
 
@@ -69,12 +80,11 @@ export async function GET(request: Request) {
       ? "global"
       : "viewport";
 
-  // Bounding box parameters for geographic filtering
   const minLat = searchParams.get("minLat");
   const maxLat = searchParams.get("maxLat");
   const minLng = searchParams.get("minLng");
   const maxLng = searchParams.get("maxLng");
-  // BBox is ignored if unmappedOnly is true
+  
   const hasBBox =
     !unmappedOnly &&
     minLat !== null &&
@@ -82,13 +92,14 @@ export async function GET(request: Request) {
     minLng !== null &&
     maxLng !== null;
 
-  // Numerical stability epsilon for coordinate comparisons
+  /**
+   * Numerical stability epsilon to prevent edge-case exclusion of markers 
+   * exactly on the bounding box boundary.
+   */
   const EPSILON = 0.00001;
 
-  // Search query for text-based filtering
   const searchQuery = searchParams.get("query");
 
-  // Detect if the requested bounding box is essentially the entire globe
   const isGlobalBBox =
     hasBBox &&
     parseFloat(minLat!) <= -89 &&
@@ -96,10 +107,8 @@ export async function GET(request: Request) {
     parseFloat(minLng!) <= -179 &&
     parseFloat(maxLng!) >= 179;
 
-  // Spatial constraints are applied unless explicitly global or searching unmapped news
   const ignoreBBox = (scopeMode === 'global') || unmappedOnly || isGlobalBBox;
 
-  // Zoom level used to determine whether to apply server-side clustering
   const zoomStr = searchParams.get("zoom");
   const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
@@ -112,8 +121,12 @@ export async function GET(request: Request) {
 
   let effectiveLimit = requestedLimit;
 
-  // Implement dynamic capping based on zoom level
-  // Base: 1000, Zoom >= 4: 500, Zoom >= 6.5: 250
+  /**
+   * Dynamic Capping Logic
+   * Higher zoom levels return fewer items to optimize client-side rendering 
+   * of high-density areas. Lower zoom levels use larger limits to populate 
+   * the global view.
+   */
   if (zoom !== null && !unmappedOnly && !searchQuery) {
     if (zoom >= 6.5) {
       effectiveLimit = Math.min(requestedLimit, 250);
@@ -122,21 +135,24 @@ export async function GET(request: Request) {
     }
   }
 
-  // Override: If the time filter range is above 24hrs, revert to a 1000 cap
+  // Extend limits for broad historical queries
   if (sinceStr) {
     const sinceTime = new Date(sinceStr).getTime();
     const untilTime = untilStr ? new Date(untilStr).getTime() : now;
     if (untilTime - sinceTime > 24 * 60 * 60 * 1000 + 5000) {
-      // Use 1000 if the calculated limit was lower
       effectiveLimit = Math.max(effectiveLimit, 1000);
     }
   }
 
-  // Enable server-side clustering only at very low zoom levels to preserve performance.
-  // At zoom 5 and above, we return raw events to allow the client-side engine to cluster organically.
+  /**
+   * Clustering Strategy
+   * Zoom < 5: Server-side clustering via PostGIS RPC to handle massive 
+   * datasets efficiently.
+   * Zoom >= 5: Raw event streaming to allow client-side Supercluster 
+   * to provide smooth, organic transitions.
+   */
   const useServerClustering = !unmappedOnly && (zoom === null || zoom < 5);
 
-  // Construct a cache key that captures all query parameters
   const bboxKeyPart = ignoreBBox
     ? "global"
     : `${minLat},${maxLat},${minLng},${maxLng}`;
@@ -145,9 +161,8 @@ export async function GET(request: Request) {
       ? `view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "new" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`
       : `view:${viewMode},scope:${scopeMode},events${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "new" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`;
   const canUseCache = true;
-  const cacheTtlMs = !hasBBox ? 5 * 60 * 1000 : 60 * 1000;
+  const cacheTtlMs = !hasBBox ? 300000 : 60000;
 
-  // Prevent excessive refresh attempts
   if (forceRefresh) {
     const lastRefresh = refreshThrottle.get("global") || 0;
     if (now - lastRefresh < REFRESH_COOLDOWN) {
@@ -158,7 +173,6 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Multi-tier rate limiting
     const ipHeader = request.headers.get("x-forwarded-for");
     const ip = ipHeader ? ipHeader.split(",")[0].trim() : "127.0.0.1";
 
@@ -169,7 +183,6 @@ export async function GET(request: Request) {
       localL1Limit.set(ip, { count: 1, reset: now + 10000 });
     } else {
       l1.count++;
-      // Check Redis if local threshold is exceeded or periodically to sync state
       if (l1.count > 15 || l1.count % 5 === 0) {
         try {
           const { success } = await ratelimit.limit(ip);
@@ -180,7 +193,7 @@ export async function GET(request: Request) {
             );
           }
         } catch (ratelimitError) {
-          // Fail open on rate limiter connectivity issues
+          // Fail-open on rate limiter failure to maintain service availability
           console.error(
             "[api/news] Rate limiter error (failing open):",
             ratelimitError,
@@ -213,8 +226,7 @@ export async function GET(request: Request) {
       }
 
       if (useServerClustering) {
-        // Execute server-side clustering RPC
-        // The RPC handles bbox, time range, search, and sorting internally.
+        // Execute server-side clustering via optimized PostgreSQL RPC
         const rpcParams: Record<string, unknown> = {
           p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
           p_min_lat: ignoreBBox ? null : parseFloat(minLat!) - EPSILON,
@@ -232,7 +244,7 @@ export async function GET(request: Request) {
         rows = res.data;
         error = res.error;
       } else {
-        // Standard query for unmapped-only view (items without coordinates)
+        // Standard SQL query for raw event retrieval
         let query = supabase.from("events").select(LIST_SELECT);
 
         if (sort === "hot") {
@@ -267,10 +279,13 @@ export async function GET(request: Request) {
 
           query = query.gte("latitude", latMin).lte("latitude", latMax);
 
+          /**
+           * International Date Line Handling
+           * Wraps longitude queries if the bounding box crosses the +/-180 limit.
+           */
           if (lngMin <= lngMax) {
             query = query.gte("longitude", lngMin).lte("longitude", lngMax);
           } else {
-            // Handle International Date Line wrap
             query = query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
           }
         }
@@ -290,8 +305,11 @@ export async function GET(request: Request) {
 
       if (error) {
         console.error("[api/news] Supabase query failed:", error.message);
-        // Fail gracefully on statement timeouts so the UI stays functional.
-        // The client will retry automatically on the next viewport change.
+        /**
+         * Fail-Open Stability
+         * If the database times out due to high load, serve a stale cache 
+         * or empty result set rather than crashing the UI.
+         */
         if (
           error.message?.includes("statement timeout") ||
           error.message?.includes("canceling statement")
@@ -299,7 +317,7 @@ export async function GET(request: Request) {
           const stale = sourceCache.get(cacheKey);
           if (stale && stale.data.length > 0) {
             console.warn(
-              "[api/news] Statement timeout — serving stale cache for fail-open stability.",
+              "[api/news] Serving stale cache for fail-open stability.",
             );
             return NextResponse.json(
               {
@@ -324,9 +342,6 @@ export async function GET(request: Request) {
             );
           }
 
-          console.warn(
-            "[api/news] Statement timeout — returning empty result set (fail-open).",
-          );
           return NextResponse.json({
             items: [],
             lastUpdated: new Date().toISOString(),
@@ -349,11 +364,12 @@ export async function GET(request: Request) {
 
       allItems = (rows as DbEvent[]).map((row) => {
         const item = dbEventToNewsItem(row);
-        // Hybrid ID logic: Ensure stable cluster IDs across client-side refreshes.
-        // We store the original UUID so the frontend can still fetch the description
-        // of the representative event for this cluster.
-        // ONLY apply to aggregated clusters (storyCount > 1). Individual items MUST
-        // retain their UUIDs directly to avoid duplicate keys during zoom transitions.
+        /**
+         * Stable Cluster IDs
+         * Aggregated clusters use a coordinate-based ID to prevent marker 
+         * flickering during zoom transitions while preserving the UUID of 
+         * the primary event for detail fetching.
+         */
         if (
           useServerClustering &&
           item.clusterId &&
@@ -366,8 +382,6 @@ export async function GET(request: Request) {
         return item;
       });
 
-      // We skip redundant sorting for RPC to minimize Vercel processing.
-      // We no longer calculate latestReportTimestamp in JS as published_at is now synced.
       if (!useServerClustering) {
         allItems = sortNewsItems(allItems, sort);
         if (effectiveLimit < allItems.length) {

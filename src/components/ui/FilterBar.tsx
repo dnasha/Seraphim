@@ -1,9 +1,10 @@
 'use client';
 
-/*
-Dan Sharan
-FilterBar component provides interface for filtering news by source, category, and time.
-*/
+/**
+ * FilterBar component provides the user interface for filtering news events.
+ * It supports filtering by source, category, and time range (including custom ranges).
+ */
+
 import { useState } from 'react';
 import styles from './FilterBar.module.css';
 

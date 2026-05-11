@@ -1,3 +1,10 @@
+/**
+ * Map Layers Hook
+ * Manages the registration of map sources, layers, and category icons.
+ * Handles the logic for client-side clustering and the layering order of 
+ * news items, pulses, and external data overlays.
+ */
+
 import { useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { generateCategoryIcon } from "./MapConstants";
@@ -16,7 +23,8 @@ export function useMapLayers({
 }: UseMapLayersProps) {
   const addSourcesAndLayers = useCallback(
     async (map: maplibregl.Map) => {
-      // Register category icons (idempotent and async-safe)
+      // Idempotent registration of category-specific SVG icons.
+      // Generates both 'active' and 'inactive' variants for each news category.
       const iconsToLoad = CATEGORIES.flatMap((cat) => [
         { name: `${cat}_inactive`, active: false, cat },
         { name: `${cat}_active`, active: true, cat },
@@ -35,16 +43,16 @@ export function useMapLayers({
             try {
               map.addImage(name, img);
             } catch {
-              /* ignore race-condition errors if style reloaded during load */
+              // Silently handle race conditions if the map style reloads during icon registration.
             }
           }
         }
       }
 
-      // Configure GeoJSON source with client-side clustering.
-      // Explicitly remove source and layers if they exist to force a clean reload with new clustering settings
+      // Re-configure the primary GeoJSON source.
+      // We explicitly remove existing layers and sources to ensure that clustering settings 
+      // are correctly applied during runtime toggles.
       if (map.getSource("news-events")) {
-        // Layers must be removed before the source
         const layers = [
           "clusters-count",
           "clusters-circle",
@@ -68,11 +76,13 @@ export function useMapLayers({
         clusterMaxZoom: CLUSTER_MAX_ZOOM,
         clusterRadius: 35,
         clusterProperties: {
+          // Accumulate metadata during clustering for use in data-driven styling.
           summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
           hasTopHot: ["max", ["case", ["==", ["get", "isTopHot"], true], 1, 0]],
         },
       });
 
+      // Define logic for when a point should be treated as a cluster vs an individual pin.
       const clusterCheck: maplibregl.FilterSpecification =
         forceIndividualPinsRef.current
           ? [
@@ -90,7 +100,13 @@ export function useMapLayers({
               ],
             ];
 
-      // Circle layer for clustered news items
+      // Layering Order:
+      // 1. External Overlays (USGS, NOAA, NASA)
+      // 2. Clusters (Circles)
+      // 3. Hot Story Pulses (Animated rings)
+      // 4. Cluster Labels (Numeric counts)
+      // 5. Unclustered Pins (Individual icons)
+
       if (!map.getLayer("clusters-circle")) {
         map.addLayer({
           id: "clusters-circle",
@@ -163,9 +179,6 @@ export function useMapLayers({
         });
       }
 
-      // Pulse animation layer for global top-3 hot stories.
-      // We add this AFTER clusters-circle to ensure it pulses OVER the red cluster background
-      // but BEFORE the count labels so it doesn't obscure text.
       if (map.getLayer("hot-story-pulse")) map.removeLayer("hot-story-pulse");
 
       map.addLayer({
@@ -209,6 +222,7 @@ export function useMapLayers({
         },
       });
 
+      // Disable transitions for the pulse layer to allow the JS animation loop to drive radius/opacity frame-by-frame.
       map.setPaintProperty("hot-story-pulse", "circle-radius-transition", {
         duration: 0,
       });
@@ -219,7 +233,6 @@ export function useMapLayers({
         duration: 0,
       });
 
-      // Numeric labels for news clusters.
       if (!map.getLayer("clusters-count")) {
         map.addLayer({
           id: "clusters-count",
@@ -248,7 +261,6 @@ export function useMapLayers({
         });
       }
 
-      // Layer for inactive individual news pins.
       if (!map.getLayer("unclustered-point")) {
         map.addLayer({
           id: "unclustered-point",
@@ -270,7 +282,6 @@ export function useMapLayers({
         });
       }
 
-      // Layer for the currently selected news pin.
       if (!map.getLayer("unclustered-point-active")) {
         map.addLayer({
           id: "unclustered-point-active",
@@ -292,7 +303,8 @@ export function useMapLayers({
         });
       }
 
-      // USGS Earthquake live overlay.
+      // External Live Overlays: Added beneath news clusters to prevent obstruction.
+      
       if (!map.getSource("overlay-usgs")) {
         map.addSource("overlay-usgs", {
           type: "geojson",
@@ -330,7 +342,6 @@ export function useMapLayers({
         );
       }
 
-      // NOAA Weather Radar live overlay.
       if (!map.getSource("overlay-noaa")) {
         map.addSource("overlay-noaa", {
           type: "raster",
@@ -358,7 +369,6 @@ export function useMapLayers({
         );
       }
 
-      // NASA EONET (Disasters) live overlay.
       if (!map.getSource("overlay-eonet")) {
         map.addSource("overlay-eonet", {
           type: "geojson",

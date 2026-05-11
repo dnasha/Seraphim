@@ -1,8 +1,9 @@
-/*
-RSS feed integration for news sources and Reddit subreddits.
-Unified implementation for both the Next.js frontend and the background scraper.
-Provides concurrent fetching and parsing of feeds with robust image extraction.
-*/
+/**
+ * RSS Feed Integration
+ * 
+ * Provides unified fetching and parsing for standard news RSS feeds and Reddit subreddits.
+ * Supports both Next.js frontend and background ingestion workers.
+ */
 
 import Parser from 'rss-parser';
 import { Agent } from 'undici';
@@ -12,7 +13,9 @@ import { ensureIsoDate } from '@/lib/utils/date';
 
 const DEFAULT_TIMEOUT = 15000;
 
-// Headers optimized for standard RSS feeds to bypass bot detection
+/**
+ * Headers optimized for standard news feeds to minimize bot detection.
+ */
 const RSS_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'application/rss+xml, application/xml, text/xml, */*',
@@ -31,7 +34,9 @@ const parser = new Parser({
 });
 
 /**
- * Extracts the first available image URL from various common RSS/MediaRSS fields.
+ * Extracts the first available image URL from varied feed formats.
+ * Checks MediaRSS fields (media:content, media:thumbnail) and standard enclosures.
+ * This ensures compatibility across different CMS implementations.
  */
 function extractImageUrl(item: Record<string, unknown>): string | undefined {
     if (item['media:content'] && typeof item['media:content'] === 'object') {
@@ -58,7 +63,8 @@ function extractImageUrl(item: Record<string, unknown>): string | undefined {
 
 /**
  * Fetches and parses a single standard RSS feed.
- * Supports an optional dispatcher for insecure connections for legacy news sources.
+ * Utilizes an undici Agent with rejected unauthorized certs to support legacy 
+ * news sources with misconfigured or expired SSL certificates.
  */
 export async function fetchSingleFeed(
     source: RSSSource, 
@@ -81,6 +87,9 @@ export async function fetchSingleFeed(
 
         const feed = await parser.parseString(text);
 
+        // Map feed items to internal NewsItem format. IDs are generated using a 
+        // combination of source name, index, and timestamp to ensure uniqueness 
+        // during high-frequency ingestion.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (feed.items || []).slice(0, 20).map((item: any, index: number) => ({
             id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
@@ -105,6 +114,7 @@ export async function fetchSingleFeed(
 
 /**
  * Fetches and parses a Reddit subreddit RSS feed.
+ * Targeted at OSINT subreddits where standard API access may be restricted.
  */
 export async function fetchRedditFeed(
     source: RedditSource, 
@@ -144,7 +154,7 @@ export async function fetchRedditFeed(
 }
 
 /**
- * Fetches all configured RSS feeds concurrently.
+ * Fetches all configured RSS feeds concurrently and returns them sorted by date.
  */
 export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
     const rssResults = await Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source)));
@@ -176,7 +186,7 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
 }
 
 /**
- * Fetches RSS feeds for a specific category.
+ * Fetches RSS feeds for a specific category with date sorting.
  */
 export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
     const sources = RSS_SOURCES.filter(s => s.category === category);

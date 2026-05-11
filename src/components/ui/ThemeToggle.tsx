@@ -1,9 +1,9 @@
 'use client';
 
-/*
-ThemeToggle component provides a user interface for switching between light and dark themes.
-It utilizes next-themes for theme management and handles client-side hydration.
-*/
+/**
+ * ThemeToggle component provides a user interface for switching between light and dark themes.
+ * It manages theme persistence via next-themes and handles SSR hydration guards.
+ */
 
 import React, { useSyncExternalStore } from 'react';
 import { useTheme } from 'next-themes';
@@ -12,7 +12,10 @@ import styles from './ThemeToggle.module.css';
 const ThemeToggle: React.FC = () => {
     const { setTheme, resolvedTheme } = useTheme();
     
-    // Official React 18+ way to detect hydration/client-side status without cascading renders
+    /**
+     * useSyncExternalStore is used as a hydration guard to detect when the component is mounted on the client.
+     * This prevents layout shifts and hydration mismatch errors by returning a stable false value during SSR.
+     */
     const mounted = useSyncExternalStore(
         () => () => {},
         () => true,
@@ -20,7 +23,7 @@ const ThemeToggle: React.FC = () => {
     );
 
     if (!mounted) {
-        /* Return placeholder during SSR and initial hydration to prevent flicker */
+        /** Placeholder prevents visual flicker during initial hydration by matching SSR dimensions */
         return <div className={styles.themeToggle} style={{ border: 'none', boxShadow: 'none' }} />;
     }
 

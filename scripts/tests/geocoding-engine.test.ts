@@ -1,9 +1,9 @@
 /*
   Seraphim Geocoding Engine Tests
+  Verifies the core NLP pipeline for location extraction and dictionary resolution.
+  Tests datelines, action-target patterns, prepositions, multi-word locations, and demonyms.
 
-  This suite tests the core NLP pipeline for location extraction and
-  dictionary-based geocoding. It verifies that the engine can identify
-  locations in raw text and resolve them to geographical coordinates.
+  Usage: bun test scripts/tests/geocoding-engine.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -11,8 +11,7 @@ import { extractLocation, geocodeLocation, ensureInitialized, KNOWN_LOCATIONS } 
 
 /*
   Dictionary Initialization
-  Ensures the GeoNames dictionary is loaded correctly and contains
-  the expected variety of locations (cities, landmarks, countries).
+  Ensures the GeoNames dictionary loads correctly with diverse location types.
 */
 beforeAll(() => {
     ensureInitialized();
@@ -45,14 +44,13 @@ describe('KNOWN_LOCATIONS dictionary', () => {
 
     it('has correct types on entries', () => {
         expect(KNOWN_LOCATIONS['pentagon'].type).toBe('landmark');
-        expect(KNOWN_LOCATIONS['kyiv'].type).toBe('landmark'); // Note: Kyiv is hardcoded as a landmark in some data versions
+        expect(KNOWN_LOCATIONS['kyiv'].type).toBe('landmark'); // Kyiv is treated as a high-priority landmark
     });
 });
 
 /*
   geocodeLocation
-  Tests the resolution of location strings to coordinate data,
-  verifying case-insensitivity and accent normalization.
+  Tests resolution of location strings to coordinates with normalization.
 */
 describe('geocodeLocation', () => {
     it('resolves a known city', async () => {
@@ -86,8 +84,7 @@ describe('geocodeLocation', () => {
 
 /*
   extractLocation - Dateline Patterns
-  Verifies the extraction of locations from standard news agency
-  dateline formats (Reuters, AP, etc.).
+  Verifies location extraction from news agency dateline formats.
 */
 describe('extractLocation - datelines', () => {
     it('detects standard Reuters dateline', () => {
@@ -96,22 +93,21 @@ describe('extractLocation - datelines', () => {
     });
 
     it('detects AP dateline', () => {
-        // Pentagon (landmark) correctly outranks Washington (superpower-penalized) here
+        // Pentagon (landmark) correctly outranks Washington (penalized superpower) here
         const { candidates } = extractLocation('WASHINGTON (AP) - Pentagon announces new aid package', '');
         const allLower = candidates.map(c => c.toLowerCase());
         expect(allLower.some(c => c.includes('washington') || c.includes('pentagon'))).toBe(true);
     });
 
-    it('detects dateline with em-dash', () => {
-        const { match } = extractLocation('BEIRUT — Lebanese officials confirm ceasefire terms', '');
+    it('detects dateline with separator', () => {
+        const { match } = extractLocation('BEIRUT - Lebanese officials confirm ceasefire terms', '');
         expect(match?.toLowerCase()).toContain('beirut');
     });
 });
 
 /*
   extractLocation - Action-Target Patterns
-  Tests the extraction of locations that appear as targets of
-  actions (strikes, shells, bombing) in headlines.
+  Tests extraction of locations appearing as targets of tactical actions.
 */
 describe('extractLocation - action-target', () => {
     it('detects "strikes on [Location]"', () => {
@@ -142,8 +138,7 @@ describe('extractLocation - action-target', () => {
 
 /*
   extractLocation - Spatial Prepositions
-  Validates the detection of locations preceded by prepositions
-  like "in", "near", or "from".
+  Validates detection via prepositions like "in", "near", or "from".
 */
 describe('extractLocation - spatial prepositions', () => {
     it('detects "in [Location]"', () => {
@@ -153,7 +148,6 @@ describe('extractLocation - spatial prepositions', () => {
 
     it('detects "near [Location]"', () => {
         const { match } = extractLocation('Earthquake near Tokyo, Japan triggers tsunami warning', '');
-        // should pick up Tokyo from comma-pair or "near" pattern
         expect(match).toBeDefined();
         expect(match!.toLowerCase()).toMatch(/tokyo|japan/);
     });
@@ -171,13 +165,12 @@ describe('extractLocation - spatial prepositions', () => {
 
 /*
   extractLocation - Comma Pair
-  Tests the "City, State" pattern which is common in regional reporting.
+  Tests "City, State" patterns common in regional reporting.
 */
 describe('extractLocation - comma pairs', () => {
     it('detects "City, State" pattern', () => {
         const { match, candidates } = extractLocation('Shooting in Austin, Texas leaves 3 dead', '');
         expect(match).toBeDefined();
-        // should find Austin and/or Texas
         const allLower = candidates.map(c => c.toLowerCase());
         expect(allLower.some(c => c.includes('austin') || c.includes('texas'))).toBe(true);
     });
@@ -185,8 +178,7 @@ describe('extractLocation - comma pairs', () => {
 
 /*
   extractLocation - Multi-Word Locations
-  Ensures that locations consisting of multiple words (e.g., New York,
-  Red Sea) are captured correctly as a single entity.
+  Ensures compound locations like New York or Red Sea are captured as single entities.
 */
 describe('extractLocation - multi-word locations', () => {
     it('detects multi-word city: New York', () => {
@@ -212,12 +204,10 @@ describe('extractLocation - multi-word locations', () => {
 
 /*
   extractLocation - Landmarks
-  Verifies the extraction of specific landmarks and territories.
+  Verifies extraction of specific landmarks and territories.
 */
 describe('extractLocation - landmarks', () => {
     it('detects Pentagon', () => {
-        // Pentagon is in FALSE_POSITIVES to avoid institutional bias, 
-        // but we verify the extractor remains stable.
         const { candidates } = extractLocation('Pentagon briefing outlines new NATO deployment strategy', '');
         expect(Array.isArray(candidates)).toBe(true);
     });
@@ -235,8 +225,7 @@ describe('extractLocation - landmarks', () => {
 
 /*
   extractLocation - Demonym Resolution
-  Tests the resolution of adjectives like "Ukrainian" to their
-  respective country or region.
+  Tests mapping adjectives like "Ukrainian" to geographic regions.
 */
 describe('extractLocation - demonyms', () => {
     it('resolves "Ukrainian" to Ukraine', () => {
@@ -256,7 +245,7 @@ describe('extractLocation - demonyms', () => {
 
 /*
   extractLocation - Country Abbreviations
-  Validates the resolution of common abbreviations like U.S. and U.K.
+  Validates resolution of common abbreviations like U.S. and U.K.
 */
 describe('extractLocation - abbreviations', () => {
     it('resolves "U.S." in text', () => {
@@ -274,7 +263,7 @@ describe('extractLocation - abbreviations', () => {
 
 /*
   extractLocation - Metadata Pattern
-  Tests the extraction of locations from metadata-style prefixes.
+  Tests extraction from metadata-style prefixes.
 */
 describe('extractLocation - metadata', () => {
     it('detects "Country: [Name]" pattern', () => {
@@ -285,8 +274,7 @@ describe('extractLocation - metadata', () => {
 
 /*
   extractLocation - Description Fallback
-  Verifies that the extractor falls back to the article description
-  if no location is found in the title.
+  Ensures extraction falls back to description if title lacks locations.
 */
 describe('extractLocation - description fallback', () => {
     it('extracts from description when title has no location', () => {
@@ -301,8 +289,7 @@ describe('extractLocation - description fallback', () => {
 
 /*
   extractLocation - False Positive Protection
-  Ensures common company names or non-geographic terms that match
-  dictionary entries are excluded.
+  Ensures common terms or entities matching dictionary entries are excluded.
 */
 describe('extractLocation - false positives', () => {
     it('does not match "Arsenal" as a location', () => {
@@ -323,20 +310,19 @@ describe('extractLocation - false positives', () => {
 
 /*
   extractLocation - Superpower Penalty
-  Tests the logic that prioritizes specific target locations over
-  global actors (superpowers) to ensure map pins are placed accurately.
+  Ensures specific targets outrank global actors to maintain pin accuracy.
 */
 describe('extractLocation - superpower penalty', () => {
     it('prioritizes target location over acting superpower', () => {
         const { match } = extractLocation('U.S. launches air strikes on targets in Syria', '');
-        // Syria (the target) should rank higher than United States (the actor)
+        // Syria (target) ranks higher than United States (actor)
         expect(match?.toLowerCase()).toContain('syria');
     });
 });
 
 /*
   extractLocation - No Match
-  Verifies graceful handling of text containing no geographic references.
+  Handles text containing no geographic references.
 */
 describe('extractLocation - no location', () => {
     it('returns null for locationless headlines', () => {
@@ -349,4 +335,5 @@ describe('extractLocation - no location', () => {
         expect(Array.isArray(candidates)).toBe(true);
     });
 });
+
 

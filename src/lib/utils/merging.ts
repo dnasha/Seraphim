@@ -1,3 +1,9 @@
+/**
+ * Story merging and content evaluation utilities for the Seraphim ingestion pipeline.
+ * This module determines how incoming news events are consolidated into existing stories,
+ * managing content updates (title/description) based on recency, depth, and credibility.
+ */
+
 import { DbEvent, DbEventSource } from "@/types";
 
 const DESCRIPTION_STALENESS_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -6,20 +12,20 @@ const DESCRIPTION_LENGTH_THRESHOLD = 0.7; // 70% of current length
 /**
  * Evaluates whether an incoming event should update the "Master" content of a story.
  * 
- * Smarter Merging Strategy:
- * 1. Headlines (Title) prefer Recency: Latest info is better for a dashboard.
- * 2. Descriptions prefer Depth & Freshness: 
- *    - By default, the longest description from the highest tier wins.
- *    - Eviction Policy: If the current description is > 6 hours old, a newer source
- *      can replace it if it's at least 70% as long and from a similar credibility tier.
+ * Content Update Strategy:
+ * 1. Headlines (Title) prefer Recency: Latest information is prioritized for the dashboard.
+ * 2. Descriptions prefer Depth and Freshness: 
+ *    - The longest description from the highest credibility tier is preferred.
+ *    - Eviction Policy: If the current description is older than 6 hours, a newer source
+ *      can replace it if it meets the length threshold (70%) and has a similar tier.
  */
 export function evaluateContentUpdate(
   current: { 
     title: string; 
     description?: string; 
     tier: number; 
-    contentPublishedAt: number; // The publication time of the current Master content
-    latestClusterTime: number;  // The latest known activity in the whole cluster
+    contentPublishedAt: number; // Publication time of the current Master content
+    latestClusterTime: number;  // Latest known activity in the whole cluster
   },
   incoming: { 
     title: string; 
@@ -38,32 +44,37 @@ export function evaluateContentUpdate(
   let updateTitle = false;
   let updateDescription = false;
 
-  // --- Title Logic (Recency Weighted) ---
+  /**
+   * Title Logic: Recency Weighted
+   * Higher credibility (lower tier number) always wins.
+   * Same tier: Newer content wins.
+   * Breaking News Override: A tier 2 source can override a tier 1 source if it is significantly fresher.
+   */
   if (incoming.tier < current.tier) {
     updateTitle = true;
   } else if (incoming.tier === current.tier) {
-    // Within same tier, always prefer the fresher headline
     if (isNewerThanMaster) updateTitle = true;
     else if (incoming.publishedAt === current.contentPublishedAt && incomingLen > currentLen) updateTitle = true;
   } else if (incoming.tier === current.tier + 1 && isMuchNewerThanMaster) {
-    // Breaking News Override: Allow a tier-2 source to update a tier-1 headline if it's fresher
     updateTitle = true;
   }
 
-  // --- Description Logic (Depth + Eviction Policy) ---
+  /**
+   * Description Logic: Depth and Eviction Policy
+   * Descriptions are updated if the incoming source has higher credibility.
+   * For the same tier, descriptions are updated if the current one is stale and the new one
+   * is sufficiently long, or if the new one simply provides more depth (longer).
+   */
   if (incoming.tier < current.tier) {
     updateDescription = true;
   } else if (incoming.tier === current.tier) {
-    // Option A: Much newer and "good enough" length (Eviction)
     if (isDescriptionStale && incomingLen >= currentLen * DESCRIPTION_LENGTH_THRESHOLD) {
       updateDescription = true;
     }
-    // Option B: Better depth
     else if (incomingLen > currentLen) {
       updateDescription = true;
     }
   } else if (incoming.tier === current.tier + 1 && isDescriptionStale && incomingLen >= currentLen) {
-    // Even a slightly lower tier can evict a very stale description if it's at least as long
     updateDescription = true;
   }
 
@@ -75,7 +86,8 @@ export function evaluateContentUpdate(
 }
 
 /**
- * Calculates the final merged state of a story.
+ * Calculates the final merged state of a story after a new event is added.
+ * Updates the source list, latest timestamps, and impact scores.
  */
 export function calculateMergedStory(
   existingStory: {
@@ -85,7 +97,7 @@ export function calculateMergedStory(
     source: string;
     url: string;
     credibility_tier: number;
-    published_at: string; // The "Master" timestamp (usually latest)
+    published_at: string; // The Master timestamp
     sources: DbEventSource[];
   },
   incomingEvent: DbEvent
@@ -93,8 +105,10 @@ export function calculateMergedStory(
   const incomingTier = incomingEvent.credibility_tier || 3;
   const currentTier = existingStory.credibility_tier || 3;
   
-  // To implement the eviction policy correctly, we need to know when the CURRENT master 
-  // content was published. We can find this by looking for the source that matches the Master URL.
+  /**
+   * Identify the actual publication time of the current Master content to correctly 
+   * apply the eviction policy. Fallback to the story's published_at if not found.
+   */
   const masterSource = existingStory.sources.find(s => s.url === existingStory.url);
   const contentPublishedAt = masterSource 
     ? new Date(masterSource.discovered_at).getTime() 
@@ -134,6 +148,12 @@ export function calculateMergedStory(
 
   const updatedSources = [...existingStory.sources, newSource];
   const eventCount = updatedSources.length;
+  
+  /**
+   * Impact Score Calculation:
+   * Multiplies the number of events by a credibility factor (5 minus the best tier).
+   * This ensures stories with more sources and higher credibility are ranked higher.
+   */
   const bestTierForImpact = Math.min(currentTier, incomingTier);
   const impactScore = eventCount * (5.0 - bestTierForImpact);
 
@@ -143,7 +163,7 @@ export function calculateMergedStory(
     published_at: latestPublishedAt,
     event_count: eventCount,
     impact_score: impactScore,
-    // Content updates
+    // Apply content updates if evaluation returned true
     ...(updateTitle ? {
       title: incomingEvent.title,
       source: incomingEvent.source,

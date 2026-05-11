@@ -1,8 +1,10 @@
-/*
-  Root layout component.
-  Defines the core structure of the application, including typography, global styles,
-  metadata for SEO, and viewport settings. Integrates providers and performance analytics.
-*/
+/**
+ * Root layout component for the Seraphim application.
+ * 
+ * Defines the core HTML structure, global font configurations, and essential 
+ * metadata for SEO and PWA support. It integrates global providers and 
+ * performance monitoring tools like Speed Insights and Vercel Analytics.
+ */
 
 import type { Metadata, Viewport } from "next";
 import {
@@ -17,7 +19,7 @@ import { Providers } from "@/components/layout/Providers";
 
 import "./globals.css";
 
-// Font configurations for the application
+// Application font configurations using Next.js font optimization
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -40,7 +42,7 @@ const merriweather = Merriweather({
   display: "swap",
 });
 
-// Viewport and device-specific settings
+// Viewport and device specific settings
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -50,11 +52,11 @@ export const viewport: Viewport = {
   themeColor: "#6366f1",
 };
 
-// Global metadata for SEO and social sharing
+// Global metadata for SEO, social sharing, and PWA capabilities
 export const metadata: Metadata = {
   metadataBase: new URL("https://seraphi.me"),
   title: "Seraphim",
-  description: "Real-time OSINT aggregator and mapper - know the world!",
+  description: "Real-time OSINT aggregator and mapper for global intelligence.",
   keywords: [
     "OSINT",
     "news",
@@ -77,7 +79,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Seraphim",
-    description: "Real-time OSINT aggregator and mapper - know the world!",
+    description: "Real-time OSINT aggregator and mapper for global intelligence.",
     url: "https://seraphi.me",
     siteName: "Seraphim",
     locale: "en_US",
@@ -86,7 +88,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Seraphim",
-    description: "Real-time OSINT aggregator and mapper - know the world!",
+    description: "Real-time OSINT aggregator and mapper for global intelligence.",
   },
 };
 

@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * EventCard component renders a summary or detailed view of a single news event.
+ * Handles credibility badges, source counts, and chronological timelines.
+ */
+
 import { NewsItem } from "@/lib/core/types";
 import { formatTimeAgo } from "@/components/map/MapConstants";
 import { getCredibilityStyle, CATEGORY_COLORS, getSourceStyle } from "@/lib/styles/colors";
@@ -37,6 +42,10 @@ export default function EventCard({
 
   let timeAgo = "";
   try {
+    /**
+     * Determines the most relevant timestamp for display.
+     * Prefers the most recent source's discovery time to reflect activity.
+     */
     const latestSource = item.sources?.length
       ? [...item.sources].sort(
           (a, b) =>
@@ -53,7 +62,10 @@ export default function EventCard({
     timeAgo = "";
   }
 
-  /* Sources & Timeline: sort chronologically (newest first), apply show-all toggle */
+  /**
+   * Sorts sources chronologically by discovery time.
+   * Limits visible items unless the user explicitly expands the timeline.
+   */
   const sortedSources = (item.sources ?? [])
     .slice()
     .sort(
@@ -69,7 +81,7 @@ export default function EventCard({
   const hasHiddenSources = sortedSources.length > TIMELINE_DEFAULT_LIMIT;
 
   return (
-    /* Wrapper for Virtuoso items with gutter padding */
+    /** Gutter padding for Virtuoso virtualization items */
     <div
       style={{
         paddingBottom: "6px",
@@ -80,7 +92,7 @@ export default function EventCard({
     >
       <div
         key={item.id}
-        /* Selection and layout state classes */
+        /** Selection and layout state classes */
         className={[
           styles.eventCard,
           isSelected ? styles.eventCardActive : "",
@@ -106,13 +118,13 @@ export default function EventCard({
           if (e.key === "Enter" || e.key === " ") onCardClick(item);
         }}
       >
-        {/* category accent bar on left edge (overridden to gold for Tier 1) */}
+        {/** Category accent bar on the left edge */}
         <div
           className={styles.eventCardAccent}
           style={{ backgroundColor: catColor }}
         />
 
-        {/* main row: thumbnail + text */}
+        {/** Main layout: thumbnail and textual content */}
         <div className={styles.eventCardRow}>
           {item.imageUrl && (
             <div className={styles.eventCardThumb}>
@@ -123,7 +135,7 @@ export default function EventCard({
                 unoptimized
                 sizes="88px"
                 style={{ objectFit: 'cover' }}
-                /* Avoid 403 errors from sources that block hotlinking */
+                /** Prevents 403 Forbidden errors from sources that block external hotlinking */
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
@@ -146,7 +158,7 @@ export default function EventCard({
                 {item.source}
               </span>
 
-              {/* Credibility tier badge */}
+              {/** Credibility tier badge icon with descriptive tooltip */}
               <span
                 className={styles.credibilityBadge}
                 style={{ background: credStyle.bg, color: credStyle.color }}
@@ -209,7 +221,7 @@ export default function EventCard({
           </div>
         </div>
 
-        {/* expanded detail panel */}
+        {/** Expanded detail panel with high-resolution image and description */}
         {isExpanded && (
           <div className={styles.eventCardDetail}>
             {item.imageUrl && (
@@ -231,7 +243,7 @@ export default function EventCard({
                 />
               </div>
             )}
-            {/* Renders skeleton during load or description text if cached */}
+            {/** Renders skeleton placeholders during lazy-fetch or the description text if available */}
             {item.description != null ? (
               item.description ? (
                 <p className={styles.eventCardDetailDesc}>
@@ -252,7 +264,7 @@ export default function EventCard({
               </div>
             )}
 
-            {/* Single-source fallback link */}
+            {/** Fallback link for single-source events */}
             {sourceCount <= 1 && (
               <a
                 className={styles.eventCardDetailLink}
@@ -266,7 +278,7 @@ export default function EventCard({
           </div>
         )}
 
-        {/* Sources & Timeline (only in expanded state with multiple sources) */}
+        {/** Timeline of contributing sources, visible only when expanded and multiple sources exist */}
         {isExpanded && sourceCount > 1 && (
           <div
             className={styles.storyTimeline}

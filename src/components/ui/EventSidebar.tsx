@@ -1,10 +1,9 @@
 "use client";
 
-/*
-EventSidebar component displays a scrollable list of news events.
-Supports item selection, expansion for details, and mobile-responsive layouts.
-Includes Story UI: credibility badges, source count pills, and Sources & Timeline.
-*/
+/**
+ * EventSidebar component provides a scrollable, virtualized list of news events.
+ * It manages selection states, expansion for detailed views, and responsive mobile layouts.
+ */
 
 import { NewsItem } from "@/lib/core/types";
 import { SortMode } from "@/lib/utils/filters";

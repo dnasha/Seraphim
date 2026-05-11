@@ -1,8 +1,14 @@
-/*
-Core type definitions for the news aggregation pipeline.
-Used across the frontend to represent news items and API responses.
-*/
+/**
+ * Core type definitions for the Seraphim news pipeline.
+ * 
+ * Defines the primary data structures used throughout the frontend to represent 
+ * news items, API responses, and spatial bounding boxes. These types ensure 
+ * consistency across the map, sidebar, and filter components.
+ */
 
+/**
+ * Represents a single source of information for a news event.
+ */
 export interface EventSource {
   name: string;
   url: string;
@@ -10,12 +16,17 @@ export interface EventSource {
   discoveredAt: string;
 }
 
+/**
+ * The primary news entity used within the dashboard.
+ * 
+ * Note: Heavy fields like 'description' are omitted during initial list 
+ * fetches to optimize egress and are loaded on demand.
+ */
 export interface NewsItem {
   id: string;
   title: string;
-  /* Omitted on initial list fetch. Loaded on demand when a card is expanded. */
   description?: string;
-  /* Canonical "freshness" timestamp: latest source discovery or publishedAt fallback. */
+  /** Canonical freshness timestamp reflecting the latest source update. */
   latestActivityAt?: string;
   url: string;
   source: string;
@@ -39,6 +50,9 @@ export interface NewsItem {
   sources?: EventSource[];
 }
 
+/**
+ * Structure of the standard API response for news queries.
+ */
 export interface NewsResponse {
   items: NewsItem[];
   lastUpdated: string;
@@ -60,6 +74,9 @@ export interface NewsResponse {
   };
 }
 
+/**
+ * Bounding box parameters used for spatial queries and viewport filtering.
+ */
 export interface BBox {
   minLat: number;
   maxLat: number;
@@ -76,6 +93,9 @@ export interface BBox {
   sortMode?: string;
 }
 
+/**
+ * Supported news categories for filtering and classification.
+ */
 export type NewsCategory =
   | 'general'
   | 'world'

@@ -1,14 +1,18 @@
-/*
-Category and source-specific styling constants and utilities.
-Provides color mapping for map pins and UI badges based on news categories and sources.
-*/
+/**
+ * Design system constants and style utilities for the Seraphim UI.
+ * 
+ * Defines the central color palette, category-specific themes, and logic for 
+ * resolving styles for map pins, source badges, and credibility tiers.
+ */
 
+/** Brand colors used for interactive elements and primary accents. */
 export const BRAND_COLORS = {
     indigo: '#6366f1',
     indigoHover: '#818cf8',
     indigoActive: '#4f46e5',
 };
 
+/** Mapping of news categories to their respective theme colors. */
 export const CATEGORY_COLORS: Record<string, string> = {
     all: BRAND_COLORS.indigo,
     general: '#3b82f6',
@@ -23,16 +27,18 @@ export const CATEGORY_COLORS: Record<string, string> = {
 
 export const DEFAULT_PIN_COLOR = '#3b82f6';
 
-/* Returns the color associated with a news category. Defaults to blue. */
+/** Resolves the theme color for a specific news category. */
 export function getCategoryColor(category?: string): string {
     if (!category) return DEFAULT_PIN_COLOR;
     return CATEGORY_COLORS[category] || DEFAULT_PIN_COLOR;
 }
 
-/* 
-Determines background and text color for source badges based on the source name.
-Supports major social platforms and specific news outlets.
-*/
+/** 
+ * Determines background and text colors for source badges based on the source name.
+ * 
+ * This logic matches known social platforms, news agencies, and research units 
+ * to provide visual cues for the origin of the information.
+ */
 export function getSourceStyle(sourceName: string): { bg: string; color: string } {
     const s = sourceName.toLowerCase();
     const color = '#ffffff';
@@ -48,49 +54,49 @@ export function getSourceStyle(sourceName: string): { bg: string; color: string 
     if (s.includes('gnews') || s === 'extra')
         return { bg: '#065f46', color };
     
-    /* Research & Analysis units */
+    // Research and Analysis units
     if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
         return { bg: '#9a3412', color };
     
-    /* Tech & Cyber units */
+    // Tech and Cyber units
     if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
         return { bg: '#0284c7', color };
     
-    /* Science & Environment */
+    // Science and Environment
     if (s.includes('nasa') || s.includes('nature'))
         return { bg: '#059669', color };
     
-    /* Health */
+    // Health
     if (s.includes('who '))
         return { bg: '#7c3aed', color };
     
-    /* Default style for mainstream media and other sources. */
+    // Default style for mainstream media and other sources
     return { bg: '#3b82f6', color };
 }
 
-/* Returns the background color for a source badge. */
+/** Convenience helper for background color resolution. */
 export function getSourceBadgeColor(sourceName: string): string {
     return getSourceStyle(sourceName).bg;
 }
 
-/*
-Credibility tier metadata for the Story model.
-Tier 1: Diamond - Verified
-Tier 2: Gold - Credible
-Tier 3: Silver - Unverified
-*/
+/** 
+ * Credibility tier metadata for visual badges.
+ * Tier 1: Verified (Diamond)
+ * Tier 2: Credible (Gold)
+ * Tier 3: Unverified (Silver)
+ */
 export const CREDIBILITY_TIERS: Record<number, { label: string; color: string; bg: string }> = {
-    1: { label: 'Verified', color: '#0369a1', bg: '#e0f2fe' }, // Diamond Blue
-    2: { label: 'Credible', color: '#92400e', bg: '#fbbf24' },  // Gold
-    3: { label: 'Unverified', color: '#475569', bg: '#cbd5e1' }, // Silver
+    1: { label: 'Verified', color: '#0369a1', bg: '#e0f2fe' },
+    2: { label: 'Credible', color: '#92400e', bg: '#fbbf24' },
+    3: { label: 'Unverified', color: '#475569', bg: '#cbd5e1' },
 };
 
-/* Returns style metadata for a credibility tier badge. Defaults to Tier 3. */
+/** Resolves visual metadata for a credibility tier, defaulting to Tier 3. */
 export function getCredibilityStyle(tier?: number): { label: string; color: string; bg: string } {
     return CREDIBILITY_TIERS[tier ?? 3] ?? CREDIBILITY_TIERS[3];
 }
 
-// SVG path data for news category icons.
+/** SVG path data for news category icons used in the UI. */
 export const CATEGORY_ICONS: Record<string, string> = {
     all: 'M22,9.81a1,1,0,0,0-.83-.69l-5.7-.78L12.88,3.53a1,1,0,0,0-1.76,0L8.57,8.34l-5.7.78a1,1,0,0,0-.82.69,1,1,0,0,0,.28,1l4.09,3.73-1,5.24A1,1,0,0,0,6.88,20.9L12,18.38l5.12,2.52a1,1,0,0,0,.44.1,1,1,0,0,0,1-1.18l-1-5.24,4.09-3.73A1,1,0,0,0,22,9.81Z',
     general: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
