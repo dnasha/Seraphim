@@ -49,29 +49,11 @@ export function getSourceStyle(sourceName: string): { bg: string; color: string 
         return { bg: '#ff4500', color };
     if (s.includes('telegram'))
         return { bg: '#0088cc', color };
-    if (s.includes('news'))
-        return { bg: BRAND_COLORS.indigo, color };
     if (s.includes('gnews') || s === 'extra')
         return { bg: '#065f46', color };
     
-    // Research and Analysis units
-    if (s.includes('bellingcat') || s.includes('isw') || s.includes('war on the rocks'))
-        return { bg: '#9a3412', color };
-    
-    // Tech and Cyber units
-    if (s.includes('ars technica') || s.includes('verge') || s.includes('bleeping') || s.includes('hacker news'))
-        return { bg: '#0284c7', color };
-    
-    // Science and Environment
-    if (s.includes('nasa') || s.includes('nature'))
-        return { bg: '#059669', color };
-    
-    // Health
-    if (s.includes('who '))
-        return { bg: '#7c3aed', color };
-    
-    // Default style for mainstream media and other sources
-    return { bg: '#3b82f6', color };
+    // All other news outlets and sources use the brand indigo
+    return { bg: BRAND_COLORS.indigo, color };
 }
 
 /** Convenience helper for background color resolution. */
@@ -85,14 +67,14 @@ export function getSourceBadgeColor(sourceName: string): string {
  * Tier 2: Credible (Gold)
  * Tier 3: Unverified (Silver)
  */
-export const CREDIBILITY_TIERS: Record<number, { label: string; color: string; bg: string }> = {
-    1: { label: 'Verified', color: '#0369a1', bg: '#e0f2fe' },
-    2: { label: 'Credible', color: '#92400e', bg: '#fbbf24' },
-    3: { label: 'Unverified', color: '#475569', bg: '#cbd5e1' },
+export const CREDIBILITY_TIERS: Record<number, { label: string; color: string }> = {
+    1: { label: 'Verified', color: BRAND_COLORS.indigo },
+    2: { label: 'Credible', color: '#93c5fd' }, // bright blue-indigo hybrid (blue-300)
+    3: { label: 'Unverified', color: '#94a3b8' }, // slate-400
 };
 
 /** Resolves visual metadata for a credibility tier, defaulting to Tier 3. */
-export function getCredibilityStyle(tier?: number): { label: string; color: string; bg: string } {
+export function getCredibilityStyle(tier?: number): { label: string; color: string } {
     return CREDIBILITY_TIERS[tier ?? 3] ?? CREDIBILITY_TIERS[3];
 }
 

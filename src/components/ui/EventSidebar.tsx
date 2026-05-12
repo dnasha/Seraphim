@@ -70,10 +70,7 @@ export default function EventSidebar({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  /* Tracks which cards have their full source timeline expanded */
-  const [showAllSourcesIds, setShowAllSourcesIds] = useState<Set<string>>(
-    new Set(),
-  );
+
 
   /* Resizable Sidebar Logic */
   const { sidebarWidth, isResizing, startResizing } = useResizable({
@@ -106,7 +103,6 @@ export default function EventSidebar({
     // Use requestAnimationFrame to avoid synchronous cascading renders
     requestAnimationFrame(() => {
       setExpandedId(null);
-      setShowAllSourcesIds(new Set());
     });
   }, [filterVersion]);
 
@@ -211,8 +207,6 @@ export default function EventSidebar({
       const isSelected = targetId === selectedItemId;
       const isExpanded = expandedId === targetId || isSelected;
       const isTop3 = top3Ids.has(targetId);
-      const showingAll = showAllSourcesIds.has(targetId);
-
       return (
         <EventCard
           key={item.id}
@@ -221,23 +215,11 @@ export default function EventSidebar({
           isSelected={isSelected}
           isExpanded={isExpanded}
           isTop3={isTop3}
-          showingAllSources={showingAll}
           onCardClick={handleCardClick}
-          onToggleSources={() => {
-            setShowAllSourcesIds((prev) => {
-              const next = new Set(prev);
-              if (next.has(targetId)) {
-                next.delete(targetId);
-              } else {
-                next.add(targetId);
-              }
-              return next;
-            });
-          }}
         />
       );
     },
-    [selectedItemId, expandedId, handleCardClick, showAllSourcesIds, top3Ids],
+    [selectedItemId, expandedId, handleCardClick, top3Ids],
   );
 
   return (

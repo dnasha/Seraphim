@@ -124,7 +124,7 @@
 }
 
 .mapWrapper :global(.news-popup-container .maplibregl-popup-close-button) {
-  color: #ef4444 !important;
+  color: var(--accent) !important;
   width: 28px;
   height: 28px;
   line-height: 28px;
@@ -145,7 +145,7 @@
 
 @media (hover: hover) {
   .mapWrapper :global(.news-popup-container .maplibregl-popup-close-button:hover) {
-    color: #b91c1c !important;
+    color: var(--accent-hover) !important;
     transform: scale(1.2);
   }
 }
@@ -196,15 +196,7 @@
   white-space: nowrap;
 }
 
-.mapWrapper :global(.news-popup-category) {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #fff;
-  text-transform: capitalize;
-}
+
 
 .mapWrapper :global(.news-popup-time) {
   color: var(--text-muted);
@@ -257,8 +249,8 @@
   display: block;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
+  color: #3b82f6;
+  text-decoration: underline;
   text-align: right;
   margin-top: 0;
   transition: opacity 0.15s, color 0.15s;
@@ -269,12 +261,12 @@
   .mapWrapper :global(.news-popup-link:hover) {
     text-decoration: underline;
     opacity: 0.8;
-    color: var(--accent-hover);
+    color: #3b82f6;
   }
 }
 
 .mapWrapper :global(.news-popup-link:active) {
-  color: var(--accent-active);
+  color: #3b82f6;
   transform: translateY(1px);
 }
 
@@ -326,9 +318,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
   flex-shrink: 0;
   cursor: help;
   transition: transform 0.15s;
@@ -342,13 +331,13 @@
 }
 
 .mapWrapper :global(.news-popup-credibility svg) {
-  width: 11px;
-  height: 11px;
+  width: 16px;
+  height: 16px;
   display: block;
   flex-shrink: 0;
 }
 
-/* Source count badge in popup meta (round pill) */
+/* Source count badge in popup header (bottom-right) */
 .mapWrapper :global(.news-popup-source-count) {
   display: inline-flex;
   align-items: center;
@@ -356,14 +345,7 @@
   gap: 4px;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 0 8px;
-  border-radius: 12px;
-  white-space: nowrap;
-  background: var(--surface-alt);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  height: 20px;
-  min-width: 20px;
+  color: var(--text-muted);
   cursor: help;
   transition: all 0.15s;
   line-height: 1;
@@ -371,23 +353,34 @@
 
 @media (hover: hover) {
   .mapWrapper :global(.news-popup-source-count:hover) {
-    background: var(--surface-hover);
-    border-color: var(--text-muted);
+    color: var(--accent);
   }
 }
 
 .mapWrapper :global(.news-popup-source-count svg) {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   display: block;
   flex-shrink: 0;
-  opacity: 0.7;
 }
 
 /* Sources & Timeline section in popup */
 .mapWrapper :global(.news-popup-sources-section) {
   border-top: 1px solid var(--border);
   padding: 10px 18px 14px;
+  position: relative;
+}
+
+/* Subtle fade at the bottom to indicate more sources if scrollable */
+.mapWrapper :global(.news-popup-sources-section::after) {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to top, var(--surface), transparent);
+  pointer-events: none;
 }
 
 .mapWrapper :global(.news-popup-sources-header) {
@@ -398,12 +391,33 @@
   text-transform: uppercase;
   letter-spacing: 0.12em;
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .mapWrapper :global(.news-popup-sources-list) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  max-height: calc(7 * 28px); /* Roughly 7 items */
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar) {
+  width: 4px;
+}
+
+.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar-thumb) {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar-track) {
+  background: transparent;
 }
 
 .mapWrapper :global(.news-popup-source-entry) {
@@ -423,8 +437,8 @@
 
 .mapWrapper :global(.news-popup-source-link) {
   font-size: 0.75rem;
-  color: var(--accent);
-  text-decoration: none;
+  color: #3b82f6;
+  text-decoration: underline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -443,6 +457,9 @@
   font-size: 0.625rem;
   color: var(--text-muted);
   white-space: nowrap;
+  width: 42px;
+  flex-shrink: 0;
+  text-align: left;
 }
 
 /* Responsive adjustments for mobile devices */

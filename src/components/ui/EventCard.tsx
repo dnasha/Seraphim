@@ -19,9 +19,7 @@ interface EventCardProps {
   isSelected: boolean;
   isExpanded: boolean;
   isTop3: boolean;
-  showingAllSources: boolean;
   onCardClick: (item: NewsItem) => void;
-  onToggleSources: () => void;
 }
 
 export default function EventCard({
@@ -30,9 +28,7 @@ export default function EventCard({
   isSelected,
   isExpanded,
   isTop3,
-  showingAllSources,
   onCardClick,
-  onToggleSources,
 }: EventCardProps) {
   const hasGeo = item.latitude != null;
   const catColor = CATEGORY_COLORS[item.category || "general"] || CATEGORY_COLORS.general;
@@ -73,12 +69,7 @@ export default function EventCard({
         new Date(b.discoveredAt).getTime() -
         new Date(a.discoveredAt).getTime(),
     );
-  const TIMELINE_DEFAULT_LIMIT = 5;
-  const visibleSources =
-    sortedSources.length > TIMELINE_DEFAULT_LIMIT && !showingAllSources
-      ? sortedSources.slice(-TIMELINE_DEFAULT_LIMIT)
-      : sortedSources;
-  const hasHiddenSources = sortedSources.length > TIMELINE_DEFAULT_LIMIT;
+  const visibleSources = sortedSources;
 
   return (
     /** Gutter padding for Virtuoso virtualization items */
@@ -161,7 +152,7 @@ export default function EventCard({
               {/** Credibility tier badge icon with descriptive tooltip */}
               <span
                 className={styles.credibilityBadge}
-                style={{ background: credStyle.bg, color: credStyle.color }}
+                style={{ color: credStyle.color }}
                 title={`${credStyle.label} source`}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor">
@@ -233,7 +224,7 @@ export default function EventCard({
                   unoptimized
                   priority={isExpanded}
                   sizes="(max-width: 860px) 100vw, 400px"
-                  style={{ objectFit: 'cover' }}
+                  style={{ objectFit: 'contain' }}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     const img = e.target as HTMLImageElement;
@@ -286,7 +277,7 @@ export default function EventCard({
           >
             <div className={styles.storyTimelineHeader}>
               <span className={styles.storyTimelineTitle}>
-                Sources & Timeline
+                Story Timeline
               </span>
               {sourceCount > 1 && (
                 <span
@@ -323,49 +314,33 @@ export default function EventCard({
                       key={`${src.url}-${i}`}
                       className={styles.timelineEntry}
                     >
-                      <div className={styles.timelineEntryBody}>
-                        <span
-                          className={styles.timelineEntrySource}
-                          style={{
-                            background: srcStyle.bg,
-                            color: srcStyle.color,
-                          }}
-                        >
-                          {src.name}
+                      {srcTimeAgo && (
+                        <span className={styles.timelineEntryTime}>
+                          {srcTimeAgo}
                         </span>
-                        <a
-                          className={styles.timelineEntryLink}
-                          href={src.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {src.url}
-                        </a>
-                        {srcTimeAgo && (
-                          <span className={styles.timelineEntryTime}>
-                            {srcTimeAgo}
-                          </span>
-                        )}
-                      </div>
+                      )}
+                      <span
+                        className={styles.timelineEntrySource}
+                        style={{
+                          background: srcStyle.bg,
+                          color: srcStyle.color,
+                        }}
+                      >
+                        {src.name}
+                      </span>
+                      <a
+                        className={styles.timelineEntryLink}
+                        href={src.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {new URL(src.url).hostname}
+                      </a>
                     </div>
                   );
                 })
               )}
             </div>
-            {hasHiddenSources && (
-              <button
-                className={styles.showAllToggle}
-                aria-pressed={showingAllSources}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleSources();
-                }}
-              >
-                {showingAllSources
-                  ? "Show fewer"
-                  : `Show all ${sortedSources.length} sources`}
-              </button>
-            )}
           </div>
         )}
       </div>
