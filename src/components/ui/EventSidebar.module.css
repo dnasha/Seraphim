@@ -400,8 +400,9 @@ Includes card expansion details and responsive mobile layouts.
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  width: 6px; /* Wider ribbon */
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  z-index: 1;
 }
 
 /* main row: thumbnail + body side by side */
@@ -409,7 +410,7 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 10px 8px 8px; /* Reduced left padding to bring cards closer to scrollbar */
+  padding: 8px 10px 8px 12px; /* Increased left padding for ribbon breathing room */
   width: 100%;
 }
 
@@ -489,11 +490,11 @@ Includes card expansion details and responsive mobile layouts.
 .eventCardMeta {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
+  padding-right: 32px; /* Reserve space for source count badge */
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .eventCardSource {
@@ -520,7 +521,11 @@ Includes card expansion details and responsive mobile layouts.
   font-size: 0.75rem; /* 12px */
   font-weight: 500;
   color: var(--accent);
-  display: inline;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .eventCardMetaSep {
@@ -849,10 +854,15 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .credibilityBadge svg {
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
   display: block;
   flex-shrink: 0;
+}
+
+.news-popup-credibility svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Source count pill in meta row (round badge with number) */
