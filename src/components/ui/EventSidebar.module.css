@@ -58,6 +58,7 @@ Includes card expansion details and responsive mobile layouts.
 @media (hover: hover) {
   .logoLink:hover {
     opacity: 0.8;
+    text-decoration: none;
   }
 }
 
