@@ -10,7 +10,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
-        <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem={false}>
+        <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem={true}>
             <AuthProvider>
                 {children}
             </AuthProvider>
