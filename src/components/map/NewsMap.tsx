@@ -335,7 +335,7 @@ export default function NewsMap({
           "Failed to load map resources. Please check your connection.",
         );
       } else if (isOverlayError) {
-        console.warn("Non-critical overlay error suppressed:", errorMsg);
+        console.debug("Non-critical overlay error suppressed:", errorMsg);
       }
     });
 

@@ -57,7 +57,7 @@ body {
   --surface-hover: #ecefff; /* Boosted desaturated indigo grey */
   --red: #ef4444;
   --green: #22c55e;
-  --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-button: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="dark"] body {
@@ -75,7 +75,7 @@ body {
   --text-secondary: #ffffff;
   --text-muted: #94a3b8;
   --surface-hover: #2a2e45; /* Boosted desaturated indigo grey */
-  --shadow-button: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 a {
