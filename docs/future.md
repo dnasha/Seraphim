@@ -1,138 +1,26 @@
-# Seraphim Project Roadmap
+# Seraphim Roadmap
 
-> A living document. Tracks what's been built, what needs hardening, and what's next in order.
-
----
-
-### What Is Already Done
-
-### Core Infrastructure & Data Pipeline
-
-- **Modern Backend**: Supabase (PostgreSQL + PostGIS) with a decoupled **Bun scraper worker** running every 30 minutes. Batched upserts with `url` deduplication and advanced sanitization.
-- **Geocoding Engine**: 98.2% accurate tiered lookup engine (Landmarks > Cities > Countries) using a 78K-entry GeoNames dictionary and `compromise` NLP. Includes jitter to prevent pin stacking.
-- **Semantic "Story" Model**: Local vectorization via `@huggingface/transformers` (all-MiniLM-L6-v2) for zero-cost clustering. Consolidation pipeline recently completed a **26k-item production backfill**, merging redundant coverage into multi-source "Stories" while preserving the latest timestamps.
-- **Broad Source Coverage**: Real-time ingestion from **30+ RSS feeds**, **8 Telegram channels** (Cheerio scraping), **4 subreddits**, and **X/Twitter** (Syndication/Nitter).
-
-### Frontend & Dashboard
-
-- **High-Performance Map**: MapLibre GL JS (WebGL) with custom vector styles. Implements **BBox snapping** and client-side caching to minimize DB egress.
-- **Smart Clustering**: Hybrid strategy using PostGIS `ST_ClusterDBSCAN` for global views (Zoom < 5) and native MapLibre clustering for local views.
-- **Responsive Sidebar**: Virtualized list (`react-virtuoso`) for 60fps scrolling. Features live search, category/source filtering, and touch-optimized mobile gestures.
-- **Intelligence Tools**:
-  - **Live Overlays**: USGS Earthquakes (24h), NOAA Weather Radar, and NASA EONET Disasters.
-  - **Lazy Loading**: Descriptions and full article metadata are fetched on-demand to reduce initial payload by 40%.
-  - **Fail-Safe Architecture**: Singleton Supabase clients, hybrid L1/L2 rate limiting, and 96% test coverage across 127 suites.
-
-### Story Implementation & View-State
-- **Story UI Evolution**: Transitioned from individual links to aggregated stories with icon-only round badges (Diamond/Gold/Silver tiers). Implemented source-count pills with hover tooltips and timeline expansion.
-- **URL View State**: Robust `useViewState` hook syncing `lat`, `lng`, `zoom`, `q`, `t`, and `sortMode` to URL.
-- **Resolution Awareness**: Resolution-aware map scaling using linear interpolation (Lerp) between 1200p and 2K targets, overcoming Mercator clamping for consistent framing.
-- **Hydration Stabilization**: Decoupled `HomeContent.tsx` (Client) from `page.tsx` (Server) using `useSyncExternalStore` to resolve React 19 hydration mismatches.
-- **News Feed Synchronization**: Finalized `events.published_at` as a "pulse" timestamp that reflects the latest source activity rather than initial scrape time.
-- **API Resilience & Transparency**: Implemented `isCapped` metadata logic and "2,000+" UI indicators to handle high-density result sets gracefully.
-- **Smart Ranking Implementation**: Finalized `impact_score` and `event_count` sorting logic, enabling high-performance "Hot" sorting across the archive.
-
----
-
-## Phase 4.4: Complete UI Overhaul (Visual Excellence)
-
-_Goal: Elevate Seraphim from a functional tool to a premium, "wow-factor" dashboard._
-
-- **Action**: Redesign the Sidebar and Map Overlays with a cohesive, modern aesthetic (Glassmorphism, refined typography, and better spacing).
-- **Action**: Implement smooth micro-animations for card entry, expansion, and map marker transitions.
-- **Action**: Refine the color palette (using HSL-tailored tokens) to ensure a high-end "Command Center" feel.
-
----
+## Phase 4.4: UI Hardening & Visual Excellence
+- [ ] **Micro-animations**: Implement smooth transitions for card entry, expansion, and map markers.
+- [ ] **Glassmorphism**: Refine sidebar and overlays with modern translucent aesthetics.
+- [ ] **Visual Consistency**: Audit all components for spacing, typography, and HSL token adherence.
 
 ## Phase 4.5: Candy Features
+- [ ] **Temporal Scrubber**: Add a time slider to scrub through the last 7 days hour-by-hour with pin animations.
+- [ ] **Drawing & Annotation**: Integrate `TerraDraw` for map-based sketches, measurement tools, and tactical overlays.
+- [ ] **Data Export**: Support for GeoJSON, KML, and CSV exports for Pro users.
+- [ ] **Dynamic OG Previews**: Use `@vercel/og` for map thumbnail previews in social shares.
+- [ ] **AI Summarization (RAG)**: Use `pgvector` embeddings for natural language queries and LLM-generated event summaries.
+- [ ] **Custom Layers**: Allow Pro users to toggle between Satellite, Topo, and Dark mode vector base layers.
 
-_Goal: Implement "nice-to-have" features that enhance the visual experience and viral potential._
+## Phase 5: Distribution & Platform
+- [ ] **Auth & Tiering**: Fully integrate Supabase Auth with Pro/Free tier enforcement.
+- [ ] **Monetization**: Stripe Checkout integration for Pro tier subscriptions.
+- [ ] **Geofence Alerts**: Edge Functions for email/push notifications based on user-defined polygons.
+- [ ] **Premium Performance**: Implement Redis-backed querying for Pro users.
 
-### 4.5.1 Temporal Scrubber (Time Slider)
-
-- **Action**: Add a horizontal range slider at the bottom of the map. Users drag a handle to scrub through the last 7 days hour-by-hour. The map animates pins appearing/disappearing based on `published_at`.
-- **Implementation**: A React component with a `<input type="range">` controlling a `maxTimestamp` state. The map layer filters its GeoJSON source by timestamp on each slider change. Include a "Play" button for auto-advance.
-
-### 4.5.2 Dynamic Open Graph (OG) Previews
-
-- **Action**: Use `@vercel/og` to render map thumbnail cards when URLs are shared. Requires Phase 4.2.
-
-### 4.5.3 AI-Powered Summarization & RAG
-
-- **Action**: Use `pgvector` embeddings as the retrieval layer for a RAG pipeline. Users type natural language queries and receive LLM-generated summaries citing relevant events.
-
----
-
-## Phase 5: Distribution, Monetization & Platform
-
-_Goal: Turn Seraphim from a project into a product with user accounts and usage tiers._
-
-### 5.1 User Auth & Stripe Monetization
-
-- **Auth**: Integrate Supabase Auth for JWT-based session management and secure API access.
-- **Monetization (Stripe)**:
-  - **Checkout**: Implement Stripe Checkout for seamless Pro tier onboarding.
-  - **Webhooks**: Deploy a listener to handle `checkout.session.completed` and `customer.subscription.deleted` events, ensuring `user_profiles.tier` remains synced with payment status.
-  - **Portal**: Provide a "Manage Billing" link using the Stripe Customer Portal for self-service subscription management.
-- **New Tables**:
-  - `user_profiles`: Stores `tier` ('free', 'pro'), `stripe_customer_id`, and preferences.
-  - `user_bookmarks`: Stores `user_id`, `event_id`, and personal notes.
-  - `user_geofences`: Stores `user_id`, `polygon`, and `alerts_enabled`.
-- **Enforcement (API Tiering)**:
-  - **Free Tier**: Limited to 7 days of history (enforced via `p_since` in API). Standard rate limits.
-  - **Pro Tier**: Unlimited historical archive. High-frequency rate limits. Access to GeoJSON/KML exports.
-
-### 5.2 Automated Geofence Alerts
-
-- **Action**: Edge Function triggered by new inserts calls `ST_Within()` against `user_geofences`. Sends email/push notifications to Pro users.
-
----
-
-## Tech Stack Evolution
-
-| Feature               | Past (Leaflet)                    | Present (MapLibre)                 | Notes                                        |
-| --------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------- |
-| **Map Engine**        | Leaflet 1.9 (DOM-based)           | MapLibre GL JS (WebGL)             | (Completed) GPU rendering: 100K+ points      |
-| **Map Tiles**         | OpenStreetMap raster (Voyager)    | Protomaps PMTiles on Cloudflare R2 | Vector tiles, $0 egress, custom styling      |
-| **Map Action Tools**  | None                              | `MapActionTools.tsx`               | (Partial) Overlays enabled, Drawing Deferred |
-| **Sidebar Rendering** | `react-virtuoso` virtualized list | (Completed)                        | Only renders ~15 visible cards vs. all 5,000 |
-| **Data Fetching**     | BBox + server-cluster queries     | (Completed)                        | 10× smaller payloads, no wasted bandwidth    |
-| **Realtime Updates**  | Supabase Realtime WebSocket       | (Completed)                        | Sub-second new event delivery                |
-| **Deduplication**     | URL unique constraint only        | `pgvector` semantic clustering     | "Stories" instead of 5 redundant pins        |
-| **Hosting**           | `seraphi.me` on Vercel            | (Completed)                        | Public-facing, CDN-cached, zero-downtime     |
-| **Auth**              | None                              | Supabase Auth + Stripe             | User accounts, saved views, Pro tier         |
-
----
-
-## Engineering & Performance Backlog
-
-### Server-Side Realtime Filtering
-
-Create an alternative to the websocket-based Realtime subscription for fetching new news events as this could be brutal on supabase with high user counts.
-
-Update the Realtime subscription to use server-side filters (e.g., by category or source) matching the user's active UI state, reducing unnecessary egress and client CPU usage.
-
-### Geodata Runtime Optimization
-
-Move the `KNOWN_LOCATIONS` dictionary build to `build-geodata.mjs`, pre-calculating the optimized structure so the runtime only needs to perform a single `JSON.parse` call.
-
-### Engineering Anomalies to Investigate
-
-- **Geodata Divergence**: Hardcoded aliases in `scripts/evaluate-accuracy.mjs` may diverge from the core geocoding engine logic, leading to inconsistent accuracy results.
-- **Monolithic Geodata**: `COUNTRY_DATA` in `scripts/build-geodata.mjs` is a very large hardcoded object that should ideally be moved to an external JSON for better maintainability.
-- **Stale Data Preservation**: `remap-db-locations.ts` prevents nulling out locations. Investigate if this causes the system to "stick" to old, incorrect geocoding results when the engine is refined.
-
-### Phase 2.5: Advanced Visualization & Tiles (Deferred)
-
-Fine-tune the new MapLibre engine for absolute visual perfection. Serve OSINT-specific vector tiles (OpenStreetMap-based) from Cloudflare R2 via Protomaps PMTiles to achieve crisp labels at all zoom levels and $0 egress.
-
-### Phase 4.4: Strategic Handling of Unmapped Events
-
-_Goal: Rethink the 22% of news that provides vital context but lacks coordinates._
-
-- **Current State**: Unmapped events live in the sidebar but are invisible on the map.
-- **Concept**: Implement a "Global Context" sidebar section or a "Regional Heatmap" for broad news (e.g., news mentioning "Ukraine" but no specific city should highlight the entire country polygon at low opacity).
-- **Concept**: "The Tickertape" - A scrolling bottom bar for high-volume, unmapped headlines to keep the main sidebar focused on geographic data.
-- **Concept**: Semantic Cross-Referencing - Use embeddings to link unmapped "Opinion" pieces to the mapped "Events" they are discussing.
-
-add redis query to premium users
+## Engineering Backlog
+- [ ] **Server-Side Realtime Filtering**: Move news filtering logic to the database level to reduce egress.
+- [ ] **Geodata Optimization**: Pre-calculate geocoding dictionaries at build time for faster runtime initialization.
+- [ ] **Regional Heatmaps**: Visualize broad, unmapped news (e.g., country-wide) via polygon overlays.
+- [ ] **The Tickertape**: Scrolling bottom bar for high-volume, unmapped headlines.

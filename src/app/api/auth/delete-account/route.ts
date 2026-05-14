@@ -3,8 +3,23 @@ import { createClient } from '@supabase/supabase-js';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    // CSRF Protection: Verify Origin
+    const origin = request.headers.get('origin') || request.headers.get('referer');
+    const host = request.headers.get('host');
+    
+    if (origin && host) {
+      try {
+        const originUrl = new URL(origin);
+        if (originUrl.host !== host) {
+          return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
+        }
+      } catch {
+        // Invalid origin format
+      }
+    }
+
     const cookieStore = await cookies();
     
     // 1. Initialize SSR Client to verify the requesting user's session
@@ -27,13 +42,13 @@ export async function POST() {
       }
     );
 
-    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
 
-    if (sessionError || !session || !session.user) {
+    if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized request.' }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
 
     // 2. Initialize Admin Client to perform the deletion
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

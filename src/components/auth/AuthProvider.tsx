@@ -46,15 +46,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setIsGuest(true);
             }
 
-            // Check initial session
+            // Check initial session locally
             const { data: { session: initialSession } } = await supabase.auth.getSession();
             
-            setSession(initialSession);
-            setUser(initialSession?.user ?? null);
+            let verifiedUser = initialSession?.user ?? null;
+            let finalSession = initialSession;
+
+            // If we think we have a session, verify it with the server
+            // This catches cases where the account was manually deleted or banned in the dashboard
+            if (initialSession) {
+                const { data: { user }, error } = await supabase.auth.getUser();
+                if (error || !user) {
+                    // Token is mathematically valid but server rejected it (deleted/banned)
+                    await supabase.auth.signOut();
+                    verifiedUser = null;
+                    finalSession = null;
+                } else {
+                    verifiedUser = user;
+                }
+            }
+            
+            setSession(finalSession);
+            setUser(verifiedUser);
 
             // If no session and not already determined as guest, show auth modal
-            if (!initialSession && wasGuest !== 'true') {
-                // First visit — show auth modal
+            if (!finalSession && wasGuest !== 'true') {
+                // First visit or forcefully logged out — show auth modal
                 setShowAuthModal(true);
             }
 
