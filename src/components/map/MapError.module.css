@@ -5,74 +5,80 @@
     right: 0;
     bottom: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 17, 23, 0.8);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    color: var(--text-primary, #ffffff);
+    background: var(--surface-alt);
     z-index: 1000;
     padding: 2.5rem;
+}
+
+.errorCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+    max-width: 440px;
+    width: 100%;
     text-align: center;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.errorIconWrapper {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1.5rem;
+    color: var(--red, #ef4444);
+    background: rgba(239, 68, 68, 0.08);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .errorIcon {
-    width: 56px;
-    height: 56px;
-    margin-bottom: 1.5rem;
-    color: var(--red, #ef4444);
-    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.3));
+    width: 32px;
+    height: 32px;
     opacity: 0.9;
 }
 
 .errorTitle {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 1.25rem;
+    font-weight: 600;
     margin-bottom: 0.75rem;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
 }
 
 .errorMessage {
-    font-size: 1rem;
-    color: var(--text-muted, #94a3b8);
-    max-width: 380px;
+    font-size: 0.9375rem;
+    color: var(--text-muted);
     margin-bottom: 2rem;
     line-height: 1.6;
 }
 
 .retryButton {
-    padding: 0.8rem 2.2rem;
-    background: var(--accent, #3b82f6);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-weight: 500;
     font-size: 0.9375rem;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+    transition: all 0.2s ease;
+    width: 100%;
 }
 
 @media (hover: hover) {
     .retryButton:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
-        filter: brightness(1.1);
+        background: var(--surface-hover);
+        transform: translateY(-1px);
     }
 }
 
 .retryButton:active {
     transform: translateY(0);
-}
-
-/* Theme handled by variables */
-
-:global(.light-mode) .errorContainer {
-    background: rgba(248, 250, 252, 0.85);
-}
-
-:global(.light-mode) .errorMessage {
-    color: #64748b;
 }

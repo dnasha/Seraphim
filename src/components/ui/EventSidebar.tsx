@@ -18,9 +18,11 @@ import {
 } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import ThemeToggle from "./ThemeToggle";
+import UserButton from "@/components/auth/UserButton";
 import { canonicalEventCount, latestReportTimestamp } from "@/lib/utils/ranking";
 import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
+import { useAuth } from "@/hooks/useAuth";
 import styles from "./EventSidebar.module.css";
 
 
@@ -45,6 +47,8 @@ interface EventSidebarProps {
   animatedEffects?: boolean;
   isCapped?: boolean;
   appliedLimit?: number;
+  /** When true, disables interactive controls for guest users */
+  disabled?: boolean;
 }
 
 export default function EventSidebar({
@@ -66,11 +70,12 @@ export default function EventSidebar({
   animatedEffects = false,
   isCapped = false,
   appliedLimit,
+  disabled = false,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
+  const { setShowAuthModal } = useAuth();
 
   /* Resizable Sidebar Logic */
   const { sidebarWidth, isResizing, startResizing } = useResizable({
@@ -231,9 +236,9 @@ export default function EventSidebar({
         isResizing ? styles.isResizing : "",
       ].join(" ")}
       style={
-        {
-          "--sidebar-width": `${sidebarWidth}px`,
-        } as React.CSSProperties
+        sidebarWidth !== undefined
+          ? ({ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties)
+          : undefined
       }
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -276,6 +281,7 @@ export default function EventSidebar({
             <h1>Seraphim</h1>
           </a>
           <div className={styles.eventSidebarActions}>
+            <UserButton variant="sidebar" />
             <ThemeToggle />
             <button
               className={`${styles.sidebarToggleBtn} ${styles.sidebarCollapseBtn}`}
@@ -326,6 +332,7 @@ export default function EventSidebar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className={styles.statsSearchInput}
+            disabled={disabled}
           />
         </div>
       </div>
@@ -353,10 +360,11 @@ export default function EventSidebar({
 
         <div className={styles.sortToggleGroup}>
           <button
-            className={`${styles.sortToggleBtn} ${sortMode === "new" ? styles.sortToggleBtnActive : ""}`}
-            onClick={() => onSortModeChange("new")}
+            className={`${styles.sortToggleBtn} ${sortMode === "new" ? styles.sortToggleBtnActive : ""} ${disabled ? styles.sortToggleBtnDisabled : ""}`}
+            onClick={() => !disabled && onSortModeChange("new")}
             aria-pressed={sortMode === "new"}
             aria-label="Sort by new"
+            aria-disabled={disabled}
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
               <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
@@ -364,10 +372,11 @@ export default function EventSidebar({
             New
           </button>
           <button
-            className={`${styles.sortToggleBtn} ${sortMode === "hot" ? styles.sortToggleBtnActive : ""}`}
-            onClick={() => onSortModeChange("hot")}
+            className={`${styles.sortToggleBtn} ${sortMode === "hot" ? styles.sortToggleBtnActive : ""} ${disabled ? styles.sortToggleBtnDisabled : ""}`}
+            onClick={() => !disabled && onSortModeChange("hot")}
             aria-pressed={sortMode === "hot"}
             aria-label="Sort by hot"
+            aria-disabled={disabled}
           >
             <svg
               viewBox="0 0 46.11 46.11"
@@ -413,6 +422,24 @@ export default function EventSidebar({
             style={{ height: "100%", width: "100%" }}
             itemContent={(index, item) => renderItem(index, item)}
             overscan={200}
+            components={{
+              Header: () => disabled ? (
+                <div className={styles.guestCtaCard}>
+                  <div className={styles.guestCtaContent}>
+                    <h3>
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className={styles.guestCtaIcon} xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+                      </svg>
+                      GUEST MODE ACTIVE
+                    </h3>
+                    <p>Sign in to access 1000+ real time events, live filters, and historical archives.</p>
+                  </div>
+                  <button className={styles.guestCtaButton} onClick={() => setShowAuthModal(true)}>
+                    SIGN IN TO UNLOCK
+                  </button>
+                </div>
+              ) : null
+            }}
           />
         )}
       </div>

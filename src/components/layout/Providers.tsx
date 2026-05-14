@@ -2,16 +2,18 @@
 
 /**
  * Providers component serves as the root wrapper for application-wide 
- * context providers. It currently configures the next-themes Provider 
- * for consistent theme management.
+ * context providers. Configures theme management and authentication state.
  */
 
 import { ThemeProvider } from 'next-themes';
+import { AuthProvider } from '@/components/auth/AuthProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem={false}>
-            {children}
+            <AuthProvider>
+                {children}
+            </AuthProvider>
         </ThemeProvider>
     );
 }

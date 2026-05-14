@@ -7,7 +7,6 @@
 import { useState, useRef, useEffect, useCallback, RefObject } from "react";
 
 interface UseResizableOptions {
-  defaultWidth?: number;
   minWidth?: number;
   maxWidth?: number;
   localStorageKey?: string;
@@ -15,15 +14,15 @@ interface UseResizableOptions {
 }
 
 export function useResizable({
-  defaultWidth = 400,
-  minWidth = 380,
+  minWidth = 340,
   maxWidth = 800,
   localStorageKey = "seraphim-sidebar-width",
   sidebarRef,
 }: UseResizableOptions) {
-  const [sidebarWidth, setSidebarWidth] = useState<number>(defaultWidth);
+  // Start as undefined so CSS clamp() handles the default sizing. This prevents hydration mismatches.
+  const [sidebarWidth, setSidebarWidth] = useState<number | undefined>(undefined);
   const [isResizing, setIsResizing] = useState(false);
-  const lastWidthRef = useRef(defaultWidth);
+  const lastWidthRef = useRef<number | undefined>(undefined);
 
   /** 
    * Loads the previously saved sidebar width from localStorage on mount.
@@ -50,11 +49,13 @@ export function useResizable({
 
   const stopResizing = useCallback(() => {
     setIsResizing(false);
-    localStorage.setItem(
-      localStorageKey,
-      lastWidthRef.current.toString(),
-    );
-    setSidebarWidth(lastWidthRef.current);
+    if (lastWidthRef.current !== undefined) {
+      localStorage.setItem(
+        localStorageKey,
+        lastWidthRef.current.toString(),
+      );
+      setSidebarWidth(lastWidthRef.current);
+    }
   }, [localStorageKey]);
 
   /**

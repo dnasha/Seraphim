@@ -77,7 +77,8 @@ export function useNewsData({
     searchQuery,
     customStartDate,
     customEndDate,
-    sortMode
+    sortMode,
+    limit
 }: {
     unmappedOnly: boolean;
     timeRange: string;
@@ -85,6 +86,7 @@ export function useNewsData({
     customStartDate?: string;
     customEndDate?: string;
     sortMode?: string;
+    limit?: number;
 }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -100,6 +102,7 @@ export function useNewsData({
         query?: string;
         timeRange?: string;
         unmappedOnly?: boolean;
+        limit?: number;
     } | null>(null);
     const isFirstMount = useRef(true);
 
@@ -227,7 +230,7 @@ export function useNewsData({
             if (bbox.until) params.append('until', bbox.until);
             if (bbox.query) params.append('query', bbox.query);
         } else {
-            params.append('scope', 'global');
+            params.set('scope', 'global');
             const since = computeSince(timeRange, customStartDate);
             const until = computeUntil(timeRange, customEndDate);
             if (since) params.append('since', since);
@@ -300,7 +303,7 @@ export function useNewsData({
 
         const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
 
-        if (!bbox && !unmappedOnly && !searchQuery) {
+        if (!bbox && !unmappedOnly && !searchQuery && !limit) {
             setIsLoading(false);
             return;
         }
@@ -319,7 +322,8 @@ export function useNewsData({
             unmappedOnly === prev.unmappedOnly &&
             sortMode === prev.sortMode &&
             searchQuery === prev.query &&
-            timeRange === prev.timeRange) {
+            timeRange === prev.timeRange &&
+            limit === prev.limit) {
             return;
         }
 
@@ -339,6 +343,7 @@ export function useNewsData({
         if (sortMode) params.append('sort', sortMode);
         params.append('view', 'map');
         params.append('scope', unmappedOnly ? 'global' : 'viewport');
+        if (limit) params.append('limit', String(limit));
         
         if (enrichedBBox && !unmappedOnly) {
             params.append('minLat', String(enrichedBBox.minLat));
@@ -350,6 +355,7 @@ export function useNewsData({
             if (enrichedBBox.since) params.append('since', enrichedBBox.since);
             if (enrichedBBox.until) params.append('until', enrichedBBox.until);
         } else {
+            params.set('scope', 'global');
             if (since) params.append('since', since);
             if (until) params.append('until', until);
             if (searchQuery) params.append('query', searchQuery);
@@ -377,7 +383,9 @@ export function useNewsData({
                 bbox,
                 sortMode,
                 query: searchQuery,
-                timeRange
+                timeRange,
+                unmappedOnly,
+                limit
             };
             return;
         }
@@ -389,7 +397,8 @@ export function useNewsData({
                 bbox: enrichedBBox,
                 signal: abortController.signal,
                 view: 'map',
-                scope: 'viewport'
+                scope: 'viewport',
+                limit
             });
 
             if (requestVersion !== requestVersionRef.current) return;
@@ -408,7 +417,8 @@ export function useNewsData({
                 sortMode,
                 query: searchQuery,
                 timeRange,
-                unmappedOnly
+                unmappedOnly,
+                limit
             };
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
@@ -419,7 +429,7 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, limit, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
         if (isFirstMount.current) {
@@ -430,7 +440,7 @@ export function useNewsData({
         
         coordinateLoad();
         return;
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, coordinateLoad]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, coordinateLoad]);
 
     /**
      * Lazy-loads heavy event details (description, sources) for a specific item.

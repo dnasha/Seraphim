@@ -35,10 +35,12 @@ export const supabase = createClient(
     SUPABASE_URL, 
     SUPABASE_ANON_KEY || 'missing_anon_key', 
     {
-        auth: { 
-            persistSession: false, 
-            autoRefreshToken: false 
-        },
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            storageKey: 'sb-seraphim-data-client'
+        }
     }
 );
 

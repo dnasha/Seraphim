@@ -113,7 +113,8 @@ export async function GET(request: Request) {
   const zoom = zoomStr ? parseFloat(zoomStr) : null;
 
   const sort = normalizeSortMode(searchParams.get("sort"));
-  const requestedLimit = searchParams.get("limit")
+  const hasRequestedLimit = searchParams.has("limit");
+  const requestedLimit = hasRequestedLimit
     ? parseInt(searchParams.get("limit")!)
     : RAW_LIMIT;
   const sinceStr = searchParams.get("since");
@@ -136,7 +137,7 @@ export async function GET(request: Request) {
   }
 
   // Extend limits for broad historical queries
-  if (sinceStr) {
+  if (sinceStr && !hasRequestedLimit) {
     const sinceTime = new Date(sinceStr).getTime();
     const untilTime = untilStr ? new Date(untilStr).getTime() : now;
     if (untilTime - sinceTime > 24 * 60 * 60 * 1000 + 5000) {

@@ -10,6 +10,14 @@ along with the custom date picker interface.
   flex-direction: column;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+/* Disabled overlay for guest users */
+.filterBarDisabled {
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
 }
 
 .scrollableFilters {

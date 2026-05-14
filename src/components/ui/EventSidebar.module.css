@@ -6,8 +6,8 @@ Includes card expansion details and responsive mobile layouts.
 
 /* Sidebar shell */
 .eventSidebar {
-  width: var(--sidebar-width, 400px);
-  min-width: var(--sidebar-width, 400px);
+  width: var(--sidebar-width, clamp(340px, 27vw, 460px));
+  min-width: var(--sidebar-width, clamp(340px, 27vw, 460px));
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -681,6 +681,80 @@ Includes card expansion details and responsive mobile layouts.
   cursor: not-allowed;
 }
 
+/* Guest CTA Card */
+.guestCtaCard {
+  margin: 12px;
+  padding: 16px;
+  border: 1px solid var(--accent);
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  direction: ltr;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="dark"] .guestCtaCard {
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.guestCtaIcon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.guestCtaContent h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.02em;
+}
+
+.guestCtaContent p {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.guestCtaButton {
+  font-family: var(--font-ui);
+  padding: 8px 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+}
+
+@media (hover: hover) {
+  .guestCtaButton:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+  }
+}
+
+.guestCtaButton:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.2);
+}
+
 /* Responsive */
 @media (max-width: 860px) {
   .eventSidebar {
@@ -714,8 +788,8 @@ Includes card expansion details and responsive mobile layouts.
   }
 
   .sidebarToggleBtn {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
   }
 
   .eventSidebarStats {
@@ -828,6 +902,13 @@ Includes card expansion details and responsive mobile layouts.
 
 .sortToggleBtn svg {
   flex-shrink: 0;
+}
+
+/* Disabled state for guest users */
+.sortToggleBtnDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* ═══════════════════════════════════════════════════════════

@@ -21,6 +21,8 @@ interface FilterBarProps {
     onCustomStartDateChange?: (date: string) => void;
     customEndDate?: string;
     onCustomEndDateChange?: (date: string) => void;
+    /** When true, all filter controls are greyed out for guest users */
+    disabled?: boolean;
 }
 
 const categoryOptions = [
@@ -116,6 +118,7 @@ export default function FilterBar({
     onCustomStartDateChange,
     customEndDate,
     onCustomEndDateChange,
+    disabled = false,
 }: FilterBarProps) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
 
@@ -189,7 +192,7 @@ export default function FilterBar({
     };
 
     return (
-        <div className={styles.filterBar}>
+        <div className={`${styles.filterBar} ${disabled ? styles.filterBarDisabled : ''}`}>
             <div className={styles.scrollableFilters}>
                 <div className={styles.filterSection}>
                     <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>

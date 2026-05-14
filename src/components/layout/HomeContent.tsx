@@ -5,7 +5,7 @@
  * It orchestrates state between the map, sidebar, and filters, while synchronizing with the URL.
  */
 
-import React, { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import FilterBar from '@/components/ui/FilterBar';
@@ -13,8 +13,11 @@ import EventSidebar from '@/components/ui/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
 import { useViewState } from '@/hooks/useViewState';
+import { useAuth } from '@/hooks/useAuth';
 import { BBox } from '@/lib/core/types';
 import { SortMode } from '@/lib/utils/ranking';
+import AuthModal from '@/components/auth/AuthModal';
+import UserButton from '@/components/auth/UserButton';
 import styles from './Layout.module.css';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
@@ -22,6 +25,8 @@ const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap
 
 export function HomeContent() {
     const { resolvedTheme } = useTheme();
+    const { user, isLoading: authLoading } = useAuth();
+    const isGuestUser = !user && !authLoading;
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
     const mounted = useSyncExternalStore(
         () => () => {},
@@ -41,7 +46,7 @@ export function HomeContent() {
     
     const [searchQuery, setSearchQuery] = useState(initialState.q || '');
     const [debouncedSearch, setDebouncedSearch] = useState(initialState.q || '');
-    const [sortMode, setSortMode] = useState<SortMode>((initialState.s as SortMode) || 'new');
+    const [sortMode, setSortMode] = useState<SortMode>((initialState.s as SortMode) || 'hot');
     const [currentBBox, setCurrentBBox] = useState<BBox | null>(null);
     
     const initialCenter: [number, number] | undefined = (initialState.lat != null && initialState.lng != null)
@@ -58,15 +63,34 @@ export function HomeContent() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
+    /** 
+     * Handle browser back button (bfcache restore).
+     * When returning from an external OAuth provider via the back button, 
+     * Next.js Suspense and MapLibre WebGL contexts can be left in a broken/blank state.
+     * Forcing a reload ensures a clean initialization.
+     */
+    useEffect(() => {
+        const onPageShow = (e: PageTransitionEvent) => {
+            if (e.persisted) {
+                window.location.reload();
+            }
+        };
+        window.addEventListener('pageshow', onPageShow);
+        return () => window.removeEventListener('pageshow', onPageShow);
+    }, []);
+
+    const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
+
     const { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 
         timeRange,
         customStartDate,
         customEndDate,
-        sortMode,
-        unmappedOnly
+        sortMode: effectiveSortMode,
+        unmappedOnly,
+        limit: isGuestUser ? 7 : undefined
     });
-
+    
     const sidebarRespectBBox = true;
 
     const {
@@ -74,7 +98,7 @@ export function HomeContent() {
         categories, setCategories,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, sortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
+    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
 
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
@@ -89,7 +113,7 @@ export function HomeContent() {
         setSearchQuery(initialState.q || '');
         setDebouncedSearch(initialState.q || '');
         setTimeRange(initialState.t || '1d');
-        setSortMode((initialState.s as SortMode) || 'new');
+        setSortMode((initialState.s as SortMode) || 'hot');
         setSelectedItemId(initialState.eventId || null);
     }
 
@@ -109,7 +133,7 @@ export function HomeContent() {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
         });
-    }, [sources, categories, timeRange, debouncedSearch, sortMode, unmappedOnly, handleSelectItem]);
+    }, [sources, categories, timeRange, debouncedSearch, effectiveSortMode, unmappedOnly, handleSelectItem]);
 
     /**
      * Handles BBox changes by resetting sidebar scroll if the selected item is panned out.
@@ -166,7 +190,11 @@ export function HomeContent() {
         updateURL({ s: mode });
     }, [setSortMode, updateURL]);
 
-    const items = filteredNews;
+    /** Gate guests to a maximum of 7 events across all views */
+    const items = useMemo(() => {
+        if (isGuestUser) return filteredNews.slice(0, 7);
+        return filteredNews;
+    }, [filteredNews, isGuestUser]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
@@ -190,6 +218,7 @@ export function HomeContent() {
             onCustomStartDateChange={setCustomStartDate}
             customEndDate={customEndDate}
             onCustomEndDateChange={setCustomEndDate}
+            disabled={isGuestUser}
         />
     );
 
@@ -220,17 +249,18 @@ export function HomeContent() {
                 mounted={mounted}
                 searchQuery={searchQuery}
                 onSearchChange={handleSearchChange}
-                sortMode={sortMode}
+                sortMode={effectiveSortMode}
                 onSortModeChange={handleSortModeChange}
                 filterVersion={filterVersion}
                 animatedEffects={animatedEffects}
                 isCapped={isCapped}
                 appliedLimit={appliedLimit}
+                disabled={isGuestUser}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
-                    items={mapNews}
+                    items={isGuestUser ? mapNews.slice(0, 7) : mapNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
@@ -246,14 +276,22 @@ export function HomeContent() {
                 />
             </main>
 
+            {/* Floating user button on map when sidebar is collapsed */}
+            {!isSidebarOpen && <UserButton variant="floating" />}
+
+            {/* Auth modal (auto-shows on first visit) */}
+            <AuthModal />
+
             {error && (
                 <div className={styles.errorOverlay}>
-                    <svg className={styles.errorIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                    <p>{error}</p>
+                    <div className={styles.errorOverlayContent}>
+                        <svg className={styles.errorIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <p>{error}</p>
+                    </div>
                     <button onClick={() => fetchNews(true)}>Retry Connection</button>
                 </div>
             )}
