@@ -205,8 +205,9 @@ export default function FilterBar({
                                     <button
                                         key={cat.value}
                                         className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
-                                        onClick={() => toggleCategory(cat.value)}
+                                        onClick={() => !disabled && toggleCategory(cat.value)}
                                         aria-pressed={isActive}
+                                        disabled={disabled}
                                         style={{
                                             '--btn-color': color,
                                             borderColor: isActive ? color : undefined,
@@ -239,8 +240,9 @@ export default function FilterBar({
                                     <button
                                         key={option.value}
                                         className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
-                                        onClick={() => handleTimeToggleClick(option.value)}
+                                        onClick={() => !disabled && handleTimeToggleClick(option.value)}
                                         aria-pressed={timeRange === option.value}
+                                        disabled={disabled}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {option.value === 'custom' && (
@@ -327,8 +329,9 @@ export default function FilterBar({
                                     <button
                                         key={option.value}
                                         className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
-                                        onClick={() => toggleSource(option.value)}
+                                        onClick={() => !disabled && toggleSource(option.value)}
                                         aria-pressed={isActive}
+                                        disabled={disabled}
                                         style={{
                                             '--btn-color': option.bg,
                                             backgroundColor: isActive ? option.bg : undefined,

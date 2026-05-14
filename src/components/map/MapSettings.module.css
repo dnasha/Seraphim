@@ -41,6 +41,13 @@
   box-shadow: none;
 }
 
+.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
+  filter: grayscale(1);
+}
+
 .btnBadgeDot {
   position: absolute;
   top: 3px;

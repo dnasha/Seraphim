@@ -25,8 +25,8 @@ const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap
 
 export function HomeContent() {
     const { resolvedTheme } = useTheme();
-    const { user, isLoading: authLoading } = useAuth();
-    const isGuestUser = !user && !authLoading;
+    const { user, isLoading: authLoading, isGuest } = useAuth();
+    const isGuestUser = isGuest || (!user && !authLoading);
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
     const mounted = useSyncExternalStore(
         () => () => {},
@@ -273,6 +273,7 @@ export function HomeContent() {
                     initialCenter={initialCenter}
                     initialZoom={validInitialZoom}
                     sortMode={appliedSortMode as SortMode}
+                    disabled={isGuestUser}
                 />
             </main>
 

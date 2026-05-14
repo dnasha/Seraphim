@@ -14,8 +14,8 @@ interface UseResizableOptions {
 }
 
 export function useResizable({
-  minWidth = 340,
-  maxWidth = 800,
+  minWidth = 420,
+  maxWidth = 900,
   localStorageKey = "seraphim-sidebar-width",
   sidebarRef,
 }: UseResizableOptions) {

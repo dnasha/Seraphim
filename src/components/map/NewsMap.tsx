@@ -39,6 +39,7 @@ interface NewsMapProps {
   initialCenter?: [number, number];
   initialZoom?: number;
   sortMode: "new" | "hot";
+  disabled?: boolean;
 }
 
 /**
@@ -63,6 +64,7 @@ export default function NewsMap({
   initialCenter,
   initialZoom,
   sortMode,
+  disabled = false,
 }: NewsMapProps) {
   const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -648,6 +650,7 @@ export default function NewsMap({
             onUnmappedOnlyChange={onUnmappedOnlyChange}
             animatedEffects={animatedEffects}
             onAnimatedEffectsChange={onAnimatedEffectsChange}
+            disabled={disabled}
           />
           <MapActionTools
             overlays={overlays}
@@ -658,6 +661,7 @@ export default function NewsMap({
             onToggleGlobe={() => setIsGlobe((v) => !v)}
             onResetOrientation={handleResetOrientation}
             bearing={mapBearing}
+            disabled={disabled}
           />
         </>
       )}

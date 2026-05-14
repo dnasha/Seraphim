@@ -16,6 +16,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 
 import { Providers } from "@/components/layout/Providers";
+import CookieConsent from "@/components/ui/CookieConsent";
 
 import "./globals.css";
 
@@ -106,7 +107,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <Providers>
           {children}
-        
+          <CookieConsent />
         </Providers>
         <SpeedInsights />
         <Analytics />

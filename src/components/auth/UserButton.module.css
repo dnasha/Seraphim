@@ -27,7 +27,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-button);
     transition: all 0.15s ease;
     padding: 0;
     position: relative;
@@ -85,13 +85,14 @@
 /* Guest indicator dot */
 .guestDot {
     position: absolute;
-    bottom: 0;
-    right: 0;
+    top: 3px;
+    right: 3px;
     width: 8px;
     height: 8px;
-    background: var(--text-muted);
+    background-color: var(--accent);
     border-radius: 50%;
     border: 1.5px solid var(--surface);
+    box-shadow: 0 0 4px rgba(99, 102, 241, 0.4);
 }
 
 /* Dropdown Menu */
@@ -178,8 +179,8 @@
     font-size: 0.8125rem;
     font-weight: 500;
     font-family: var(--font-ui);
-    color: var(--text-primary);
-    text-decoration: none;
+    color: var(--text-primary) !important;
+    text-decoration: none !important;
     background: transparent;
     border: none;
     border-radius: var(--radius-sm);

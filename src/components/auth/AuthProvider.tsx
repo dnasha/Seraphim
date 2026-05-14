@@ -39,24 +39,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     useEffect(() => {
-        // Check initial session
-        supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+        const initializeAuth = async () => {
+            // Check guest preference immediately on mount to minimize UI flicker
+            const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
+            if (wasGuest === 'true') {
+                setIsGuest(true);
+            }
+
+            // Check initial session
+            const { data: { session: initialSession } } = await supabase.auth.getSession();
+            
             setSession(initialSession);
             setUser(initialSession?.user ?? null);
 
-            // If no session, check guest preference
-            if (!initialSession) {
-                const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
-                if (wasGuest === 'true') {
-                    setIsGuest(true);
-                } else {
-                    // First visit — show auth modal
-                    setShowAuthModal(true);
-                }
+            // If no session and not already determined as guest, show auth modal
+            if (!initialSession && wasGuest !== 'true') {
+                // First visit — show auth modal
+                setShowAuthModal(true);
             }
 
             setIsLoading(false);
-        });
+        };
+
+        initializeAuth();
 
         // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(

@@ -6,8 +6,8 @@ Includes card expansion details and responsive mobile layouts.
 
 /* Sidebar shell */
 .eventSidebar {
-  width: var(--sidebar-width, clamp(340px, 27vw, 460px));
-  min-width: var(--sidebar-width, clamp(340px, 27vw, 460px));
+  width: var(--sidebar-width, clamp(420px, 20vw, 800px));
+  min-width: var(--sidebar-width, clamp(420px, 20vw, 800px));
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -50,6 +50,7 @@ Includes card expansion details and responsive mobile layouts.
   align-items: center;
   text-decoration: none;
   flex: 1;
+  min-width: 0;
   transition: opacity 0.2s ease;
   user-select: none;
   outline: none;
@@ -68,16 +69,18 @@ Includes card expansion details and responsive mobile layouts.
 
 .logoLink h1 {
   font-family: var(--font-logo);
-  font-size: 2.125rem;
+  font-size: 1.85rem;
   font-weight: 600;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.12em;
   color: var(--text-primary);
   text-transform: uppercase;
-  margin-left: 12px;
+  margin-left: 10px;
+  white-space: nowrap;
 }
 
 .sidebarLogoImg {
   transition: transform 0.3s ease;
+  flex-shrink: 0;
 }
 
 .logoFill {
@@ -101,7 +104,8 @@ Includes card expansion details and responsive mobile layouts.
 .eventSidebarActions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Stats row */
@@ -218,6 +222,7 @@ Includes card expansion details and responsive mobile layouts.
   justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
+  box-shadow: var(--shadow-button);
   transition: all 0.15s;
 }
 
