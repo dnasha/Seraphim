@@ -9,10 +9,10 @@ import { NewsItem } from '@/lib/core/types';
 export type SortMode = 'new' | 'hot';
 
 /**
- * Normalizes a sort mode string to a valid SortMode. Defaults to 'new'.
+ * Normalizes a sort mode string to a valid SortMode. Defaults to 'hot'.
  */
 export function normalizeSortMode(mode?: string | null): SortMode {
-    return mode === 'hot' ? 'hot' : 'new';
+    return mode === 'new' ? 'new' : 'hot';
 }
 
 /**

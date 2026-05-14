@@ -190,12 +190,12 @@ describe('getSourceStyle', () => {
         expect(getSourceStyle('Telegram - NEXTA').bg).toBe('#0088cc');
     });
 
-    it('returns tech teal for tech sources', () => {
-        expect(getSourceStyle('Ars Technica').bg).toBe('#0284c7');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#0284c7');
+    it('returns brand indigo for other sources', () => {
+        expect(getSourceStyle('Ars Technica').bg).toBe('#6366f1');
+        expect(getSourceStyle('BleepingComputer').bg).toBe('#6366f1');
     });
 
-    it('returns fallback grey for unknown sources', () => {
+    it('returns brand indigo for unknown sources', () => {
         expect(getSourceStyle('BBC News').bg).toBe('#6366f1');
     });
 });

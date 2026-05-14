@@ -106,7 +106,7 @@ export function useNewsData({
     } | null>(null);
     const isFirstMount = useRef(true);
 
-    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources'] }>>(new Map());
+    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number }>>(new Map());
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
 
     const entitiesRef = useRef<Map<string, NewsItem>>(new Map());
@@ -116,7 +116,7 @@ export function useNewsData({
     const requestVersionRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'new');
+    const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
 
     /**
      * Synchronizes the public news state with the internal entity store.
@@ -179,6 +179,8 @@ export function useNewsData({
             if (cached) {
                 merged.description = cached.description;
                 merged.sources = cached.sources;
+                if (cached.latitude !== undefined) merged.latitude = cached.latitude;
+                if (cached.longitude !== undefined) merged.longitude = cached.longitude;
             }
 
             entitiesRef.current.set(key, merged);
@@ -248,7 +250,12 @@ export function useNewsData({
                 items: cached.data.map(item => {
                     const cacheKey = item.originalId || item.id;
                     const cachedDetail = detailCache.current.get(cacheKey);
-                    return cachedDetail ? { ...item, ...cachedDetail } : item;
+                    return cachedDetail ? { 
+                        ...item, 
+                        ...cachedDetail,
+                        latitude: cachedDetail.latitude !== undefined ? cachedDetail.latitude : item.latitude,
+                        longitude: cachedDetail.longitude !== undefined ? cachedDetail.longitude : item.longitude
+                    } : item;
                 }),
                 isCapped: cached.isCapped,
                 appliedLimit: cached.appliedLimit
@@ -265,7 +272,12 @@ export function useNewsData({
             const hydrated = data.items.map(item => {
                 const cacheKey = item.originalId || item.id;
                 const cachedDetail = detailCache.current.get(cacheKey);
-                return cachedDetail ? { ...item, ...cachedDetail } : item;
+                return cachedDetail ? { 
+                    ...item, 
+                    ...cachedDetail,
+                    latitude: cachedDetail.latitude !== undefined ? cachedDetail.latitude : item.latitude,
+                    longitude: cachedDetail.longitude !== undefined ? cachedDetail.longitude : item.longitude
+                } : item;
             });
             const apiCapped = data.meta?.isCapped || false;
             const isCapped = apiCapped;
@@ -467,7 +479,12 @@ export function useNewsData({
         try {
             const res = await fetch(`/api/news/${targetId}`);
             if (!res.ok) return;
-            const { description, sources } = await res.json() as { description?: string; sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>; };
+            const { description, sources, latitude, longitude } = await res.json() as { 
+                description?: string; 
+                sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>;
+                latitude?: number;
+                longitude?: number;
+            };
             const descriptionValue = typeof description === 'string' ? description : '';
             const mappedSources = Array.isArray(sources)
                 ? sources.map((s) => ({
@@ -478,7 +495,12 @@ export function useNewsData({
                 }))
                 : undefined;
             
-            detailCache.current.set(targetId, { description: descriptionValue, sources: mappedSources });
+            detailCache.current.set(targetId, { 
+                description: descriptionValue, 
+                sources: mappedSources,
+                latitude,
+                longitude
+            });
 
             let changed = false;
             for (const [entityId, entity] of entitiesRef.current.entries()) {
@@ -490,6 +512,8 @@ export function useNewsData({
                         ...entity,
                         description: descriptionValue,
                         sources: mappedSources ?? entity.sources,
+                        latitude: latitude !== undefined ? latitude : entity.latitude,
+                        longitude: longitude !== undefined ? longitude : entity.longitude,
                     });
                     entityTouchedAtRef.current.set(entityId, Date.now());
                     changed = true;

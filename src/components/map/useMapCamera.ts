@@ -40,6 +40,7 @@ export function useMapCamera({
 }: UseMapCameraProps) {
   const lastFlownSelectionRef = useRef<string | null>(null);
   const lastFlownVersionRef = useRef(0);
+  const lastFlownCoordsRef = useRef<[number, number] | null>(null);
   const isFlyingRef = useRef(false);
 
   // Resolution-aware initial view calculation.
@@ -150,6 +151,7 @@ export function useMapCamera({
         if (isNewSelection) {
           lastFlownSelectionRef.current = selectedItemId;
           lastFlownVersionRef.current = selectionVersion;
+          lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
 
           const currentZoom = map.getZoom();
           const targetZoom = Math.max(currentZoom, 8.5);
@@ -173,6 +175,7 @@ export function useMapCamera({
               ) || item;
 
             if (popupRef.current && finalItem.latitude != null) {
+              lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
               // Re-snap to final jittered position to account for any data updates during the flight.
               popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
               map.easeTo({
@@ -232,7 +235,7 @@ export function useMapCamera({
   ]);
 
   useEffect(() => {
-    if (!mapReady || !popupRef.current || !popupRef.current.isOpen()) return;
+    if (!mapReady || !mapRef.current || !popupRef.current || !popupRef.current.isOpen()) return;
 
     // Sync popup position if coordinates shift (e.g., due to jitter re-calculation during background data refresh).
     if (selectedItemId) {
@@ -256,10 +259,29 @@ export function useMapCamera({
             selectedItem.longitude,
             selectedItem.latitude,
           ]);
+
+          // Seamlessly align the camera with the new jittered/precise position.
+          if (dist > 0.05) {
+            // Significant shift (e.g., cluster to precise coord) - use flyTo for a smooth arc.
+            mapRef.current.flyTo({
+              center: [selectedItem.longitude, selectedItem.latitude],
+              zoom: Math.max(mapRef.current.getZoom(), 8.5),
+              speed: 1.2,
+              essential: true
+            });
+          } else {
+            // Minor shift (e.g., local jitter) - use easeTo for a subtle nudge.
+            mapRef.current.easeTo({
+              center: [selectedItem.longitude, selectedItem.latitude],
+              duration: 300,
+              essential: true
+            });
+          }
+          lastFlownCoordsRef.current = [selectedItem.longitude, selectedItem.latitude];
         }
       }
     }
-  }, [geoItems, mapReady, selectedItemId, popupRef]);
+  }, [geoItems, mapReady, selectedItemId, popupRef, mapRef]);
 
   return {
     getInitialViewState,

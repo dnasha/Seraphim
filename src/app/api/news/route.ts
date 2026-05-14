@@ -159,8 +159,8 @@ export async function GET(request: Request) {
     : `${minLat},${maxLat},${minLng},${maxLng}`;
   const cacheKey =
     hasBBox || ignoreBBox
-      ? `view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "new" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`
-      : `view:${viewMode},scope:${scopeMode},events${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "new" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`;
+      ? `view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`
+      : `view:${viewMode},scope:${scopeMode},events${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`;
   const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
 

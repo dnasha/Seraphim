@@ -15,7 +15,7 @@ import { DbEvent } from '@/types';
  * Stores the heavy JSONB 'sources' and 'description' columns which are 
  * excluded from the primary list fetch.
  */
-const detailCache = new Map<string, { description: string; sources: DbEvent['sources']; timestamp: number }>();
+const detailCache = new Map<string, { description: string; sources: DbEvent['sources']; latitude?: number; longitude?: number; timestamp: number }>();
 const DETAIL_CACHE_TTL = 1800000;
 
 export async function GET(
@@ -47,19 +47,30 @@ export async function GET(
 
     const { data, error } = await supabase
         .from('events')
-        .select('description, sources')
+        .select('description, sources, latitude, longitude')
         .eq('id', id)
-        .single<Pick<DbEvent, 'description' | 'sources'>>();
+        .single<Pick<DbEvent, 'description' | 'sources' | 'latitude' | 'longitude'>>();
 
     if (error || !data) {
         console.error('[api/news/[id]] Supabase query failed:', error?.message);
         return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    detailCache.set(id, { description: data.description ?? '', sources: data.sources ?? [], timestamp: Date.now() });
+    detailCache.set(id, { 
+        description: data.description ?? '', 
+        sources: data.sources ?? [], 
+        latitude: data.latitude ?? undefined,
+        longitude: data.longitude ?? undefined,
+        timestamp: Date.now() 
+    });
 
     return NextResponse.json(
-        { description: data.description ?? '', sources: data.sources ?? [] },
+        { 
+            description: data.description ?? '', 
+            sources: data.sources ?? [],
+            latitude: data.latitude,
+            longitude: data.longitude
+        },
         { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
     );
 }

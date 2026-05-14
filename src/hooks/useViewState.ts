@@ -110,7 +110,7 @@ export function useViewState() {
                     params.set('cat', s.cat);
                 }
             }
-            if (s.s && s.s !== 'new') params.set('s', s.s);
+            if (s.s && s.s !== 'hot') params.set('s', s.s);
             if (s.eventId) params.set('eventId', s.eventId);
 
             const qs = params.toString();
