@@ -15,11 +15,11 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 16px; /* Tighter padding */
+    padding: 13px;
     box-shadow: 0 16px 64px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
-    gap: 16px; /* Tighter vertical spacing */
+    gap: 12px;
     pointer-events: auto;
     width: 280px;
 }
@@ -27,40 +27,40 @@
 .section {
     display: flex;
     flex-direction: column;
-    gap: 8px; /* Tighter internal spacing */
+    gap: 6px;
 }
 
 .sectionTitle {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     color: var(--text-muted);
     letter-spacing: 0.8px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 4px;
-    margin-bottom: 2px;
+    padding-bottom: 3px;
+    margin-bottom: 1px;
 }
 
 .grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 6px;
 }
 
 .toolBtn {
     background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 10px 0;
+    padding: 8px 0;
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -79,14 +79,14 @@
 .colors {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .colorBtn {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    border: 2px solid var(--border);
+    border: 1.5px solid var(--border);
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
@@ -103,23 +103,100 @@
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--accent);
 }
 
-.brushSizes {
+.colorPickerDot {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.cycling {
+    background: linear-gradient(
+        120deg,
+        #ff4d4d,
+        #ffa24d,
+        #ffee4d,
+        #4dff88,
+        #4dd2ff,
+        #7a6bff,
+        #ff4dd2,
+        #ff4d4d
+    );
+    background-size: 400% 400%;
+    animation: colorPickerCycle 14s linear infinite;
+}
+
+@keyframes colorPickerCycle {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.colorPickerDot:hover {
+    transform: scale(1.15);
+    border-color: var(--text-primary);
+}
+
+.colorPickerDot.active {
+    border-color: var(--text-primary);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--accent);
+}
+
+.colorPickerInput {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.colorPickerGlyph {
+    position: absolute;
+    right: 1px;
+    bottom: 0;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1;
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+    pointer-events: none;
+}
+
+.styleRow {
     display: flex;
-    gap: 12px;
     align-items: center;
+    gap: 8px;
+}
+
+.styleDivider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
 }
 
 .sizeBtn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    min-width: 30px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--surface-alt);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .sizeBtn:hover {
@@ -132,9 +209,46 @@
     color: var(--accent);
 }
 
+.fillBtn {
+    width: 30px;
+}
+
+.presetSizes {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.sizeSymbolBtn {
+    width: 30px;
+}
+
 .sizeIndicator {
     background: currentColor;
     border-radius: 50%;
+}
+
+.sizeInputWrap {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.sizeInput {
+    width: 54px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sizeInput:focus {
+    outline: none;
+    border-color: var(--accent);
 }
 
 .measurementBox {
@@ -161,7 +275,7 @@
 .actions {
     display: flex;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 2px;
 }
 
 .actionBtn {

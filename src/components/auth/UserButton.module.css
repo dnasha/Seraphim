@@ -179,8 +179,8 @@
     font-size: 0.8125rem;
     font-weight: 500;
     font-family: var(--font-ui);
-    color: var(--text-primary) !important;
-    text-decoration: none !important;
+    color: var(--text-primary);
+    text-decoration: none;
     background: transparent;
     border: none;
     border-radius: var(--radius-sm);

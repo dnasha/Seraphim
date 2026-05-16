@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import { createPortal } from 'react-dom';
 import {
@@ -23,6 +23,11 @@ interface MapDrawToolsProps {
 
 const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
 const SIZES = [2, 4, 8];
+const MIN_DRAW_SIZE = 1;
+const MAX_DRAW_SIZE = 24;
+const FREEHAND_OVERLAY_SOURCE_ID = 'td-freehand-lines-overlay-source';
+const FREEHAND_OVERLAY_LAYER_ID = 'td-freehand-lines-overlay-layer';
+const DRAW_STORAGE_KEY = 'seraphim-map-draw-tools-v1';
 
 interface TextAnnotation {
   id: string;
@@ -31,12 +36,115 @@ interface TextAnnotation {
   initialZoom: number;
 }
 
+interface PersistedDrawState {
+  version: number;
+  drawFeatures: unknown[];
+  textAnnotations: TextAnnotation[];
+}
+
+const isValidTextAnnotation = (annotation: unknown): annotation is TextAnnotation => {
+  if (!annotation || typeof annotation !== 'object') return false;
+  const candidate = annotation as Partial<TextAnnotation>;
+  return typeof candidate.id === 'string'
+    && Array.isArray(candidate.lngLat)
+    && candidate.lngLat.length === 2
+    && typeof candidate.lngLat[0] === 'number'
+    && typeof candidate.lngLat[1] === 'number'
+    && typeof candidate.text === 'string'
+    && typeof candidate.initialZoom === 'number';
+};
+
+const readPersistedDrawState = (): PersistedDrawState | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(DRAW_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      drawFeatures?: unknown;
+      textAnnotations?: unknown;
+    };
+
+    if (!Array.isArray(parsed.drawFeatures) || !Array.isArray(parsed.textAnnotations)) {
+      console.warn('Ignoring invalid persisted map annotations payload.');
+      return null;
+    }
+
+    return {
+      version: typeof parsed.version === 'number' ? parsed.version : 1,
+      drawFeatures: parsed.drawFeatures,
+      textAnnotations: parsed.textAnnotations.filter(isValidTextAnnotation),
+    };
+  } catch (err) {
+    console.warn('Failed to load persisted map annotations:', err);
+    return null;
+  }
+};
+
+const persistDrawState = (drawFeatures: unknown[], annotations: TextAnnotation[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DRAW_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      drawFeatures,
+      textAnnotations: annotations,
+    }));
+  } catch (err) {
+    console.warn('Failed to persist map annotations:', err);
+  }
+};
+
+const clearPersistedDrawState = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(DRAW_STORAGE_KEY);
+  } catch (err) {
+    console.warn('Failed to clear persisted map annotations:', err);
+  }
+};
+
+type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['onMouseMove']>[0];
+
+class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
+  private isDragSketchActive = false;
+
+  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
+    if (!event) return;
+    this.isDragSketchActive = true;
+    setMapDraggability?.(false);
+    this.onClick({ ...event, button: 'left', isContextMenu: false });
+  }
+
+  public onDrag(event?: FreehandPointerEvent): void {
+    if (!event || !this.isDragSketchActive) return;
+    this.onMouseMove(event);
+  }
+
+  public onDragEnd(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
+    if (event && this.isDragSketchActive) {
+      this.onMouseMove(event);
+      this.onClick({ ...event, button: 'left', isContextMenu: false });
+    }
+    this.isDragSketchActive = false;
+    setMapDraggability?.(true);
+  }
+
+  public cleanUp(): void {
+    this.isDragSketchActive = false;
+    super.cleanUp();
+  }
+}
+
 export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
   const [activeFill, setActiveFill] = useState<boolean>(true);
+  const [hasPickedCustomColor, setHasPickedCustomColor] = useState(false);
+  const [customPickerColor, setCustomPickerColor] = useState<string>('#8b5cf6');
   const colorRef = useRef(activeColor);
   const sizeRef = useRef(activeSize);
   const fillRef = useRef(activeFill);
@@ -47,13 +155,23 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
 
   const [measurement, setMeasurement] = useState<{ value: number; unit: string; type: 'area' | 'distance' } | null>(null);
 
-  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+  const initialPersistedState = useMemo(() => readPersistedDrawState(), []);
+  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>(
+    () => initialPersistedState?.textAnnotations ?? [],
+  );
   const textModeRef = useRef(false);
   type SnapshotFeatures = ReturnType<InstanceType<typeof TerraDraw>['getSnapshot']>;
-  const persistentFeaturesRef = useRef<SnapshotFeatures>([]);
+  const persistentFeaturesRef = useRef<SnapshotFeatures>(
+    (initialPersistedState?.drawFeatures as SnapshotFeatures) ?? [],
+  );
+  const textAnnotationsRef = useRef<TextAnnotation[]>(textAnnotations);
 
   const activeModeRef = useRef(activeMode);
   const calculateMeasurementRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    textAnnotationsRef.current = textAnnotations;
+  }, [textAnnotations]);
 
   useEffect(() => { 
     activeModeRef.current = activeMode; 
@@ -149,8 +267,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
         new TerraDrawLineStringMode({ styles: rulerStyles }),
         new TerraDrawRectangleMode({ styles: polygonStyles }),
         new TerraDrawCircleMode({ styles: polygonStyles }),
-        // Removed unsupported `minDistance: 2` argument to fix constructor configuration validation failure
-        new TerraDrawFreehandLineStringMode({ styles: sketchStyles }),
+        new DragFriendlyFreehandLineStringMode({ styles: sketchStyles, minDistance: 2 }),
         new TerraDrawPointMode({ styles: pointStyles }),
       ],
     });
@@ -168,10 +285,71 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
     
     drawRef.current = draw;
 
+    const ensureFreehandOverlay = () => {
+      if (!map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
+        map.addSource(FREEHAND_OVERLAY_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+      }
+
+      if (!map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
+        map.addLayer({
+          id: FREEHAND_OVERLAY_LAYER_ID,
+          type: 'line',
+          source: FREEHAND_OVERLAY_SOURCE_ID,
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': ['coalesce', ['get', '__drawColor'], COLORS[0]],
+            'line-width': ['coalesce', ['get', '__drawWidth'], SIZES[1]],
+            'line-opacity': 1,
+          },
+        });
+      }
+    };
+
+    const syncFreehandOverlay = () => {
+      ensureFreehandOverlay();
+      const source = map.getSource(FREEHAND_OVERLAY_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (!source) return;
+
+      const freehandFeatures = draw.getSnapshot()
+        .filter((feature) => {
+          return feature.geometry.type === 'LineString'
+            && (feature.properties as { mode?: string } | undefined)?.mode === 'freehand-linestring';
+        })
+        .map((feature) => {
+          const props = feature.properties as { color?: string; size?: number } | undefined;
+          return {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              __drawColor: props?.color || colorRef.current,
+              __drawWidth: props?.size || sizeRef.current,
+            },
+          };
+        });
+
+      source.setData({
+        type: 'FeatureCollection',
+        features: freehandFeatures as GeoJSON.Feature[],
+      });
+    };
+
+    syncFreehandOverlay();
+
     const handleChange = () => {
       if (drawRef.current) {
         persistentFeaturesRef.current = drawRef.current.getSnapshot();
       }
+      persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+      syncFreehandOverlay();
       calculateMeasurement();
     };
 
@@ -226,6 +404,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
         size: sizeRef.current,
         fill: fillRef.current 
       });
+      if (drawRef.current) {
+        persistentFeaturesRef.current = drawRef.current.getSnapshot();
+        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+      }
+      syncFreehandOverlay();
     });
 
     draw.on('change', handleChange);
@@ -233,6 +416,12 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
     draw.on('deselect', handleChange);
 
     return () => {
+      if (map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
+        map.removeLayer(FREEHAND_OVERLAY_LAYER_ID);
+      }
+      if (map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
+        map.removeSource(FREEHAND_OVERLAY_SOURCE_ID);
+      }
       if (drawRef.current) {
         try {
           if (map && map.getStyle()) {
@@ -255,7 +444,13 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       if (textModeRef.current) {
         const id = Math.random().toString(36).substr(2, 9);
         const initialZoom = map.getZoom();
-        setTextAnnotations(prev => [...prev, { id, lngLat: [e.lngLat.lng, e.lngLat.lat], text: '', initialZoom }]);
+        const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        setTextAnnotations(prev => {
+          const next = [...prev, { id, lngLat, text: '', initialZoom }];
+          textAnnotationsRef.current = next;
+          persistDrawState(persistentFeaturesRef.current, next);
+          return next;
+        });
       }
     };
 
@@ -287,7 +482,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       setMeasurement(null);
     }
     persistentFeaturesRef.current = [];
+    textAnnotationsRef.current = [];
     setTextAnnotations([]);
+    clearPersistedDrawState();
   };
 
   const handleExport = () => {
@@ -336,7 +533,13 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
               }));
             
             drawRef.current.addFeatures(drawFeatures as SnapshotFeatures);
-            setTextAnnotations(prev => [...prev, ...importedText]);
+            persistentFeaturesRef.current = drawRef.current.getSnapshot();
+            setTextAnnotations(prev => {
+              const next = [...prev, ...importedText];
+              textAnnotationsRef.current = next;
+              persistDrawState(persistentFeaturesRef.current, next);
+              return next;
+            });
           }
         } catch (err) {
           console.error("Failed to import GeoJSON:", err);
@@ -348,12 +551,46 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
   };
 
   const updateTextAnnotation = (id: string, text: string) => {
-    setTextAnnotations(prev => prev.map(a => a.id === id ? { ...a, text } : a));
+    setTextAnnotations(prev => {
+      const next = prev.map(a => a.id === id ? { ...a, text } : a);
+      textAnnotationsRef.current = next;
+      persistDrawState(persistentFeaturesRef.current, next);
+      return next;
+    });
   };
 
   const removeTextAnnotation = (id: string) => {
-    setTextAnnotations(prev => prev.filter(a => a.id !== id));
+    setTextAnnotations(prev => {
+      const next = prev.filter(a => a.id !== id);
+      textAnnotationsRef.current = next;
+      persistDrawState(persistentFeaturesRef.current, next);
+      return next;
+    });
   };
+
+  const updateTextAnnotationPosition = (id: string, lngLat: [number, number]) => {
+    setTextAnnotations(prev => {
+      const next = prev.map(a => a.id === id ? { ...a, lngLat } : a);
+      textAnnotationsRef.current = next;
+      persistDrawState(persistentFeaturesRef.current, next);
+      return next;
+    });
+  };
+
+  const handleDrawSizeInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = Number.parseInt(event.target.value, 10);
+    if (Number.isNaN(nextValue)) return;
+    setActiveSize(Math.max(MIN_DRAW_SIZE, Math.min(MAX_DRAW_SIZE, nextValue)));
+  };
+
+  const handleCustomColorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextColor = event.target.value;
+    setHasPickedCustomColor(true);
+    setCustomPickerColor(nextColor);
+    setActiveColor(nextColor);
+  };
+
+  const isCustomColorActive = !COLORS.some((color) => color.toLowerCase() === activeColor.toLowerCase());
 
   return (
     <>
@@ -415,35 +652,64 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
                 {COLORS.map(c => (
                   <button
                     key={c}
-                    className={`${styles.colorBtn} ${activeColor === c ? styles.active : ''}`}
+                    className={`${styles.colorBtn} ${activeColor.toLowerCase() === c.toLowerCase() ? styles.active : ''}`}
                     style={{ backgroundColor: c }}
                     onClick={() => setActiveColor(c)}
                   />
                 ))}
+                <label
+                  className={`${styles.colorPickerDot} ${isCustomColorActive ? styles.active : ''} ${!hasPickedCustomColor ? styles.cycling : ''}`}
+                  style={hasPickedCustomColor ? { backgroundColor: customPickerColor } : undefined}
+                  title="Custom color"
+                >
+                  <input
+                    className={styles.colorPickerInput}
+                    type="color"
+                    value={activeColor}
+                    onChange={handleCustomColorChange}
+                    aria-label="Pick custom draw color"
+                  />
+                  <span className={styles.colorPickerGlyph}>+</span>
+                </label>
               </div>
             </div>
 
             {/* Section 4: Size & Fill */}
             <div className={styles.section}>
               <div className={styles.sectionTitle}>Style</div>
-              <div className={styles.brushSizes}>
-                {SIZES.map(s => (
-                  <button
-                    key={s}
-                    className={`${styles.sizeBtn} ${activeSize === s ? styles.active : ''}`}
-                    onClick={() => setActiveSize(s)}
-                  >
-                    <div className={styles.sizeIndicator} style={{ width: s * 1.5, height: s * 1.5 }} />
-                  </button>
-                ))}
-                <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
+              <div className={styles.styleRow}>
+                <div className={styles.presetSizes}>
+                  {SIZES.map((sizeValue) => (
+                    <button
+                      key={sizeValue}
+                      className={`${styles.sizeBtn} ${styles.sizeSymbolBtn} ${activeSize === sizeValue ? styles.active : ''}`}
+                      onClick={() => setActiveSize(sizeValue)}
+                      title={`Set draw size ${sizeValue}`}
+                    >
+                      <div className={styles.sizeIndicator} style={{ width: sizeValue * 1.5, height: sizeValue * 1.5 }} />
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.sizeInputWrap}>
+                  <input
+                    className={styles.sizeInput}
+                    type="number"
+                    min={MIN_DRAW_SIZE}
+                    max={MAX_DRAW_SIZE}
+                    step={1}
+                    value={activeSize}
+                    onChange={handleDrawSizeInputChange}
+                    title="Custom draw size"
+                  />
+                </div>
+                <div className={styles.styleDivider} />
                 <button
-                  className={`${styles.sizeBtn} ${activeFill ? styles.active : ''}`}
+                  className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
                   onClick={() => setActiveFill(!activeFill)}
                   title="Toggle Fill"
                 >
                   <svg viewBox="0 0 24 24" width="16" height="16" fill={activeFill ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   </svg>
                 </button>
               </div>
@@ -476,7 +742,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
           annotation={annotation} 
           onUpdate={(text) => updateTextAnnotation(annotation.id, text)}
           onRemove={() => removeTextAnnotation(annotation.id)}
-          onDragEnd={(lngLat) => setTextAnnotations(prev => prev.map(a => a.id === annotation.id ? { ...a, lngLat } : a))}
+          onDragEnd={(lngLat) => updateTextAnnotationPosition(annotation.id, lngLat)}
         />
       ))}
     </>
@@ -558,6 +824,28 @@ function TextMarker({
   }, []);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    let raf2: number | null = null;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        const cursorPosition = el.value.length;
+        el.setSelectionRange(cursorPosition, cursorPosition);
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2 !== null) {
+        cancelAnimationFrame(raf2);
+      }
+    };
+  }, [annotation.id]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
