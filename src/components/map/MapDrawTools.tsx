@@ -24,7 +24,7 @@ interface MapDrawToolsProps {
 const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
 const SIZES = [2, 4, 8];
 const MIN_DRAW_SIZE = 1;
-const MAX_DRAW_SIZE = 24;
+const MAX_DRAW_SIZE = 50;
 const FREEHAND_OVERLAY_SOURCE_ID = 'td-freehand-lines-overlay-source';
 const FREEHAND_OVERLAY_LAYER_ID = 'td-freehand-lines-overlay-layer';
 const DRAW_STORAGE_KEY = 'seraphim-map-draw-tools-v1';
@@ -722,11 +722,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
                 Clear
               </button>
               <button className={styles.actionBtn} onClick={handleImport}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 Import
               </button>
               <button className={styles.actionBtn} onClick={handleExport}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                 Export
               </button>
             </div>
