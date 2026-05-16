@@ -1,0 +1,288 @@
+.drawToolsWrapper {
+    position: absolute;
+    top: 50%;
+    right: 60px; /* To the left of MapActionTools */
+    transform: translateY(-50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+    gap: 12px;
+    pointer-events: none;
+}
+
+.drawToolsPanel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px; /* Tighter padding */
+    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 16px; /* Tighter vertical spacing */
+    pointer-events: auto;
+    width: 280px;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Tighter internal spacing */
+}
+
+.sectionTitle {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.toolBtn {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 0;
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.toolBtn:hover {
+    background: var(--surface-hover);
+    transform: translateY(-1px);
+}
+
+.toolBtn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.colors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.colorBtn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.colorBtn:hover {
+    transform: scale(1.15);
+    border-color: var(--text-primary);
+}
+
+.colorBtn.active {
+    border-color: var(--text-primary);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--accent);
+}
+
+.brushSizes {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.sizeBtn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sizeBtn:hover {
+    background: var(--surface-hover);
+}
+
+.sizeBtn.active {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--accent);
+}
+
+.sizeIndicator {
+    background: currentColor;
+    border-radius: 50%;
+}
+
+.measurementBox {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    text-align: center;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+}
+
+.measurementLabel {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.6px;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.actionBtn {
+    flex: 1;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.actionBtn:hover {
+    background: var(--surface-hover);
+}
+
+.actionBtn.danger {
+    background: rgba(239, 68, 68, 0.08); /* Subtle red tint */
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.actionBtn.danger:hover {
+    background: var(--red);
+    color: #ffffff;
+    border-color: var(--red);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* MapLibre Text Marker styling */
+.textMarkerContainer {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+}
+
+.textMarker {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 700;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    cursor: text;
+    white-space: pre-wrap;
+    padding: 8px 12px;
+    z-index: 10;
+    min-width: 150px;
+    min-height: 40px;
+    resize: both;
+    overflow: auto;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.textMarker:focus {
+    border-color: var(--accent);
+}
+
+.textMarker::placeholder {
+    color: var(--text-muted);
+}
+
+.textMarkerDelete {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--red);
+    color: white;
+    border: 2px solid var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 11;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s ease;
+}
+
+.textMarkerDrag {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    z-index: 11;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s ease;
+}
+
+.textMarkerDrag:active {
+    cursor: grabbing;
+}
+
+.textMarkerContainer:hover .textMarkerDelete,
+.textMarkerContainer:hover .textMarkerDrag,
+.textMarker:focus ~ .textMarkerDelete,
+.textMarker:focus ~ .textMarkerDrag {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.textMarkerDelete:hover {
+    background: #dc2626;
+    transform: scale(1.1);
+}

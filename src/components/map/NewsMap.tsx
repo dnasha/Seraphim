@@ -24,6 +24,7 @@ import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
 import MapLoading from "./MapLoading";
 import UpgradeButton from "./UpgradeButton";
+import MapDrawTools from "./MapDrawTools";
 import styles from "./NewsMap.module.css";
 
 interface NewsMapProps {
@@ -81,6 +82,7 @@ export default function NewsMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drawToolsOpen, setDrawToolsOpen] = useState(false);
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
     isDarkMode ? "dark" : "standard",
@@ -670,8 +672,15 @@ export default function NewsMap({
             isGlobe={isGlobe}
             onToggleGlobe={() => setIsGlobe((v) => !v)}
             onResetOrientation={handleResetOrientation}
+            drawToolsOpen={drawToolsOpen}
+            onToggleDrawTools={() => setDrawToolsOpen((o) => !o)}
             bearing={mapBearing}
             disabled={disabled}
+          />
+          <MapDrawTools
+            mapRef={mapRef}
+            mapReady={mapReady}
+            isOpen={drawToolsOpen}
           />
         </>
       )}
