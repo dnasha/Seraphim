@@ -19,6 +19,7 @@ interface MapDrawToolsProps {
   mapRef: React.MutableRefObject<maplibregl.Map | null>;
   mapReady: boolean;
   isOpen: boolean;
+  userTier?: string;
 }
 
 const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
@@ -110,8 +111,8 @@ type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['onMouseM
 class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
   private isDragSketchActive = false;
 
-  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
-    if (!event) return;
+  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void, userTier?: string, isOpen?: boolean): void {
+    if (userTier === 'guest' || !isOpen || !event) return;
     this.isDragSketchActive = true;
     setMapDraggability?.(false);
     this.onClick({ ...event, button: 'left', isContextMenu: false });
@@ -137,7 +138,7 @@ class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode
   }
 }
 
-export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsProps) {
+export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest' }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
@@ -155,14 +156,29 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
 
   const [measurement, setMeasurement] = useState<{ value: number; unit: string; type: 'area' | 'distance' } | null>(null);
 
-  const initialPersistedState = useMemo(() => readPersistedDrawState(), []);
-  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>(
-    () => initialPersistedState?.textAnnotations ?? [],
-  );
+  const initialPersistedState = useMemo(() => {
+    if (userTier === 'guest') return null;
+    return readPersistedDrawState();
+  }, [userTier]);
+
+  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+
+  useEffect(() => {
+    if (initialPersistedState?.textAnnotations) {
+      requestAnimationFrame(() => {
+        setTextAnnotations(initialPersistedState.textAnnotations);
+      });
+    } else {
+      requestAnimationFrame(() => {
+        setTextAnnotations([]);
+      });
+    }
+  }, [initialPersistedState]);
+
   const textModeRef = useRef(false);
   type SnapshotFeatures = ReturnType<InstanceType<typeof TerraDraw>['getSnapshot']>;
   const persistentFeaturesRef = useRef<SnapshotFeatures>(
-    (initialPersistedState?.drawFeatures as SnapshotFeatures) ?? [],
+    (userTier !== 'guest' ? initialPersistedState?.drawFeatures as SnapshotFeatures : []) ?? [],
   );
   const textAnnotationsRef = useRef<TextAnnotation[]>(textAnnotations);
 
@@ -187,6 +203,22 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       }
     }
   }, [activeMode, mapRef]);
+  
+  useEffect(() => {
+    if (userTier === 'guest') {
+      clearPersistedDrawState();
+      persistentFeaturesRef.current = [];
+      textAnnotationsRef.current = [];
+      
+      requestAnimationFrame(() => {
+        setTextAnnotations([]);
+        setMeasurement(null);
+        if (drawRef.current) {
+          drawRef.current.clear();
+        }
+      });
+    }
+  }, [userTier]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -228,7 +260,6 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       zIndex: 30,
     };
 
-    // Validated styles containing only properties supported by FreehandLineStringMode
     const sketchStyles = {
       lineStringColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
       lineStringWidth: (feature: StyledFeature) => feature.properties?.size || sizeRef.current,
@@ -274,7 +305,6 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
 
     draw.start();
     
-    // Restore features if any exist
     if (persistentFeaturesRef.current.length > 0) {
       try {
         draw.addFeatures(persistentFeaturesRef.current);
@@ -348,7 +378,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       if (drawRef.current) {
         persistentFeaturesRef.current = drawRef.current.getSnapshot();
       }
-      persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+      if (userTier !== 'guest') {
+        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+      }
       syncFreehandOverlay();
       calculateMeasurement();
     };
@@ -406,14 +438,22 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
       });
       if (drawRef.current) {
         persistentFeaturesRef.current = drawRef.current.getSnapshot();
-        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+        if (userTier !== 'guest') {
+          persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+        }
       }
       syncFreehandOverlay();
     });
 
     draw.on('change', handleChange);
-    draw.on('select', handleChange);
-    draw.on('deselect', handleChange);
+    draw.on('select', () => {
+      if (userTier === 'guest') return;
+      handleChange();
+    });
+    draw.on('deselect', () => {
+      if (userTier === 'guest') return;
+      handleChange();
+    });
 
     return () => {
       if (map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
@@ -433,9 +473,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
         drawRef.current = null;
       }
     };
-  }, [mapReady, mapRef]);
+  }, [mapReady, mapRef, userTier]);
 
-  // Handle map click for text annotations
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -448,19 +487,24 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
         setTextAnnotations(prev => {
           const next = [...prev, { id, lngLat, text: '', initialZoom }];
           textAnnotationsRef.current = next;
-          persistDrawState(persistentFeaturesRef.current, next);
+          if (userTier !== 'guest') {
+            persistDrawState(persistentFeaturesRef.current, next);
+          }
           return next;
         });
       }
     };
 
-    map.on('click', handleMapClick);
+    const timer = setTimeout(() => {
+      map.on('click', handleMapClick);
+    }, 0);
+
     return () => {
+      clearTimeout(timer);
       map.off('click', handleMapClick);
     };
-  }, [mapReady, mapRef]);
+  }, [mapReady, mapRef, userTier]);
 
-  // Sync mode changes
   useEffect(() => {
     if (!drawRef.current) return;
     const effectiveMode = isOpen ? activeMode : 'static';
@@ -537,7 +581,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
             setTextAnnotations(prev => {
               const next = [...prev, ...importedText];
               textAnnotationsRef.current = next;
-              persistDrawState(persistentFeaturesRef.current, next);
+              if (userTier !== 'guest') {
+                persistDrawState(persistentFeaturesRef.current, next);
+              }
               return next;
             });
           }
@@ -554,7 +600,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
     setTextAnnotations(prev => {
       const next = prev.map(a => a.id === id ? { ...a, text } : a);
       textAnnotationsRef.current = next;
-      persistDrawState(persistentFeaturesRef.current, next);
+      if (userTier !== 'guest') {
+        persistDrawState(persistentFeaturesRef.current, next);
+      }
       return next;
     });
   };
@@ -563,7 +611,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
     setTextAnnotations(prev => {
       const next = prev.filter(a => a.id !== id);
       textAnnotationsRef.current = next;
-      persistDrawState(persistentFeaturesRef.current, next);
+      if (userTier !== 'guest') {
+        persistDrawState(persistentFeaturesRef.current, next);
+      }
       return next;
     });
   };
@@ -572,7 +622,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen }: MapDrawToolsP
     setTextAnnotations(prev => {
       const next = prev.map(a => a.id === id ? { ...a, lngLat } : a);
       textAnnotationsRef.current = next;
-      persistDrawState(persistentFeaturesRef.current, next);
+      if (userTier !== 'guest') {
+        persistDrawState(persistentFeaturesRef.current, next);
+      }
       return next;
     });
   };

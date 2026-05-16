@@ -6,7 +6,7 @@
  * Features:
  * - Tab-based Login / Sign Up views with email + password
  * - OAuth buttons for Google, GitHub, and Discord
- * - "Continue as Guest" button (guests are limited to 7 events, no filters)
+ * - "Continue as Guest" button (guests are limited to 10 events, no filters)
  * - Glassmorphism backdrop with smooth fade-in animation
  * - Matches Seraphim's design system (indigo accent, radius tokens, dark mode)
  */
@@ -275,7 +275,7 @@ export default function AuthModal() {
                 </button>
 
                 <p className={styles.guestNote}>
-                    Guest access is limited to 7 events with no filter controls.
+                    Guest access is limited to 10 hot events per view with no advanced controls.
                 </p>
             </div>
         </div>

@@ -69,10 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSession(finalSession);
             setUser(verifiedUser);
 
-            // If no session and not already determined as guest, show auth modal
+            // If no session and not already determined as guest, default to guest mode internally
+            // We no longer auto-show the auth modal on first launch to reduce friction.
             if (!finalSession && wasGuest !== 'true') {
-                // First visit or forcefully logged out — show auth modal
-                setShowAuthModal(true);
+                setIsGuest(true);
             }
 
             setIsLoading(false);
@@ -106,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setIsGuest(false);
         localStorage.removeItem(GUEST_STORAGE_KEY);
+        localStorage.removeItem('seraphim-map-draw-tools-v1');
         // Show auth modal again after sign out
         setShowAuthModal(true);
     }, [supabase]);

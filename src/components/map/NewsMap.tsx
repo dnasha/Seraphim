@@ -366,7 +366,7 @@ export default function NewsMap({
       closeButton: true,
       closeOnClick: false,
       className: "news-popup-container",
-      maxWidth: "400px",
+      maxWidth: "500px",
       anchor: "bottom",
     });
 
@@ -681,6 +681,7 @@ export default function NewsMap({
             mapRef={mapRef}
             mapReady={mapReady}
             isOpen={drawToolsOpen}
+            userTier={userTier}
           />
         </>
       )}

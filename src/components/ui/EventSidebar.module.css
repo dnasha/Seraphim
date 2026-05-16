@@ -1014,7 +1014,7 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: calc(7 * 28px); /* Roughly 7 items */
+  max-height: calc(10 * 28px); /* Roughly 10 items */
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;

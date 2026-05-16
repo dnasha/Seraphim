@@ -438,7 +438,7 @@ export default function EventSidebar({
                       </svg>
                       GUEST MODE ACTIVE
                     </h3>
-                    <p>Sign in to access 1000+ real time events, live filters, and historical archives.</p>
+                    <p>Sign in to access 1000+ real time events, live filters, customization, and annotation tools.</p>
                   </div>
                   <button className={styles.guestCtaButton} onClick={() => setShowAuthModal(true)}>
                     SIGN IN TO UNLOCK

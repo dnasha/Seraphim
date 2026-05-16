@@ -90,7 +90,7 @@ export function HomeContent() {
         customEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 7 : (userTier === 'free' ? 100 : undefined)
+        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined)
     });
     
     const sidebarRespectBBox = true;
@@ -192,9 +192,9 @@ export function HomeContent() {
         updateURL({ s: mode });
     }, [setSortMode, updateURL]);
 
-    /** Gate guests to a maximum of 7 events across all views */
+    /** Gate guests to a maximum of 10 events across all views */
     const items = useMemo(() => {
-        if (isGuestUser) return filteredNews.slice(0, 7);
+        if (isGuestUser) return filteredNews.slice(0, 10);
         if (userTier === 'free') return filteredNews.slice(0, 100);
         return filteredNews;
     }, [filteredNews, isGuestUser, userTier]);
@@ -264,7 +264,7 @@ export function HomeContent() {
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
-                    items={isGuestUser ? mapNews.slice(0, 7) : mapNews}
+                    items={isGuestUser ? mapNews.slice(0, 10) : mapNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}

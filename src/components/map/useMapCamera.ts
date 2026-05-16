@@ -167,27 +167,8 @@ export function useMapCamera({
               .addTo(map);
           }
 
-          map.once("moveend", () => {
-            isFlyingRef.current = false;
-            const finalItem =
-              latestGeoItemsRef.current.find(
-                (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-              ) || item;
-
-            if (popupRef.current && finalItem.latitude != null) {
-              lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
-              // Re-snap to final jittered position to account for any data updates during the flight.
-              popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
-              map.easeTo({
-                center: [finalItem.longitude!, finalItem.latitude!],
-                duration: 300,
-                essential: true,
-              });
-            }
-          });
-
           const containerHeight = containerRef.current?.clientHeight || 800;
-          const responsivePadding = Math.min(250, Math.floor(containerHeight * 0.25));
+          const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
 
           map.flyTo({
             center: [item.longitude!, item.latitude!],
@@ -203,6 +184,31 @@ export function useMapCamera({
               left: 0,
               right: 0,
             },
+          });
+
+          map.once("moveend", () => {
+            isFlyingRef.current = false;
+            const finalItem =
+              latestGeoItemsRef.current.find(
+                (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+              ) || item;
+
+            if (popupRef.current && finalItem.latitude != null) {
+              lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
+              // Re-snap to final jittered position to account for any data updates during the flight.
+              popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
+              map.easeTo({
+                center: [finalItem.longitude!, finalItem.latitude!],
+                duration: 300,
+                essential: true,
+                padding: {
+                  top: targetZoom > 4 ? responsivePadding : 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                },
+              });
+            }
           });
         }
       }

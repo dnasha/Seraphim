@@ -89,7 +89,7 @@ export default function MapPopup({ item }: MapPopupProps) {
                             fill
                             unoptimized
                             priority
-                            sizes="(max-width: 860px) 100vw, 400px"
+                            sizes="(max-width: 860px) 100vw, 500px"
                             style={{ objectFit: 'cover' }}
                             referrerPolicy="no-referrer" 
                             onError={(e) => (e.currentTarget.style.display = 'none')} 
