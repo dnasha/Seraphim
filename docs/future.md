@@ -4,6 +4,7 @@
 - [ ] **Micro-animations**: Implement smooth transitions for card entry, expansion, and map markers.
 - [ ] **Glassmorphism**: Refine sidebar and overlays with modern translucent aesthetics.
 - [ ] **Visual Consistency**: Audit all components for spacing, typography, and HSL token adherence.
+- [ ] **Support & Help**: Add a Ko-fi support button and a help/onboarding button to the main interface.
 
 ## Phase 4.5: Candy Features
 - [ ] **Temporal Scrubber**: Add a time slider to scrub through the last 7 days hour-by-hour with pin animations.
@@ -24,3 +25,4 @@
 - [ ] **Geodata Optimization**: Pre-calculate geocoding dictionaries at build time for faster runtime initialization.
 - [ ] **Regional Heatmaps**: Visualize broad, unmapped news (e.g., country-wide) via polygon overlays.
 - [ ] **The Tickertape**: Scrolling bottom bar for high-volume, unmapped headlines.
+- [ ] **Realtime Scalability**: Rethink Supabase realtime connections for initial public launch to prevent connection exhaustion/system failure.

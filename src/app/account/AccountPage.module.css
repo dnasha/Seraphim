@@ -1,5 +1,6 @@
 .container {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--surface-alt);
   color: var(--text-primary);
   display: flex;
@@ -7,6 +8,8 @@
   align-items: center;
   padding: 32px 20px 80px;
   font-family: var(--font-ui);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .content {

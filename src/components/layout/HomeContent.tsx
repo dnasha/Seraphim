@@ -16,6 +16,7 @@ import { useViewState } from '@/hooks/useViewState';
 import { useAuth } from '@/hooks/useAuth';
 import { BBox } from '@/lib/core/types';
 import { SortMode } from '@/lib/utils/ranking';
+import { useUserTier } from '@/hooks/useUserTier';
 import AuthModal from '@/components/auth/AuthModal';
 import UserButton from '@/components/auth/UserButton';
 import styles from './Layout.module.css';
@@ -27,6 +28,7 @@ export function HomeContent() {
     const { resolvedTheme } = useTheme();
     const { user, isLoading: authLoading, isGuest } = useAuth();
     const isGuestUser = isGuest || (!user && !authLoading);
+    const { tier: userTier } = useUserTier();
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
     const mounted = useSyncExternalStore(
         () => () => {},
@@ -88,7 +90,7 @@ export function HomeContent() {
         customEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 7 : undefined
+        limit: isGuestUser ? 7 : (userTier === 'free' ? 100 : undefined)
     });
     
     const sidebarRespectBBox = true;
@@ -193,8 +195,9 @@ export function HomeContent() {
     /** Gate guests to a maximum of 7 events across all views */
     const items = useMemo(() => {
         if (isGuestUser) return filteredNews.slice(0, 7);
+        if (userTier === 'free') return filteredNews.slice(0, 100);
         return filteredNews;
-    }, [filteredNews, isGuestUser]);
+    }, [filteredNews, isGuestUser, userTier]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
@@ -256,6 +259,7 @@ export function HomeContent() {
                 isCapped={isCapped}
                 appliedLimit={appliedLimit}
                 disabled={isGuestUser}
+                userTier={userTier}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
@@ -274,6 +278,8 @@ export function HomeContent() {
                     initialZoom={validInitialZoom}
                     sortMode={appliedSortMode as SortMode}
                     disabled={isGuestUser}
+                    isSidebarOpen={isSidebarOpen}
+                    userTier={userTier}
                 />
             </main>
 

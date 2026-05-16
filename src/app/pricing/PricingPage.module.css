@@ -1,0 +1,621 @@
+/* PricingPage.module.css — Premium pricing page matching Seraphim design system */
+
+.container {
+    height: 100vh;
+    height: 100dvh;
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+}
+
+/* ═══════════════ Header ═══════════════ */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+}
+
+.headerLeft, .headerRight {
+    flex: 0 0 auto;
+}
+
+.headerCenter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logoFill {
+    fill: var(--accent);
+}
+
+.logoStroke {
+    stroke: var(--accent);
+    fill: none;
+}
+
+.logoTitle {
+    font-family: var(--font-logo);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.backBtn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+@media (hover: hover) {
+    .backBtn:hover {
+        background: var(--surface-hover);
+        transform: scale(1.05);
+    }
+}
+
+/* ═══════════════ Hero ═══════════════ */
+.hero {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.heroTitle {
+    font-family: var(--font-logo);
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.heroSubtitle {
+    font-size: 1.125rem;
+    color: var(--text-muted);
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* ═══════════════ Billing Toggle ═══════════════ */
+.toggleContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 40px;
+}
+
+.toggleLabel {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+}
+
+.toggleLabelActive {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.toggleTrack {
+    width: 52px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--border);
+    border: none;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.25s;
+    padding: 0;
+}
+
+.toggleTrackActive {
+    background: var(--accent);
+}
+
+.toggleThumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggleTrackActive .toggleThumb {
+    transform: translateX(24px);
+}
+
+.saveBadge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+}
+
+/* ═══════════════ Cards Grid ═══════════════ */
+.cardsGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 60px;
+}
+
+.card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+@media (hover: hover) {
+    .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+    }
+}
+
+.cardPopular {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(99, 102, 241, 0.15);
+    transform: translateY(-4px);
+}
+
+.cardAngel {
+    border-color: #10b981;
+    background: linear-gradient(180deg, var(--surface) 0%, rgba(16, 185, 129, 0.04) 100%);
+}
+
+/* Card Badges */
+.cardBadge {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 14px;
+    border-radius: 10px;
+    white-space: nowrap;
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
+.cardBadgePopular {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.cardBadgeAngel {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border-color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+/* Card Content */
+.cardHeader {
+    margin-bottom: 20px;
+}
+
+.cardName {
+    font-family: var(--font-logo);
+    font-size: 1.375rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.cardTagline {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* Pricing */
+.cardPricing {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.priceOriginal {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    text-decoration: line-through;
+    width: 100%;
+    margin-bottom: 2px;
+}
+
+.priceAmount {
+    font-family: var(--font-logo);
+    font-size: 2.25rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.pricePeriod {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.priceSavings {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+    padding: 2px 8px;
+    border-radius: 8px;
+    margin-left: 8px;
+}
+
+/* Scarcity & Trial Badges */
+.scarcityBadge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.08);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+}
+
+.trialBadge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+/* Feature List */
+.featureList {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex: 1;
+}
+
+.featureItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.featureItem svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: #10b981;
+}
+
+.featureExcluded {
+    color: var(--text-muted);
+    opacity: 0.55;
+}
+
+.featureExcluded svg {
+    color: var(--text-muted);
+}
+
+/* CTA Buttons */
+.ctaBtn {
+    width: 100%;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+}
+
+@media (hover: hover) {
+    .ctaBtn:hover:not(:disabled) {
+        background: var(--surface-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+}
+
+.ctaBtnPopular {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+@media (hover: hover) {
+    .ctaBtnPopular:hover:not(:disabled) {
+        background: var(--accent-hover);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+}
+
+.ctaBtnAngel {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border-color: #10b981;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
+
+@media (hover: hover) {
+    .ctaBtnAngel:hover:not(:disabled) {
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        background: linear-gradient(135deg, #34d399, #10b981);
+    }
+}
+
+.ctaBtnFree {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ═══════════════ Comparison Table ═══════════════ */
+.comparisonSection {
+    margin-bottom: 60px;
+}
+
+.comparisonTitle {
+    font-family: var(--font-logo);
+    font-size: 1.75rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 28px;
+    letter-spacing: -0.02em;
+}
+
+.tableWrapper {
+    overflow-x: auto;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.comparisonTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.comparisonTable th {
+    padding: 14px 16px;
+    font-weight: 700;
+    text-align: center;
+    border-bottom: 2px solid var(--border);
+    background: var(--surface-alt);
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.thFeature {
+    text-align: left !important;
+    width: 35%;
+}
+
+.thPopular {
+    color: var(--accent) !important;
+    background: rgba(99, 102, 241, 0.05) !important;
+}
+
+.thAngel {
+    color: #10b981 !important;
+}
+
+.comparisonTable td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-primary);
+}
+
+.tdFeature {
+    text-align: left !important;
+    font-weight: 500;
+}
+
+.tdValue {
+    font-weight: 500;
+}
+
+.tdPopular {
+    background: rgba(99, 102, 241, 0.03);
+}
+
+.tdAngel {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.comparisonTable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ═══════════════ FAQ ═══════════════ */
+.faqSection {
+    margin-bottom: 40px;
+}
+
+.faqTitle {
+    font-family: var(--font-logo);
+    font-size: 1.75rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 28px;
+    letter-spacing: -0.02em;
+}
+
+.faqGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.faqItem {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+}
+
+.faqItem h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.faqItem p {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+/* ═══════════════ Footer ═══════════════ */
+.footer {
+    text-align: center;
+    padding: 20px 0 0;
+    border-top: 1px solid var(--border);
+}
+
+.footer p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.footer strong {
+    color: var(--text-primary);
+}
+
+/* ═══════════════ Responsive ═══════════════ */
+@media (max-width: 1024px) {
+    .cardsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .heroTitle {
+        font-size: 1.75rem;
+    }
+
+    .cardsGrid {
+        grid-template-columns: 1fr;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .cardPopular {
+        transform: none;
+    }
+
+    .faqGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .comparisonTable {
+        font-size: 0.75rem;
+    }
+
+    .comparisonTable th,
+    .comparisonTable td {
+        padding: 8px 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .content {
+        padding: 0 16px 40px;
+    }
+
+    .header {
+        padding: 16px 0;
+        margin-bottom: 24px;
+    }
+
+    .logoTitle {
+        font-size: 1.25rem;
+    }
+
+    .priceAmount {
+        font-size: 1.875rem;
+    }
+}

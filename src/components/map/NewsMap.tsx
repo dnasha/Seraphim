@@ -23,6 +23,7 @@ import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
 import MapLoading from "./MapLoading";
+import UpgradeButton from "./UpgradeButton";
 import styles from "./NewsMap.module.css";
 
 interface NewsMapProps {
@@ -40,6 +41,8 @@ interface NewsMapProps {
   initialZoom?: number;
   sortMode: "new" | "hot";
   disabled?: boolean;
+  isSidebarOpen?: boolean;
+  userTier?: string;
 }
 
 /**
@@ -65,6 +68,8 @@ export default function NewsMap({
   initialZoom,
   sortMode,
   disabled = false,
+  isSidebarOpen = true,
+  userTier = 'guest',
 }: NewsMapProps) {
   const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -633,6 +638,11 @@ export default function NewsMap({
     <div className={styles.mapWrapper}>
       {!mapReady && !mapError && <MapLoading />}
       {mapError && <MapError onRetry={handleRetry} error={mapError} />}
+
+      {/* Upgrade CTA for non-paying users */}
+      {(userTier === 'free' || userTier === 'guest') && (
+        <UpgradeButton isSidebarOpen={isSidebarOpen} />
+      )}
 
       {!mapError && (
         <>

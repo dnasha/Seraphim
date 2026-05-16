@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserTier } from '@/hooks/useUserTier';
+import TierBadge from '@/components/ui/TierBadge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './AccountPage.module.css';
 
@@ -54,6 +56,9 @@ export default function AccountPage() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isManagingBilling, setIsManagingBilling] = useState(false);
+
+  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt } = useUserTier();
 
   // Redirect if not logged in
   useEffect(() => {
@@ -195,6 +200,76 @@ export default function AccountPage() {
                 <span>Signed in via {provider}</span>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Subscription</h2>
+          <div className={styles.profileRow}>
+            <div className={styles.profileInfo} style={{ gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <TierBadge tier={userTier} size="md" />
+                {subscriptionStatus && subscriptionStatus !== 'inactive' && (
+                  <span className={styles.label} style={{ textTransform: 'capitalize', fontSize: '0.8125rem' }}>
+                    {subscriptionStatus === 'trialing' ? 'Trial Active' : subscriptionStatus}
+                  </span>
+                )}
+              </div>
+              {billingInterval && billingInterval !== 'month' && billingInterval !== 'lifetime' && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Billed {billingInterval}ly
+                </span>
+              )}
+              {billingInterval === 'lifetime' && (
+                <span style={{ fontSize: '0.75rem', color: '#10b981' }}>
+                  Lifetime Access
+                </span>
+              )}
+              {trialEndsAt && subscriptionStatus === 'trialing' && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Trial ends {new Date(trialEndsAt).toLocaleDateString()}
+                </span>
+              )}
+              {currentPeriodEnd && subscriptionStatus === 'active' && billingInterval !== 'lifetime' && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Renews {new Date(currentPeriodEnd).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className={styles.formGroup}>
+            {userTier === 'free' ? (
+              <button
+                className={styles.button}
+                onClick={() => router.push('/pricing')}
+                style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}
+              >
+                Upgrade Plan
+              </button>
+            ) : userTier !== 'angel' ? (
+              <button
+                className={styles.button}
+                disabled={isManagingBilling}
+                onClick={async () => {
+                  setIsManagingBilling(true);
+                  try {
+                    const res = await fetch('/api/stripe/portal', { method: 'POST' });
+                    const data = await res.json() as { url?: string; error?: string };
+                    if (data.url) {
+                      window.location.href = data.url;
+                    } else {
+                      alert(data.error || 'Failed to open billing portal');
+                    }
+                  } catch {
+                    alert('Network error');
+                  } finally {
+                    setIsManagingBilling(false);
+                  }
+                }}
+              >
+                {isManagingBilling ? <span className={styles.spinner} /> : 'Manage Billing'}
+              </button>
+            ) : null}
           </div>
         </section>
 

@@ -7,6 +7,7 @@
 
 import { NewsItem } from "@/lib/core/types";
 import { SortMode } from "@/lib/utils/filters";
+import type { UserTier } from "@/components/ui/TierBadge";
 
 import {
   ReactNode,
@@ -18,6 +19,7 @@ import {
 } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import ThemeToggle from "./ThemeToggle";
+import TierBadge from "@/components/ui/TierBadge";
 import UserButton from "@/components/auth/UserButton";
 import { canonicalEventCount, latestReportTimestamp } from "@/lib/utils/ranking";
 import EventCard from "./EventCard";
@@ -49,6 +51,8 @@ interface EventSidebarProps {
   appliedLimit?: number;
   /** When true, disables interactive controls for guest users */
   disabled?: boolean;
+  /** Current user subscription tier */
+  userTier?: UserTier;
 }
 
 export default function EventSidebar({
@@ -71,6 +75,7 @@ export default function EventSidebar({
   isCapped = false,
   appliedLimit,
   disabled = false,
+  userTier = 'guest',
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -279,6 +284,7 @@ export default function EventSidebar({
               />
             </svg>
             <h1>Seraphim</h1>
+            <TierBadge tier={userTier} />
           </a>
           <div className={styles.eventSidebarActions}>
             <UserButton variant="sidebar" />

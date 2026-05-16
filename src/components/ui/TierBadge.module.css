@@ -1,0 +1,76 @@
+/* TierBadge.module.css — Tier status badge styling */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: var(--font-ui);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 6px;
+    user-select: none;
+    white-space: nowrap;
+    line-height: 1;
+
+    /* Default: small size */
+    font-size: 0.5625rem;
+    padding: 2px 6px;
+}
+
+.md {
+    font-size: 0.6875rem;
+    padding: 4px 10px;
+    border-radius: 8px;
+    gap: 4px;
+}
+
+.icon {
+    flex-shrink: 0;
+}
+
+/* ═══ Tier Colors ═══ */
+
+.guest {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.free {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .free {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.pro {
+    background: rgba(99, 102, 241, 0.12);
+    color: #6366f1;
+}
+
+[data-theme="dark"] .pro {
+    background: rgba(99, 102, 241, 0.18);
+    color: #818cf8;
+}
+
+.analyst {
+    background: rgba(234, 179, 8, 0.12);
+    color: #b45309;
+}
+
+[data-theme="dark"] .analyst {
+    background: rgba(234, 179, 8, 0.15);
+    color: #fbbf24;
+}
+
+.angel {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.12));
+    color: #059669;
+}
+
+[data-theme="dark"] .angel {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.15));
+    color: #34d399;
+}
