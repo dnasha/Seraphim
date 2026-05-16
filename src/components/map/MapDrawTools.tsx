@@ -456,15 +456,15 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     });
 
     return () => {
-      if (map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
+      if (map && typeof map.getLayer === 'function' && map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
         map.removeLayer(FREEHAND_OVERLAY_LAYER_ID);
       }
-      if (map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
+      if (map && typeof map.getSource === 'function' && map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
         map.removeSource(FREEHAND_OVERLAY_SOURCE_ID);
       }
       if (drawRef.current) {
         try {
-          if (map && map.getStyle()) {
+          if (map && typeof map.getStyle === 'function' && map.getStyle()) {
             drawRef.current.stop();
           }
         } catch (err) {
@@ -501,7 +501,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     return () => {
       clearTimeout(timer);
-      map.off('click', handleMapClick);
+      if (map && typeof map.off === 'function') {
+        map.off('click', handleMapClick);
+      }
     };
   }, [mapReady, mapRef, userTier]);
 
