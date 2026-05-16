@@ -30,6 +30,65 @@ const FREEHAND_OVERLAY_SOURCE_ID = 'td-freehand-lines-overlay-source';
 const FREEHAND_OVERLAY_LAYER_ID = 'td-freehand-lines-overlay-layer';
 const DRAW_STORAGE_KEY = 'seraphim-map-draw-tools-v1';
 
+const hasMapStyleObject = (map: maplibregl.Map): boolean => {
+  return Boolean((map as maplibregl.Map & { style?: unknown }).style);
+};
+
+const getTerraDrawArtifactIds = (map: maplibregl.Map): { layerIds: string[]; sourceIds: string[] } => {
+  if (!hasMapStyleObject(map)) {
+    return { layerIds: [], sourceIds: [] };
+  }
+
+  try {
+    const style = typeof map.getStyle === 'function' ? map.getStyle() : null;
+    if (!style) return { layerIds: [], sourceIds: [] };
+
+    const layerIds = (style.layers || [])
+      .map((layer) => layer.id)
+      .filter((id): id is string => typeof id === 'string' && id.startsWith('td-'));
+
+    const sourceIds = Object.keys(style.sources || {})
+      .filter((id) => id.startsWith('td-'));
+
+    return { layerIds, sourceIds };
+  } catch {
+    return { layerIds: [], sourceIds: [] };
+  }
+};
+
+const removeStaleTerraDrawArtifacts = (map: maplibregl.Map) => {
+  const { layerIds, sourceIds } = getTerraDrawArtifactIds(map);
+
+  for (const layerId of layerIds) {
+    try {
+      if (typeof map.getLayer === 'function' && map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+    } catch {
+      // Map style can mutate during teardown; best effort cleanup avoids duplicate-source crashes.
+    }
+  }
+
+  for (const sourceId of sourceIds) {
+    try {
+      if (typeof map.getSource === 'function' && map.getSource(sourceId)) {
+        map.removeSource(sourceId);
+      }
+    } catch {
+      // Map style can mutate during teardown; best effort cleanup avoids duplicate-source crashes.
+    }
+  }
+};
+
+const stopTerraDrawSafely = (draw: TerraDraw, map: maplibregl.Map) => {
+  if (!hasMapStyleObject(map)) return;
+  try {
+    draw.stop();
+  } catch {
+    // Ignore teardown races when the underlying adapter map internals are already disposed.
+  }
+};
+
 interface TextAnnotation {
   id: string;
   lngLat: [number, number];
@@ -224,7 +283,15 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    const adapter = new TerraDrawMapLibreGLAdapter({ map });
+    if (drawRef.current) {
+      stopTerraDrawSafely(drawRef.current, map);
+      drawRef.current = null;
+    }
+
+    removeStaleTerraDrawArtifacts(map);
+
+    const adapterPrefixId = `td-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const adapter = new TerraDrawMapLibreGLAdapter({ map, prefixId: adapterPrefixId });
 
     type StyledFeature = { properties?: { color?: string; size?: number; fill?: boolean } };
 
@@ -303,7 +370,17 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       ],
     });
 
-    draw.start();
+    try {
+      draw.start();
+    } catch {
+      removeStaleTerraDrawArtifacts(map);
+      try {
+        draw.start();
+      } catch (retryErr) {
+        console.error('MapDrawTools failed to initialize TerraDraw:', retryErr);
+        return;
+      }
+    }
     
     if (persistentFeaturesRef.current.length > 0) {
       try {
@@ -456,21 +533,17 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     });
 
     return () => {
-      if (map && typeof map.getLayer === 'function' && map.getLayer(FREEHAND_OVERLAY_LAYER_ID)) {
-        map.removeLayer(FREEHAND_OVERLAY_LAYER_ID);
-      }
-      if (map && typeof map.getSource === 'function' && map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
-        map.removeSource(FREEHAND_OVERLAY_SOURCE_ID);
-      }
-      if (drawRef.current) {
-        try {
-          if (map && typeof map.getStyle === 'function' && map.getStyle()) {
-            drawRef.current.stop();
-          }
-        } catch (err) {
-          console.warn("TerraDraw stop error suppressed:", err);
+      const instance = map;
+      if (!instance) return;
+
+      try {
+        if (drawRef.current) {
+          stopTerraDrawSafely(drawRef.current, instance);
+          drawRef.current = null;
         }
-        drawRef.current = null;
+        removeStaleTerraDrawArtifacts(instance);
+      } catch (err) {
+        console.warn("MapDrawTools cleanup error suppressed:", err);
       }
     };
   }, [mapReady, mapRef, userTier]);
@@ -501,8 +574,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     return () => {
       clearTimeout(timer);
-      if (map && typeof map.off === 'function') {
-        map.off('click', handleMapClick);
+      const instance = map;
+      if (instance && typeof instance.off === 'function') {
+        instance.off('click', handleMapClick);
       }
     };
   }, [mapReady, mapRef, userTier]);
@@ -847,7 +921,10 @@ function TextMarker({
     updateScale();
 
     return () => {
-      map.off('zoom', updateScale);
+      const instance = map;
+      if (instance && typeof instance.off === 'function') {
+        instance.off('zoom', updateScale);
+      }
     };
   }, [mapRef, annotation.initialZoom]);
 

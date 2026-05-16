@@ -1,11 +1,8 @@
 /**
  * Pricing Page
- * 
- * Conversion-optimized pricing page with monthly/yearly toggle, 4-tier comparison,
- * feature matrix, and FAQ section. Uses Stripe Checkout Sessions for payment.
- * 
- * Marketing psychology applied: anchoring, urgency (Angel scarcity),
- * loss aversion (savings badges), default yearly selection (higher LTV).
+ *
+ * Four-tier pricing page with monthly and yearly billing options,
+ * Stripe Checkout integration, feature comparison, and FAQ content.
  */
 
 'use client';
@@ -38,7 +35,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'free',
         name: 'Free',
-        tagline: 'Explore the global intelligence feed',
+        tagline: 'Full toolkit with a 100 story cap',
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: false,
@@ -47,28 +44,25 @@ const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            'Live event map (100 pins)',
-            'Hot & New sort modes',
-            'Light & Dark themes',
-            'Basic event details',
+            'Up to 100 stories per refresh',
+            'Search, source filters, and category filters',
+            'Time range controls with custom dates',
+            'Hot and New sorting',
+            'Live overlays: USGS, NOAA, NASA EONET',
+            'Map styles, 3D globe, and draw tools',
+            'Import and export GeoJSON annotations',
         ],
         excluded: [
-            'Source & category filters',
-            'Time range controls',
-            'Search',
-            'Bookmarks',
-            'Live overlays',
-            'Map style themes',
-            '3D Globe mode',
+            'Unlimited story volume',
         ],
-        cta: 'Current Plan',
+        cta: 'Included',
         priceKeyMonthly: '',
         priceKeyYearly: '',
     },
     {
         key: 'pro',
         name: 'Pro',
-        tagline: 'Full OSINT toolkit for power users',
+        tagline: 'Unlimited feed access for daily monitoring',
         monthlyPrice: 9.99,
         yearlyPrice: 99.99,
         isLifetime: false,
@@ -77,100 +71,80 @@ const TIERS: TierConfig[] = [
         popular: true,
         trialDays: 7,
         features: [
-            'Unlimited event pins',
-            'Source & category filters',
-            'Time range controls',
-            'Full-text search',
-            'Up to 50 bookmarks',
-            'Live overlays (USGS, NOAA, NASA)',
-            'All map style themes',
-            '3D Globe mode',
-            'Sort by Hot & New',
-            '7-day free trial',
+            'Unlimited stories in map and sidebar',
+            'Everything in Free',
+            '7 day trial on monthly billing',
+            'Monthly or yearly billing',
+            'Pro tier badge in app',
         ],
         excluded: [
-            'Geofence alerts',
-            'API access',
-            'Custom intel reports',
-            'Priority support',
+            'Lifetime billing',
         ],
-        cta: 'Start Free Trial',
+        cta: 'Start 7 Day Trial',
         priceKeyMonthly: 'pro_monthly',
         priceKeyYearly: 'pro_yearly',
     },
     {
         key: 'analyst',
         name: 'Analyst',
-        tagline: 'Professional intelligence & analytics',
+        tagline: 'Unlimited access with Analyst status',
         monthlyPrice: 29.99,
         yearlyPrice: 299.99,
         isLifetime: false,
         lifetimePrice: 0,
-        badge: 'For Teams',
+        badge: 'Power User',
         popular: false,
         trialDays: 0,
         features: [
             'Everything in Pro',
-            'Unlimited bookmarks',
-            'Geofence alerts',
-            'API access',
-            'Custom intel reports',
-            'Priority support',
-            'Advanced analytics',
-            'Data export (CSV/JSON)',
+            'Analyst tier badge in app',
+            'Monthly or yearly billing',
+            'Unlimited stories in map and sidebar',
         ],
         excluded: [
-            'Founder badge',
-            'Lifetime access',
+            'Lifetime billing',
         ],
-        cta: 'Get Analyst',
+        cta: 'Upgrade to Analyst',
         priceKeyMonthly: 'analyst_monthly',
         priceKeyYearly: 'analyst_yearly',
     },
     {
         key: 'angel',
         name: 'Angel',
-        tagline: 'Lifetime access. Founding supporter.',
+        tagline: 'One time payment for lifetime access',
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: true,
         lifetimePrice: 299,
-        badge: 'Limited Edition',
+        badge: 'Limited 100',
         popular: false,
         trialDays: 0,
         features: [
             'Everything in Analyst',
-            'Lifetime access — pay once',
-            'Exclusive Founder badge',
-            'Early access to new features',
-            'Direct line to the team',
-            'Name in the credits',
+            'Lifetime access with one payment',
+            'Angel tier badge in app',
+            'Limited to 100 total memberships',
         ],
         excluded: [],
-        cta: 'Become an Angel',
+        cta: 'Get Lifetime Access',
         priceKeyMonthly: 'angel',
         priceKeyYearly: 'angel',
     },
 ];
 
 const COMPARISON_ROWS = [
-    { feature: 'Live Event Map', free: '100 pins', pro: 'Unlimited', analyst: 'Unlimited', angel: 'Unlimited' },
-    { feature: 'Source Filters', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Category Filters', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Time Range Controls', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Full-text Search', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Sort Modes (Hot/New)', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Bookmarks', free: '—', pro: '50', analyst: 'Unlimited', angel: 'Unlimited' },
-    { feature: 'Live Overlays (USGS/NOAA/NASA)', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Map Style Themes', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: '3D Globe Mode', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
-    { feature: 'Geofence Alerts', free: '—', pro: '—', analyst: '✓', angel: '✓' },
-    { feature: 'API Access', free: '—', pro: '—', analyst: '✓', angel: '✓' },
-    { feature: 'Custom Intel Reports', free: '—', pro: '—', analyst: '✓', angel: '✓' },
-    { feature: 'Data Export', free: '—', pro: '—', analyst: '✓', angel: '✓' },
-    { feature: 'Priority Support', free: '—', pro: '—', analyst: '✓', angel: '✓' },
-    { feature: 'Founder Badge', free: '—', pro: '—', analyst: '—', angel: '✓' },
-    { feature: 'Lifetime Access', free: '—', pro: '—', analyst: '—', angel: '✓' },
+    { feature: 'Story volume (map and sidebar)', free: '100 per refresh', pro: 'Unlimited', analyst: 'Unlimited', angel: 'Unlimited' },
+    { feature: 'Search and filters', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Time range controls', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Map styles and 3D globe', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Live overlays (USGS, NOAA, NASA)', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Draw, measure, and text annotations', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'GeoJSON import and export', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Tier badge in app', free: 'Free', pro: 'Pro', analyst: 'Analyst', angel: 'Angel' },
+    { feature: 'Billing model', free: 'Free', pro: 'Subscription', analyst: 'Subscription', angel: 'One time' },
+    { feature: 'Trial availability', free: 'No', pro: '7 days on monthly', analyst: 'No', angel: 'No' },
+    { feature: 'Manage billing in account', free: 'No', pro: 'Yes', analyst: 'Yes', angel: 'Not needed' },
+    { feature: 'Lifetime access', free: 'No', pro: 'No', analyst: 'No', angel: 'Yes' },
 ];
 
 export default function PricingPage() {
@@ -284,9 +258,9 @@ export default function PricingPage() {
 
                 {/* Hero */}
                 <section className={styles.hero}>
-                    <h2 className={styles.heroTitle}>Intelligence at every level</h2>
+                    <h2 className={styles.heroTitle}>See more of the global signal</h2>
                     <p className={styles.heroSubtitle}>
-                        Choose the plan that matches your mission. Upgrade, downgrade, or cancel anytime.
+                        Free includes the full toolkit with a 100 story cap. Paid plans remove the cap and include subscription management.
                     </p>
                 </section>
 
@@ -324,6 +298,7 @@ export default function PricingPage() {
                                 : tier.priceKeyMonthly;
                         const isFreeTier = tier.key === 'free';
                         const isLoading = loadingTier === priceKey;
+                        const ctaText = tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
 
                         return (
                             <div
@@ -379,9 +354,9 @@ export default function PricingPage() {
                                     </div>
                                 )}
 
-                                {tier.trialDays > 0 && (
+                                {tier.trialDays > 0 && !isYearly && (
                                     <div className={styles.trialBadge}>
-                                        {tier.trialDays}-day free trial · Cancel anytime
+                                        {tier.trialDays} day free trial. Cancel anytime.
                                     </div>
                                 )}
 
@@ -413,7 +388,7 @@ export default function PricingPage() {
                                     {isLoading ? (
                                         <span className={styles.spinner} />
                                     ) : (
-                                        tier.cta
+                                        ctaText
                                     )}
                                 </button>
                             </div>
@@ -456,33 +431,41 @@ export default function PricingPage() {
                     <div className={styles.faqGrid}>
                         <div className={styles.faqItem}>
                             <h3>How does the free trial work?</h3>
-                            <p>Pro monthly includes a 7-day free trial. Your card won&apos;t be charged until the trial ends. Cancel anytime before to avoid charges.</p>
+                            <p>The Pro monthly plan includes a 7 day trial. You are charged only after the trial ends, and you can cancel before then.</p>
+                        </div>
+                        <div className={styles.faqItem}>
+                            <h3>What is the core difference between Free and paid?</h3>
+                            <p>Free is capped at 100 stories per refresh. Pro, Analyst, and Angel remove that cap so you can monitor the full stream.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Can I switch plans?</h3>
-                            <p>Yes! You can upgrade, downgrade, or cancel anytime from your account settings. Changes take effect at the next billing cycle.</p>
+                            <p>Yes. You can upgrade, downgrade, or cancel from your account settings. Changes apply on your next billing cycle.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>What happens when I cancel?</h3>
-                            <p>You&apos;ll retain access until the end of your current billing period, then your account reverts to the Free tier.</p>
+                            <p>You keep access until the end of your current period, then your account returns to the Free tier.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Is the Angel tier really lifetime?</h3>
-                            <p>Yes. Angel is a one-time payment for permanent access to all features. Only 100 will ever be sold — once they&apos;re gone, they&apos;re gone.</p>
+                            <p>Yes. Angel is a one time payment for lifetime access. Only 100 Angel memberships are available.</p>
+                        </div>
+                        <div className={styles.faqItem}>
+                            <h3>Where do I manage billing?</h3>
+                            <p>Pro and Analyst subscriptions include a Manage Billing button in your account page for plan changes and cancellation.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>What payment methods are accepted?</h3>
-                            <p>We accept all major credit cards, debit cards, and select local payment methods through Stripe&apos;s secure payment infrastructure.</p>
+                            <p>Stripe supports major credit cards, debit cards, and supported local payment methods.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Is my payment information secure?</h3>
-                            <p>Absolutely. All payments are processed by Stripe, a PCI Level 1 certified payment processor. We never store your card details.</p>
+                            <p>Yes. Payments are processed by Stripe, a PCI Level 1 certified provider, and card details are not stored by Seraphim.</p>
                         </div>
                     </div>
                 </section>
 
                 <footer className={styles.footer}>
-                    <p>Secured by <strong>Stripe</strong> · PCI Level 1 Certified · 256-bit SSL Encryption</p>
+                    <p>Payments are secured by <strong>Stripe</strong>, PCI Level 1 certified, with 256 bit SSL encryption.</p>
                 </footer>
             </div>
         </div>
