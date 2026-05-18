@@ -4,6 +4,9 @@
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .mapSettingsBtn {

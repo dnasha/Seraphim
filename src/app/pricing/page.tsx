@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserTier } from '@/hooks/useUserTier';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './PricingPage.module.css';
 
@@ -151,7 +152,10 @@ export default function PricingPage() {
     const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
     const [loadingTier, setLoadingTier] = useState<string | null>(null);
     const [angelRemaining, setAngelRemaining] = useState<number | null>(null);
+    const [angelTotal, setAngelTotal] = useState<number>(100);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const { user, isGuest } = useAuth();
+    const { tier: currentTier } = useUserTier();
     const router = useRouter();
 
     // Fetch angel remaining count
@@ -160,8 +164,9 @@ export default function PricingPage() {
             try {
                 const res = await fetch('/api/stripe/angel-count');
                 if (res.ok) {
-                    const data = await res.json() as { remaining: number };
+                    const data = await res.json() as { remaining: number; total: number };
                     setAngelRemaining(data.remaining);
+                    setAngelTotal(data.total);
                 }
             } catch {
                 // Non-critical, default to showing nothing
@@ -180,6 +185,7 @@ export default function PricingPage() {
         if (!priceKey) return;
 
         setLoadingTier(priceKey);
+        setErrorMsg(null);
         try {
             const res = await fetch('/api/stripe/checkout', {
                 method: 'POST',
@@ -192,10 +198,10 @@ export default function PricingPage() {
             if (data.url) {
                 window.location.href = data.url;
             } else {
-                alert(data.error || 'Failed to start checkout');
+                setErrorMsg(data.error || 'Failed to start checkout');
             }
         } catch {
-            alert('Network error. Please try again.');
+            setErrorMsg('Network error. Please try again.');
         } finally {
             setLoadingTier(null);
         }
@@ -264,6 +270,47 @@ export default function PricingPage() {
                     </p>
                 </section>
 
+                {/* Error Toast */}
+                {errorMsg && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            bottom: '24px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            background: '#ef4444',
+                            color: '#fff',
+                            padding: '12px 24px',
+                            borderRadius: 'var(--radius-md)',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            zIndex: 1000,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            boxShadow: '0 8px 32px rgba(239, 68, 68, 0.35)',
+                            animation: 'fadeIn 0.2s ease-out',
+                        }}
+                    >
+                        {errorMsg}
+                        <button
+                            onClick={() => setErrorMsg(null)}
+                            style={{
+                                background: 'rgba(255,255,255,0.2)',
+                                border: 'none',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                borderRadius: '4px',
+                                padding: '2px 8px',
+                                fontSize: '0.8125rem',
+                                fontWeight: 700,
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
                 {/* Billing Toggle */}
                 <div className={styles.toggleContainer}>
                     <span className={`${styles.toggleLabel} ${!isYearly ? styles.toggleLabelActive : ''}`}>Monthly</span>
@@ -297,15 +344,22 @@ export default function PricingPage() {
                                 ? tier.priceKeyYearly
                                 : tier.priceKeyMonthly;
                         const isFreeTier = tier.key === 'free';
+                        const isCurrentPlan = tier.key === currentTier;
                         const isLoading = loadingTier === priceKey;
-                        const ctaText = tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
+                        const ctaText = isCurrentPlan
+                            ? 'Current Plan'
+                            : tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
 
                         return (
                             <div
                                 key={tier.key}
-                                className={`${styles.card} ${tier.popular ? styles.cardPopular : ''} ${tier.key === 'angel' ? styles.cardAngel : ''}`}
+                                className={`${styles.card} ${tier.popular ? styles.cardPopular : ''} ${tier.key === 'angel' ? styles.cardAngel : ''} ${isCurrentPlan ? styles.cardCurrent : ''}`}
                             >
-                                {tier.badge && (
+                                {isCurrentPlan ? (
+                                    <div className={`${styles.cardBadge} ${styles.cardBadgeCurrent}`}>
+                                        Current Plan
+                                    </div>
+                                ) : tier.badge && (
                                     <div className={`${styles.cardBadge} ${tier.popular ? styles.cardBadgePopular : ''} ${tier.key === 'angel' ? styles.cardBadgeAngel : ''}`}>
                                         {tier.badge}
                                     </div>
@@ -346,11 +400,14 @@ export default function PricingPage() {
                                 </div>
 
                                 {tier.key === 'angel' && angelRemaining !== null && (
-                                    <div className={styles.scarcityBadge}>
+                                    <div className={styles.scarcityBadge} style={angelRemaining === 0 ? { color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)' } : undefined}>
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                                             <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" />
                                         </svg>
-                                        Only {angelRemaining} of 100 remaining
+                                        {angelRemaining === 0
+                                            ? 'Sold out'
+                                            : `Only ${angelRemaining} of ${angelTotal} remaining`
+                                        }
                                     </div>
                                 )}
 
@@ -381,12 +438,14 @@ export default function PricingPage() {
                                 </ul>
 
                                 <button
-                                    className={`${styles.ctaBtn} ${tier.popular ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' ? styles.ctaBtnAngel : ''} ${isFreeTier ? styles.ctaBtnFree : ''}`}
-                                    disabled={isFreeTier || isLoading}
+                                    className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${isFreeTier || isCurrentPlan ? styles.ctaBtnFree : ''}`}
+                                    disabled={isFreeTier || isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0)}
                                     onClick={() => handleCheckout(priceKey)}
                                 >
                                     {isLoading ? (
                                         <span className={styles.spinner} />
+                                    ) : (tier.key === 'angel' && angelRemaining === 0 && !isCurrentPlan) ? (
+                                        'Sold Out'
                                     ) : (
                                         ctaText
                                     )}

@@ -234,6 +234,18 @@
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
+/* Current Plan */
+.cardCurrent {
+    border-color: var(--text-muted);
+    box-shadow: 0 0 0 1px var(--text-muted);
+}
+
+.cardBadgeCurrent {
+    background: var(--text-primary);
+    color: var(--surface);
+    border-color: var(--text-primary);
+}
+
 /* Card Content */
 .cardHeader {
     margin-bottom: 20px;

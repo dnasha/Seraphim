@@ -18,6 +18,7 @@ interface UserTierState {
     billingInterval: string | null;
     currentPeriodEnd: string | null;
     trialEndsAt: string | null;
+    cancelAtPeriodEnd: boolean;
     refetch: () => void;
 }
 
@@ -31,6 +32,7 @@ export function useUserTier(): UserTierState {
     const [billingInterval, setBillingInterval] = useState<string | null>(null);
     const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null);
     const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+    const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [fetchVersion, setFetchVersion] = useState(0);
 
@@ -49,6 +51,7 @@ export function useUserTier(): UserTierState {
             setBillingInterval(null);
             setCurrentPeriodEnd(null);
             setTrialEndsAt(null);
+            setCancelAtPeriodEnd(false);
             setIsLoading(false);
             return;
         }
@@ -56,7 +59,7 @@ export function useUserTier(): UserTierState {
         try {
             const { data, error } = await supabase
                 .from('user_profiles')
-                .select('tier, subscription_status, billing_interval, current_period_end, trial_ends_at')
+                .select('tier, subscription_status, billing_interval, current_period_end, trial_ends_at, cancel_at_period_end')
                 .eq('id', user.id)
                 .single();
 
@@ -68,6 +71,7 @@ export function useUserTier(): UserTierState {
                 setBillingInterval(data.billing_interval);
                 setCurrentPeriodEnd(data.current_period_end);
                 setTrialEndsAt(data.trial_ends_at);
+                setCancelAtPeriodEnd(data.cancel_at_period_end ?? false);
             }
         } catch {
             setTier('free');
@@ -109,6 +113,21 @@ export function useUserTier(): UserTierState {
         () => 'ssr',
     );
 
+    // Auto-refetch on window focus (e.g., returning from Stripe billing portal)
+    useSyncExternalStore(
+        useCallback((onStoreChange: () => void) => {
+            if (typeof window === 'undefined') return () => {};
+            const handleFocus = () => {
+                setFetchVersion(v => v + 1);
+                onStoreChange();
+            };
+            window.addEventListener('focus', handleFocus);
+            return () => window.removeEventListener('focus', handleFocus);
+        }, []),
+        () => 'focus-listener',
+        () => 'ssr',
+    );
+
     return {
         tier,
         isLoading,
@@ -116,6 +135,7 @@ export function useUserTier(): UserTierState {
         billingInterval,
         currentPeriodEnd,
         trialEndsAt,
+        cancelAtPeriodEnd,
         refetch: () => setFetchVersion(v => v + 1),
     };
 }

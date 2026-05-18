@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         const isAngel = priceKey === 'angel';
         const isProMonthly = priceKey === 'pro_monthly';
 
-        const origin = request.headers.get('origin') || 'https://seraphi.me';
+        const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://seraphi.me';
 
         const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
             customer: customerId,

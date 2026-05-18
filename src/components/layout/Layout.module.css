@@ -47,7 +47,7 @@ Styles for the main application shell, content area, and top-level action button
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-button);
   cursor: pointer;
   display: flex;
   align-items: center;

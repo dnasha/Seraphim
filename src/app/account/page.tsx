@@ -58,7 +58,7 @@ export default function AccountPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
 
-  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt } = useUserTier();
+  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd } = useUserTier();
 
   // Redirect if not logged in
   useEffect(() => {
@@ -231,13 +231,13 @@ export default function AccountPage() {
                 </span>
               )}
               {currentPeriodEnd && subscriptionStatus === 'active' && billingInterval !== 'lifetime' && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Renews {new Date(currentPeriodEnd).toLocaleDateString()}
+                <span style={{ fontSize: '0.75rem', color: cancelAtPeriodEnd ? '#ef4444' : 'var(--text-muted)' }}>
+                  {cancelAtPeriodEnd ? 'Ends' : 'Renews'} {new Date(currentPeriodEnd).toLocaleDateString()}
                 </span>
               )}
             </div>
           </div>
-          <div className={styles.formGroup}>
+          <div className={styles.buttonGroup}>
             {userTier === 'free' ? (
               <button
                 className={styles.button}
@@ -247,6 +247,37 @@ export default function AccountPage() {
                 Upgrade Plan
               </button>
             ) : userTier !== 'angel' ? (
+              <>
+                <button
+                  className={styles.button}
+                  disabled={isManagingBilling}
+                  onClick={async () => {
+                    setIsManagingBilling(true);
+                    try {
+                      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+                      const data = await res.json() as { url?: string; error?: string };
+                      if (data.url) {
+                        window.location.href = data.url;
+                      } else {
+                        alert(data.error || 'Failed to open billing portal');
+                      }
+                    } catch {
+                      alert('Network error');
+                    } finally {
+                      setIsManagingBilling(false);
+                    }
+                  }}
+                >
+                  {isManagingBilling ? <span className={styles.spinner} /> : 'Manage Billing'}
+                </button>
+                <button
+                  className={`${styles.button} ${styles.buttonSecondary}`}
+                  onClick={() => router.push('/pricing')}
+                >
+                  Upgrade Plan
+                </button>
+              </>
+            ) : (
               <button
                 className={styles.button}
                 disabled={isManagingBilling}
@@ -269,7 +300,7 @@ export default function AccountPage() {
               >
                 {isManagingBilling ? <span className={styles.spinner} /> : 'Manage Billing'}
               </button>
-            ) : null}
+            )}
           </div>
         </section>
 

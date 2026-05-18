@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { MAP_STYLES } from './MapConstants';
 import styles from './MapSettings.module.css';
 
@@ -39,6 +40,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     onAnimatedEffectsChange,
     disabled = false
 }) => {
+    const router = useRouter();
     const [showBadge, setShowBadge] = React.useState(false);
 
     React.useEffect(() => {
@@ -65,6 +67,20 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 
     return (
         <div className={styles.mapSettingsArea} ref={panelRef}>
+            <button
+                onClick={() => router.push('/help')}
+                className={`${styles.mapSettingsBtn}${disabled ? ` ${styles.disabled}` : ''}`}
+                title="Help & Info"
+                aria-label="Help and Information"
+                disabled={disabled}
+            >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </button>
+
             <button
                 className={`${styles.mapSettingsBtn}${disabled ? ` ${styles.disabled}` : ''}`}
                 onClick={disabled ? undefined : handleButtonClick}

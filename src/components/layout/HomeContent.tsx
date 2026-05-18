@@ -28,7 +28,7 @@ export function HomeContent() {
     const { resolvedTheme } = useTheme();
     const { user, isLoading: authLoading, isGuest } = useAuth();
     const isGuestUser = isGuest || (!user && !authLoading);
-    const { tier: userTier } = useUserTier();
+    const { tier: userTier, isLoading: tierLoading } = useUserTier();
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
     const mounted = useSyncExternalStore(
         () => () => {},
@@ -260,6 +260,7 @@ export function HomeContent() {
                 appliedLimit={appliedLimit}
                 disabled={isGuestUser}
                 userTier={userTier}
+                tierLoading={tierLoading}
             />
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
@@ -280,6 +281,7 @@ export function HomeContent() {
                     disabled={isGuestUser}
                     isSidebarOpen={isSidebarOpen}
                     userTier={userTier}
+                    tierLoading={tierLoading}
                 />
             </main>
 

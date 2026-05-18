@@ -53,6 +53,8 @@ interface EventSidebarProps {
   disabled?: boolean;
   /** Current user subscription tier */
   userTier?: UserTier;
+  /** True while the tier is still being resolved from DB */
+  tierLoading?: boolean;
 }
 
 export default function EventSidebar({
@@ -76,6 +78,7 @@ export default function EventSidebar({
   appliedLimit,
   disabled = false,
   userTier = 'guest',
+  tierLoading = false,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -283,8 +286,10 @@ export default function EventSidebar({
                 strokeWidth="12"
               />
             </svg>
-            <h1>Seraphim</h1>
-            <TierBadge tier={userTier} />
+            <div className={styles.logoTextWrapper}>
+              <h1>Seraphim</h1>
+              {!tierLoading && <TierBadge tier={userTier} />}
+            </div>
           </a>
           <div className={styles.eventSidebarActions}>
             <UserButton variant="sidebar" />

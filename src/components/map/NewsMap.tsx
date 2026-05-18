@@ -44,6 +44,8 @@ interface NewsMapProps {
   disabled?: boolean;
   isSidebarOpen?: boolean;
   userTier?: string;
+  /** True while the tier is still being resolved from DB */
+  tierLoading?: boolean;
 }
 
 /**
@@ -71,6 +73,7 @@ export default function NewsMap({
   disabled = false,
   isSidebarOpen = true,
   userTier = 'guest',
+  tierLoading = false,
 }: NewsMapProps) {
   const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -642,7 +645,7 @@ export default function NewsMap({
       {mapError && <MapError onRetry={handleRetry} error={mapError} />}
 
       {/* Upgrade CTA for non-paying users */}
-      {(userTier === 'free' || userTier === 'guest') && (
+      {!tierLoading && (userTier === 'free' || userTier === 'guest') && (
         <UpgradeButton isSidebarOpen={isSidebarOpen} />
       )}
 

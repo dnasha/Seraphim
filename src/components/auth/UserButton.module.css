@@ -51,7 +51,7 @@
 }
 
 .userBtnLoggedIn {
-    border-color: var(--accent);
+    border: 1px solid var(--border);
 }
 
 /* Avatar image */

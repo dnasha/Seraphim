@@ -193,6 +193,29 @@
   }
 }
 
+.buttonSecondary {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+@media (hover: hover) {
+  .buttonSecondary:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+    transform: translateY(-1px);
+  }
+}
+
+.buttonGroup {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

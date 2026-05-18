@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
                 break;
             }
             default:
-                console.log(`Unhandled Stripe event type: ${event.type}`);
+                console.debug(`Unhandled Stripe event type: ${event.type}`);
         }
     } catch (err) {
         console.error(`Error processing webhook ${event.type}:`, err);
@@ -124,6 +124,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
                 stripe_subscription_id: subscription.id,
                 subscription_status: subscription.status,
                 billing_interval: interval,
+                cancel_at_period_end: subscription.cancel_at_period_end ?? false,
                 trial_ends_at: subscription.trial_end
                     ? new Date(subscription.trial_end * 1000).toISOString()
                     : null,
@@ -209,6 +210,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
             stripe_subscription_id: null,
             trial_ends_at: null,
             current_period_end: null,
+            cancel_at_period_end: false,
         })
         .eq('id', targetUserId);
 }
@@ -274,6 +276,7 @@ async function syncSubscription(userId: string, subscription: Stripe.Subscriptio
             stripe_subscription_id: subscription.id,
             subscription_status: subscription.status,
             billing_interval: isActive ? interval : 'month',
+            cancel_at_period_end: subscription.cancel_at_period_end ?? false,
             trial_ends_at: subscription.trial_end
                 ? new Date(subscription.trial_end * 1000).toISOString()
                 : null,

@@ -67,15 +67,27 @@ Includes card expansion details and responsive mobile layouts.
   transform: scale(0.98);
 }
 
-.logoLink h1 {
+.logoTextWrapper {
+  display: flex;
+  align-items: flex-end;
+  margin-left: 4px;
+  gap: 4px;
+}
+
+.logoTextWrapper h1 {
   font-family: var(--font-logo);
-  font-size: 1.85rem;
+  font-size: 2.05rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--text-primary);
   text-transform: uppercase;
-  margin-left: 10px;
+  margin-left: 0;
   white-space: nowrap;
+  line-height: 1.1;
+}
+
+.logoTextWrapper span {
+  margin-bottom: 3px;
 }
 
 .sidebarLogoImg {
