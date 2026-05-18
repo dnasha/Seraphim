@@ -38,7 +38,7 @@
   font-size: 10px !important;
   line-height: 1.2 !important;
   color: var(--text-muted) !important;
-  opacity: 0.45;
+  opacity: 0.70;
   text-shadow: 
     -1px -1px 0 var(--surface),
      1px -1px 0 var(--surface),
@@ -58,6 +58,12 @@
   color: inherit !important;
   text-decoration: none !important;
   transition: color 0.15s ease;
+  margin-right: 6px !important;
+  display: inline-block !important;
+}
+
+.mapWrapper :global(.maplibregl-ctrl-attrib a:last-child) {
+  margin-right: 0 !important;
 }
 
 @media (hover: hover) {
@@ -69,7 +75,14 @@
 
 .mapWrapper :global(.maplibregl-ctrl-attrib-inner) {
   padding: 0 !important;
-  display: inline-block !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0 !important;
+  font-size: 0 !important;
+}
+
+.mapWrapper :global(.maplibregl-ctrl-attrib-inner > *) {
+  font-size: 10px !important;
 }
 
 .mapWrapper :global(.maplibregl-ctrl-attrib-button) {

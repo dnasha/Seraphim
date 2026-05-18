@@ -11,6 +11,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { NewsItem, BBox } from "@/lib/core/types";
 import maplibregl from "maplibre-gl";
+
 import "maplibre-gl/dist/maplibre-gl.css";
 import MapPopup from "./MapPopup";
 
@@ -339,13 +340,19 @@ export default function NewsMap({
         errorMsg.includes("earthquake.usgs.gov") ||
         errorMsg.includes("mesonet.agron.iastate.edu");
 
-      if (e.error && !mapReady && !isOverlayError) {
+      const isGlyphError =
+        errorMsg.includes("glyphs") ||
+        errorMsg.includes("fonts") ||
+        errorMsg.includes("Open Sans") ||
+        errorMsg.includes("Arial Unicode");
+
+      if (e.error && !mapReady && !isOverlayError && !isGlyphError) {
         console.error("MapLibre error event:", e.error);
         setMapError(
           "Failed to load map resources. Please check your connection.",
         );
-      } else if (isOverlayError) {
-        console.debug("Non-critical overlay error suppressed:", errorMsg);
+      } else if (isOverlayError || isGlyphError) {
+        console.debug("Non-critical resource error suppressed:", errorMsg);
       }
     });
 

@@ -11,6 +11,7 @@ import {
     getCredibilityStyle, 
     CATEGORY_ICONS 
 } from '@/lib/styles/colors';
+import { layers, namedFlavor } from '@protomaps/basemaps';
 
 /**
  * Available Map Base Layers
@@ -20,32 +21,59 @@ import {
  */
 export const MAP_STYLES: Record<
   string,
-  { url: string; labelsUrl?: string; attribution: string; label: string }
+  {
+    url: string;
+    labelsUrl?: string;
+    attribution: string;
+    label: string;
+    isPmtiles?: boolean;
+    theme?: string;
+    isMapTiler?: boolean;
+  }
 > = {
   standard: {
-    url: "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
+    url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
+    attribution: '<a href="https://protomaps.com">© Protomaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Standard",
+    isPmtiles: true,
+    theme: "light",
   },
   dark: {
-    url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
+    url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
+    attribution: '<a href="https://protomaps.com">© Protomaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Dark",
+    isPmtiles: true,
+    theme: "dark",
+  },
+  black: {
+    url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
+    attribution: '<a href="https://protomaps.com">© Protomaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
+    label: "Black",
+    isPmtiles: true,
+    theme: "black",
   },
   light: {
-    url: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors &copy; CARTO",
+    url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
+    attribution: '<a href="https://protomaps.com">© Protomaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Light",
+    isPmtiles: true,
+    theme: "white",
   },
   satellite: {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "&copy; Seraphim 2026 &copy; Esri - Esri, DeLorme, NAVTEQ",
+    url: process.env.NEXT_PUBLIC_MAPTILER_API_KEY
+      ? `https://api.maptiler.com/maps/hybrid/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`
+      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Satellite",
+    isMapTiler: !!process.env.NEXT_PUBLIC_MAPTILER_API_KEY,
   },
   topographic: {
-    url: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; Seraphim 2026 &copy; OpenStreetMap contributors, &copy; OpenTopoMap",
+    url: process.env.NEXT_PUBLIC_MAPTILER_API_KEY
+      ? `https://api.maptiler.com/maps/topo-v2/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`
+      : "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Terrain",
+    isMapTiler: !!process.env.NEXT_PUBLIC_MAPTILER_API_KEY,
   },
 };
 
@@ -106,6 +134,26 @@ export async function generateCategoryIcon(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getMapLibreStyle(styleKey: string): any {
   const style = MAP_STYLES[styleKey] || MAP_STYLES.standard;
+
+  if (style.isMapTiler) {
+    return style.url;
+  }
+
+  if (style.isPmtiles && style.theme) {
+    return {
+      version: 8,
+      glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+      sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${style.theme}`,
+      sources: {
+        "protomaps": {
+          type: "vector",
+          tiles: [style.url],
+          attribution: style.attribution,
+        },
+      },
+      layers: layers("protomaps", namedFlavor(style.theme), { lang: "en" }),
+    };
+  }
 
   return {
     version: 8,

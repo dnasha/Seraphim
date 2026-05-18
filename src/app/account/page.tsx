@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { LuArrowLeft } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import TierBadge from '@/components/ui/TierBadge';
@@ -140,10 +142,7 @@ export default function AccountPage() {
         <header className={styles.header}>
           <div className={styles.headerLeft}>
             <button onClick={() => router.push('/')} className={styles.backBtn} aria-label="Go back">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
+              <LuArrowLeft size={24} />
             </button>
           </div>
 
@@ -370,6 +369,14 @@ export default function AccountPage() {
             </button>
           </form>
         </section>
+
+        <footer className={styles.footer}>
+          <div className={styles.footerLinks}>
+            <Link href="/terms" className={styles.link}>Terms of Service</Link>
+            <Link href="/privacy" className={styles.link}>Privacy Policy</Link>
+          </div>
+          <p>&copy; {new Date().getFullYear()} Seraphim. All rights reserved.</p>
+        </footer>
 
       </div>
     </div>
