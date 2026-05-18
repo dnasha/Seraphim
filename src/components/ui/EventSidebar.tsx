@@ -132,33 +132,6 @@ export default function EventSidebar({
     }
   }, [selectedItemId, selectionVersion, items]);
 
-  /* Swipe detection for mobile collapse */
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartX.current || !touchStartY.current) return;
-
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-
-    const deltaX = touchStartX.current - touchEndX;
-    const deltaY = Math.abs(touchStartY.current - touchEndY);
-
-    /* Threshold: 60px left swipe; movement must be primarily horizontal */
-    if (deltaX > 60 && deltaY < 50 && isOpen) {
-      onToggleSidebar();
-    }
-
-    touchStartX.current = null;
-    touchStartY.current = null;
-  };
-
   const handleCardClick = useCallback(
     (item: NewsItem) => {
       const hasGeo = item.latitude != null;
@@ -248,8 +221,6 @@ export default function EventSidebar({
           ? ({ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties)
           : undefined
       }
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
     >
       {/* Resize Handle */}
       <div
@@ -338,6 +309,7 @@ export default function EventSidebar({
             <path d="m21 21-4.35-4.35" />
           </svg>
           <input
+            id="sidebar-search-input"
             type="text"
             placeholder={`Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`}
             value={searchQuery}

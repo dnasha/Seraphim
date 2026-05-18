@@ -190,6 +190,7 @@ export const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'eu': '__skip__',
     'd.c.': 'washington dc',
     'nk': 'north korea',
+    'usa': 'united states', 'l.a.': 'los angeles', 'l.a': 'los angeles',
     'ca': 'california',
     'ny': 'new york',
     'nyc': 'new york',
@@ -197,7 +198,8 @@ export const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'ga': 'georgia',
     'va': 'virginia',
     'fl': 'florida',
-    'nj': 'new jersey',
+    'nj': 'new jersey', 'n.j.': 'new jersey', 'n.j': 'new jersey',
+    'ny': 'new york', 'n.y.': 'new york', 'n.y': 'new york',
 };
 
 /**
@@ -268,6 +270,8 @@ export const STOP_WORDS = new Set([
  * always used in a non-geographic context in news headlines.
  */
 export const FALSE_POSITIVES = new Set([
+    'date', 'blair', 'tufts', 'tufts university',
+    'the atlantic', 'turning point usa', "america's pastime", 'federal',
     'paris hilton', 'jackson hole', 'georgia tech',
     'chelsea clinton', 'chelsea handler', 'virginia woolf',
     'arsenal', 'chelsea fc', 'manchester united', 'manchester city',
@@ -320,6 +324,7 @@ export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'wash
  */
 export const OVERRIDE_LOCATIONS: Record<string, { lat: number; lon: number; type: 'country' | 'admin1' | 'city' }> = {
     'georgia': { lat: 42.3154, lon: 43.3569, type: 'country' },
+    'ocean county': { lat: 39.87, lon: -74.26, type: 'admin1' },
 };
 
 /** 

@@ -21,6 +21,10 @@ interface FilterBarProps {
     onCustomStartDateChange?: (date: string) => void;
     customEndDate?: string;
     onCustomEndDateChange?: (date: string) => void;
+    minVolume: number;
+    onMinVolumeChange: (volume: number) => void;
+    credibilityTiers: number[];
+    onCredibilityTiersChange: (tiers: number[]) => void;
     /** When true, all filter controls are greyed out for guest users */
     disabled?: boolean;
 }
@@ -51,6 +55,31 @@ const timeOptions = [
     { value: '1m', label: '1 Month' },
     { value: 'custom', label: 'Custom' },
 ];
+
+const credibilityOptions = [
+    { value: 1, label: 'Verified', color: '#6366f1' },
+    { value: 2, label: 'Credible', color: '#93c5fd' },
+    { value: 3, label: 'Unverified', color: '#94a3b8' },
+];
+
+const volumeOptions = [
+    { value: 1, label: 'All' },
+    { value: 2, label: '2+' },
+    { value: 5, label: '5+' },
+    { value: 10, label: '10+' }
+];
+
+const renderVolumeIcon = (isActive: boolean, color = 'var(--text-secondary)') => (
+    <svg 
+        viewBox="0 0 24 24" 
+        width="14" 
+        height="14" 
+        fill={isActive ? '#ffffff' : color} 
+        style={{ flexShrink: 0 }}
+    >
+        <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
+    </svg>
+);
 
 const renderSourceIcon = (sourceValue: string) => {
   const name = sourceValue.toLowerCase();
@@ -118,6 +147,10 @@ export default function FilterBar({
     onCustomStartDateChange,
     customEndDate,
     onCustomEndDateChange,
+    minVolume,
+    onMinVolumeChange,
+    credibilityTiers,
+    onCredibilityTiersChange,
     disabled = false,
 }: FilterBarProps) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -178,6 +211,16 @@ export default function FilterBar({
             onCategoriesChange(updated.length > 0 ? updated : ['all']);
         } else {
             onCategoriesChange([...withoutAll, category]);
+        }
+    };
+
+    const toggleCredibilityTier = (tier: number) => {
+        if (credibilityTiers.includes(tier)) {
+            if (credibilityTiers.length > 1) {
+                onCredibilityTiersChange(credibilityTiers.filter(t => t !== tier));
+            }
+        } else {
+            onCredibilityTiersChange([...credibilityTiers, tier]);
         }
     };
 
@@ -341,6 +384,83 @@ export default function FilterBar({
                                     >
                                         {renderSourceIcon(option.value)}
                                         {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Volume ("Hotness") Row */}
+                <div className={styles.filterSection}>
+                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                        <div className={styles.sourceToggles}>
+                            {volumeOptions.map((opt) => {
+                                const isActive = minVolume === opt.value;
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        className={`${styles.timeToggle} ${isActive ? styles.timeToggleActive : ''}`}
+                                        onClick={() => !disabled && onMinVolumeChange(opt.value)}
+                                        aria-pressed={isActive}
+                                        disabled={disabled}
+                                        style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
+                                    >
+                                        {renderVolumeIcon(isActive, isActive ? '#ffffff' : 'var(--text-secondary)')}
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                            <div className={`${styles.customVolumeContainer} ${![1, 2, 5, 10].includes(minVolume) ? styles.customVolumeContainerActive : ''}`}>
+                                {renderVolumeIcon(![1, 2, 5, 10].includes(minVolume), ![1, 2, 5, 10].includes(minVolume) ? 'var(--accent)' : 'var(--text-secondary)')}
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="999"
+                                    disabled={disabled}
+                                    value={[1, 2, 5, 10].includes(minVolume) ? '' : minVolume}
+                                    placeholder="Min"
+                                    className={styles.customVolumeInput}
+                                    onChange={(e) => {
+                                        const val = e.target.value === '' ? 1 : Math.max(1, parseInt(e.target.value) || 1);
+                                        onMinVolumeChange(val);
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Credibility Badge Row */}
+                <div className={styles.filterSection}>
+                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                        <div className={styles.sourceToggles}>
+                            {credibilityOptions.map((opt) => {
+                                const isActive = credibilityTiers.includes(opt.value);
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        className={`${styles.sourceToggle} ${isActive ? styles.credibilityToggleActive : ''}`}
+                                        onClick={() => !disabled && toggleCredibilityTier(opt.value)}
+                                        aria-pressed={isActive}
+                                        disabled={disabled}
+                                        style={{
+                                            '--btn-color': opt.color,
+                                            backgroundColor: isActive ? opt.color : undefined,
+                                            borderColor: isActive ? opt.color : undefined,
+                                            color: isActive ? '#ffffff' : undefined,
+                                        } as React.CSSProperties}
+                                    >
+                                        <svg 
+                                            viewBox="0 0 24 24" 
+                                            width="14" 
+                                            height="14" 
+                                            fill={isActive ? '#ffffff' : opt.color} 
+                                            style={{ flexShrink: 0 }}
+                                        >
+                                            <path fillRule="evenodd" clipRule="evenodd" d="M21.007 8.27C22.194 9.125 23 10.45 23 12c0 1.55-.806 2.876-1.993 3.73.24 1.442-.134 2.958-1.227 4.05-1.095 1.095-2.61 1.459-4.046 1.225C14.883 22.196 13.546 23 12 23c-1.55 0-2.878-.807-3.731-1.996-1.438.235-2.954-.128-4.05-1.224-1.095-1.095-1.459-2.611-1.217-4.05C1.816 14.877 1 13.551 1 12s.816-2.878 2.002-3.73c-.242-1.439.122-2.955 1.218-4.05 1.093-1.094 2.61-1.467 4.057-1.227C9.125 1.804 10.453 1 12 1c1.545 0 2.88.803 3.732 1.993 1.442-.24 2.956.135 4.048 1.227 1.093 1.092 1.468 2.608 1.227 4.05Zm-4.426-.084a1 1 0 0 1 .233 1.395l-5 7a1 1 0 0 1-1.521.126l-3-3a1 1 0 0 1 1.414-1.414l2.165 2.165 4.314-6.04a1 1 0 0 1 1.395-.232Z" />
+                                        </svg>
+                                        {opt.label}
                                     </button>
                                 );
                             })}

@@ -3,7 +3,7 @@
  * Usage: bun run scripts/diagnostics/generate-benchmark.ts --limit 100 --out scripts/results/new-grading-100.json
  */
 
-import { supabaseAdmin as supabase } from '@/lib/core/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { NewsItem } from '@/lib/core/types';
 import { enrichItemsWithLocation, ensureInitialized } from '@/lib/geocoding';
 import * as fs from 'fs';
@@ -12,12 +12,17 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-if (!supabase) {
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('Missing Supabase credentials (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY).');
     process.exit(1);
 }
 
-const db = supabase!;
+const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+});
 
 // Parse CLI flags to control sample size and output destination for the generated benchmark.
 const args = process.argv.slice(2);
@@ -28,15 +33,25 @@ const outArg = args.indexOf('--out');
 const DEFAULT_OUT = `scripts/results/benchmark-${LIMIT}.json`;
 const OUT_PATH = outArg !== -1 ? args[outArg + 1] : DEFAULT_OUT;
 
+const daysAgoArg = args.indexOf('--days-ago');
+const DAYS_AGO = daysAgoArg !== -1 ? parseInt(args[daysAgoArg + 1], 10) : 0;
+
 async function run() {
     console.log("Initializing Geocoding Engine...");
     ensureInitialized();
 
-    console.log(`Pulling latest ${LIMIT} events from Supabase...`);
+    console.log(`Pulling latest ${LIMIT} events from Supabase (older than ${DAYS_AGO} days ago)...`);
     
-    const { data: events, error } = await db
+    let query = db
         .from('events')
-        .select('*')
+        .select('*');
+
+    if (DAYS_AGO > 0) {
+        const cutOffDate = new Date(Date.now() - DAYS_AGO * 24 * 60 * 60 * 1000).toISOString();
+        query = query.lt('created_at', cutOffDate);
+    }
+    
+    const { data: events, error } = await query
         .order('created_at', { ascending: false })
         .limit(LIMIT);
 

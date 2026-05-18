@@ -19,6 +19,7 @@ import { SortMode } from '@/lib/utils/ranking';
 import { useUserTier } from '@/hooks/useUserTier';
 import AuthModal from '@/components/auth/AuthModal';
 import UserButton from '@/components/auth/UserButton';
+import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import styles from './Layout.module.css';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
@@ -98,6 +99,8 @@ export function HomeContent() {
     const {
         sources, setSources,
         categories, setCategories,
+        minVolume, setMinVolume,
+        credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
     } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
@@ -135,7 +138,7 @@ export function HomeContent() {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
         });
-    }, [sources, categories, timeRange, debouncedSearch, effectiveSortMode, unmappedOnly, handleSelectItem]);
+    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, effectiveSortMode, unmappedOnly, handleSelectItem]);
 
     /**
      * Handles BBox changes by resetting sidebar scroll if the selected item is panned out.
@@ -192,6 +195,82 @@ export function HomeContent() {
         updateURL({ s: mode });
     }, [setSortMode, updateURL]);
 
+    /** Global keyboard shortcuts listener (1.2) */
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const activeEl = document.activeElement;
+            if (activeEl) {
+                const tagName = activeEl.tagName.toLowerCase();
+                if (
+                    tagName === 'input' || 
+                    tagName === 'textarea' || 
+                    activeEl.hasAttribute('contenteditable') ||
+                    (activeEl as HTMLElement).isContentEditable
+                ) {
+                    return;
+                }
+            }
+
+            const key = e.key.toLowerCase();
+
+            // Escape: Close active event selection / popup (allowed for everyone for accessibility)
+            if (e.key === 'Escape') {
+                if (selectedItemId) {
+                    e.preventDefault();
+                    handleSelectItem(null);
+                }
+                return;
+            }
+
+            // GUEST GUARD: Guests cannot access search, sidebar toggles, filtering, sorting, or query clearing via keyboard shortcuts.
+            if (isGuestUser) {
+                return;
+            }
+
+            // 'f' or '/': Focus the sidebar search box
+            if (key === 'f' || key === '/') {
+                const searchInput = document.getElementById('sidebar-search-input');
+                if (searchInput) {
+                    e.preventDefault();
+                    (searchInput as HTMLInputElement).focus();
+                    (searchInput as HTMLInputElement).select();
+                }
+                return;
+            }
+
+            // 'm': Toggle sidebar panel collapse/expand
+            if (key === 'm') {
+                e.preventDefault();
+                setIsSidebarOpen(prev => !prev);
+                return;
+            }
+
+            // 't': Toggle sort mode between 'new' and 'hot'
+            if (key === 't') {
+                e.preventDefault();
+                handleSortModeChange(sortMode === 'hot' ? 'new' : 'hot');
+                return;
+            }
+
+            // 'a': Toggle unmappedOnly filter (mapped only vs unmapped only)
+            if (key === 'a') {
+                e.preventDefault();
+                setUnmappedOnly(prev => !prev);
+                return;
+            }
+
+            // 'c': Clear the search query
+            if (key === 'c') {
+                e.preventDefault();
+                handleSearchChange('');
+                return;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedItemId, sortMode, isGuestUser, handleSelectItem, handleSortModeChange, handleSearchChange]);
+
     /** Gate guests to a maximum of 10 events across all views */
     const items = useMemo(() => {
         if (isGuestUser) return filteredNews.slice(0, 10);
@@ -221,6 +300,10 @@ export function HomeContent() {
             onCustomStartDateChange={setCustomStartDate}
             customEndDate={customEndDate}
             onCustomEndDateChange={setCustomEndDate}
+            minVolume={minVolume}
+            onMinVolumeChange={setMinVolume}
+            credibilityTiers={credibilityTiers}
+            onCredibilityTiersChange={setCredibilityTiers}
             disabled={isGuestUser}
         />
     );
@@ -290,6 +373,9 @@ export function HomeContent() {
 
             {/* Auth modal (auto-shows on first visit) */}
             <AuthModal />
+
+            {/* PWA Install Prompt (1.4) */}
+            <PWAInstallPrompt />
 
             {error && (
                 <div className={styles.errorOverlay}>

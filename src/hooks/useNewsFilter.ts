@@ -25,6 +25,8 @@ export function useNewsFilter(
 ) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
+    const [minVolume, setMinVolume] = useState<number>(1);
+    const [credibilityTiers, setCredibilityTiers] = useState<number[]>([1, 2, 3]);
     
     /**
      * track time in state to avoid impurity in useMemo while allowing 
@@ -54,6 +56,8 @@ export function useNewsFilter(
         return applyNewsFilters(news, {
             sources,
             categories,
+            minVolume,
+            credibilityTiers,
             timeRange,
             customStartDate,
             customEndDate,
@@ -65,12 +69,14 @@ export function useNewsFilter(
             bbox: currentBBox || undefined,
             respectBBox: sidebarRespectBBox,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox]);
 
     const mapNews = useMemo(() => {
         return applyNewsFilters(news, {
             sources,
             categories,
+            minVolume,
+            credibilityTiers,
             timeRange,
             customStartDate,
             customEndDate,
@@ -82,11 +88,13 @@ export function useNewsFilter(
             bbox: currentBBox || undefined,
             respectBBox: true,
         });
-    }, [news, sources, debouncedSearch, categories, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox]);
 
     return {
         sources, setSources,
         categories, setCategories,
+        minVolume, setMinVolume,
+        credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
     };

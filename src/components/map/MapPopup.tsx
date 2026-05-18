@@ -8,6 +8,7 @@
 
 'use client';
 
+import { useState } from 'react';
 import Image from "next/image";
 import { NewsItem } from '@/lib/core/types';
 import { 
@@ -16,6 +17,7 @@ import {
     formatTimeAgo 
 } from './MapConstants';
 import { canonicalEventCount } from '@/lib/utils/ranking';
+import { LuShare2 } from 'react-icons/lu';
 
 interface MapPopupProps {
     item: NewsItem;
@@ -46,6 +48,19 @@ export default function MapPopup({ item }: MapPopupProps) {
     const displayDate = latestSource
         ? latestSource.discoveredAt
         : (item.latestActivityAt || item.publishedAt);
+
+    const [copied, setCopied] = useState(false);
+
+    const handleShare = async () => {
+        try {
+            const shareUrl = `${window.location.origin}/?eventId=${item.id}`;
+            await navigator.clipboard.writeText(shareUrl);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy link:', err);
+        }
+    };
 
     return (
         <div className="news-popup">
@@ -107,11 +122,13 @@ export default function MapPopup({ item }: MapPopupProps) {
                         <div className="popup-skeleton-line" style={{ width: '75%' }} />
                     </div>
                 )}
-                {sourceCount <= 1 && (
-                    <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer">
-                        View source →
-                    </a>
-                )}
+                <div className="news-popup-actions">
+                    {sourceCount <= 1 && (
+                        <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer">
+                            View source →
+                        </a>
+                    )}
+                </div>
             </div>
             {sourceCount > 1 && item.sources && (
                 <div className="news-popup-sources-section">
@@ -145,6 +162,14 @@ export default function MapPopup({ item }: MapPopupProps) {
                     </div>
                 </div>
             )}
+            <button 
+                className="news-popup-share-btn-absolute" 
+                onClick={handleShare}
+                title="Copy shareable deep link"
+            >
+                <LuShare2 size={13} />
+                {copied ? 'Link Copied!' : 'Share Event'}
+            </button>
         </div>
     );
 }

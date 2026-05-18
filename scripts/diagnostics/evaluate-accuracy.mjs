@@ -6,7 +6,7 @@
 import fs from 'fs';
 import { performance } from 'perf_hooks';
 
-const GRADED_RESULTS_PATH = 'scripts/results/graded-results.json';
+const GRADED_RESULTS_PATH = process.env.GRADED_RESULTS_PATH || 'scripts/results/graded-results.json';
 const FAILURES_PATH = 'scripts/results/accuracy-failures.txt';
 
 /**
@@ -23,7 +23,7 @@ async function run() {
   const startTime = performance.now();
   try {
     process.env.IS_BENCHMARK = 'true';
-    const { extractLocation, geocodeLocation } = await import('../src/lib/geocoding');
+    const { extractLocation, geocodeLocation } = await import('../../src/lib/geocoding');
 
     if (!fs.existsSync(GRADED_RESULTS_PATH)) {
       console.error(`Error: Graded results file not found at ${GRADED_RESULTS_PATH}`);
@@ -112,7 +112,7 @@ async function run() {
       } else {
         failures.push({
           title: item.title,
-          description: item.desc,
+          description: item.description || item.desc || '',
           expected: rawExpected,
           actual: actualLocationFullName,
           candidates: candidates,

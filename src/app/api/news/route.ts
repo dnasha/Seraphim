@@ -296,14 +296,6 @@ export async function GET(request: Request) {
         error = res.error;
       }
 
-      const totalRawCount = useServerClustering
-        ? (rows as DbEvent[]).reduce((acc, r) => acc + (Number(r.story_count) || 1), 0)
-        : rows.length;
-
-      if (totalRawCount >= effectiveLimit - 5) {
-        queryCapped = true;
-      }
-
       if (error) {
         console.error("[api/news] Supabase query failed:", error.message);
         /**
@@ -363,7 +355,16 @@ export async function GET(request: Request) {
         }
       }
 
-      allItems = (rows as DbEvent[]).map((row) => {
+      const safeRows = rows || [];
+      const totalRawCount = useServerClustering
+        ? (safeRows as DbEvent[]).reduce((acc, r) => acc + (Number(r.story_count) || 1), 0)
+        : safeRows.length;
+
+      if (totalRawCount >= effectiveLimit - 5) {
+        queryCapped = true;
+      }
+
+      allItems = (safeRows as DbEvent[]).map((row) => {
         const item = dbEventToNewsItem(row);
         /**
          * Stable Cluster IDs

@@ -85,12 +85,23 @@ export function ensureInitialized() {
     }
 
     // Load admin1 regions (states/provinces)
+    const ADMIN_SUFFIX_STRIP = /\s+(state|province|oblast|governorate|prefecture|county|district|region|krai|raion|emirate|wilayah|republic)$/i;
     for (const [key, region] of Object.entries(geoAdmin1)) {
         if (key.length <= 2) continue;
         const existing = KNOWN_LOCATIONS[key];
         // Protection: do not let a generic region overwrite a major city (> 500k pop)
         if (existing && existing.pop > 500000) continue;
-        KNOWN_LOCATIONS[key] = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1', cc: region.cc };
+        const entry = { lat: region.lat, lon: region.lon, pop: 0, type: 'admin1' as const, cc: region.cc };
+        KNOWN_LOCATIONS[key] = entry;
+
+        // Register the base name without administrative suffix for single-word matching
+        const strippedKey = key.replace(ADMIN_SUFFIX_STRIP, '').trim();
+        if (strippedKey !== key && strippedKey.length > 2) {
+            const existingStripped = KNOWN_LOCATIONS[strippedKey];
+            if (!existingStripped || (existingStripped.type === 'admin1' && existingStripped.pop === 0)) {
+                KNOWN_LOCATIONS[strippedKey] = entry;
+            }
+        }
     }
 
     // Load country centroids
@@ -142,10 +153,16 @@ function disambiguate(candidate: string): string {
  */
 function extractDemonym(text: string): string | null {
     const words = text.split(/[\s\-]+/);
-    for (const word of words) {
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
         const lower = word.toLowerCase().replace(/[^a-z]/g, '');
         const mapped = DEMONYM_MAP[lower];
         if (typeof mapped === 'string') {
+            // Protect "Mark Cuban" from being geocoded to Cuba
+            if (lower === 'cuban' && i > 0) {
+                const prev = words[i - 1].toLowerCase().replace(/[^a-z]/g, '');
+                if (prev === 'mark') continue;
+            }
             return mapped;
         }
         if (lower.endsWith('s')) {
@@ -165,9 +182,22 @@ function extractDemonym(text: string): string | null {
 function extractCountryAbbrev(text: string): string | null {
     const tokens = text.split(/[\s\-]+/);
     for (const token of tokens) {
-        const cleaned = token.toLowerCase().replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
-        const mapped = COUNTRY_ABBREV_MAP[cleaned];
+        const cleaned = token.replace(/['\u2019]s$/i, '').replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
+        const lower = cleaned.toLowerCase();
+        const mapped = COUNTRY_ABBREV_MAP[lower];
         if (typeof mapped === 'string' && mapped !== '__skip__') {
+            // Pronoun 'us' protection: 'us' must be uppercase (US, U.S., Us) to match United States
+            if (lower === 'us' && cleaned !== 'US' && cleaned !== 'U.S.' && cleaned !== 'Us' && cleaned !== 'U.S') {
+                continue;
+            }
+            // State abbreviation 'or' protection: 'or' must be uppercase/capitalized (OR, O.R., Or) to match Oregon
+            if (lower === 'or' && cleaned !== 'OR' && cleaned !== 'O.R.' && cleaned !== 'Or' && cleaned !== 'O.R') {
+                continue;
+            }
+            // State abbreviation 'wa' protection: 'wa' must be uppercase/capitalized (WA, W.A., Wa) to match Washington
+            if (lower === 'wa' && cleaned !== 'WA' && cleaned !== 'W.A.' && cleaned !== 'Wa' && cleaned !== 'W.A') {
+                continue;
+            }
             return mapped;
         }
     }
@@ -197,6 +227,15 @@ interface Candidate {
     placement: 'title' | 'description';
 }
 
+export interface ScoredCandidate {
+    name: string;
+    key: string;
+    source: string;
+    placement: 'title' | 'description';
+    score: number;
+    cc?: string;
+}
+
 /**
  * Removes metadata noise, social media trailers, and attribution suffixes
  * to prevent false positive location matches from source names or hashtags.
@@ -206,9 +245,13 @@ function preprocessText(text: string): string {
     text = text.replace(/^GeoConfirmed\s+\w+\.?\s*/i, '');
     text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
     text = text.replace(/\b(U\.S\.|U\.K\.|U\.A\.E\.|NK|EU|NATO|UK|US|UAE)['\u2019]s\b/gi, '$1 ');
+    // Hyphenated compound adjective resolution (e.g. "Oregon-based" -> "Oregon ")
+    text = text.replace(/\b([A-Za-z]+)-(based|led|linked|centric|backed|focused|mediated|aligned|sponsored)\b/gi, '$1 ');
     text = text.replace(HASHTAG_FUSED_PATTERN, '$2');
     text = text.replace(/#\w+/g, '');
     text = text.replace(MEDIA_ATTRIBUTION_SUFFIX, '');
+    text = text.replace(/\b(?:turning\s+point\s+usa|america's\s+pastime|the\s+atlantic)\b/gi, '');
+    text = text.replace(/\b(vietnam|korean|gulf|world|civil|cold)\s+war\b/gi, '');
     return text.trim();
 }
 
@@ -216,7 +259,7 @@ function preprocessText(text: string): string {
  * Performs a multi-pass extraction process on news items.
  * Uses tiered heuristics to identify the most relevant geographic location.
  */
-export function extractLocation(title: string, description: string): { match: string | null; candidates: string[] } {
+export function extractLocation(title: string, description: string): { match: string | null; candidates: string[]; scored?: ScoredCandidate[] } {
     ensureInitialized();
     
     title = title.replace(EMOJI_STRIP, ' ').replace(/\s+/g, ' ').trim();
@@ -263,8 +306,28 @@ export function extractLocation(title: string, description: string): { match: st
             const cleaned = cleanCandidate(prefix);
             const key = normalizeAccents(cleaned.toLowerCase());
             if (key.length > 2 && KNOWN_LOCATIONS[key] && !STOP_WORDS.has(key) && !CONTINENT_NAMES.has(key)) {
-                candidates.push({ name: cleaned, source: 'title_subject', placement: 'title' });
-                break;
+                // Heuristic protection: if the candidate is a common first name,
+                // and the next word is capitalized (not a known location or stop word),
+                // then it's probably a person's full name.
+                let shouldSkip = false;
+                if (len === 1 && ['virginia', 'milan', 'clara', 'victoria', 'charlotte', 'elizabeth', 'saint', 'st'].includes(key)) {
+                    if (titleWords.length > 1) {
+                        const nextWordRaw = titleWords[1];
+                        if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
+                            const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                            if (nextWordLower.length > 0 &&
+                                !KNOWN_LOCATIONS[nextWordLower] &&
+                                !STOP_WORDS.has(nextWordLower) &&
+                                !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
+                                shouldSkip = true;
+                            }
+                        }
+                    }
+                }
+                if (!shouldSkip) {
+                    candidates.push({ name: cleaned, source: 'title_subject', placement: 'title' });
+                    break;
+                }
             }
         }
     }
@@ -296,7 +359,25 @@ export function extractLocation(title: string, description: string): { match: st
                         // Unambiguous single-word matches are restricted to countries, major cities, or landmarks
                         const isMajor = entry.type === 'country' || entry.type === 'landmark' || entry.type === 'admin1' || entry.pop > 500000;
                         if (isMajor) {
-                            candidates.push({ name: cleanedWord, source: 'direct_scan', placement });
+                            // Capitalized surname/phrase protection:
+                            // If the next word is capitalized and is not a known location, stop word, or admin suffix,
+                            // then this word is likely a first name in a person's full name.
+                            let shouldSkip = false;
+                            if (i + 1 < words.length) {
+                                const nextWordRaw = words[i + 1];
+                                if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
+                                    const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                                    if (nextWordLower.length > 0 &&
+                                        !KNOWN_LOCATIONS[nextWordLower] &&
+                                        !STOP_WORDS.has(nextWordLower) &&
+                                        !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands', 'district', 'county', 'region', 'town', 'airport', 'port', 'station', 'center', 'forces', 'military', 'government', 'police', 'commission', 'commissioner', 'pastime', 'organization', 'agency', 'school', 'schools', 'public', 'health', 'hospital', 'university', 'college', 'mayor', 'governor', 'leader', 'minister', 'senator', 'president', 'officer', 'representative', 'candidate', 'chief', 'department', 'fire', 'medical', 'association', 'institute', 'foundation', 'council', 'group'].includes(nextWordLower)) {
+                                        shouldSkip = true;
+                                    }
+                                }
+                            }
+                            if (!shouldSkip) {
+                                candidates.push({ name: cleanedWord, source: 'direct_scan', placement });
+                            }
                         }
                     }
                 }
@@ -437,7 +518,7 @@ export function extractLocation(title: string, description: string): { match: st
                         if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
                             const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
                             if (!KNOWN_LOCATIONS[nextWordLower] && 
-                                !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
+                                !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands', 'district', 'county', 'region', 'town', 'airport', 'port', 'station', 'center', 'forces', 'military', 'government', 'police', 'commission', 'organization', 'agency', 'school', 'schools', 'public', 'health', 'hospital', 'university', 'college', 'mayor', 'governor', 'leader', 'minister', 'senator', 'president', 'officer', 'representative', 'candidate', 'chief', 'department', 'fire', 'medical', 'association', 'institute', 'foundation', 'council', 'group'].includes(nextWordLower)) {
                                 continue; 
                             }
                         }
@@ -486,7 +567,7 @@ export function extractLocation(title: string, description: string): { match: st
             // Regional and entity-type penalties
             const continentPenalty = CONTINENT_NAMES.has(key) ? 40 : 0;
             const regionPenalty = (key === 'middle east' || key === 'west asia' || key === 'southeast asia') ? 25 : 0;
-            const superpowerPenalty = SUPERPOWER_KEYS.has(key) ? 20 : 0;
+            const superpowerPenalty = (SUPERPOWER_KEYS.has(key) && source !== 'action_target') ? 20 : 0;
 
             const finalScore = wPlacement + wSource + wType + continentPenalty + regionPenalty + superpowerPenalty;
 
@@ -549,7 +630,27 @@ export function extractLocation(title: string, description: string): { match: st
         const titlePlaces = nlp(title).places().out('array');
         if (titlePlaces && titlePlaces.length > 0) {
             for (const place of titlePlaces) {
-                candidates.push({ name: place, source: 'nlp', placement: 'title' });
+                const placeLower = place.toLowerCase().trim();
+                let shouldSkip = false;
+                if (['virginia', 'milan', 'clara', 'victoria', 'charlotte', 'elizabeth', 'saint', 'st'].includes(placeLower)) {
+                    const titleWords = title.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
+                    const idx = titleWords.findIndex(w => w.toLowerCase() === placeLower);
+                    if (idx !== -1 && idx + 1 < titleWords.length) {
+                        const nextWordRaw = titleWords[idx + 1];
+                        if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
+                            const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                            if (nextWordLower.length > 0 &&
+                                !KNOWN_LOCATIONS[nextWordLower] &&
+                                !STOP_WORDS.has(nextWordLower) &&
+                                !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
+                                shouldSkip = true;
+                            }
+                        }
+                    }
+                }
+                if (!shouldSkip) {
+                    candidates.push({ name: place, source: 'nlp', placement: 'title' });
+                }
             }
             bestCandidates = computeScored(candidates);
         }
@@ -558,68 +659,126 @@ export function extractLocation(title: string, description: string): { match: st
             const descPlaces = nlp(description).places().out('array');
             if (descPlaces && descPlaces.length > 0) {
                 for (const place of descPlaces) {
-                    candidates.push({ name: place, source: 'nlp', placement: 'description' });
+                    const placeLower = place.toLowerCase().trim();
+                    let shouldSkip = false;
+                    if (['virginia', 'milan', 'clara', 'victoria', 'charlotte', 'elizabeth', 'saint', 'st'].includes(placeLower)) {
+                        const descWords = description.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
+                        const idx = descWords.findIndex(w => w.toLowerCase() === placeLower);
+                        if (idx !== -1 && idx + 1 < descWords.length) {
+                            const nextWordRaw = descWords[idx + 1];
+                            if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
+                                const nextWordLower = nextWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                                if (nextWordLower.length > 0 &&
+                                    !KNOWN_LOCATIONS[nextWordLower] &&
+                                    !STOP_WORDS.has(nextWordLower) &&
+                                    !['city', 'state', 'province', 'river', 'lake', 'bay', 'gulf', 'mountain', 'island', 'islands'].includes(nextWordLower)) {
+                                    shouldSkip = true;
+                                }
+                            }
+                        }
+                    }
+                    if (!shouldSkip) {
+                        candidates.push({ name: place, source: 'nlp', placement: 'description' });
+                    }
                 }
                 bestCandidates = computeScored(candidates);
             }
         }
     }
 
+    let finalMatch: string | null = null;
+    let finalCandidates: string[] = [];
+
     if (bestCandidates.length > 0) {
-        return { 
-            match: bestCandidates[0].name, 
-            candidates: bestCandidates.map(c => c.name) 
+        finalMatch = bestCandidates[0].name;
+        finalCandidates = bestCandidates.map(c => c.name);
+    } else {
+        // Last resort fallback scans
+        const scanCountries = (text: string) => {
+            const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
+            for (let i = 0; i < words.length; i++) {
+                for (let len = Math.min(4, words.length - i); len >= 1; len--) {
+                    const slice = words.slice(i, i + len).join(' ');
+                    const cleaned = cleanCandidate(slice);
+                    const key = normalizeAccents(cleaned.toLowerCase());
+                    if (geoCountries[key]) {
+                        const display = toTitleCase(key);
+                        return { match: display, candidates: [display] };
+                    }
+                }
+            }
+            return null;
         };
-    }
 
-    // Last resort fallback scans
-    const scanCountries = (text: string) => {
-        const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
-        for (let i = 0; i < words.length; i++) {
-            for (let len = Math.min(4, words.length - i); len >= 1; len--) {
-                const slice = words.slice(i, i + len).join(' ');
-                const cleaned = cleanCandidate(slice);
-                const key = normalizeAccents(cleaned.toLowerCase());
-                if (geoCountries[key]) {
-                    const display = toTitleCase(key);
-                    return { match: display, candidates: [display] };
+        const countryMatch = scanCountries(title) || scanCountries(description);
+        if (countryMatch) {
+            finalMatch = countryMatch.match;
+            finalCandidates = countryMatch.candidates;
+        } else {
+            const scanContinents = (text: string) => {
+                const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
+                for (let i = 0; i < words.length; i++) {
+                    for (let len = Math.min(4, words.length - i); len >= 1; len--) {
+                        const slice = words.slice(i, i + len).join(' ');
+                        const cleaned = cleanCandidate(slice);
+                        const key = normalizeAccents(cleaned.toLowerCase());
+                        if (CONTINENT_FALLBACKS[key]) {
+                            const display = toTitleCase(key);
+                            return { match: display, candidates: [display] };
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const continentMatch = scanContinents(title) || scanContinents(description);
+            if (continentMatch) {
+                finalMatch = continentMatch.match;
+                finalCandidates = continentMatch.candidates;
+            } else {
+                const combinedText = (title + ' ' + description).toLowerCase();
+                for (const [source, location] of Object.entries(NEWS_SOURCE_DEFAULTS)) {
+                    if (new RegExp(`\\b${source}\\b`).test(combinedText)) {
+                        if (source === 'nature' && (combinedText.includes('nature materials') || combinedText.includes('nature chemistry') || combinedText.includes('nature medicine') || combinedText.includes('nature communications') || combinedText.includes('nature nanotechnology') || combinedText.includes('nature biotechnology') || combinedText.includes('nature physics') || combinedText.includes('nature methods') || combinedText.includes('nature genetics') || combinedText.includes('nature neuroscience'))) {
+                            continue;
+                        }
+                        const display = toTitleCase(location);
+                        finalMatch = display;
+                        finalCandidates = [display];
+                        break;
+                    }
                 }
             }
         }
-        return null;
-    };
+    }
 
-    const countryMatch = scanCountries(title) || scanCountries(description);
-    if (countryMatch) return countryMatch;
-
-    const scanContinents = (text: string) => {
-        const words = text.split(/[\s,.;:!?()\[\]"']+/).filter(w => w.length > 0);
-        for (let i = 0; i < words.length; i++) {
-            for (let len = Math.min(4, words.length - i); len >= 1; len--) {
-                const slice = words.slice(i, i + len).join(' ');
-                const cleaned = cleanCandidate(slice);
-                const key = normalizeAccents(cleaned.toLowerCase());
-                if (CONTINENT_FALLBACKS[key]) {
-                    const display = toTitleCase(key);
-                    return { match: display, candidates: [display] };
-                }
+    if (finalMatch) {
+        const fullTextLower = (title + ' ' + description).toLowerCase();
+        const matchKey = normalizeAccents(finalMatch.toLowerCase().trim());
+        if (matchKey === 'derry' && (fullTextLower.includes('new hampshire') || fullTextLower.includes('n.h.') || fullTextLower.includes('nh'))) {
+            finalMatch = 'Derry, New Hampshire';
+            if (!finalCandidates.includes('Derry, New Hampshire')) {
+                finalCandidates.unshift('Derry, New Hampshire');
             }
-        }
-        return null;
-    };
-
-    const continentMatch = scanContinents(title) || scanContinents(description);
-    if (continentMatch) return continentMatch;
-
-    const combinedText = (title + ' ' + description).toLowerCase();
-    for (const [source, location] of Object.entries(NEWS_SOURCE_DEFAULTS)) {
-        if (new RegExp(`\\b${source}\\b`).test(combinedText)) {
-            const display = toTitleCase(location);
-            return { match: display, candidates: [display] };
+        } else if (matchKey === 'wildwood' && (fullTextLower.includes('new jersey') || fullTextLower.includes('n.j.') || fullTextLower.includes('nj') || fullTextLower.includes('cape may'))) {
+            finalMatch = 'Wildwood, New Jersey';
+            if (!finalCandidates.includes('Wildwood, New Jersey')) {
+                finalCandidates.unshift('Wildwood, New Jersey');
+            }
+        } else if (matchKey === 'long island' && (fullTextLower.includes('new york') || fullTextLower.includes('n.y.') || fullTextLower.includes('ny'))) {
+            finalMatch = 'Long Island, New York';
+            if (!finalCandidates.includes('Long Island, New York')) {
+                finalCandidates.unshift('Long Island, New York');
+            }
+        } else if (matchKey === 'salem' && (fullTextLower.includes('new jersey') || fullTextLower.includes('n.j.') || fullTextLower.includes('nj') || fullTextLower.includes('salem county') || fullTextLower.includes('penns grove'))) {
+            finalMatch = 'Salem County';
+            if (!finalCandidates.includes('Salem County')) {
+                finalCandidates.unshift('Salem County');
+            }
         }
     }
 
-    return { match: null, candidates: [] };
+    return { match: finalMatch, candidates: finalCandidates, scored: bestCandidates };
 }
 
 // Canonical display overrides for ambiguous landmark names
@@ -627,6 +786,11 @@ const LANDMARK_DISPLAY_ALIASES: Record<string, string> = {
     'hormuz': 'Strait of Hormuz',
     'bab el-mandeb': 'Bab El-Mandeb',
     'kiryat shmona': 'Qiryat Shemona',
+    'long island': 'Long Island, New York',
+    'johnson space center': 'Houston',
+    'everest': 'Mount Everest',
+    'mount everest': 'Mount Everest',
+    'scandinavia': 'Scandinavia',
 };
 
 /**
@@ -637,6 +801,21 @@ export async function geocodeLocation(
 ): Promise<{ lat: number; lon: number; displayName: string } | null> {
     ensureInitialized();
     const key = normalizeAccents(placeName.toLowerCase().trim());
+
+    // Check contextual custom overrides first
+    if (key === 'derry, new hampshire') {
+        return { lat: 42.88, lon: -71.33, displayName: 'Derry, New Hampshire' };
+    }
+    if (key === 'wildwood, new jersey') {
+        return { lat: 38.99, lon: -74.82, displayName: 'Wildwood, New Jersey' };
+    }
+    if (key === 'long island, new york') {
+        return { lat: 40.79, lon: -73.02, displayName: 'Long Island, New York' };
+    }
+    if (key === 'salem county') {
+        return { lat: 39.58, lon: -75.36, displayName: 'Salem County' };
+    }
+
     const known = KNOWN_LOCATIONS[key];
     if (known) {
         const displayName = LANDMARK_DISPLAY_ALIASES[key] || placeName;

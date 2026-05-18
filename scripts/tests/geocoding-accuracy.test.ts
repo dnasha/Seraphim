@@ -17,11 +17,10 @@ import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geoco
 */
 const ACCURACY_THRESHOLD = 70;
 
-const GRADED_RESULTS_PATH = path.resolve(__dirname, '../results/graded-results.json');
-
+const GRADED_RESULTS_PATH = path.resolve(__dirname, '../results/new-graded-6d.json');
 interface GradedResult {
     title: string;
-    desc: string;
+    description?: string;
     graded_status: string;
     expected_location?: string;
     final_mapped_location?: {
@@ -94,7 +93,7 @@ describe('geocoding accuracy regression', () => {
             totalCount++;
 
             // Execute geocoding pipeline.
-            const ext = extractLocation(item.title, item.desc || '');
+            const ext = extractLocation(item.title, item.description || '');
             let actualLocationFullName: string | null = null;
 
             if (ext.match) {
@@ -145,7 +144,7 @@ describe('geocoding accuracy regression', () => {
 
         if (failures.length > 0) {
             console.log('Top failures:');
-            for (const f of failures.slice(0, 5)) {
+            for (const f of failures) {
                 console.log(`  [${f.type}] ${f.title.slice(0, 80)}`);
                 console.log(`         expected: ${f.expected || 'null'} -> got: ${f.actual || 'null'}`);
             }

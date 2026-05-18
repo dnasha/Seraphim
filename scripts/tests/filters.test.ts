@@ -250,6 +250,88 @@ describe('applyNewsFilters - mapped only', () => {
 });
 
 /*
+  Volume ("Hotness") Filtering
+  Validates filtering based on story report count (sources list length or eventCount).
+*/
+describe('applyNewsFilters - minVolume filtering', () => {
+    const thinItem = makeItem({
+        id: 'thin',
+        sources: [
+            { name: 'Source A', url: 'https://example.com/a', sourceType: 'rss', discoveredAt: new Date(NOW - 1000 * 60).toISOString() }
+        ]
+    }); // 1 source
+    const fatItem = makeItem({
+        id: 'fat',
+        sources: [
+            { name: 'Source A', url: 'https://example.com/a', sourceType: 'rss', discoveredAt: new Date(NOW - 1000 * 60).toISOString() },
+            { name: 'Source B', url: 'https://example.com/b', sourceType: 'rss', discoveredAt: new Date(NOW - 1000 * 60).toISOString() }
+        ]
+    }); // 2 sources
+    const megaItem = makeItem({
+        id: 'mega',
+        sourcesCount: 6,
+        sources: []
+    }); // sourcesCount 6 override
+    const allItems = [thinItem, fatItem, megaItem];
+
+    it('shows everything when minVolume=1', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ minVolume: 1 }));
+        expect(result).toHaveLength(3);
+    });
+
+    it('shows only items with 2+ sources when minVolume=2', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ minVolume: 2 }));
+        expect(result).toContain(fatItem);
+        expect(result).toContain(megaItem);
+        expect(result).not.toContain(thinItem);
+    });
+
+    it('shows only items with 5+ sources when minVolume=5', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ minVolume: 5 }));
+        expect(result).toEqual([megaItem]);
+    });
+});
+
+/*
+  Credibility Tiers Filtering
+  Validates filtering based on the credibility Tier (1, 2, or 3).
+*/
+describe('applyNewsFilters - credibilityTiers filtering', () => {
+    const verifiedItem = makeItem({ credibilityTier: 1 });
+    const credibleItem = makeItem({ credibilityTier: 2 });
+    const unverifiedItem = makeItem({ credibilityTier: 3 });
+    const noTierItem = makeItem({ credibilityTier: undefined }); // defaults to 3
+    const allItems = [verifiedItem, credibleItem, unverifiedItem, noTierItem];
+
+    it('shows everything when credibilityTiers is empty or all-inclusive', () => {
+        const result1 = applyNewsFilters(allItems, defaultOpts({ credibilityTiers: [] }));
+        expect(result1).toHaveLength(4);
+
+        const result2 = applyNewsFilters(allItems, defaultOpts({ credibilityTiers: [1, 2, 3] }));
+        expect(result2).toHaveLength(4);
+    });
+
+    it('shows only verified when credibilityTiers=[1]', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ credibilityTiers: [1] }));
+        expect(result).toEqual([verifiedItem]);
+    });
+
+    it('shows verified and credible when credibilityTiers=[1, 2]', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ credibilityTiers: [1, 2] }));
+        expect(result).toContain(verifiedItem);
+        expect(result).toContain(credibleItem);
+        expect(result).not.toContain(unverifiedItem);
+    });
+
+    it('includes undefined credibility tier in Tier 3 (Unverified) results', () => {
+        const result = applyNewsFilters(allItems, defaultOpts({ credibilityTiers: [3] }));
+        expect(result).toContain(unverifiedItem);
+        expect(result).toContain(noTierItem);
+        expect(result).not.toContain(verifiedItem);
+    });
+});
+
+/*
   Combined Filters
   Validates intersection logic when multiple filters are active.
 */

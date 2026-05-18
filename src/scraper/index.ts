@@ -14,7 +14,7 @@ Requirements:
 - GNEWS_API_KEY for GNews integration.
 */
 
-import { supabaseAdmin as supabase } from "@/lib/core/supabase";
+import { supabaseAdmin as supabase } from "@/lib/core/supabase-admin";
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "@/lib/api/rss";
 import { fetchGNews } from "@/lib/api/gnews";
 import { fetchSocialFeeds } from "@/lib/api/social";

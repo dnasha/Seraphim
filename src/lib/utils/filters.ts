@@ -6,7 +6,7 @@
 
 import { NewsItem, BBox } from '@/lib/core/types';
 import { isWithinBBox } from './geo';
-import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked } from './ranking';
+import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked, canonicalEventCount } from './ranking';
 
 export type SortMode = 'new' | 'hot';
 
@@ -23,6 +23,8 @@ export interface FilterOptions {
     sortMode?: SortMode;
     bbox?: BBox;
     respectBBox?: boolean;
+    minVolume?: number;
+    credibilityTiers?: number[];
 }
 
 /**
@@ -30,7 +32,7 @@ export interface FilterOptions {
  * This is a pure function with no React dependencies or side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true, minVolume, credibilityTiers } = options;
     const mode = normalizeSortMode(sortMode);
 
     let filtered = items;
@@ -119,6 +121,23 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
         filtered = filtered.filter(n => n.latitude == null);
     } else if (mappedOnly) {
         filtered = filtered.filter(n => n.latitude != null);
+    }
+
+    /**
+     * 5b. Volume ("Hotness") Filtering
+     */
+    if (minVolume !== undefined && minVolume > 1) {
+        filtered = filtered.filter(item => canonicalEventCount(item) >= minVolume);
+    }
+
+    /**
+     * 5c. Credibility Badge Filtering
+     */
+    if (credibilityTiers && credibilityTiers.length > 0) {
+        filtered = filtered.filter(item => {
+            const tier = item.credibilityTier ?? 3;
+            return credibilityTiers.includes(tier);
+        });
     }
 
     /**

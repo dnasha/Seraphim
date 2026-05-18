@@ -377,3 +377,70 @@ along with the custom date picker interface.
   border-color: var(--accent-active);
   background: var(--surface-alt);
 }
+
+/* Custom Volume Input Container */
+.customVolumeContainer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.customVolumeContainerActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.customVolumeLabel {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.customVolumeContainerActive .customVolumeLabel {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.customVolumeInput {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  width: 44px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.customVolumeInput:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* Credibility Toggle Active style */
+.credibilityToggleActive {
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: scale(1.02);
+}
+
+@media (hover: hover) {
+  .customVolumeContainer:hover {
+    border-color: var(--accent);
+    transform: scale(1.03);
+  }
+}
+
