@@ -199,7 +199,7 @@ export const COUNTRY_ABBREV_MAP: Record<string, string> = {
     'va': 'virginia',
     'fl': 'florida',
     'nj': 'new jersey', 'n.j.': 'new jersey', 'n.j': 'new jersey',
-    'ny': 'new york', 'n.y.': 'new york', 'n.y': 'new york',
+    'n.y.': 'new york', 'n.y': 'new york',
 };
 
 /**
@@ -296,7 +296,7 @@ export const FALSE_POSITIVES = new Set([
     'nako', 'victoria', 'usa', 'real', 'charlotte', 'murphy', 'bar', 'ray', 'chamber', 'valverde',
     'can', 'meta', 'sam', 'post', 'battle', 'eagle', 'enterprise',
     'nigel', 'kim', 'pacific', 'aung san', 'golders green',
-    'sanchez', 'harvard', 'irani',
+    'sanchez', 'harvard', 'irani', 'free',
 ]);
 
 /**

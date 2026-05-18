@@ -547,10 +547,15 @@ export function extractLocation(title: string, description: string): { match: st
             const wPlacement = placement === 'title' ? 0 : 12;
             
             // Source confidence weight
+            // action_target gets full bonus only for specific locations (cities/landmarks).
+            // Country-level action targets ("attack on Iran") get reduced credit because
+            // they don't pinpoint a specific place and cause country-swap regressions
+            // in multi-nation geopolitical articles.
             let wSource = 0;
+            const isCountryLevel = finalEntry?.type === 'country' || finalEntry?.type === 'admin1';
             switch(source) {
                 case 'possessive_focus': wSource = -15; break;
-                case 'action_target': wSource = -20; break;
+                case 'action_target': wSource = isCountryLevel ? -5 : -20; break;
                 case 'dateline': wSource = -15; break;
                 case 'title_subject': wSource = -8; break;
                 case 'compound_scan': wSource = 0; break;
@@ -567,7 +572,9 @@ export function extractLocation(title: string, description: string): { match: st
             // Regional and entity-type penalties
             const continentPenalty = CONTINENT_NAMES.has(key) ? 40 : 0;
             const regionPenalty = (key === 'middle east' || key === 'west asia' || key === 'southeast asia') ? 25 : 0;
-            const superpowerPenalty = (SUPERPOWER_KEYS.has(key) && source !== 'action_target') ? 20 : 0;
+            // Apply superpower penalty to all sources including action_target when country-level.
+            // Only exempt action_target for city/landmark targets (e.g., "missile hits Kyiv").
+            const superpowerPenalty = (SUPERPOWER_KEYS.has(key) && !(source === 'action_target' && !isCountryLevel)) ? 20 : 0;
 
             const finalScore = wPlacement + wSource + wType + continentPenalty + regionPenalty + superpowerPenalty;
 
@@ -609,6 +616,20 @@ export function extractLocation(title: string, description: string): { match: st
                 if (descC.score < bestTitleCountry.score) {
                     bestTitleCountry.score -= 15;
                     break;
+                }
+            }
+        }
+
+        // Multi-country dampening: when 2+ distinct countries are found in the title,
+        // action_target country-level picks are penalized because the article is likely
+        // about international relations, not a local event.
+        const titleCountryKeys = new Set(
+            scored.filter(s => s.placement === 'title' && KNOWN_LOCATIONS[s.key]?.type === 'country').map(s => s.key)
+        );
+        if (titleCountryKeys.size >= 2) {
+            for (const s of scored) {
+                if (s.source === 'action_target' && KNOWN_LOCATIONS[s.key]?.type === 'country') {
+                    s.score += 15; // penalize action_target country picks in multi-country articles
                 }
             }
         }
