@@ -390,3 +390,25 @@
         height: 40px;
     }
 }
+
+.footerLinks {
+    text-align: center;
+    font-size: 0.725rem;
+    color: var(--text-muted);
+    margin-top: 18px;
+    line-height: 1.4;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+}
+
+.footerLink {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.15s ease;
+}
+
+.footerLink:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}

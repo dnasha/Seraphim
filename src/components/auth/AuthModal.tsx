@@ -13,6 +13,8 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import { useTheme } from 'next-themes';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import styles from './AuthModal.module.css';
 
@@ -20,6 +22,7 @@ type AuthTab = 'login' | 'signup' | 'reset';
 
 export default function AuthModal() {
     const { showAuthModal, setShowAuthModal, supabase, continueAsGuest } = useAuth();
+    const { resolvedTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<AuthTab>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -232,7 +235,7 @@ export default function AuthModal() {
                             onExpire={() => setCaptchaToken(null)}
                             onError={() => setCaptchaToken(null)}
                             options={{
-                                theme: 'dark',
+                                theme: resolvedTheme === 'dark' ? 'dark' : 'light',
                                 size: 'normal',
                             }}
                         />
@@ -275,8 +278,19 @@ export default function AuthModal() {
                 </button>
 
                 <p className={styles.guestNote}>
-                    Guest access is limited to 10 hot events per view with no advanced controls.
+                    Guest access is limited to basic features.
                 </p>
+
+                <div className={styles.footerLinks}>
+                    By continuing, you agree to our<br />
+                    <Link href="/terms" className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
+                        Terms of Service
+                    </Link>{' '}
+                    and{' '}
+                    <Link href="/privacy" className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
+                        Privacy Policy
+                    </Link>.
+                </div>
             </div>
         </div>
     );

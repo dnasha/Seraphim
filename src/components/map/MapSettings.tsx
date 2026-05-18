@@ -118,6 +118,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                                         title={`Switch to ${style.label} style`}
                                     >
                                         <div className={styles.previewImgWrapper}>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img 
                                                 src={previewImg} 
                                                 alt={style.label} 

@@ -653,7 +653,7 @@ export default function NewsMap({
       {mapError && <MapError onRetry={handleRetry} error={mapError} />}
 
       {/* Upgrade CTA for non-paying users */}
-      {!tierLoading && (userTier === 'free' || userTier === 'guest') && (
+      {!tierLoading && userTier === 'free' && (
         <UpgradeButton isSidebarOpen={isSidebarOpen} />
       )}
 
