@@ -1,5 +1,9 @@
-import 'server-only';
 import { createClient } from '@supabase/supabase-js';
+
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.env.IS_BENCHMARK && !process.versions?.bun) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('server-only');
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
