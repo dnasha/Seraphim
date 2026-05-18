@@ -69,15 +69,15 @@ export default function UserButton({ variant = 'sidebar' }: UserButtonProps) {
             <button
                 className={`${styles.userBtn} ${user ? styles.userBtnLoggedIn : ''}`}
                 onClick={handleClick}
-                aria-label={user ? 'User menu' : 'Sign in'}
-                title={user ? displayName || 'Account' : (isGuest ? 'Guest — Click to sign in' : 'Sign in')}
+                aria-label={user ? `User account menu for ${displayName || 'User'}` : (isGuest ? 'Guest account menu: click to sign in' : 'Sign in to Seraphim')}
+                title={user ? `Account: ${displayName || 'User'}` : (isGuest ? 'Guest Mode: Click to sign in' : 'Sign in')}
             >
                 {user ? (
                     avatarUrl ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                             src={avatarUrl}
-                            alt={displayName || 'User'}
+                            alt={displayName ? `Profile picture of ${displayName}` : 'User profile picture'}
                             className={styles.avatar}
                             referrerPolicy="no-referrer"
                         />

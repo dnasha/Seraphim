@@ -622,12 +622,39 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       features: [...features, ...textFeatures]
     };
 
+    // Construct a highly descriptive and useful filename containing a timestamp and map view state
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const timestamp = `${year}${month}${day}-${hours}${minutes}${seconds}`;
+
+    let viewSuffix = '';
+    if (mapRef.current) {
+      try {
+        const center = mapRef.current.getCenter();
+        const zoom = mapRef.current.getZoom();
+        const lat = center.lat.toFixed(4);
+        const lng = center.lng.toFixed(4);
+        const z = zoom.toFixed(1);
+        viewSuffix = `_z${z}_lat${lat}_lng${lng}`;
+      } catch (err) {
+        console.warn('Failed to extract map coordinates for export filename:', err);
+      }
+    }
+
+    const fileName = `seraphim_draw_${timestamp}${viewSuffix}.geojson`;
+
     const blob = new Blob([JSON.stringify(geojson)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'map-annotations.geojson';
+    a.download = fileName;
     a.click();
+    URL.revokeObjectURL(url); // Clean up the object URL to prevent memory leaks
   };
 
   const handleImport = () => {

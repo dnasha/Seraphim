@@ -69,10 +69,9 @@ const MapSettings: React.FC<MapSettingsProps> = ({
         <div className={styles.mapSettingsArea} ref={panelRef}>
             <button
                 onClick={() => router.push('/help')}
-                className={`${styles.mapSettingsBtn}${disabled ? ` ${styles.disabled}` : ''}`}
+                className={styles.mapSettingsBtn}
                 title="Help & Info"
                 aria-label="Help and Information"
-                disabled={disabled}
             >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>

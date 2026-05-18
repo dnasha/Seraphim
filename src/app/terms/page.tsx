@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import styles from '../help/page.module.css';
+import styles from './LegalPage.module.css';
 
 export const metadata = {
   title: 'Terms of Service | Seraphim',
