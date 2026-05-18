@@ -151,30 +151,32 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 <span className={styles.btnText}>3D</span>
             </button>
 
-            <button
-                className={`${styles.actionBtn}${drawToolsOpen ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
-                onClick={disabled ? undefined : onToggleDrawTools}
-                title="Draw & Measure"
-                disabled={disabled}
-            >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-                    <path d="M2 2l7.58 7.58"></path>
-                </svg>
-            </button>
+            <div className={styles.bottomRow}>
+                <button
+                    className={`${styles.actionBtn}${drawToolsOpen ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                    onClick={disabled ? undefined : onToggleDrawTools}
+                    title="Draw & Measure"
+                    disabled={disabled}
+                >
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                        <path d="M2 2l7.58 7.58"></path>
+                    </svg>
+                </button>
 
-            <button
-                className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
-                onClick={disabled ? undefined : handleOverlayButtonClick}
-                title="Environmental Overlays"
-                disabled={disabled}
-            >
-                <svg viewBox="0 0 1200 1200" width="20" height="20" fill="currentColor">
-                    <path d="M381.64,1200C135.779,1061.434,71.049,930.278,108.057,751.148 c27.321-132.271,116.782-239.886,125.36-371.903c38.215,69.544,54.183,119.691,58.453,192.364 C413.413,422.695,493.731,216.546,498.487,0c0,0,316.575,186.01,337.348,466.98c27.253-57.913,40.972-149.892,13.719-209.504 c81.757,59.615,560.293,588.838-64.818,942.524c117.527-228.838,30.32-537.611-173.739-680.218 c13.628,61.319-10.265,290.021-100.542,390.515c25.014-167.916-23.8-238.918-23.8-238.918s-16.754,94.054-81.758,189.065 C345.537,947.206,304.407,1039.291,381.64,1200L381.64,1200z"/>
-                </svg>
-                {showBadge && <div className={styles.btnBadgeDot} />}
-            </button>
+                <button
+                    className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                    onClick={disabled ? undefined : handleOverlayButtonClick}
+                    title="Environmental Overlays"
+                    disabled={disabled}
+                >
+                    <svg viewBox="0 0 1200 1200" width="20" height="20" fill="currentColor">
+                        <path d="M381.64,1200C135.779,1061.434,71.049,930.278,108.057,751.148 c27.321-132.271,116.782-239.886,125.36-371.903c38.215,69.544,54.183,119.691,58.453,192.364 C413.413,422.695,493.731,216.546,498.487,0c0,0,316.575,186.01,337.348,466.98c27.253-57.913,40.972-149.892,13.719-209.504 c81.757,59.615,560.293,588.838-64.818,942.524c117.527-228.838,30.32-537.611-173.739-680.218 c13.628,61.319-10.265,290.021-100.542,390.515c25.014-167.916-23.8-238.918-23.8-238.918s-16.754,94.054-81.758,189.065 C345.537,947.206,304.407,1039.291,381.64,1200L381.64,1200z"/>
+                    </svg>
+                    {showBadge && <div className={styles.btnBadgeDot} />}
+                </button>
+            </div>
         </div>
     );
 };

@@ -6,6 +6,7 @@
   right: max(12px, env(safe-area-inset-right));
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   z-index: 1000;
 }
@@ -82,10 +83,16 @@
   letter-spacing: -0.02em;
 }
 
+.bottomRow {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
 /* Overlay menu layout */
 .overlayMenu {
   position: absolute;
-  right: 50px; /* Width of button + gap */
+  right: 100px; /* Width of bottom row buttons (42*2 + 8) + gap */
   width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -181,7 +188,7 @@
     height: 44px;
   }
   .overlayMenu {
-    right: 52px;
+    right: 108px; /* (44*2 + 8) + gap */
     width: min(240px, 75vw);
   }
 }

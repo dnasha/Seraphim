@@ -117,6 +117,7 @@ export default function NewsMap({
     currentStyleRef.current = currentStyle;
   }, [currentStyle]);
 
+
   const settingsPanelRef = useRef<HTMLDivElement>(null);
 
   const onBoundsChangeRef = useRef(onBoundsChange);

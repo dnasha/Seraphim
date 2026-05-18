@@ -26,6 +26,15 @@ interface MapSettingsProps {
     disabled?: boolean;
 }
 
+const PREVIEW_IMAGES: Record<string, string> = {
+    standard: '/map_previews/Default.webp',
+    dark: '/map_previews/Dark.webp',
+    black: '/map_previews/Black.webp',
+    light: '/map_previews/White.webp',
+    satellite: '/map_previews/Sattelite.webp',
+    topographic: '/map_previews/Topo.webp',
+};
+
 const MapSettings: React.FC<MapSettingsProps> = ({
     mapStyle,
     onStyleChange,
@@ -99,15 +108,26 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Map Style</div>
                         <div className={styles.settingsStyleGrid}>
-                            {Object.entries(MAP_STYLES).map(([key, style]) => (
-                                <button
-                                    key={key}
-                                    className={`${styles.settingsStyleBtn}${mapStyle === key ? ` ${styles.settingsStyleBtnActive}` : ''}`}
-                                    onClick={() => onStyleChange(key)}
-                                >
-                                    {style.label}
-                                </button>
-                            ))}
+                            {Object.entries(MAP_STYLES).map(([key, style]) => {
+                                const previewImg = PREVIEW_IMAGES[key] || '/map_previews/Default.webp';
+                                return (
+                                    <button
+                                        key={key}
+                                        className={`${styles.settingsStyleBtn}${mapStyle === key ? ` ${styles.settingsStyleBtnActive}` : ''}`}
+                                        onClick={() => onStyleChange(key)}
+                                        title={`Switch to ${style.label} style`}
+                                    >
+                                        <div className={styles.previewImgWrapper}>
+                                            <img 
+                                                src={previewImg} 
+                                                alt={style.label} 
+                                                className={styles.previewImg} 
+                                            />
+                                        </div>
+                                        <span className={styles.previewLabel}>{style.label}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 

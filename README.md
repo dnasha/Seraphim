@@ -1,74 +1,93 @@
-# Seraphim - Real-Time OSINT Dashboard
+# Seraphim
 
-Seraphim is a real-time OSINT (Open-Source Intelligence) news aggregator that scrapes global headlines, extracts geographic locations via NLP + regex heuristics, and plots them on an interactive world map. It combines RSS feeds, social media (Telegram, X/Twitter), Reddit, and the GNews API into a single filterable intelligence dashboard.
+Seraphim is a real time Open Source Intelligence news aggregator designed to provide a comprehensive and interactive dashboard for global events. The platform scrapes headlines from diverse sources, including RSS feeds, social media platforms like Telegram and Reddit, and specialized news APIs. By employing advanced natural language processing and custom heuristic engines, Seraphim extracts geographic locations from news content and visualizes them on a high performance map.
 
----
+## Architecture and Tech Stack
 
-##  Architecture & Tech Stack
+The project is built on a modern and resilient stack designed for performance and scalability.
 
-| Layer | Technology | Notes |
-| :--- | :--- | :--- |
-| **Framework** | Next.js 16.2.4 (App Router) | React 19.2.5, deployed to Vercel |
-| **Language** | TypeScript | Strict mode, version 6.0.3 |
-| **Styling** | Vanilla CSS | CSS Modules for component isolation. Base tokens in `globals.css` |
-| **Testing** | Vitest | Unit/Integration/Accuracy testing (~130 tests) |
-| **Database** | Supabase (PostgreSQL + PostGIS) | `events` (Story model) with `pgvector` enabled |
-| **Map Engine** | MapLibre GL JS 5.1 | WebGL-accelerated rendering |
-| **Primary Runtime** | Bun | Native TS execution, used for development and ingestion |
+### Frontend
+The user interface is powered by Next.js 16 (App Router) and React 19. It uses MapLibre GL JS for WebGL accelerated map rendering. Styling is handled via Vanilla CSS and CSS Modules to ensure component isolation and maintainable styles. The frontend implements a persistent entity store that preserves data during map navigation and synchronizes the view state with the URL for shareable links.
 
----
+### Backend and API
+The backend is integrated within the Next.js App Router, providing server side rendering and API routes. It uses Supabase for database management, utilizing PostgreSQL with PostGIS for spatial queries and pgvector for semantic search capabilities. A hybrid rate limiting strategy using Upstash (Local L1 and Redis L2) ensures API stability.
 
-##  Key Commands
+### Data Ingestion
+A dedicated ingestion worker built with Bun executes the scraping and processing pipeline. It handles data from RSS feeds, Cheerio based web scraping for Telegram, and integration with the GNews API.
 
-| Command | Description |
-|---|---|
-| `bun dev` | Starts the Next.js development server. |
-| `bun build` | Builds the application for production. |
-| `bun run scrape` | Runs the ingestion worker (`src/scraper/index.ts`). |
-| `bun test` | Executes the Vitest suite. |
-| `bun run test:accuracy` | Runs geocoding regression tests. |
-| `bun run scripts/build-geodata.mjs` | Compiles GeoNames data into `data/geonames.json`. |
+### Geocoding and NLP
+Seraphim features a custom geocoding engine that operates independently of external paid services. It uses the compromise NLP library alongside a multi pass heuristic system to resolve locations from unstructured text. Local vectorization is performed using the Hugging Face Transformers library (all-MiniLM-L6-v2) to generate embeddings for semantic clustering.
 
----
+## Project Structure
 
-##  Project Structure
+The codebase is organized into logical directories to separate concerns across the stack.
 
-- `src/app/`: Next.js App Router pages and API routes.
-- `src/components/`: React components, including the `map/` engine.
-- `src/scraper/`: Bun-based ingestion worker and transformers.
-- `src/lib/geocoding/`: Core NLP extraction and location resolution logic.
-- `data/`: Geodata (raw `.txt` and compiled `geonames.json`).
-- `scripts/`: Accuracy evaluators, geodata builders, and maintenance tools.
+* src/app: Contains the Next.js pages, layouts, and API routes.
+* src/components: Reusable UI components, including the core map engine and its associated tools.
+* src/scraper: The ingestion worker logic, transformers, and source specific scrapers.
+* src/lib/geocoding: The core logic for location extraction and geographic resolution.
+* src/hooks: Custom React hooks for managing authentication, news data, and map state.
+* data: Static geographic datasets and compiled GeoNames information.
+* scripts: Maintenance utilities, diagnostic tools, and accuracy evaluators.
 
----
+## Installation and Setup
 
-##  Data Pipeline
+To set up the project locally, follow these steps.
 
-1. **Scraper**: Fetches from RSS, Reddit, Telegram, and GNews.
-2. **Vectorization**: Generates 384-dim embeddings locally via `@huggingface/transformers`.
-3. **Consolidation**: Incoming events are matched against existing stories using tiered semantic similarity (0.85 global, 0.75 anchored, 0.60 spatial).
-4. **Upsert**: New sources are appended to story clusters, updating titles/descriptions based on credibility tiers.
+### Prerequisites
+* Bun (Primary runtime and package manager)
+* Node.js (For secondary tooling if required)
+* A Supabase project with PostGIS and pgvector enabled
+* Upstash Redis (Optional for L2 rate limiting)
 
----
+### Environment Variables
+Create a .env file in the root directory and provide the following variables.
+* SUPABASE_URL: Your Supabase project URL.
+* SUPABASE_SERVICE_ROLE_KEY: Service role key for administrative database access.
+* GNEWS_API_KEY: Optional API key for GNews integration.
+* UPSTASH_REDIS_REST_URL: Optional URL for Upstash Redis.
+* UPSTASH_REDIS_REST_TOKEN: Optional token for Upstash Redis.
 
-##  Environment Variables
+### Data Initialization
+Before running the project, you must compile the geographic data.
+1. Download the required GeoNames datasets into the data directory.
+2. Run the build script: bun run scripts/build-geodata.mjs.
 
-Required for full functionality:
-- `SUPABASE_URL`: DB endpoint.
-- `SUPABASE_SERVICE_ROLE_KEY`: For scraper write access.
-- `GNEWS_API_KEY`: (Optional) For keyword-driven news search.
+## Operational Guide
 
----
+### Development
+Start the development server with:
+bun dev
 
-##  Geocoding Strategy
+### Data Ingestion
+Run the scraper to fetch and process new events:
+bun run scrape
 
-The engine uses a tiered approach:
-1. **Explicit Overrides**: `src/lib/geocoding/constants.ts` (e.g., resolving "Georgia" correctly).
-2. **Dictionary Priority**: Landmarks > Mega-Cities > Countries > Cities > Admin1.
-3. **Scoring**: Candidates are scored based on placement (Title vs. Description) and source signals.
+### Testing
+Seraphim uses Vitest for unit and integration testing.
+* Run all tests: bun test
+* Run geocoding accuracy benchmark: bun run test:accuracy
 
----
+## Technical Deep Dive
 
-##  License
+### Geocoding Strategy
+The geocoding engine uses a tiered multi pass approach to ensure high accuracy with minimal false positives. It prioritizes locations based on:
+1. Explicit metadata (e.g., datelines or source specific tags).
+2. Patterns like "City, Country" or landmark names.
+3. Weighted dictionary lookups against GeoNames data.
+4. NLP based entity extraction for contextual resolution.
 
-(c) Seraphim 2026. See `LICENSE` for details.
+### Data Pipeline and Semantic Clustering
+Incoming news items undergo a rigorous consolidation process.
+1. Extraction: Locations and metadata are extracted from the raw content.
+2. Vectorization: Content is converted into 384-dim embeddings locally.
+3. Merging: New items are compared against existing stories using a tiered similarity model (Global Semantic, Anchored Location, and Spatial Proximity).
+4. Clustering: Related sources are grouped under a single "Master" story to reduce map clutter.
+
+### Performance and Resilience
+* BBox Snapping: The map API implements a bounding box snapping grid (0.5 to 10 degrees) to maximize server side cache hits and prevent redundant queries during minor panning.
+* Fail-Open API: In the event of database statement timeouts, the API returns empty results or cached data to prevent UI crashes.
+* Server-Only Protection: Core geodata and geocoding logic are restricted to the server to minimize client side bundle sizes.
+
+## License
+Copyright Seraphim 2026. Distributed under the terms of the project license.

@@ -55,7 +55,7 @@ export const MAP_STYLES: Record<
   light: {
     url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
     attribution: '<a href="https://protomaps.com">© Protomaps</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
-    label: "Light",
+    label: "White",
     isPmtiles: true,
     theme: "white",
   },
@@ -149,6 +149,8 @@ export function getMapLibreStyle(styleKey: string): any {
           type: "vector",
           tiles: [style.url],
           attribution: style.attribution,
+          minzoom: 0,
+          maxzoom: 11,
         },
       },
       layers: layers("protomaps", namedFlavor(style.theme), { lang: "en" }),
