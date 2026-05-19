@@ -243,7 +243,6 @@ export default function EventSidebar({
               viewBox="0 0 200 200"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              style={{ height: "3.4rem", width: "auto" }}
             >
               <path
                 className={styles.logoFill}

@@ -18,6 +18,8 @@ Includes card expansion details and responsive mobile layouts.
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform, width;
   outline: none;
+  container-type: inline-size;
+  container-name: sidebar;
 }
 
 .isResizing {
@@ -43,6 +45,7 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .logoLink {
@@ -72,6 +75,7 @@ Includes card expansion details and responsive mobile layouts.
   align-items: flex-end;
   margin-left: 4px;
   gap: 4px;
+  min-width: 0;
 }
 
 .logoTextWrapper h1 {
@@ -91,6 +95,8 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sidebarLogoImg {
+  height: 3.4rem;
+  width: auto;
   transition: transform 0.3s ease;
   flex-shrink: 0;
 }
@@ -111,6 +117,31 @@ Includes card expansion details and responsive mobile layouts.
 
 [data-theme="dark"] .logoStroke {
   stroke: #fff;
+}
+
+/* Container Query for small sidebar widths (e.g. min-width of 420px or mobile views) */
+@container sidebar (max-width: 480px) {
+  .sidebarLogoImg {
+    height: 2.2rem;
+  }
+
+  .logoTextWrapper {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin-left: 6px;
+  }
+
+  .logoTextWrapper h1 {
+    font-size: 1.3rem;
+    letter-spacing: 0.06em;
+    line-height: 1.0;
+  }
+
+  .logoTextWrapper span {
+    margin-bottom: 0;
+    margin-top: 1px;
+  }
 }
 
 .eventSidebarActions {
@@ -514,10 +545,11 @@ Includes card expansion details and responsive mobile layouts.
 .eventCardMeta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 3px;
+  column-gap: 6px;
   margin-top: 4px;
-  padding-right: 32px; /* Reserve space for source count badge */
-  white-space: nowrap;
+  padding-right: 38px; /* Boosted padding to prevent overlap with source count badge */
   overflow: hidden;
 }
 
@@ -538,6 +570,7 @@ Includes card expansion details and responsive mobile layouts.
   font-size: 0.75rem; /* 12px */
   font-weight: 500;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .eventCardLocation {
@@ -549,7 +582,8 @@ Includes card expansion details and responsive mobile layouts.
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  min-width: 80px;
+  max-width: 100%;
 }
 
 .eventCardMetaSep {
@@ -808,24 +842,6 @@ Includes card expansion details and responsive mobile layouts.
   .eventSidebarHeader {
     padding: 8px 10px;
     flex-shrink: 0;
-  }
-
-  .sidebarLogoImg {
-    height: 2.2rem !important;
-  }
-
-  .logoTextWrapper {
-    margin-left: 2px;
-    gap: 3px;
-  }
-
-  .logoTextWrapper h1 {
-    font-size: 1.25rem !important;
-    letter-spacing: 0.05em;
-  }
-
-  .eventSidebarLogo h1 {
-    font-size: 1.25rem;
   }
 
   .eventSidebarActions {
