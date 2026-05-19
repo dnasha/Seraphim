@@ -326,7 +326,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (_event !== 'INITIAL_SESSION') {
                         await fetchUserTier(newSession.user.id, true);
                     }
-                } else {
+                } else if (_event !== 'INITIAL_SESSION') {
                     setUserTier('guest');
                     setSubscriptionStatus(null);
                     setBillingInterval(null);
