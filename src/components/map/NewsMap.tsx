@@ -320,6 +320,30 @@ export default function NewsMap({
         trackResize: false,
         // @ts-expect-error - Internal property used for high-fidelity screenshots/rendering
         preserveDrawingBuffer: true,
+        transformRequest: (url, resourceType) => {
+          if (resourceType === 'Glyphs' && url.includes('basemaps-assets/fonts/')) {
+            const match = url.match(/\/fonts\/([^/]+)\/([^/]+)$/);
+            if (match) {
+              const encodedFontstack = match[1];
+              const range = match[2];
+              const decodedFontstack = decodeURIComponent(encodedFontstack);
+              
+              let mappedFont = "Noto Sans Regular";
+              if (decodedFontstack.toLowerCase().includes("italic")) {
+                mappedFont = "Noto Sans Italic";
+              } else if (decodedFontstack.toLowerCase().includes("bold") || decodedFontstack.toLowerCase().includes("medium")) {
+                mappedFont = "Noto Sans Medium";
+              }
+              
+              const newUrl = url.replace(
+                `/fonts/${encodedFontstack}/${range}`,
+                `/fonts/${encodeURIComponent(mappedFont)}/${range}`
+              );
+              return { url: newUrl };
+            }
+          }
+          return { url };
+        }
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);

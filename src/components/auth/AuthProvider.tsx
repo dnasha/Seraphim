@@ -99,8 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data, error } = result;
 
             if (error || !data) {
-                console.warn('[AuthProvider] Failed to fetch tier, defaulting to free:', error);
-                setUserTier('free');
+                console.warn('[AuthProvider] Failed to fetch tier, keeping cached tier or defaulting to free:', error);
+                setUserTier(prev => (prev && prev !== 'guest') ? prev : 'free');
             } else {
                 console.log('[AuthProvider] User tier fetched successfully:', data.tier);
                 const normalizedTier = (data.tier?.toLowerCase() as UserTier) || 'free';
@@ -110,10 +110,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setCurrentPeriodEnd(data.current_period_end);
                 setTrialEndsAt(data.trial_ends_at);
                 setCancelAtPeriodEnd(data.cancel_at_period_end ?? false);
+
+                // Cache in localStorage to bypass cold database start delay on next load
+                try {
+                    localStorage.setItem('seraphim_cached_tier', normalizedTier);
+                    if (data.subscription_status) localStorage.setItem('seraphim_cached_sub_status', data.subscription_status);
+                    else localStorage.removeItem('seraphim_cached_sub_status');
+                    if (data.billing_interval) localStorage.setItem('seraphim_cached_billing_interval', data.billing_interval);
+                    else localStorage.removeItem('seraphim_cached_billing_interval');
+                    if (data.current_period_end) localStorage.setItem('seraphim_cached_period_end', data.current_period_end);
+                    else localStorage.removeItem('seraphim_cached_period_end');
+                    if (data.trial_ends_at) localStorage.setItem('seraphim_cached_trial_ends', data.trial_ends_at);
+                    else localStorage.removeItem('seraphim_cached_trial_ends');
+                    localStorage.setItem('seraphim_cached_cancel_at_end', String(data.cancel_at_period_end ?? false));
+                } catch (cacheErr) {
+                    console.warn('[AuthProvider] Failed to save tier details to cache:', cacheErr);
+                }
             }
         } catch (err) {
             console.error('[AuthProvider] Error in fetchUserTier:', err);
-            setUserTier('free');
+            setUserTier(prev => (prev && prev !== 'guest') ? prev : 'free');
         } finally {
             setTierLoading(false);
         }
@@ -127,13 +143,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user, fetchUserTier]);
 
     useEffect(() => {
-        const initializeAuth = async () => {
-            console.log('[AuthProvider] Starting initializeAuth...');
+        // 1. Restore cached auth and tier on client mount to bypass cold starts
+        const cachedUserStr = localStorage.getItem('seraphim_cached_user');
+        const cachedSessionStr = localStorage.getItem('seraphim_cached_session');
+        const cachedTier = localStorage.getItem('seraphim_cached_tier') as UserTier | null;
+        const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
+        const hasSupabaseSession = Object.keys(localStorage).some(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
+        
+        let hasRestoredFromCache = false;
+        
+        if (cachedUserStr && cachedSessionStr && cachedTier) {
             try {
-                // Check guest preference immediately on mount to minimize UI flicker
-                const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
-                console.log('[AuthProvider] wasGuest preference:', wasGuest);
-                if (wasGuest === 'true') {
+                const cachedUser = JSON.parse(cachedUserStr);
+                const cachedSession = JSON.parse(cachedSessionStr);
+                const status = localStorage.getItem('seraphim_cached_sub_status');
+                const interval = localStorage.getItem('seraphim_cached_billing_interval');
+                const periodEnd = localStorage.getItem('seraphim_cached_period_end');
+                const trialEnds = localStorage.getItem('seraphim_cached_trial_ends');
+                const cancelAtEnd = localStorage.getItem('seraphim_cached_cancel_at_end') === 'true';
+
+                // Defer setting state to avoid synchronous cascading renders in the effect body (satisfies ESLint)
+                setTimeout(() => {
+                    setUser(cachedUser);
+                    setSession(cachedSession);
+                    setUserTier(cachedTier);
+                    setSubscriptionStatus(status);
+                    setBillingInterval(interval);
+                    setCurrentPeriodEnd(periodEnd);
+                    setTrialEndsAt(trialEnds);
+                    setCancelAtPeriodEnd(cancelAtEnd);
+                    setIsLoading(false);
+                    setTierLoading(false);
+                }, 0);
+                
+                hasRestoredFromCache = true;
+                console.log('[AuthProvider] Restored cached auth synchronously on mount:', cachedTier);
+            } catch (e) {
+                console.error('[AuthProvider] Failed to parse cached auth state:', e);
+            }
+        }
+        
+        if (!hasRestoredFromCache) {
+            // If we know they are a guest (either explicit choice or no Supabase session cookie/local storage at all)
+            if (wasGuest === 'true' || !hasSupabaseSession) {
+                const isGuestPref = wasGuest === 'true';
+                setTimeout(() => {
+                    setIsGuest(isGuestPref);
+                    setUserTier('guest');
+                    setIsLoading(false);
+                    setTierLoading(false);
+                }, 0);
+                hasRestoredFromCache = true;
+                console.log('[AuthProvider] Synchronously resolved guest status on mount');
+            }
+        }
+
+        const initializeAuth = async () => {
+            console.log('[AuthProvider] Starting background initializeAuth...');
+            try {
+                // Check guest preference
+                const currentWasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
+                if (currentWasGuest === 'true') {
                     setIsGuest(true);
                 }
 
@@ -184,23 +254,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(verifiedUser);
 
                 if (verifiedUser) {
+                    // Update cache for the session/user
+                    try {
+                        localStorage.setItem('seraphim_cached_user', JSON.stringify(verifiedUser));
+                        localStorage.setItem('seraphim_cached_session', JSON.stringify(finalSession));
+                    } catch (cacheErr) {
+                        console.warn('[AuthProvider] Failed to save user session to cache:', cacheErr);
+                    }
                     await fetchUserTier(verifiedUser.id, true);
                 } else {
                     console.log('[AuthProvider] No verified user, setting guest tier');
                     setUserTier('guest');
                     setTierLoading(false);
+                    // Clear cache
+                    localStorage.removeItem('seraphim_cached_user');
+                    localStorage.removeItem('seraphim_cached_session');
+                    localStorage.removeItem('seraphim_cached_tier');
+                    localStorage.removeItem('seraphim_cached_sub_status');
+                    localStorage.removeItem('seraphim_cached_billing_interval');
+                    localStorage.removeItem('seraphim_cached_period_end');
+                    localStorage.removeItem('seraphim_cached_trial_ends');
+                    localStorage.removeItem('seraphim_cached_cancel_at_end');
                 }
 
                 // If no session and not already determined as guest, default to guest mode internally
-                // We no longer auto-show the auth modal on first launch to reduce friction.
-                if (!finalSession && wasGuest !== 'true') {
+                if (!finalSession && currentWasGuest !== 'true') {
                     console.log('[AuthProvider] No active session, enabling Guest Mode');
                     setIsGuest(true);
                 }
             } catch (err) {
                 console.error('[AuthProvider] Failed to initialize auth:', err);
-                setUserTier('guest');
-                setTierLoading(false);
+                if (!hasRestoredFromCache) {
+                    setUserTier('guest');
+                    setTierLoading(false);
+                }
             } finally {
                 console.log('[AuthProvider] Setting isLoading to false');
                 setIsLoading(false);
@@ -220,6 +307,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setIsGuest(false);
                     localStorage.removeItem(GUEST_STORAGE_KEY);
                     setShowAuthModal(false);
+                    try {
+                        localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
+                        localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
+                    } catch (cacheErr) {
+                        console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
+                    }
                     await fetchUserTier(newSession.user.id, true);
                 } else {
                     setUserTier('guest');
@@ -229,6 +322,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setTrialEndsAt(null);
                     setCancelAtPeriodEnd(false);
                     setTierLoading(false);
+
+                    // Clear cache
+                    localStorage.removeItem('seraphim_cached_user');
+                    localStorage.removeItem('seraphim_cached_session');
+                    localStorage.removeItem('seraphim_cached_tier');
+                    localStorage.removeItem('seraphim_cached_sub_status');
+                    localStorage.removeItem('seraphim_cached_billing_interval');
+                    localStorage.removeItem('seraphim_cached_period_end');
+                    localStorage.removeItem('seraphim_cached_trial_ends');
+                    localStorage.removeItem('seraphim_cached_cancel_at_end');
                 }
             }
         );
@@ -327,6 +430,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setTierLoading(false);
         localStorage.removeItem(GUEST_STORAGE_KEY);
         localStorage.removeItem('seraphim-map-draw-tools-v1');
+        
+        // Clear cached auth details
+        localStorage.removeItem('seraphim_cached_user');
+        localStorage.removeItem('seraphim_cached_session');
+        localStorage.removeItem('seraphim_cached_tier');
+        localStorage.removeItem('seraphim_cached_sub_status');
+        localStorage.removeItem('seraphim_cached_billing_interval');
+        localStorage.removeItem('seraphim_cached_period_end');
+        localStorage.removeItem('seraphim_cached_trial_ends');
+        localStorage.removeItem('seraphim_cached_cancel_at_end');
+
         // Show auth modal again after sign out
         setShowAuthModal(true);
     }, [supabase]);

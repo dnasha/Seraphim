@@ -251,7 +251,7 @@ export function useMapLayers({
               ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"]],
             ],
             "text-size": 12,
-            "text-font": ["Noto Sans Medium"],
+            "text-font": ["Arial Bold"],
             "text-allow-overlap": false,
             "text-ignore-placement": false,
             "text-padding": 6,

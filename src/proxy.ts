@@ -17,6 +17,13 @@ export async function proxy(request: NextRequest) {
         request,
     });
 
+    // Performance Optimization: Skip session checks if request contains no Supabase cookies.
+    // Guests avoid ~1.5s database and authentication network roundtrips on cold start.
+    const hasAuthCookie = request.cookies.getAll().some(cookie => cookie.name.startsWith('sb-'));
+    if (!hasAuthCookie) {
+        return supabaseResponse;
+    }
+
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
