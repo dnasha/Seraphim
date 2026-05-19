@@ -108,7 +108,7 @@ export function HomeContent() {
         customEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
+        limit: isGuestUser ? 10 : undefined,
         enabled: !isAuthResolving
     });
 
@@ -294,9 +294,10 @@ export function HomeContent() {
     /** Gate guests to a maximum of 10 events across all views */
     const items = useMemo(() => {
         if (isGuestUser) return filteredNews.slice(0, 10);
-        if (userTier === 'free') return filteredNews.slice(0, 100);
+        // Deactivated for demo mode: free users get full feed access
+        // if (userTier === 'free') return filteredNews.slice(0, 100);
         return filteredNews;
-    }, [filteredNews, isGuestUser, userTier]);
+    }, [filteredNews, isGuestUser]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
@@ -351,15 +352,18 @@ export function HomeContent() {
     return (
         <div className={styles.appLayout}>
             {!isSidebarOpen && (
-                <button
-                    className={styles.sidebarExpandBtn}
-                    onClick={() => setIsSidebarOpen(true)}
-                    aria-label="Open sidebar"
-                >
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
-                    </svg>
-                </button>
+                <div className={styles.floatingActions}>
+                    <button
+                        className={styles.sidebarExpandBtn}
+                        onClick={() => setIsSidebarOpen(true)}
+                        aria-label="Open sidebar"
+                    >
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+                        </svg>
+                    </button>
+                    <UserButton variant="floating" />
+                </div>
             )}
 
             <EventSidebar
@@ -408,9 +412,6 @@ export function HomeContent() {
                     tierLoading={tierLoading}
                 />
             </main>
-
-            {/* Floating user button on map when sidebar is collapsed */}
-            {!isSidebarOpen && <UserButton variant="floating" />}
 
             {/* Auth modal (auto-shows on first visit) */}
             <AuthModal />

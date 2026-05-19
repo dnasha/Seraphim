@@ -36,11 +36,17 @@ Styles for the main application shell, content area, and top-level action button
   gap: var(--space-xs);
 }
 
-.sidebarExpandBtn {
+.floatingActions {
   position: absolute;
   top: max(var(--space-sm), env(safe-area-inset-top));
   left: max(var(--space-sm), env(safe-area-inset-left));
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.sidebarExpandBtn {
   width: 42px;
   height: 42px;
   border-radius: var(--radius-md);
@@ -77,11 +83,14 @@ Styles for the main application shell, content area, and top-level action button
     display: none;
   }
 
-  .sidebarExpandBtn {
+  .floatingActions {
     top: var(--space-sm);
     left: var(--space-sm);
-    width: 44px;
-    height: 44px;
+  }
+
+  .sidebarExpandBtn {
+    width: 36px;
+    height: 36px;
   }
 }
 

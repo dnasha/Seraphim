@@ -158,6 +158,11 @@ export default function PricingPage() {
     const { tier: currentTier } = useUserTier();
     const router = useRouter();
 
+    // Redirect to homepage since pricing/checkout is disabled for demo
+    useEffect(() => {
+        router.replace('/');
+    }, [router]);
+
     // Fetch angel remaining count
     useEffect(() => {
         async function fetchAngelCount() {

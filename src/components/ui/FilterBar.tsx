@@ -5,7 +5,7 @@
  * It supports filtering by source, category, and time range (including custom ranges).
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styles from './FilterBar.module.css';
 
 import { CATEGORY_COLORS, getSourceStyle, CATEGORY_ICONS } from '@/lib/styles/colors';
@@ -236,21 +236,44 @@ export default function FilterBar({
         }
     };
 
-    /**
-     * Converts vertical scroll wheel movement into horizontal scrolling for the filter containers.
-     * This improves UX for desktop users without horizontal-swipe capabilities.
-     */
-    const handleWheelScroll = (e: React.WheelEvent<HTMLDivElement>) => {
-        if (e.deltaY !== 0) {
-            e.currentTarget.scrollLeft += e.deltaY;
-        }
-    };
+    const filterBarRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const filterBar = filterBarRef.current;
+        if (!filterBar) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            let target = e.target as HTMLElement | null;
+            let scrollWrapper: HTMLElement | null = null;
+            
+            while (target && target !== filterBar) {
+                if (target.classList && Array.from(target.classList).some(c => c.includes('scrollWrapper'))) {
+                    scrollWrapper = target;
+                    break;
+                }
+                target = target.parentElement;
+            }
+
+            if (scrollWrapper) {
+                if (e.deltaY !== 0 || e.deltaX !== 0) {
+                    const scrollDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                    e.preventDefault();
+                    scrollWrapper.scrollLeft += scrollDelta;
+                }
+            }
+        };
+
+        filterBar.addEventListener('wheel', handleWheel, { passive: false });
+        return () => {
+            filterBar.removeEventListener('wheel', handleWheel);
+        };
+    }, []);
 
     return (
-        <div className={`${styles.filterBar} ${disabled ? styles.filterBarDisabled : ''}`}>
+        <div ref={filterBarRef} className={`${styles.filterBar} ${disabled ? styles.filterBarDisabled : ''}`}>
             <div className={styles.scrollableFilters}>
                 <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                    <div className={styles.scrollWrapper}>
                         <div className={styles.categoryToggles}>
                             {categoryOptions.map((cat) => {
                                 const isActive = categories.includes(cat.value);
@@ -289,7 +312,7 @@ export default function FilterBar({
 
                 <div className={styles.filterSection}>
                     <div className={styles.timeFilterContainer}>
-                        <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                        <div className={styles.scrollWrapper}>
                             <div className={styles.sourceToggles}>
                                 {timeOptions.map((option) => (
                                     <button
@@ -376,7 +399,7 @@ export default function FilterBar({
                 </div>
 
                 <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                    <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {sourceOptions.map((option) => {
                                 const isActive = sources.includes(option.value);
@@ -405,7 +428,7 @@ export default function FilterBar({
 
                 {/* Volume ("Hotness") Row */}
                 <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                    <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {volumeOptions.map((opt) => {
                                 const isActive = customValue === '' && minVolume === opt.value;
@@ -452,7 +475,7 @@ export default function FilterBar({
 
                 {/* Credibility Badge Row */}
                 <div className={styles.filterSection}>
-                    <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
+                    <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {credibilityOptions.map((opt) => {
                                 const isActive = credibilityTiers.includes(opt.value);

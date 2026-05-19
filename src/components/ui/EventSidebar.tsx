@@ -325,23 +325,6 @@ export default function EventSidebar({
 
       {/* Hot / New sort toggle */}
       <div className={styles.sortToggleRow}>
-        {/* Prevents hydration mismatch for time strings */}
-        {(newestEventTime || isLoading) && (
-          <div className={styles.liveStatusWrapper}>
-            <span className={styles.pulseDot} />
-            <span className={styles.lastUpdated} suppressHydrationWarning>
-              UPDATED{" "}
-              {newestEventTime && mounted
-                ? new Date(newestEventTime).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  })
-                : "--:-- --"}
-            </span>
-          </div>
-        )}
-
         <div className={styles.sortToggleGroup}>
           <button
             className={`${styles.sortToggleBtn} ${sortMode === "new" ? styles.sortToggleBtnActive : ""} ${disabled ? styles.sortToggleBtnDisabled : ""}`}
@@ -394,6 +377,23 @@ export default function EventSidebar({
             <span className={styles.filterBadgeCount}>{filterCount}</span>
           )}
         </button>
+
+        {/* Prevents hydration mismatch for time strings */}
+        {(newestEventTime || isLoading) && (
+          <div className={styles.liveStatusWrapper}>
+            <span className={styles.pulseDot} />
+            <span className={styles.lastUpdated} suppressHydrationWarning>
+              UPDATED{" "}
+              {newestEventTime && mounted
+                ? new Date(newestEventTime).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })
+                : "--:-- --"}
+            </span>
+          </div>
+        )}
       </div>
 
       <div

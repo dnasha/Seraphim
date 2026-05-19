@@ -9,9 +9,7 @@
 
 /* Floating placement (map top-left when sidebar collapsed) */
 .floatingContainer {
-    position: absolute;
-    top: max(60px, calc(env(safe-area-inset-top) + 60px));
-    left: max(12px, env(safe-area-inset-left));
+    position: relative;
     z-index: 1000;
 }
 
@@ -46,8 +44,9 @@
     transform: scale(0.95);
 }
 
-.userBtn:focus {
-    outline: none;
+.userBtn:focus,
+.userBtn:focus-visible {
+    outline: none !important;
 }
 
 .userBtnLoggedIn {
@@ -197,13 +196,12 @@
 
 /* Responsive */
 @media (max-width: 860px) {
-    .floatingContainer {
-        top: max(60px, calc(env(safe-area-inset-top) + 60px));
-        left: 12px;
-    }
-
     .userBtn {
-        width: 44px;
-        height: 44px;
+        width: 36px;
+        height: 36px;
     }
+}
+
+.floatingContainer .userBtn {
+    border: none !important;
 }

@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         try {
             console.log('[AuthProvider] Fetching user tier for', userId);
-            // Race the database profile query against a 5-second timeout to prevent UI hangs
+            // Race the database profile query against a 10-second timeout to prevent UI hangs on cold starts
             const queryPromise = supabase
                 .from('user_profiles')
                 .select('tier, subscription_status, billing_interval, current_period_end, trial_ends_at, cancel_at_period_end')
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const result = await Promise.race([
                 queryPromise,
                 new Promise<{ data: null; error: Error | PostgrestError }>((resolve) =>
-                    setTimeout(() => resolve({ data: null, error: new Error('Profile query timeout') }), 5000)
+                    setTimeout(() => resolve({ data: null, error: new Error('Profile query timeout') }), 10000)
                 )
             ]);
             
@@ -207,16 +207,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setIsGuest(true);
                 }
 
-                // Check initial session locally with a 4-second timeout safeguard
+                // Check initial session locally with a 10-second timeout safeguard to accommodate cold starts
                 console.log('[AuthProvider] Retrieving local session...');
                 const sessionResult = await Promise.race([
-                    supabase.auth.getSession(),
-                    new Promise<{ data: { session: Session | null } }>((resolve) =>
-                        setTimeout(() => resolve({ data: { session: null } }), 4000)
+                    supabase.auth.getSession().then(res => ({ ...res, timedOut: false as const })),
+                    new Promise<{ data: { session: null }; timedOut: true }>((resolve) =>
+                        setTimeout(() => resolve({ data: { session: null }, timedOut: true }), 10000)
                     )
                 ]);
                 const initialSession = sessionResult.data?.session ?? null;
-                console.log('[AuthProvider] Session retrieved:', initialSession ? 'Found' : 'None');
+                const getSessionTimedOut = 'timedOut' in sessionResult && sessionResult.timedOut;
+                console.log('[AuthProvider] Session retrieved:', initialSession ? 'Found' : 'None', getSessionTimedOut ? '(Timed Out)' : '');
                 
                 let verifiedUser = initialSession?.user ?? null;
                 let finalSession = initialSession;
@@ -250,35 +251,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     }
                 }
                 
-                setSession(finalSession);
-                setUser(verifiedUser);
+                // Only update the state and cached credentials if getSession completed.
+                // If it timed out, we retain the cached states we restored synchronously on mount.
+                if (!getSessionTimedOut) {
+                    setSession(finalSession);
+                    setUser(verifiedUser);
 
-                if (verifiedUser) {
-                    // Update cache for the session/user
-                    try {
-                        localStorage.setItem('seraphim_cached_user', JSON.stringify(verifiedUser));
-                        localStorage.setItem('seraphim_cached_session', JSON.stringify(finalSession));
-                    } catch (cacheErr) {
-                        console.warn('[AuthProvider] Failed to save user session to cache:', cacheErr);
+                    if (verifiedUser) {
+                        // Update cache for the session/user
+                        try {
+                            localStorage.setItem('seraphim_cached_user', JSON.stringify(verifiedUser));
+                            localStorage.setItem('seraphim_cached_session', JSON.stringify(finalSession));
+                        } catch (cacheErr) {
+                            console.warn('[AuthProvider] Failed to save user session to cache:', cacheErr);
+                        }
+                        await fetchUserTier(verifiedUser.id, true);
+                    } else {
+                        console.log('[AuthProvider] No verified user, setting guest tier');
+                        setUserTier('guest');
+                        setTierLoading(false);
+                        // Clear cache
+                        localStorage.removeItem('seraphim_cached_user');
+                        localStorage.removeItem('seraphim_cached_session');
+                        localStorage.removeItem('seraphim_cached_tier');
+                        localStorage.removeItem('seraphim_cached_sub_status');
+                        localStorage.removeItem('seraphim_cached_billing_interval');
+                        localStorage.removeItem('seraphim_cached_period_end');
+                        localStorage.removeItem('seraphim_cached_trial_ends');
+                        localStorage.removeItem('seraphim_cached_cancel_at_end');
                     }
-                    await fetchUserTier(verifiedUser.id, true);
                 } else {
-                    console.log('[AuthProvider] No verified user, setting guest tier');
-                    setUserTier('guest');
-                    setTierLoading(false);
-                    // Clear cache
-                    localStorage.removeItem('seraphim_cached_user');
-                    localStorage.removeItem('seraphim_cached_session');
-                    localStorage.removeItem('seraphim_cached_tier');
-                    localStorage.removeItem('seraphim_cached_sub_status');
-                    localStorage.removeItem('seraphim_cached_billing_interval');
-                    localStorage.removeItem('seraphim_cached_period_end');
-                    localStorage.removeItem('seraphim_cached_trial_ends');
-                    localStorage.removeItem('seraphim_cached_cancel_at_end');
+                    console.warn('[AuthProvider] getSession timed out. Retaining cached session and tier in background.');
                 }
 
-                // If no session and not already determined as guest, default to guest mode internally
-                if (!finalSession && currentWasGuest !== 'true') {
+                // If no session and not already determined as guest, default to guest mode internally (only if not timed out)
+                if (!finalSession && currentWasGuest !== 'true' && !getSessionTimedOut) {
                     console.log('[AuthProvider] No active session, enabling Guest Mode');
                     setIsGuest(true);
                 }
@@ -313,7 +320,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     } catch (cacheErr) {
                         console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
                     }
-                    await fetchUserTier(newSession.user.id, true);
+                    
+                    // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
+                    // This prevents redundant queued queries during cold starts.
+                    if (_event !== 'INITIAL_SESSION') {
+                        await fetchUserTier(newSession.user.id, true);
+                    }
                 } else {
                     setUserTier('guest');
                     setSubscriptionStatus(null);
