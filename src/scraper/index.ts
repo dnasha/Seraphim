@@ -295,6 +295,17 @@ interface BulkIngestResult {
   merged_count: number;
 }
 
+function isVectorTypeMissingError(message?: string | null): boolean {
+  return /type\s+"vector"\s+does not exist/i.test(message ?? "");
+}
+
+function stripEmbedding(event: DbEvent): Omit<DbEvent, "embedding"> {
+  // Keep inserts compatible when pgvector is unavailable.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { embedding: _embedding, ...eventWithoutEmbedding } = event;
+  return eventWithoutEmbedding;
+}
+
 /* 
 Main execution pipeline:
 1. Fetch from RSS, GNews, Reddit, and social feeds.
@@ -432,6 +443,49 @@ async function run(): Promise<void> {
   if (mergeChunks.length === 0) mergeChunks.push([]);
 
   const numChunks = Math.max(eventChunks.length, mergeChunks.length);
+  let vectorTypeUnavailable = false;
+
+  type MergePayloadEntry = (typeof mergePayload)[number];
+  async function ingestSequentially(
+    eChunk: DbEvent[],
+    mChunk: MergePayloadEntry[],
+    omitEmbedding: boolean,
+  ): Promise<void> {
+    for (const merge of mChunk) {
+      const { error: mErr } = await db
+        .from("events")
+        .update(merge as Partial<DbEvent>)
+        .eq("id", merge.id);
+      if (!mErr) {
+        merged_count++;
+      } else {
+        console.error("[scraper] Sequential merge failed:", mErr.message);
+      }
+    }
+
+    for (const event of eChunk) {
+      let payload: Partial<DbEvent> = omitEmbedding
+        ? stripEmbedding(event)
+        : event;
+      let { error: iErr } = await db.from("events").insert(payload);
+
+      if (
+        iErr &&
+        !omitEmbedding &&
+        isVectorTypeMissingError(iErr.message)
+      ) {
+        vectorTypeUnavailable = true;
+        payload = stripEmbedding(event);
+        ({ error: iErr } = await db.from("events").insert(payload));
+      }
+
+      if (!iErr) {
+        upserted_count++;
+      } else {
+        console.error("[scraper] Sequential insert failed:", iErr.message);
+      }
+    }
+  }
 
   try {
     for (let i = 0; i < numChunks; i++) {
@@ -439,6 +493,11 @@ async function run(): Promise<void> {
       const mChunk = mergeChunks[i] || [];
       
       console.log(`[scraper] Processing chunk ${i + 1}/${numChunks} (${eChunk.length} events, ${mChunk.length} merges)...`);
+
+      if (vectorTypeUnavailable) {
+        await ingestSequentially(eChunk, mChunk, false);
+        continue;
+      }
 
       const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
         p_new_events: eChunk,
@@ -450,21 +509,13 @@ async function run(): Promise<void> {
         
         if (isTimeout) {
           console.warn(`[scraper] Chunk ${i + 1} RPC timed out. Executing sequential fallback...`);
-          
-          for (const merge of mChunk) {
-            const { error: mErr } = await db
-              .from('events')
-              .update(merge as Partial<DbEvent>)
-              .eq('id', merge.id);
-            if (!mErr) merged_count++;
-          }
-
-          for (const event of eChunk) {
-            const { error: iErr } = await db
-              .from('events')
-              .insert(event);
-            if (!iErr) upserted_count++;
-          }
+          await ingestSequentially(eChunk, mChunk, false);
+        } else if (isVectorTypeMissingError(ingestError.message)) {
+          vectorTypeUnavailable = true;
+          console.warn(
+            `[scraper] pgvector type is unavailable. Falling back to sequential ingestion from chunk ${i + 1}.`,
+          );
+          await ingestSequentially(eChunk, mChunk, false);
         } else {
           throw new Error(`Bulk ingestion failed on chunk ${i + 1}: ${ingestError.message}`);
         }
