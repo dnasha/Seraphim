@@ -18,6 +18,7 @@ import {
   useCallback,
 } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
+import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import TierBadge from "@/components/ui/TierBadge";
 import UserButton from "@/components/auth/UserButton";
@@ -38,6 +39,7 @@ interface EventSidebarProps {
   /* Lazy-fetch description on expansion */
   onFetchDetails?: (id: string) => void;
   filterBar: ReactNode;
+  filterCount?: number;
   isOpen: boolean;
   onToggleSidebar: () => void;
   mounted: boolean;
@@ -65,6 +67,7 @@ export default function EventSidebar({
   isLoading,
   onFetchDetails,
   filterBar,
+  filterCount = 0,
   isOpen,
   onToggleSidebar,
   mounted,
@@ -83,6 +86,7 @@ export default function EventSidebar({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const { setShowAuthModal } = useAuth();
 
   /* Resizable Sidebar Logic */
@@ -231,8 +235,7 @@ export default function EventSidebar({
 
       <div className={styles.eventSidebarHeader}>
         <div className={styles.eventSidebarLogo}>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/" className={styles.logoLink}>
+          <Link href="/" className={styles.logoLink}>
             <svg
               className={styles.sidebarLogoImg}
               width="200"
@@ -261,7 +264,7 @@ export default function EventSidebar({
               <h1>Seraphim</h1>
               {!tierLoading && <TierBadge tier={userTier} />}
             </div>
-          </a>
+          </Link>
           <div className={styles.eventSidebarActions}>
             <UserButton variant="sidebar" />
             <ThemeToggle />
@@ -320,8 +323,6 @@ export default function EventSidebar({
         </div>
       </div>
 
-      {filterBar}
-
       {/* Hot / New sort toggle */}
       <div className={styles.sortToggleRow}>
         {/* Prevents hydration mismatch for time strings */}
@@ -377,6 +378,30 @@ export default function EventSidebar({
             Hot
           </button>
         </div>
+
+        <button
+          className={`${styles.filterToggleBtn} ${isFiltersExpanded ? styles.filterToggleBtnActive : ""} ${disabled ? styles.filterToggleBtnDisabled : ""}`}
+          onClick={() => !disabled && setIsFiltersExpanded(prev => !prev)}
+          aria-pressed={isFiltersExpanded}
+          aria-label="Toggle filters"
+          aria-disabled={disabled}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
+          </svg>
+          Filters
+          {filterCount > 0 && (
+            <span className={styles.filterBadgeCount}>{filterCount}</span>
+          )}
+        </button>
+      </div>
+
+      <div
+        className={`${styles.filterBarContainer} ${
+          isFiltersExpanded ? styles.filterBarContainerExpanded : ""
+        }`}
+      >
+        <div className={styles.filterBarWrapper}>{filterBar}</div>
       </div>
 
       <div

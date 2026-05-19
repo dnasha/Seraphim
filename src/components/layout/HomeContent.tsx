@@ -99,16 +99,20 @@ export function HomeContent() {
     }, [setShowAuthModal]);
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
+    const isAuthResolving = authLoading || (!!user && tierLoading);
 
-    const { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+    const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 
         timeRange,
         customStartDate,
         customEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined)
+        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
+        enabled: !isAuthResolving
     });
+
+    const isLoading = dataLoading || isAuthResolving;
     
     const sidebarRespectBBox = true;
 
@@ -304,6 +308,26 @@ export function HomeContent() {
         }
     }, [selectedItemId, fetchEventDetails, items]);
 
+    const activeFilterCount = useMemo(() => {
+        let count = 0;
+        if (categories && !categories.includes('all')) {
+            count += categories.length;
+        }
+        if (sources) {
+            count += (5 - sources.length);
+        }
+        if (timeRange && timeRange !== '1d') {
+            count += 1;
+        }
+        if (minVolume && minVolume > 1) {
+            count += 1;
+        }
+        if (credibilityTiers) {
+            count += (3 - credibilityTiers.length);
+        }
+        return count;
+    }, [categories, sources, timeRange, minVolume, credibilityTiers]);
+
     const filterBarSlot = (
         <FilterBar
             sources={sources}
@@ -348,6 +372,7 @@ export function HomeContent() {
                 isOpen={isSidebarOpen}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 filterBar={filterBarSlot}
+                filterCount={activeFilterCount}
                 mounted={mounted}
                 searchQuery={searchQuery}
                 onSearchChange={handleSearchChange}

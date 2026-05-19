@@ -76,7 +76,8 @@ export function useNewsData({
     customStartDate,
     customEndDate,
     sortMode,
-    limit
+    limit,
+    enabled = true
 }: {
     unmappedOnly: boolean;
     timeRange: string;
@@ -85,6 +86,7 @@ export function useNewsData({
     customEndDate?: string;
     sortMode?: string;
     limit?: number;
+    enabled?: boolean;
 }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -297,6 +299,7 @@ export function useNewsData({
      * snapping, parameter change detection, and store synchronization.
      */
     const coordinateLoad = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
+        if (!enabled) return;
         const requestVersion = ++requestVersionRef.current;
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -439,9 +442,11 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, limit, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, limit, enabled, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
+        if (!enabled) return;
+        
         if (isFirstMount.current) {
             isFirstMount.current = false;
             const timer = setTimeout(() => coordinateLoad(), 0);
@@ -450,7 +455,7 @@ export function useNewsData({
         
         coordinateLoad();
         return;
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, coordinateLoad]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, coordinateLoad]);
 
     /**
      * Lazy-loads heavy event details (description, sources) for a specific item.
@@ -531,7 +536,7 @@ export function useNewsData({
 
     // Smart scraper-aligned polling to fetch updates at scrape intervals (every 15/30 mins) + 2 min buffer
     useEffect(() => {
-        if (typeof window === 'undefined') return;
+        if (typeof window === 'undefined' || !enabled) return;
 
         let pollTimeout: NodeJS.Timeout | undefined;
 
@@ -573,7 +578,7 @@ export function useNewsData({
         return () => {
             if (pollTimeout) clearTimeout(pollTimeout);
         };
-    }, [coordinateLoad]);
+    }, [enabled, coordinateLoad]);
 
     return { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

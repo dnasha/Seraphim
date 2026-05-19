@@ -563,7 +563,7 @@
   }
 
   .mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
-    margin-top: calc(42px + 12px + 8px) !important;
+    margin-top: calc(44px + 12px + 8px) !important;
   }
 }
 

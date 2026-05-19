@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         try {
             console.log('[AuthProvider] Fetching user tier for', userId);
-            // Race the database profile query against a 2-second timeout to prevent UI hangs
+            // Race the database profile query against a 5-second timeout to prevent UI hangs
             const queryPromise = supabase
                 .from('user_profiles')
                 .select('tier, subscription_status, billing_interval, current_period_end, trial_ends_at, cancel_at_period_end')
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const result = await Promise.race([
                 queryPromise,
                 new Promise<{ data: null; error: Error | PostgrestError }>((resolve) =>
-                    setTimeout(() => resolve({ data: null, error: new Error('Profile query timeout') }), 2000)
+                    setTimeout(() => resolve({ data: null, error: new Error('Profile query timeout') }), 5000)
                 )
             ]);
             
@@ -137,12 +137,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setIsGuest(true);
                 }
 
-                // Check initial session locally with a 1.5-second timeout safeguard
+                // Check initial session locally with a 4-second timeout safeguard
                 console.log('[AuthProvider] Retrieving local session...');
                 const sessionResult = await Promise.race([
                     supabase.auth.getSession(),
                     new Promise<{ data: { session: Session | null } }>((resolve) =>
-                        setTimeout(() => resolve({ data: { session: null } }), 1500)
+                        setTimeout(() => resolve({ data: { session: null } }), 4000)
                     )
                 ]);
                 const initialSession = sessionResult.data?.session ?? null;
@@ -151,13 +151,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 let verifiedUser = initialSession?.user ?? null;
                 let finalSession = initialSession;
 
-                // If we think we have a session, verify it with the server (with a 1.5-second timeout)
+                // If we think we have a session, verify it with the server (with a 4-second timeout)
                 if (initialSession) {
                     console.log('[AuthProvider] Verifying session with server...');
                     const userResult = await Promise.race([
                         supabase.auth.getUser(),
                         new Promise<{ data: { user: User | null }; error: AuthError | Error | null }>((resolve) =>
-                            setTimeout(() => resolve({ data: { user: null }, error: new Error('User verify timeout') }), 1500)
+                            setTimeout(() => resolve({ data: { user: null }, error: new Error('User verify timeout') }), 4000)
                         )
                     ]);
                     const user = userResult.data?.user ?? null;
@@ -165,11 +165,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     console.log('[AuthProvider] Server verification result:', { hasUser: !!user, hasError: !!error });
                     
                     if (error || !user) {
-                        // Token is mathematically valid but server rejected it (deleted/banned)
-                        console.warn('[AuthProvider] Server rejected session. Signing out.');
-                        await supabase.auth.signOut();
-                        verifiedUser = null;
-                        finalSession = null;
+                        if (error && (error.message === 'User verify timeout' || error.message.includes('fetch') || error.message.includes('network'))) {
+                            console.warn('[AuthProvider] Network or timeout during verification. Keeping local session.');
+                            verifiedUser = initialSession.user;
+                        } else {
+                            // Token is mathematically valid but server rejected it (deleted/banned)
+                            console.warn('[AuthProvider] Server rejected session. Signing out.', error);
+                            await supabase.auth.signOut();
+                            verifiedUser = null;
+                            finalSession = null;
+                        }
                     } else {
                         verifiedUser = user;
                     }

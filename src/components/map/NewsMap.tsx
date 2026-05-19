@@ -570,6 +570,37 @@ export default function NewsMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady]);
 
+  const hasCoordinates = initialCenter !== undefined && initialZoom !== undefined;
+
+  // Reset map view to default when coordinates are cleared from URL (e.g. logo click)
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+
+    if (!hasCoordinates) {
+      const defaultView = getInitialViewState();
+      const map = mapRef.current;
+      const currentCenter = map.getCenter();
+      const currentZoom = map.getZoom();
+
+      const dist = Math.sqrt(
+        Math.pow(currentCenter.lng - defaultView.center[0], 2) +
+        Math.pow(currentCenter.lat - defaultView.center[1], 2)
+      );
+      const zoomDiff = Math.abs(currentZoom - defaultView.zoom);
+
+      if (dist > 0.05 || zoomDiff > 0.2) {
+        map.easeTo({
+          center: defaultView.center,
+          zoom: defaultView.zoom,
+          pitch: 0,
+          bearing: 0,
+          duration: 1000,
+          essential: true,
+        });
+      }
+    }
+  }, [hasCoordinates, mapReady, getInitialViewState]);
+
   useEffect(() => {
     if (mapReady && mapRef.current) emitBounds(mapRef.current);
   }, [forceIndividualPins, mapReady, emitBounds]);
