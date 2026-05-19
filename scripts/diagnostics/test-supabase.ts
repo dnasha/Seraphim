@@ -6,7 +6,7 @@
   Usage: bun run scripts/diagnostics/test-supabase.ts
 */
 
-import { supabaseAdmin as supabase } from "@/lib/core/supabase";
+import { supabaseAdmin as supabase } from "@/lib/core/supabase-admin";
 
 if (!supabase) {
   console.error(

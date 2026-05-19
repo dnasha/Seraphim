@@ -9,7 +9,7 @@
     - START_DATE: optional ISO date to begin re-clustering from.
 */
 
-import { supabaseAdmin as supabase } from '@/lib/core/supabase';
+import { supabaseAdmin as supabase } from '@/lib/core/supabase-admin';
 import { 
     calculateDistance, 
     SIMILARITY_THRESHOLD_STRICT, 

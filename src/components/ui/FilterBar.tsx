@@ -154,6 +154,18 @@ export default function FilterBar({
     disabled = false,
 }: FilterBarProps) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [customValue, setCustomValue] = useState<string>(() => {
+        return ![1, 2, 5, 10].includes(minVolume) ? String(minVolume) : '';
+    });
+
+    const [prevMinVolume, setPrevMinVolume] = useState<number>(minVolume);
+    if (minVolume !== prevMinVolume) {
+        setPrevMinVolume(minVolume);
+        const parsedCustom = customValue === '' ? 1 : parseInt(customValue) || 1;
+        if (minVolume !== parsedCustom) {
+            setCustomValue(![1, 2, 5, 10].includes(minVolume) ? String(minVolume) : '');
+        }
+    }
 
     const toLocalISO = (d: Date) => {
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -396,12 +408,17 @@ export default function FilterBar({
                     <div className={styles.scrollWrapper} onWheel={handleWheelScroll}>
                         <div className={styles.sourceToggles}>
                             {volumeOptions.map((opt) => {
-                                const isActive = minVolume === opt.value;
+                                const isActive = customValue === '' && minVolume === opt.value;
                                 return (
                                     <button
                                         key={opt.value}
                                         className={`${styles.timeToggle} ${isActive ? styles.timeToggleActive : ''}`}
-                                        onClick={() => !disabled && onMinVolumeChange(opt.value)}
+                                        onClick={() => {
+                                            if (!disabled) {
+                                                setCustomValue('');
+                                                onMinVolumeChange(opt.value);
+                                            }
+                                        }}
                                         aria-pressed={isActive}
                                         disabled={disabled}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
@@ -411,18 +428,20 @@ export default function FilterBar({
                                     </button>
                                 );
                             })}
-                            <div className={`${styles.customVolumeContainer} ${![1, 2, 5, 10].includes(minVolume) ? styles.customVolumeContainerActive : ''}`}>
-                                {renderVolumeIcon(![1, 2, 5, 10].includes(minVolume), ![1, 2, 5, 10].includes(minVolume) ? 'var(--accent)' : 'var(--text-secondary)')}
+                            <div className={`${styles.customVolumeContainer} ${customValue !== '' ? styles.customVolumeContainerActive : ''}`}>
+                                {renderVolumeIcon(customValue !== '', 'var(--text-secondary)')}
                                 <input
                                     type="number"
                                     min="1"
                                     max="999"
                                     disabled={disabled}
-                                    value={[1, 2, 5, 10].includes(minVolume) ? '' : minVolume}
+                                    value={customValue}
                                     placeholder="Min"
                                     className={styles.customVolumeInput}
                                     onChange={(e) => {
-                                        const val = e.target.value === '' ? 1 : Math.max(1, parseInt(e.target.value) || 1);
+                                        const rawVal = e.target.value;
+                                        setCustomValue(rawVal);
+                                        const val = rawVal === '' ? 1 : Math.max(1, parseInt(rawVal) || 1);
                                         onMinVolumeChange(val);
                                     }}
                                 />

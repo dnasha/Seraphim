@@ -11,7 +11,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     animation: overlayFadeIn 0.25s ease;
-    padding: 16px;
+    padding: var(--space-md);
 }
 
 @keyframes overlayFadeIn {
@@ -32,7 +32,7 @@
         0 0 0 1px rgba(99, 102, 241, 0.08);
     width: 100%;
     max-width: 400px;
-    padding: 32px 28px 24px;
+    padding: var(--space-3xl) var(--space-2xl) var(--space-xl);
     animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow-y: auto;
     max-height: 90vh;
@@ -54,13 +54,15 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-xl);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .logoInline {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-md);
 }
 
 .logo {
@@ -78,9 +80,9 @@
 }
 
 .logoSubtitle {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--text-muted);
-    font-weight: 500;
+    font-weight: var(--weight-medium);
     text-align: center;
     margin-top: -4px;
     letter-spacing: 0.03em;
@@ -92,22 +94,24 @@
     gap: 0;
     background: var(--surface-alt);
     border-radius: var(--radius-md);
-    padding: 3px;
-    margin-bottom: 20px;
+    padding: var(--space-3xs);
+    margin-bottom: var(--space-lg);
 }
 
 .tab {
     flex: 1;
-    padding: 8px 0;
-    font-size: 0.8125rem;
-    font-weight: 600;
+    padding: var(--space-xs) 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
     color: var(--text-muted);
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s ease;
     font-family: var(--font-ui);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .tabActive {
@@ -120,19 +124,19 @@
 .oauthSection {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-lg);
 }
 
 .oauthBtn {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--space-sm);
     width: 100%;
-    padding: 10px 16px;
-    font-size: 0.8125rem;
-    font-weight: 600;
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -140,6 +144,8 @@
     font-family: var(--font-ui);
     background: var(--surface);
     color: var(--text-primary);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @media (hover: hover) {
@@ -176,8 +182,10 @@
 .divider {
     display: flex;
     align-items: center;
-    margin: 16px 0;
-    gap: 12px;
+    margin: var(--space-lg) 0;
+    gap: var(--space-md);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .divider::before,
@@ -189,8 +197,8 @@
 }
 
 .divider span {
-    font-size: 0.6875rem;
-    font-weight: 600;
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -200,14 +208,14 @@
 .form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 16px;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
 }
 
 .input {
     width: 100%;
-    padding: 10px 14px;
-    font-size: 0.875rem;
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--text-sm);
     font-family: var(--font-ui);
     color: var(--text-primary);
     background: var(--surface-alt);
@@ -228,7 +236,7 @@
 
 .forgotPasswordBtn {
     align-self: flex-end;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--text-secondary);
     background: none;
     border: none;
@@ -237,6 +245,8 @@
     font-family: var(--font-ui);
     transition: color 0.15s;
     margin-top: -4px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .forgotPasswordBtn:hover {
@@ -246,15 +256,17 @@
 
 .backToLoginBtn {
     align-self: center;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     color: var(--text-secondary);
     background: none;
     border: none;
-    padding: 8px;
+    padding: var(--space-xs);
     cursor: pointer;
     font-family: var(--font-ui);
     transition: color 0.15s;
     margin-top: 4px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .backToLoginBtn:hover {
@@ -264,24 +276,26 @@
 .captchaContainer {
     display: flex;
     justify-content: center;
-    margin: 8px 0;
+    margin: var(--space-xs) 0;
     min-height: 65px; /* Prevent layout shift when Turnstile loads */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Error & Success */
 .errorMsg {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--red);
-    padding: 8px 12px;
+    padding: var(--space-xs) var(--space-md);
     background: rgba(239, 68, 68, 0.08);
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: var(--radius-sm);
 }
 
 .successMsg {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--green);
-    padding: 8px 12px;
+    padding: var(--space-xs) var(--space-md);
     background: rgba(34, 197, 94, 0.08);
     border: 1px solid rgba(34, 197, 94, 0.2);
     border-radius: var(--radius-sm);
@@ -290,9 +304,9 @@
 /* Submit Button */
 .submitBtn {
     width: 100%;
-    padding: 11px 16px;
-    font-size: 0.875rem;
-    font-weight: 600;
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
     font-family: var(--font-ui);
     color: #ffffff;
     background: var(--accent);
@@ -304,6 +318,8 @@
     align-items: center;
     justify-content: center;
     min-height: 42px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @media (hover: hover) {
@@ -342,9 +358,9 @@
 /* Guest Button */
 .guestBtn {
     width: 100%;
-    padding: 10px 16px;
-    font-size: 0.8125rem;
-    font-weight: 500;
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
     font-family: var(--font-ui);
     color: var(--text-muted);
     background: transparent;
@@ -355,7 +371,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--space-xs);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @media (hover: hover) {
@@ -368,16 +386,18 @@
 
 .guestNote {
     text-align: center;
-    font-size: 0.6875rem;
+    font-size: var(--text-2xs);
     color: var(--text-muted);
-    margin-top: 8px;
+    margin-top: var(--space-xs);
     line-height: 1.4;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Responsive */
 @media (max-width: 480px) {
     .modal {
-        padding: 24px 20px 20px;
+        padding: var(--space-xl) var(--space-lg) var(--space-lg);
         max-width: 100%;
     }
 
@@ -393,18 +413,20 @@
 
 .footerLinks {
     text-align: center;
-    font-size: 0.725rem;
+    font-size: var(--text-xs);
     color: var(--text-muted);
     margin-top: 18px;
     line-height: 1.4;
     border-top: 1px solid var(--border);
-    padding-top: 14px;
+    padding-top: var(--space-sm);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .footerLink {
     color: var(--text-secondary);
     text-decoration: none;
-    font-weight: 500;
+    font-weight: var(--weight-medium);
     transition: color 0.15s ease;
 }
 

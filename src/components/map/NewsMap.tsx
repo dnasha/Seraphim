@@ -331,6 +331,36 @@ export default function NewsMap({
       return;
     }
 
+    map.on("webglcontextlost", () => {
+      console.warn("WebGL context lost!");
+      try {
+        const reloadKey = "seraphim_map_reload_count";
+        const lastReload = sessionStorage.getItem(reloadKey);
+        const now = Date.now();
+
+        if (lastReload && now - parseInt(lastReload, 10) < 10000) {
+          console.error("WebGL context lost repeatedly. Showing error.");
+          setMapError("WebGL context was lost and could not be recovered automatically. Please reload the page manually.");
+        } else {
+          sessionStorage.setItem(reloadKey, now.toString());
+          window.location.reload();
+        }
+      } catch {
+        window.location.reload();
+      }
+    });
+
+    const container = containerRef.current;
+    const handleAttributionClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (anchor && anchor.href && (anchor.closest(".maplibregl-ctrl-attrib") || anchor.closest(".maplibregl-ctrl-scale"))) {
+        e.preventDefault();
+        window.open(anchor.href, "_blank", "noopener,noreferrer");
+      }
+    };
+    container?.addEventListener("click", handleAttributionClick);
+
     map.on("error", (e) => {
       const errorMsg =
         e.error?.message || (typeof e.error === "string" ? e.error : "");
@@ -504,6 +534,7 @@ export default function NewsMap({
       if (resizeEndTimeoutRef.current)
         clearTimeout(resizeEndTimeoutRef.current);
       resizeObserver.disconnect();
+      container?.removeEventListener("click", handleAttributionClick);
       if (map) {
         try {
           map.remove();

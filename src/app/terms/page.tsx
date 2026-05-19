@@ -1,6 +1,5 @@
-import React from 'react';
-import Link from 'next/link';
 import styles from './LegalPage.module.css';
+import LegalBackButton from '@/components/ui/LegalBackButton';
 
 export const metadata = {
   title: 'Terms of Service | Seraphim',
@@ -11,13 +10,7 @@ export default function TermsPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.container}>
-        <Link href="/help" className={styles.backBtn}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-          Back to Help
-        </Link>
+        <LegalBackButton />
 
         <header className={styles.header}>
           <h1 className={styles.title}>Terms of Service</h1>

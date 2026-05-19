@@ -149,8 +149,8 @@ export default function HelpPage() {
 
         <footer className={styles.footer}>
           <div className={styles.footerLinks}>
-            <Link href="/terms" className={styles.link}>Terms of Service</Link>
-            <Link href="/privacy" className={styles.link}>Privacy Policy</Link>
+            <Link href="/terms?from=help" className={styles.link}>Terms of Service</Link>
+            <Link href="/privacy?from=help" className={styles.link}>Privacy Policy</Link>
           </div>
           <p>&copy; {new Date().getFullYear()} Seraphim. All rights reserved.</p>
         </footer>

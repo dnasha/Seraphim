@@ -27,7 +27,7 @@ const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap
 
 export function HomeContent() {
     const { resolvedTheme } = useTheme();
-    const { user, isLoading: authLoading, isGuest } = useAuth();
+    const { user, isLoading: authLoading, isGuest, setShowAuthModal } = useAuth();
     const isGuestUser = isGuest || (!user && !authLoading);
     const { tier: userTier, isLoading: tierLoading } = useUserTier();
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
@@ -81,6 +81,22 @@ export function HomeContent() {
         window.addEventListener('pageshow', onPageShow);
         return () => window.removeEventListener('pageshow', onPageShow);
     }, []);
+
+    // Auto-show auth modal if returning from legal pages via auth referral query parameter
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('auth') === 'true') {
+                setShowAuthModal(true);
+                // Clean up query param from URL bar for aesthetic and UX reasons
+                const cleanedSearch = window.location.search
+                    .replace(/[?&]auth=true/, '')
+                    .replace(/^&/, '?');
+                const newUrl = window.location.pathname + (cleanedSearch === '?' ? '' : cleanedSearch);
+                window.history.replaceState(null, '', newUrl);
+            }
+        }
+    }, [setShowAuthModal]);
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
 

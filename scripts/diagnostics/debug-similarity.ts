@@ -3,7 +3,7 @@
  * Usage: bun run scripts/diagnostics/debug-similarity.ts
  */
 
-import { supabaseAdmin as supabase } from '@/lib/core/supabase';
+import { supabaseAdmin as supabase } from '@/lib/core/supabase-admin';
 import { 
     cosineSimilarity, 
     calculateDistance, 

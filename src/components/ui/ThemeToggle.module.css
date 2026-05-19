@@ -35,11 +35,11 @@
 }
 
 .sunIcon {
-  color: #fbbf24;
+  color: var(--gold);
 }
 
 .moonIcon {
-  color: #6366f1;
+  color: var(--accent);
 }
 
 @media (max-width: 860px) {

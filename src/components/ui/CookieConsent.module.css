@@ -1,9 +1,9 @@
 .container {
   position: fixed;
-  bottom: 24px;
-  right: 80px;
+  bottom: var(--space-xl);
+  right: var(--space-3xl);
   width: 360px;
-  padding: 24px;
+  padding: var(--space-xl);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -11,7 +11,7 @@
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-lg);
   animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -32,15 +32,15 @@
 }
 
 .title {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   margin: 0;
   letter-spacing: -0.01em;
 }
 
 .description {
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
@@ -49,7 +49,7 @@
 .link {
   color: var(--accent);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .link:hover {
@@ -58,19 +58,19 @@
 
 .actions {
   display: flex;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
 }
 
 .acceptBtn {
   flex: 1;
-  padding: 10px 16px;
+  padding: var(--space-sm) var(--space-lg);
   background: var(--accent);
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  font-weight: 600;
-  font-size: 0.875rem;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
 }
@@ -84,13 +84,13 @@
 }
 
 .declineBtn {
-  padding: 10px 16px;
+  padding: var(--space-sm) var(--space-lg);
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-weight: 500;
-  font-size: 0.875rem;
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
@@ -103,10 +103,10 @@
 
 @media (max-width: 480px) {
   .container {
-    bottom: 16px;
-    right: 16px;
-    left: 16px;
+    bottom: var(--space-lg);
+    right: var(--space-lg);
+    left: var(--space-lg);
     width: auto;
-    padding: 20px;
+    padding: var(--space-lg);
   }
 }

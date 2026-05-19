@@ -9,11 +9,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
-import { supabase } from "@/lib/core/supabase";
-import { snapBBox, isWithinBBox } from "@/lib/utils/geo";
+import { snapBBox } from "@/lib/utils/geo";
 import { normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
 
-const CLUSTER_ZOOM_THRESHOLD = 5;
 const LOCAL_RESPONSE_TTL_MS = 60_000;
 const MAX_ENTITY_COUNT = 5000;
 
@@ -531,38 +529,51 @@ export function useNewsData({
         coordinateLoad(false, bbox);
     }, [coordinateLoad]);
 
+    // Smart scraper-aligned polling to fetch updates at scrape intervals (every 15/30 mins) + 2 min buffer
     useEffect(() => {
-        const channel = supabase
-            .channel('events-inserts')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'events' }, (payload) => {
-                const row = payload.new as unknown as Record<string, unknown>;
-                const newItem: NewsItem = {
-                    id: String(row.id),
-                    title: String(row.title),
-                    url: String(row.url),
-                    source: String(row.source),
-                    sourceType: (row.source_type as 'gnews' | 'rss' | 'social') || 'rss',
-                    category: String(row.category),
-                    publishedAt: String(row.published_at),
-                    imageUrl: row.image_url ? String(row.image_url) : undefined,
-                    latitude: typeof row.latitude === 'number' ? row.latitude : undefined,
-                    longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
-                    locationName: row.location_name ? String(row.location_name) : undefined,
-                    tags: Array.isArray(row.tags) ? row.tags : undefined,
-                    impactScore: typeof row.impact_score === 'number' ? row.impact_score : (typeof row.impactScore === 'number' ? row.impactScore : undefined),
-                    sourcesCount: typeof row.event_count === 'number' ? row.event_count : (typeof row.source_count === 'number' ? row.source_count : (typeof row.sourceCount === 'number' ? row.sourceCount : undefined))
-                };
+        if (typeof window === 'undefined') return;
 
-                const bbox = lastFetchParamsRef.current?.bbox;
-                const isGlobalSidebarView = unmappedOnly || (!!bbox && bbox.zoom !== undefined && bbox.zoom < CLUSTER_ZOOM_THRESHOLD);
-                if (!isGlobalSidebarView && bbox && !isWithinBBox(newItem, bbox)) return;
+        let pollTimeout: NodeJS.Timeout | undefined;
 
-                mergeItemsIntoStore([newItem]);
-                syncNewsFromStore(sortMode);
-            })
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
-    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore, unmappedOnly]);
+        const getMsToNextFetch = (): number => {
+            const now = new Date();
+            const currentMin = now.getMinutes();
+            const currentSec = now.getSeconds();
+            const currentMs = now.getMilliseconds();
+            
+            // Scraper runs every 30 minutes (potential 15 minutes in future) on [0, 15, 30, 45].
+            // We align client polling to run at [2, 17, 32, 47] (+2 min jitter buffer).
+            const targets = [2, 17, 32, 47];
+            const targetMin = targets.find(m => m > currentMin);
+            
+            if (targetMin === undefined) {
+                // Next target is minute 2 of the next hour
+                const minsRemaining = (60 - currentMin) + 2;
+                return (minsRemaining * 60 - currentSec) * 1000 - currentMs;
+            } else {
+                const minsRemaining = targetMin - currentMin;
+                return (minsRemaining * 60 - currentSec) * 1000 - currentMs;
+            }
+        };
+
+        const scheduleNextPoll = () => {
+            const ms = getMsToNextFetch();
+            console.log(`[useNewsData] Scheduling next scraper-aligned update poll in ${(ms / 1000 / 60).toFixed(2)} minutes.`);
+            
+            pollTimeout = setTimeout(async () => {
+                console.log('[useNewsData] Scraper-aligned update poll triggered. Fetching fresh events...');
+                // Trigger a refresh (caches are cleared, new events are merged, existing viewport is retained)
+                await coordinateLoad(true);
+                scheduleNextPoll();
+            }, ms);
+        };
+
+        scheduleNextPoll();
+
+        return () => {
+            if (pollTimeout) clearTimeout(pollTimeout);
+        };
+    }, [coordinateLoad]);
 
     return { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

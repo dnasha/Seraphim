@@ -757,6 +757,10 @@ Includes card expansion details and responsive mobile layouts.
   align-self: flex-start;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 @media (hover: hover) {
@@ -1093,7 +1097,7 @@ Includes card expansion details and responsive mobile layouts.
 .timelineEntryLink {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #3b82f6;
+  color: var(--accent);
   text-decoration: underline;
   white-space: nowrap;
   overflow: hidden;
