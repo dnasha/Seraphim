@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuArrowLeft } from 'react-icons/lu';
+import { LuArrowLeft, LuTriangleAlert } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 // import { useUserTier } from '@/hooks/useUserTier';
 // import TierBadge from '@/components/ui/TierBadge';
@@ -349,7 +349,10 @@ export default function AccountPage() {
 
         <section className={`${styles.section} ${styles.dangerSection}`}>
           <div className={styles.sectionHeader}>
-            <h2 className={`${styles.sectionTitle} ${styles.dangerTitle}`}>Danger Zone</h2>
+            <h2 className={`${styles.sectionTitle} ${styles.dangerTitle}`}>
+              <LuTriangleAlert size={18} />
+              Danger Zone
+            </h2>
             <p className={styles.dangerText}>
               Permanently delete your account and all associated data. This action is irreversible!
             </p>

@@ -58,6 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [tierLoading, setTierLoading] = useState(true);
 
     const lastFetchedRef = useRef<Record<string, number>>({});
+    const userRef = useRef<User | null>(null);
+
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
 
     const fetchUserTier = useCallback(async (userId: string | undefined, force = false) => {
         if (!userId) {
@@ -97,6 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ]);
             
             const { data, error } = result;
+
+            // Guard against race conditions (e.g. user signs out or switches account during fetch)
+            if (!userRef.current || userRef.current.id !== userId) {
+                console.log('[AuthProvider] User changed or signed out during tier fetch. Discarding result.');
+                return;
+            }
 
             if (error || !data) {
                 console.warn('[AuthProvider] Failed to fetch tier, keeping cached tier or defaulting to free:', error);
