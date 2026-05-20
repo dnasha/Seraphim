@@ -351,7 +351,7 @@ export default function AccountPage() {
           <div className={styles.sectionHeader}>
             <h2 className={`${styles.sectionTitle} ${styles.dangerTitle}`}>Danger Zone</h2>
             <p className={styles.dangerText}>
-              Permanently dekete your account and all associated data. This action is irreversible!
+              Permanently delete your account and all associated data. This action is irreversible!
             </p>
           </div>
           <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
