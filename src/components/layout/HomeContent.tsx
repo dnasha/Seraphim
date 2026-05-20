@@ -99,6 +99,7 @@ export function HomeContent() {
     }, [setShowAuthModal]);
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
+    const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
 
     const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
@@ -387,7 +388,7 @@ export function HomeContent() {
                 isCapped={isCapped}
                 appliedLimit={appliedLimit}
                 disabled={isGuestUser}
-                userTier={userTier}
+                userTier={effectiveUserTier}
                 tierLoading={tierLoading}
             />
 
@@ -408,7 +409,7 @@ export function HomeContent() {
                     sortMode={appliedSortMode as SortMode}
                     disabled={isGuestUser}
                     isSidebarOpen={isSidebarOpen}
-                    userTier={userTier}
+                    userTier={effectiveUserTier}
                     tierLoading={tierLoading}
                 />
             </main>

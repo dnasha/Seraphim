@@ -329,16 +329,17 @@ export function useNewsData({
             detailCache.current.clear();
         }
 
-        const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
+        const prev = lastFetchParamsRef.current;
+        const bbox = rawBBox ? snapBBox(rawBBox) : (prev?.bbox ?? null);
         console.log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
-        if (!bbox && !unmappedOnly && !searchQuery && !limit) {
+        const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
+        if (!bbox && !unmappedOnly && !searchQuery && !limit && !isUpgradingFromLimitedFetch) {
             console.log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
         }
 
-        const prev = lastFetchParamsRef.current;
         const isSameBBox = unmappedOnly || (!bbox && !prev?.bbox) || (
             bbox && prev?.bbox &&
             bbox.minLat === prev.bbox.minLat &&

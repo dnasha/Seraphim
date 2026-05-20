@@ -17,6 +17,17 @@ import type { UserTier } from '@/components/ui/TierBadge';
 
 const GUEST_STORAGE_KEY = 'seraphim_guest_mode';
 
+const normalizeUserTier = (tier: string | null | undefined, hasUser: boolean): UserTier => {
+    const normalized = tier?.toLowerCase();
+    if (normalized === 'pro' || normalized === 'analyst' || normalized === 'angel') {
+        return normalized;
+    }
+    if (normalized === 'free') {
+        return 'free';
+    }
+    return hasUser ? 'free' : 'guest';
+};
+
 const log = (message: unknown, ...optionalParams: unknown[]) => {
     if (process.env.NODE_ENV !== 'production') {
         console.log(message, ...optionalParams);
@@ -121,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUserTier(prev => (prev && prev !== 'guest') ? prev : 'free');
             } else {
                 log('[AuthProvider] User tier fetched successfully:', data.tier);
-                const normalizedTier = (data.tier?.toLowerCase() as UserTier) || 'free';
+                const normalizedTier = normalizeUserTier(data.tier, true);
                 setUserTier(normalizedTier);
                 setSubscriptionStatus(data.subscription_status);
                 setBillingInterval(data.billing_interval);
@@ -180,11 +191,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const trialEnds = localStorage.getItem('seraphim_cached_trial_ends');
                 const cancelAtEnd = localStorage.getItem('seraphim_cached_cancel_at_end') === 'true';
 
+                const restoredTier = normalizeUserTier(cachedTier, true);
+
                 // Defer setting state to avoid synchronous cascading renders in the effect body (satisfies ESLint)
                 setTimeout(() => {
                     setUser(cachedUser);
                     setSession(cachedSession);
-                    setUserTier(cachedTier);
+                    setUserTier(restoredTier);
                     setIsGuest(false);
                     setSubscriptionStatus(status);
                     setBillingInterval(interval);
@@ -194,10 +207,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setIsLoading(false);
                     setTierLoading(false);
                     localStorage.removeItem(GUEST_STORAGE_KEY);
+                    if (restoredTier !== cachedTier) {
+                        localStorage.setItem('seraphim_cached_tier', restoredTier);
+                    }
                 }, 0);
                 
                 hasRestoredFromCache = true;
-                log('[AuthProvider] Restored cached auth synchronously on mount:', cachedTier);
+                log('[AuthProvider] Restored cached auth synchronously on mount:', restoredTier);
             } catch (e) {
                 console.error('[AuthProvider] Failed to parse cached auth state:', e);
             }
@@ -407,6 +423,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => window.removeEventListener('focus', handleFocus);
     }, [user, fetchUserTier]);
 
+    useEffect(() => {
+        if (!user) return;
+        if (!isGuest && userTier !== 'guest') return;
+
+        const timer = setTimeout(() => {
+            if (isGuest) {
+                setIsGuest(false);
+                localStorage.removeItem(GUEST_STORAGE_KEY);
+            }
+            if (userTier === 'guest') {
+                setUserTier('free');
+            }
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [user, isGuest, userTier]);
+
     // Single global listener: handle Stripe success redirection with polling
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -507,18 +540,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setShowAuthModal(false);
     }, []);
 
+    const effectiveUserTier = user || session
+        ? normalizeUserTier(userTier, true)
+        : userTier;
+    const effectiveIsGuest = user || session ? false : isGuest;
+
     const value = useMemo<AuthContextType>(() => ({
         user,
         session,
         isLoading,
-        isGuest,
+        isGuest: effectiveIsGuest,
         supabase,
         signOut,
         continueAsGuest,
         showAuthModal,
         setShowAuthModal,
         // Shared states
-        userTier,
+        userTier: effectiveUserTier,
         tierLoading,
         subscriptionStatus,
         billingInterval,
@@ -530,12 +568,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         isLoading,
-        isGuest,
+        effectiveIsGuest,
         supabase,
         signOut,
         continueAsGuest,
         showAuthModal,
-        userTier,
+        effectiveUserTier,
         tierLoading,
         subscriptionStatus,
         billingInterval,
