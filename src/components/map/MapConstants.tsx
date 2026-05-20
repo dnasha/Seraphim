@@ -142,7 +142,7 @@ export function getMapLibreStyle(styleKey: string): any {
   if (style.isPmtiles && style.theme) {
     return {
       version: 8,
-      glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+      glyphs: "https://tiles.openstreetmap.us/fonts/{fontstack}/{range}.pbf",
       sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${style.theme}`,
       sources: {
         "protomaps": {

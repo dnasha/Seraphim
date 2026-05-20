@@ -198,13 +198,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
+        let activeSubscription: { unsubscribe: () => void } | null = null;
+        let isUnmounted = false;
+
         const initializeAuth = async () => {
             console.log('[AuthProvider] Starting background initializeAuth...');
             try {
                 // Check guest preference
                 const currentWasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
                 if (currentWasGuest === 'true') {
-                    setIsGuest(true);
+                    if (!isUnmounted) setIsGuest(true);
                 }
 
                 // Check initial session locally with a 10-second timeout safeguard to accommodate cold starts
@@ -254,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Only update the state and cached credentials if getSession completed.
                 // If it timed out, we retain the cached states we restored synchronously on mount.
                 if (!getSessionTimedOut) {
+                    if (isUnmounted) return;
                     setSession(finalSession);
                     setUser(verifiedUser);
 
@@ -287,69 +291,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // If no session and not already determined as guest, default to guest mode internally (only if not timed out)
                 if (!finalSession && currentWasGuest !== 'true' && !getSessionTimedOut) {
                     console.log('[AuthProvider] No active session, enabling Guest Mode');
-                    setIsGuest(true);
+                    if (!isUnmounted) setIsGuest(true);
                 }
             } catch (err) {
                 console.error('[AuthProvider] Failed to initialize auth:', err);
                 if (!hasRestoredFromCache) {
+                    if (isUnmounted) return;
                     setUserTier('guest');
                     setTierLoading(false);
                 }
             } finally {
                 console.log('[AuthProvider] Setting isLoading to false');
-                setIsLoading(false);
+                if (!isUnmounted) {
+                    setIsLoading(false);
+
+                    // Defer registration of auth state change listener until getSession has resolved
+                    console.log('[AuthProvider] Registering post-initialization onAuthStateChange listener...');
+                    const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
+                        async (_event, newSession) => {
+                            if (isUnmounted) return;
+                            setSession(newSession);
+                            setUser(newSession?.user ?? null);
+
+                            // If user signs in, clear guest mode and fetch profile
+                            if (newSession?.user) {
+                                setIsGuest(false);
+                                localStorage.removeItem(GUEST_STORAGE_KEY);
+                                setShowAuthModal(false);
+                                try {
+                                    localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
+                                    localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
+                                } catch (cacheErr) {
+                                    console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
+                                }
+                                
+                                // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
+                                // This prevents redundant queued queries during cold starts.
+                                if (_event !== 'INITIAL_SESSION') {
+                                    await fetchUserTier(newSession.user.id, true);
+                                }
+                            } else if (_event !== 'INITIAL_SESSION') {
+                                setUserTier('guest');
+                                setSubscriptionStatus(null);
+                                setBillingInterval(null);
+                                setCurrentPeriodEnd(null);
+                                setTrialEndsAt(null);
+                                setCancelAtPeriodEnd(false);
+                                setTierLoading(false);
+
+                                // Clear cache
+                                localStorage.removeItem('seraphim_cached_user');
+                                localStorage.removeItem('seraphim_cached_session');
+                                localStorage.removeItem('seraphim_cached_tier');
+                                localStorage.removeItem('seraphim_cached_sub_status');
+                                localStorage.removeItem('seraphim_cached_billing_interval');
+                                localStorage.removeItem('seraphim_cached_period_end');
+                                localStorage.removeItem('seraphim_cached_trial_ends');
+                                localStorage.removeItem('seraphim_cached_cancel_at_end');
+                            }
+                        }
+                    );
+                    activeSubscription = sub;
+                }
             }
         };
 
         initializeAuth();
 
-        // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, newSession) => {
-                setSession(newSession);
-                setUser(newSession?.user ?? null);
-
-                // If user signs in, clear guest mode and fetch profile
-                if (newSession?.user) {
-                    setIsGuest(false);
-                    localStorage.removeItem(GUEST_STORAGE_KEY);
-                    setShowAuthModal(false);
-                    try {
-                        localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
-                        localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
-                    } catch (cacheErr) {
-                        console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
-                    }
-                    
-                    // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
-                    // This prevents redundant queued queries during cold starts.
-                    if (_event !== 'INITIAL_SESSION') {
-                        await fetchUserTier(newSession.user.id, true);
-                    }
-                } else if (_event !== 'INITIAL_SESSION') {
-                    setUserTier('guest');
-                    setSubscriptionStatus(null);
-                    setBillingInterval(null);
-                    setCurrentPeriodEnd(null);
-                    setTrialEndsAt(null);
-                    setCancelAtPeriodEnd(false);
-                    setTierLoading(false);
-
-                    // Clear cache
-                    localStorage.removeItem('seraphim_cached_user');
-                    localStorage.removeItem('seraphim_cached_session');
-                    localStorage.removeItem('seraphim_cached_tier');
-                    localStorage.removeItem('seraphim_cached_sub_status');
-                    localStorage.removeItem('seraphim_cached_billing_interval');
-                    localStorage.removeItem('seraphim_cached_period_end');
-                    localStorage.removeItem('seraphim_cached_trial_ends');
-                    localStorage.removeItem('seraphim_cached_cancel_at_end');
-                }
-            }
-        );
-
         return () => {
-            subscription.unsubscribe();
+            isUnmounted = true;
+            if (activeSubscription) {
+                activeSubscription.unsubscribe();
+            }
         };
     }, [supabase, fetchUserTier]);
 

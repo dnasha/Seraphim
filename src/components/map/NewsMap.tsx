@@ -323,7 +323,7 @@ export default function NewsMap({
         // @ts-expect-error - Internal property used for high-fidelity screenshots/rendering
         preserveDrawingBuffer: true,
         transformRequest: (url, resourceType) => {
-          if (resourceType === 'Glyphs' && url.includes('basemaps-assets/fonts/')) {
+          if (resourceType === 'Glyphs' && (url.includes('basemaps-assets/fonts/') || url.includes('tiles.openstreetmap.us/fonts/'))) {
             const match = url.match(/\/fonts\/([^/]+)\/([^/]+)$/);
             if (match) {
               const encodedFontstack = match[1];
@@ -333,7 +333,9 @@ export default function NewsMap({
               let mappedFont = "Noto Sans Regular";
               if (decodedFontstack.toLowerCase().includes("italic")) {
                 mappedFont = "Noto Sans Italic";
-              } else if (decodedFontstack.toLowerCase().includes("bold") || decodedFontstack.toLowerCase().includes("medium")) {
+              } else if (decodedFontstack.toLowerCase().includes("bold")) {
+                mappedFont = "Noto Sans Bold";
+              } else if (decodedFontstack.toLowerCase().includes("medium")) {
                 mappedFont = "Noto Sans Medium";
               }
               
