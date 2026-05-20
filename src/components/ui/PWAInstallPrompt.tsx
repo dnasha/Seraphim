@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styles from './PWAInstallPrompt.module.css';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -17,6 +17,7 @@ export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -43,19 +44,35 @@ export default function PWAInstallPrompt() {
     
     if (isIOS) {
       // Wait 6 seconds after mounting to display the prompt gently
-      const timer = setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         setIsIOSDevice(true);
         setIsVisible(true);
       }, 6000);
-      return () => clearTimeout(timer);
+      return () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      };
     }
 
     // 4. Handle standard beforeinstallprompt (Android / Chrome / Windows / macOS Edge/Chrome)
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
+      
+      // Clear any existing scheduled prompt timer to prevent duplicate overlays
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
       // Show the prompt gently after a delay
-      setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
+        // Double check cooldown in case it was dismissed while the timeout was pending
+        const dismissedTime = localStorage.getItem('seraphim_pwa_dismissed');
+        if (dismissedTime) {
+          const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+          if (Date.now() - parseInt(dismissedTime, 10) < sevenDaysMs) {
+            return;
+          }
+        }
         setIsVisible(true);
       }, 5000);
     };
@@ -66,6 +83,9 @@ export default function PWAInstallPrompt() {
     // some browsers might allow standard install triggers, but listening is safest.
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, []);
 
@@ -83,8 +103,16 @@ export default function PWAInstallPrompt() {
     // Wait for the user's response
     const { outcome } = await deferredPrompt.userChoice;
     
+    setIsVisible(false);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
     if (outcome === 'accepted') {
-      setIsVisible(false);
+      // Installed!
+    } else {
+      // Dismissed the native install prompt - set cooldown
+      localStorage.setItem('seraphim_pwa_dismissed', Date.now().toString());
     }
     
     // Clear deferred prompt either way
@@ -94,6 +122,9 @@ export default function PWAInstallPrompt() {
   const handleDismiss = () => {
     setIsVisible(false);
     setShowIOSInstructions(false);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     localStorage.setItem('seraphim_pwa_dismissed', Date.now().toString());
   };
 

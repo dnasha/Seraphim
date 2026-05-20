@@ -213,17 +213,20 @@ export function useMapCamera({
         }
       }
     } else {
-      if (!isFlyingRef.current) {
-        popupRef.current?.remove();
-        if (map.getPadding().top !== 0) {
-          map.easeTo({
-            padding: { top: 0, bottom: 0, left: 0, right: 0 },
-            duration: 500,
-          });
+      const wasSelected = lastFlownSelectionRef.current !== null;
+      if (wasSelected) {
+        if (!isFlyingRef.current) {
+          popupRef.current?.remove();
+          if (map.getPadding().top !== 0) {
+            map.easeTo({
+              padding: { top: 0, bottom: 0, left: 0, right: 0 },
+              duration: 300,
+            });
+          }
         }
+        lastFlownSelectionRef.current = null;
+        lastFlownVersionRef.current = 0;
       }
-      lastFlownSelectionRef.current = null;
-      lastFlownVersionRef.current = 0;
     }
   }, [
     selectedItemId,
