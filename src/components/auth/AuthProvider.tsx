@@ -91,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         lastFetchedRef.current[userId] = now;
         
+        setTierLoading(true);
         try {
             log('[AuthProvider] Fetching user tier for', userId);
             // Race the database profile query against a 10-second timeout to prevent UI hangs on cold starts
@@ -279,6 +280,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUser(verifiedUser);
 
                     if (verifiedUser) {
+                        setIsGuest(false);
+                        localStorage.removeItem(GUEST_STORAGE_KEY);
                         // Update cache for the session/user
                         try {
                             localStorage.setItem('seraphim_cached_user', JSON.stringify(verifiedUser));

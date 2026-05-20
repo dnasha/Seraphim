@@ -236,6 +236,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (window.innerWidth <= 860 || e.button !== 0) return;
+    if (activeMode !== 'select') return;
 
     const target = e.target as HTMLElement;
     const isInteractive = target.closest('button, input, select, textarea, label, [role="button"]');
@@ -963,7 +964,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
           >
             {/* Header / Collapse Toggle */}
             <div className={styles.panelHeader}>
-              <div className={styles.panelTitle} onClick={() => setIsCollapsed(!isCollapsed)}>
+              <div className={styles.panelTitle}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
                   <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>

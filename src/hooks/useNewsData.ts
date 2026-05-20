@@ -121,6 +121,7 @@ export function useNewsData({
     const visibleSidebarIdsRef = useRef<Set<string>>(new Set());
     const requestVersionRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const pendingBBoxRef = useRef<BBox | null>(null);
 
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
 
@@ -305,9 +306,17 @@ export function useNewsData({
      * snapping, parameter change detection, and store synchronization.
      */
     const coordinateLoad = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
-        if (!enabled) return;
+        if (!enabled) {
+            if (rawBBox) {
+                pendingBBoxRef.current = rawBBox;
+            }
+            console.log('[useNewsData] coordinateLoad called but not enabled.');
+            return;
+        }
         const requestVersion = ++requestVersionRef.current;
+        console.log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
         if (abortControllerRef.current) {
+            console.log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
             abortControllerRef.current.abort();
         }
 
@@ -321,8 +330,10 @@ export function useNewsData({
         }
 
         const bbox = rawBBox ? snapBBox(rawBBox) : (lastFetchParamsRef.current?.bbox ?? null);
+        console.log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
         if (!bbox && !unmappedOnly && !searchQuery && !limit) {
+            console.log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
         }
@@ -343,8 +354,11 @@ export function useNewsData({
             searchQuery === prev.query &&
             timeRange === prev.timeRange &&
             limit === prev.limit) {
+            console.log('[useNewsData] Returning early because all parameters match previous fetch params');
             return;
         }
+
+        console.log(`[useNewsData] Proceeding to fetch. Prev limit was: ${prev?.limit}, New limit: ${limit}`);
 
         const since = computeSince(timeRange, customStartDate);
         const until = computeUntil(timeRange, customEndDate);
@@ -449,6 +463,14 @@ export function useNewsData({
             }
         }
     }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, limit, enabled, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+
+    useEffect(() => {
+        if (!enabled) return;
+        if (!pendingBBoxRef.current) return;
+        const pending = pendingBBoxRef.current;
+        pendingBBoxRef.current = null;
+        coordinateLoad(false, pending);
+    }, [enabled, coordinateLoad]);
 
     useEffect(() => {
         if (!enabled) return;
