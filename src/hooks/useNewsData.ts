@@ -313,16 +313,6 @@ export function useNewsData({
             console.log('[useNewsData] coordinateLoad called but not enabled.');
             return;
         }
-        const requestVersion = ++requestVersionRef.current;
-        console.log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
-        if (abortControllerRef.current) {
-            console.log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
-            abortControllerRef.current.abort();
-        }
-
-        const abortController = new AbortController();
-        abortControllerRef.current = abortController;
-        setError(null);
 
         if (isRefresh) {
             responseCache.clear();
@@ -330,7 +320,13 @@ export function useNewsData({
         }
 
         const prev = lastFetchParamsRef.current;
-        const bbox = rawBBox ? snapBBox(rawBBox) : (prev?.bbox ?? null);
+        const pendingBBox = pendingBBoxRef.current;
+        const bboxSource = rawBBox ?? pendingBBox ?? undefined;
+        if (bboxSource === pendingBBox) {
+            pendingBBoxRef.current = null;
+        }
+
+        const bbox = bboxSource ? snapBBox(bboxSource) : (prev?.bbox ?? null);
         console.log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
         const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
@@ -397,6 +393,8 @@ export function useNewsData({
         const requestKey = params.toString();
         const now = Date.now();
         const cached = responseCache.get(requestKey);
+        const requestVersion = ++requestVersionRef.current;
+        console.log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
 
         /**
          * Cache Hit Optimization: If fresh data exists for this specific snapped 
@@ -424,6 +422,14 @@ export function useNewsData({
             return;
         }
 
+        if (abortControllerRef.current) {
+            console.log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
+            abortControllerRef.current.abort();
+        }
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+        setError(null);
         setIsLoading(true);
         try {
             const { items: mapResults, isCapped: resultCapped, appliedLimit: fetchLimit } = await _performFetch({
