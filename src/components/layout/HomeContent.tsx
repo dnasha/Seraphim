@@ -99,7 +99,7 @@ export function HomeContent() {
     }, [setShowAuthModal]);
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
-    const isAuthResolving = authLoading || (!!user && tierLoading);
+    const isAuthResolving = authLoading;
 
     const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
         searchQuery: debouncedSearch, 

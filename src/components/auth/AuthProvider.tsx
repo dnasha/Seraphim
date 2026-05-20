@@ -185,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUser(cachedUser);
                     setSession(cachedSession);
                     setUserTier(cachedTier);
+                    setIsGuest(false);
                     setSubscriptionStatus(status);
                     setBillingInterval(interval);
                     setCurrentPeriodEnd(periodEnd);
@@ -192,6 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setCancelAtPeriodEnd(cancelAtEnd);
                     setIsLoading(false);
                     setTierLoading(false);
+                    localStorage.removeItem(GUEST_STORAGE_KEY);
                 }, 0);
                 
                 hasRestoredFromCache = true;
@@ -224,7 +226,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 // Check guest preference
                 const currentWasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
-                if (currentWasGuest === 'true') {
+                const hasSupabaseSession = Object.keys(localStorage).some(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
+                if (currentWasGuest === 'true' && !hasSupabaseSession && !userRef.current) {
                     if (!isUnmounted) setIsGuest(true);
                 }
 
@@ -460,6 +463,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (pollInterval) clearInterval(pollInterval);
         };
     }, [user, fetchUserTier, supabase]);
+
 
     const signOut = useCallback(async () => {
         await supabase.auth.signOut();
