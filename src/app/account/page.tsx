@@ -351,7 +351,7 @@ export default function AccountPage() {
           <div className={styles.sectionHeader}>
             <h2 className={`${styles.sectionTitle} ${styles.dangerTitle}`}>Danger Zone</h2>
             <p className={styles.dangerText}>
-              Permanently obliterate your account and all associated intelligence data. This action is irreversible.
+              Permanently dekete your account and all associated data. This action is irreversible!
             </p>
           </div>
           <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
@@ -368,7 +368,7 @@ export default function AccountPage() {
             />
             {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`}>{deleteMsg.text}</div>}
             <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>
-              {isDeleting ? <span className={styles.spinner} /> : 'Erase Account'}
+              {isDeleting ? <span className={styles.spinner} /> : 'Delete Account'}
             </button>
           </form>
         </section>

@@ -76,7 +76,7 @@ export default function EventCard({
     <div
       style={{
         paddingBottom: "6px",
-        paddingLeft: "10px",
+        paddingLeft: "4px",
         paddingRight: "10px",
         paddingTop: index === 0 ? "5px" : "0",
       }}

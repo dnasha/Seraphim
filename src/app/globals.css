@@ -268,19 +268,10 @@ body {
 }
 
 /* Aggressively hide scrollbar buttons/arrows globally */
-::-webkit-scrollbar-button,
-::-webkit-scrollbar-button:start,
-::-webkit-scrollbar-button:end,
-::-webkit-scrollbar-button:single-button,
-::-webkit-scrollbar-button:double-button,
-::-webkit-scrollbar-button:vertical:decrement,
-::-webkit-scrollbar-button:vertical:increment,
-::-webkit-scrollbar-button:horizontal:decrement,
-::-webkit-scrollbar-button:horizontal:increment {
+::-webkit-scrollbar-button {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
-  background: transparent !important;
 }
 
 /* Firefox Support */
