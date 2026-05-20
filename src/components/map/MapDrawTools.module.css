@@ -3,7 +3,7 @@
     top: 50%;
     right: 60px; /* To the left of MapActionTools */
     transform: translateY(-50%);
-    z-index: 20;
+    z-index: 2100;
     display: flex;
     flex-direction: row-reverse;
     align-items: flex-start;
@@ -22,6 +22,11 @@
     gap: 12px;
     pointer-events: auto;
     width: 280px;
+    cursor: grab;
+}
+
+.drawToolsPanel:active {
+    cursor: grabbing;
 }
 
 .section {
@@ -80,6 +85,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    padding: 3px 3px 3px 6px;
 }
 
 .colorBtn {
@@ -255,9 +261,11 @@
     background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 12px;
-    text-align: center;
-    font-size: 16px;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     font-weight: 800;
@@ -268,7 +276,7 @@
     text-transform: uppercase;
     font-weight: 700;
     color: var(--text-muted);
-    margin-bottom: 4px;
+    margin-bottom: 0;
     letter-spacing: 0.6px;
 }
 
@@ -399,4 +407,194 @@
 .textMarkerDelete:hover {
     background: #dc2626;
     transform: scale(1.1);
+}
+
+/* Collapsible Panel Styles */
+.drawToolsPanel.collapsed {
+    padding: 8px 12px;
+    gap: 0;
+}
+
+.panelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.panelTitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+}
+
+.panelTitle svg {
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.titleText {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.collapsedMeasurement {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+}
+
+.panelHeaderActions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.headerBtn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+    outline: none;
+}
+
+@media (hover: hover) {
+    .headerBtn:hover {
+        color: var(--text-primary);
+    }
+
+    .headerBtn.closeBtn:hover {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--red);
+    }
+}
+
+.panelContent {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 860px) {
+    .drawToolsWrapper {
+        top: calc(max(12px, env(safe-area-inset-top)) + 8px);
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: min(340px, calc(100vw - 24px));
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .drawToolsPanel {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        padding: 10px 12px;
+        max-height: calc(85vh - env(safe-area-inset-top));
+        display: flex;
+        flex-direction: column;
+        cursor: default;
+    }
+
+    .drawToolsPanel:active {
+        cursor: default;
+    }
+
+    .panelContent {
+        overflow-y: auto;
+        max-height: calc(60vh - env(safe-area-inset-top));
+        gap: 12px;
+        padding-right: 4px;
+    }
+
+    .sectionTitle {
+        display: none;
+    }
+
+    .section {
+        gap: 4px;
+    }
+
+    .measurementBox {
+        padding: 5px 8px;
+        font-size: 14px;
+    }
+
+    .measurementLabel {
+        font-size: 10px;
+        margin-bottom: 0;
+    }
+
+    .colors {
+        gap: 6px;
+    }
+
+    .colorBtn, .colorPickerDot {
+        width: 20px;
+        height: 20px;
+    }
+
+    .styleRow {
+        gap: 6px;
+    }
+
+    .sizeBtn {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        font-size: 11px;
+    }
+
+    .sizeInput {
+        width: 48px;
+        height: 28px;
+        padding: 0 6px;
+        font-size: 11px;
+    }
+
+    .styleDivider {
+        height: 18px;
+    }
+
+    .grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+    }
+
+    .toolBtn {
+        padding: 5px 0;
+        font-size: 11px;
+        gap: 2px;
+    }
+
+    .actions {
+        gap: 6px;
+        margin-top: 2px;
+    }
+
+    .actionBtn {
+        padding: 8px 0;
+        font-size: 12px;
+    }
 }

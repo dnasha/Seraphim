@@ -20,6 +20,7 @@ interface MapDrawToolsProps {
   mapReady: boolean;
   isOpen: boolean;
   userTier?: string;
+  onClose?: () => void;
 }
 
 const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
@@ -167,11 +168,14 @@ const clearPersistedDrawState = () => {
 
 type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['onMouseMove']>[0];
 
+// Modes that require touch gesture suppression and direct touch-to-draw bridging.
+const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle']);
+
 class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
   private isDragSketchActive = false;
 
-  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void, userTier?: string, isOpen?: boolean): void {
-    if (userTier === 'guest' || !isOpen || !event) return;
+  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
+    if (!event) return;
     this.isDragSketchActive = true;
     setMapDraggability?.(false);
     this.onClick({ ...event, button: 'left', isContextMenu: false });
@@ -197,8 +201,11 @@ class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode
   }
 }
 
-export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest' }: MapDrawToolsProps) {
+export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
+  const freehandModeRef = useRef<DragFriendlyFreehandLineStringMode | null>(null);
+  const rectangleModeRef = useRef<TerraDrawRectangleMode | null>(null);
+  const circleModeRef = useRef<TerraDrawCircleMode | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
@@ -212,6 +219,88 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   useEffect(() => { colorRef.current = activeColor; }, [activeColor]);
   useEffect(() => { sizeRef.current = activeSize; }, [activeSize]);
   useEffect(() => { fillRef.current = activeFill; }, [activeFill]);
+
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 860) {
+      setTimeout(() => {
+        setIsCollapsed(true);
+      }, 0);
+    }
+  }, []);
+
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const draggingRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (window.innerWidth <= 860 || e.button !== 0) return;
+
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest('button, input, select, textarea, label, [role="button"]');
+    if (isInteractive) return;
+
+    e.preventDefault();
+    
+    if (wrapperRef.current) {
+      const rect = wrapperRef.current.getBoundingClientRect();
+      draggingRef.current = {
+        isDragging: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        initialX: position ? position.x : rect.left,
+        initialY: position ? position.y : rect.top,
+      };
+      
+      if (!position) {
+        setPosition({ x: rect.left, y: rect.top });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!draggingRef.current.isDragging) return;
+      
+      const deltaX = e.clientX - draggingRef.current.startX;
+      const deltaY = e.clientY - draggingRef.current.startY;
+      
+      setPosition({
+        x: draggingRef.current.initialX + deltaX,
+        y: draggingRef.current.initialY + deltaY,
+      });
+    };
+
+    const handleMouseUp = () => {
+      draggingRef.current.isDragging = false;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [position]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeout(() => {
+        setPosition(null);
+      }, 0);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setPosition(null);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [measurement, setMeasurement] = useState<{ value: number; unit: string; type: 'area' | 'distance' } | null>(null);
 
@@ -255,10 +344,14 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     }
 
     if (mapRef.current) {
-      if (activeMode === 'freehand-linestring') {
+      if (TOUCH_DRAW_MODES.has(activeMode)) {
         mapRef.current.dragPan.disable();
+        mapRef.current.touchZoomRotate.disable();
+        if (mapRef.current.touchPitch) mapRef.current.touchPitch.disable();
       } else {
         mapRef.current.dragPan.enable();
+        mapRef.current.touchZoomRotate.enable();
+        if (mapRef.current.touchPitch) mapRef.current.touchPitch.enable();
       }
     }
   }, [activeMode, mapRef]);
@@ -363,9 +456,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         }),
         new TerraDrawPolygonMode({ styles: polygonStyles }),
         new TerraDrawLineStringMode({ styles: rulerStyles }),
-        new TerraDrawRectangleMode({ styles: polygonStyles }),
-        new TerraDrawCircleMode({ styles: polygonStyles }),
-        new DragFriendlyFreehandLineStringMode({ styles: sketchStyles, minDistance: 2 }),
+        (() => { const m = new TerraDrawRectangleMode({ styles: polygonStyles }); rectangleModeRef.current = m; return m; })(),
+        (() => { const m = new TerraDrawCircleMode({ styles: polygonStyles }); circleModeRef.current = m; return m; })(),
+        (() => { const m = new DragFriendlyFreehandLineStringMode({ styles: sketchStyles, minDistance: 2 }); freehandModeRef.current = m; return m; })(),
         new TerraDrawPointMode({ styles: pointStyles }),
       ],
     });
@@ -547,6 +640,110 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       }
     };
   }, [mapReady, mapRef, userTier]);
+
+  // Mobile touch-to-draw bridge for drag-draw modes (freehand, rectangle, circle).
+  // On mobile, MapLibre's touch gesture handlers consume touch events before they
+  // reach TerraDraw's pointer event pipeline. Additionally, touch-drag produces a
+  // pointerdown→pointermove→pointerup sequence that TerraDraw interprets as a
+  // "drag" rather than the click-move-click lifecycle these modes expect.
+  //
+  // This effect:
+  //  1. Intercepts raw touch events and calls mode methods directly.
+  //  2. Blocks touch-originated PointerEvents (capture phase) so TerraDraw's
+  //     adapter doesn't double-process the same gesture.
+  useEffect(() => {
+    if (!TOUCH_DRAW_MODES.has(activeMode) || !mapReady || !mapRef.current) return;
+    if (typeof window === 'undefined') return;
+
+    const map = mapRef.current;
+    const canvas = map.getCanvas();
+
+    // Resolve the active mode instance for direct method calls.
+    const getMode = (): { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null => {
+      switch (activeMode) {
+        case 'freehand-linestring': return freehandModeRef.current;
+        case 'rectangle': return rectangleModeRef.current as unknown as { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null;
+        case 'circle': return circleModeRef.current as unknown as { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null;
+        default: return null;
+      }
+    };
+
+    const mode = getMode();
+    if (!mode) return;
+
+    let isTouchDrawing = false;
+
+    const toTerraDrawEvent = (touch: Touch): FreehandPointerEvent => {
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      const lngLat = map.unproject([x, y]);
+      return {
+        lng: lngLat.lng,
+        lat: lngLat.lat,
+        containerX: x,
+        containerY: y,
+        button: 'left' as const,
+        heldKeys: [] as string[],
+        isContextMenu: false,
+      };
+    };
+
+    // --- Touch handlers (primary drawing driver) ---
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      isTouchDrawing = true;
+      const ev = toTerraDrawEvent(e.touches[0]);
+      mode.onClick({ ...ev, isContextMenu: false });
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTouchDrawing || e.touches.length !== 1) return;
+      e.preventDefault();
+      const ev = toTerraDrawEvent(e.touches[0]);
+      mode.onMouseMove(ev);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!isTouchDrawing) return;
+      e.preventDefault();
+      if (e.changedTouches.length > 0) {
+        const ev = toTerraDrawEvent(e.changedTouches[0]);
+        mode.onMouseMove(ev);
+        mode.onClick({ ...ev, isContextMenu: false });
+      }
+      isTouchDrawing = false;
+    };
+
+    // --- Pointer event blocker ---
+    // Prevent touch-originated pointer events from reaching TerraDraw's adapter
+    // so we don't get double-processed gestures (our touch handler + TD's pointer handler).
+    const blockTouchPointer = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') {
+        e.stopImmediatePropagation();
+      }
+    };
+
+    // Touch handlers drive drawing; capture phase ensures we run first.
+    canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false } as AddEventListenerOptions);
+    canvas.addEventListener('touchmove', onTouchMove, { capture: true, passive: false } as AddEventListenerOptions);
+    canvas.addEventListener('touchend', onTouchEnd, { capture: true, passive: false } as AddEventListenerOptions);
+
+    // Block pointer events that originate from touch so TerraDraw doesn't double-fire.
+    canvas.addEventListener('pointerdown', blockTouchPointer, true);
+    canvas.addEventListener('pointermove', blockTouchPointer, true);
+    canvas.addEventListener('pointerup', blockTouchPointer, true);
+
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart, true);
+      canvas.removeEventListener('touchmove', onTouchMove, true);
+      canvas.removeEventListener('touchend', onTouchEnd, true);
+      canvas.removeEventListener('pointerdown', blockTouchPointer, true);
+      canvas.removeEventListener('pointermove', blockTouchPointer, true);
+      canvas.removeEventListener('pointerup', blockTouchPointer, true);
+    };
+  }, [activeMode, mapReady, mapRef]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -750,141 +947,201 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   return (
     <>
       {isOpen && (
-        <div className={styles.drawToolsWrapper}>
-          <div className={styles.drawToolsPanel}>
-            {/* Section 1: Measurement */}
-            <div className={styles.section}>
-              <div className={styles.sectionTitle}>Measure</div>
-              <div className={styles.measurementBox}>
-                <div className={styles.measurementLabel}>{measurement?.type || 'Metrics'}</div>
-                {measurement ? `${measurement.value.toFixed(2)} ${measurement.unit}` : '0.00'}
+        <div 
+          ref={wrapperRef}
+          className={styles.drawToolsWrapper}
+          style={position ? {
+            top: `${position.y}px`,
+            left: `${position.x}px`,
+            right: 'auto',
+            transform: 'none'
+          } : undefined}
+        >
+          <div 
+            className={`${styles.drawToolsPanel} ${isCollapsed ? styles.collapsed : ''}`}
+            onMouseDown={handleMouseDown}
+          >
+            {/* Header / Collapse Toggle */}
+            <div className={styles.panelHeader}>
+              <div className={styles.panelTitle} onClick={() => setIsCollapsed(!isCollapsed)}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                  <path d="M2 2l7.58 7.58"></path>
+                </svg>
+                <span className={styles.titleText}>
+                  {isCollapsed && measurement ? (
+                    <span className={styles.collapsedMeasurement}>
+                      {measurement.type === 'area' ? 'Area' : 'Dist'}: {measurement.value.toFixed(2)} {measurement.unit}
+                    </span>
+                  ) : (
+                    "Draw & Measure"
+                  )}
+                </span>
               </div>
-            </div>
-
-            {/* Section 2: Draw */}
-            <div className={styles.section}>
-              <div className={styles.sectionTitle}>Draw</div>
-              <div className={styles.grid}>
-                <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => setActiveMode('select')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
-                  Select
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => setActiveMode('polygon')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 14l5-9 9 3 4 10-10 3-8-7z"/></svg>
-                  Area
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => setActiveMode('linestring')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21L21 3"/></svg>
-                  Ruler
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => setActiveMode('rectangle')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
-                  Rect
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => setActiveMode('circle')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
-                  Circle
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => setActiveMode('point')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  Pin
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => setActiveMode('freehand-linestring')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.58 7.58"/></svg>
-                  Sketch
-                </button>
-                <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => setActiveMode('text')}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
-                  Text
-                </button>
-              </div>
-            </div>
-
-            {/* Section 3: Color */}
-            <div className={styles.section}>
-              <div className={styles.sectionTitle}>Color</div>
-              <div className={styles.colors}>
-                {COLORS.map(c => (
-                  <button
-                    key={c}
-                    className={`${styles.colorBtn} ${activeColor.toLowerCase() === c.toLowerCase() ? styles.active : ''}`}
-                    style={{ backgroundColor: c }}
-                    onClick={() => setActiveColor(c)}
-                  />
-                ))}
-                <label
-                  className={`${styles.colorPickerDot} ${isCustomColorActive ? styles.active : ''} ${!hasPickedCustomColor ? styles.cycling : ''}`}
-                  style={hasPickedCustomColor ? { backgroundColor: customPickerColor } : undefined}
-                  title="Custom color"
+              <div className={styles.panelHeaderActions}>
+                <button 
+                  className={styles.headerBtn} 
+                  onClick={() => setIsCollapsed(!isCollapsed)} 
+                  title={isCollapsed ? "Expand panel" : "Collapse panel"}
+                  aria-label={isCollapsed ? "Expand panel" : "Collapse panel"}
                 >
-                  <input
-                    className={styles.colorPickerInput}
-                    type="color"
-                    value={activeColor}
-                    onChange={handleCustomColorChange}
-                    aria-label="Pick custom draw color"
-                  />
-                  <span className={styles.colorPickerGlyph}>+</span>
-                </label>
+                  {isCollapsed ? (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6"/></svg>
+                  )}
+                </button>
+                {onClose && (
+                  <button 
+                    className={`${styles.headerBtn} ${styles.closeBtn}`} 
+                    onClick={onClose} 
+                    title="Close drawing tools"
+                    aria-label="Close drawing tools"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Section 4: Size & Fill */}
-            <div className={styles.section}>
-              <div className={styles.sectionTitle}>Style</div>
-              <div className={styles.styleRow}>
-                <div className={styles.presetSizes}>
-                  {SIZES.map((sizeValue) => (
-                    <button
-                      key={sizeValue}
-                      className={`${styles.sizeBtn} ${styles.sizeSymbolBtn} ${activeSize === sizeValue ? styles.active : ''}`}
-                      onClick={() => setActiveSize(sizeValue)}
-                      title={`Set draw size ${sizeValue}`}
-                    >
-                      <div className={styles.sizeIndicator} style={{ width: sizeValue * 1.5, height: sizeValue * 1.5 }} />
+            {!isCollapsed && (
+              <div className={styles.panelContent}>
+                {/* Section 1: Measurement */}
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Measure</div>
+                  <div className={styles.measurementBox}>
+                    <div className={styles.measurementLabel}>{measurement?.type || 'Metrics'}</div>
+                    {measurement ? `${measurement.value.toFixed(2)} ${measurement.unit}` : '0.00'}
+                  </div>
+                </div>
+
+                {/* Section 2: Draw */}
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Draw</div>
+                  <div className={styles.grid}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => setActiveMode('select')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
+                      Select
                     </button>
-                  ))}
+                    <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => setActiveMode('polygon')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 14l5-9 9 3 4 10-10 3-8-7z"/></svg>
+                      Area
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => setActiveMode('linestring')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21L21 3"/></svg>
+                      Ruler
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => setActiveMode('rectangle')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+                      Rect
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => setActiveMode('circle')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
+                      Circle
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => setActiveMode('point')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      Pin
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => setActiveMode('freehand-linestring')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.58 7.58"/></svg>
+                      Sketch
+                    </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => setActiveMode('text')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+                      Text
+                    </button>
+                  </div>
                 </div>
-                <div className={styles.sizeInputWrap}>
-                  <input
-                    className={styles.sizeInput}
-                    type="number"
-                    min={MIN_DRAW_SIZE}
-                    max={MAX_DRAW_SIZE}
-                    step={1}
-                    value={activeSize}
-                    onChange={handleDrawSizeInputChange}
-                    title="Custom draw size"
-                  />
-                </div>
-                <div className={styles.styleDivider} />
-                <button
-                  className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
-                  onClick={() => setActiveFill(!activeFill)}
-                  title="Toggle Fill"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill={activeFill ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
 
-            {/* Section 5: Actions */}
-            <div className={styles.actions}>
-              <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
-                Clear
-              </button>
-              <button className={styles.actionBtn} onClick={handleImport}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                Import
-              </button>
-              <button className={styles.actionBtn} onClick={handleExport}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                Export
-              </button>
-            </div>
+                {/* Section 3: Color */}
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Color</div>
+                  <div className={styles.colors}>
+                    {COLORS.map(c => (
+                      <button
+                        key={c}
+                        className={`${styles.colorBtn} ${activeColor.toLowerCase() === c.toLowerCase() ? styles.active : ''}`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => setActiveColor(c)}
+                      />
+                    ))}
+                    <label
+                      className={`${styles.colorPickerDot} ${isCustomColorActive ? styles.active : ''} ${!hasPickedCustomColor ? styles.cycling : ''}`}
+                      style={hasPickedCustomColor ? { backgroundColor: customPickerColor } : undefined}
+                      title="Custom color"
+                    >
+                      <input
+                        className={styles.colorPickerInput}
+                        type="color"
+                        value={activeColor}
+                        onChange={handleCustomColorChange}
+                        aria-label="Pick custom draw color"
+                      />
+                      <span className={styles.colorPickerGlyph}>+</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section 4: Size & Fill */}
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Style</div>
+                  <div className={styles.styleRow}>
+                    <div className={styles.presetSizes}>
+                      {SIZES.map((sizeValue) => (
+                        <button
+                          key={sizeValue}
+                          className={`${styles.sizeBtn} ${styles.sizeSymbolBtn} ${activeSize === sizeValue ? styles.active : ''}`}
+                          onClick={() => setActiveSize(sizeValue)}
+                          title={`Set draw size ${sizeValue}`}
+                        >
+                          <div className={styles.sizeIndicator} style={{ width: sizeValue * 1.5, height: sizeValue * 1.5 }} />
+                        </button>
+                      ))}
+                    </div>
+                    <div className={styles.sizeInputWrap}>
+                      <input
+                        className={styles.sizeInput}
+                        type="number"
+                        min={MIN_DRAW_SIZE}
+                        max={MAX_DRAW_SIZE}
+                        step={1}
+                        value={activeSize}
+                        onChange={handleDrawSizeInputChange}
+                        title="Custom draw size"
+                      />
+                    </div>
+                    <div className={styles.styleDivider} />
+                    <button
+                      className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
+                      onClick={() => setActiveFill(!activeFill)}
+                      title="Toggle Fill"
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill={activeFill ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 5: Actions */}
+                <div className={styles.actions}>
+                  <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+                    Clear
+                  </button>
+                  <button className={styles.actionBtn} onClick={handleImport}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    Import
+                  </button>
+                  <button className={styles.actionBtn} onClick={handleExport}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    Export
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

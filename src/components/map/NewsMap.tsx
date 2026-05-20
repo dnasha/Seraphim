@@ -783,6 +783,7 @@ export default function NewsMap({
             mapReady={mapReady}
             isOpen={drawToolsOpen}
             userTier={userTier}
+            onClose={() => setDrawToolsOpen(false)}
           />
         </>
       )}
