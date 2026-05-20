@@ -12,6 +12,12 @@ import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
 import { snapBBox } from "@/lib/utils/geo";
 import { normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
 
+const log = (message: unknown, ...optionalParams: unknown[]) => {
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(message, ...optionalParams);
+    }
+};
+
 const LOCAL_RESPONSE_TTL_MS = 60_000;
 const MAX_ENTITY_COUNT = 5000;
 
@@ -563,10 +569,10 @@ export function useNewsData({
 
         const scheduleNextPoll = () => {
             const ms = getMsToNextFetch();
-            console.log(`[useNewsData] Scheduling next scraper-aligned update poll in ${(ms / 1000 / 60).toFixed(2)} minutes.`);
+            log(`[useNewsData] Scheduling next scraper-aligned update poll in ${(ms / 1000 / 60).toFixed(2)} minutes.`);
             
             pollTimeout = setTimeout(async () => {
-                console.log('[useNewsData] Scraper-aligned update poll triggered. Fetching fresh events...');
+                log('[useNewsData] Scraper-aligned update poll triggered. Fetching fresh events...');
                 // Trigger a refresh (caches are cleared, new events are merged, existing viewport is retained)
                 await coordinateLoad(true);
                 scheduleNextPoll();

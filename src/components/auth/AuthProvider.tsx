@@ -17,6 +17,12 @@ import type { UserTier } from '@/components/ui/TierBadge';
 
 const GUEST_STORAGE_KEY = 'seraphim_guest_mode';
 
+const log = (message: unknown, ...optionalParams: unknown[]) => {
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(message, ...optionalParams);
+    }
+};
+
 interface AuthContextType {
     user: User | null;
     session: Session | null;
@@ -86,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastFetchedRef.current[userId] = now;
         
         try {
-            console.log('[AuthProvider] Fetching user tier for', userId);
+            log('[AuthProvider] Fetching user tier for', userId);
             // Race the database profile query against a 10-second timeout to prevent UI hangs on cold starts
             const queryPromise = supabase
                 .from('user_profiles')
@@ -105,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             // Guard against race conditions (e.g. user signs out or switches account during fetch)
             if (!userRef.current || userRef.current.id !== userId) {
-                console.log('[AuthProvider] User changed or signed out during tier fetch. Discarding result.');
+                log('[AuthProvider] User changed or signed out during tier fetch. Discarding result.');
                 return;
             }
 
@@ -113,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.warn('[AuthProvider] Failed to fetch tier, keeping cached tier or defaulting to free:', error);
                 setUserTier(prev => (prev && prev !== 'guest') ? prev : 'free');
             } else {
-                console.log('[AuthProvider] User tier fetched successfully:', data.tier);
+                log('[AuthProvider] User tier fetched successfully:', data.tier);
                 const normalizedTier = (data.tier?.toLowerCase() as UserTier) || 'free';
                 setUserTier(normalizedTier);
                 setSubscriptionStatus(data.subscription_status);
@@ -188,7 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }, 0);
                 
                 hasRestoredFromCache = true;
-                console.log('[AuthProvider] Restored cached auth synchronously on mount:', cachedTier);
+                log('[AuthProvider] Restored cached auth synchronously on mount:', cachedTier);
             } catch (e) {
                 console.error('[AuthProvider] Failed to parse cached auth state:', e);
             }
@@ -205,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setTierLoading(false);
                 }, 0);
                 hasRestoredFromCache = true;
-                console.log('[AuthProvider] Synchronously resolved guest status on mount');
+                log('[AuthProvider] Synchronously resolved guest status on mount');
             }
         }
 
@@ -213,7 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let isUnmounted = false;
 
         const initializeAuth = async () => {
-            console.log('[AuthProvider] Starting background initializeAuth...');
+            log('[AuthProvider] Starting background initializeAuth...');
             try {
                 // Check guest preference
                 const currentWasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
@@ -222,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 // Check initial session locally with a 10-second timeout safeguard to accommodate cold starts
-                console.log('[AuthProvider] Retrieving local session...');
+                log('[AuthProvider] Retrieving local session...');
                 const sessionResult = await Promise.race([
                     supabase.auth.getSession().then(res => ({ ...res, timedOut: false as const })),
                     new Promise<{ data: { session: null }; timedOut: true }>((resolve) =>
@@ -231,14 +237,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ]);
                 const initialSession = sessionResult.data?.session ?? null;
                 const getSessionTimedOut = 'timedOut' in sessionResult && sessionResult.timedOut;
-                console.log('[AuthProvider] Session retrieved:', initialSession ? 'Found' : 'None', getSessionTimedOut ? '(Timed Out)' : '');
+                log('[AuthProvider] Session retrieved:', initialSession ? 'Found' : 'None', getSessionTimedOut ? '(Timed Out)' : '');
                 
                 let verifiedUser = initialSession?.user ?? null;
                 let finalSession = initialSession;
 
                 // If we think we have a session, verify it with the server (with a 4-second timeout)
                 if (initialSession) {
-                    console.log('[AuthProvider] Verifying session with server...');
+                    log('[AuthProvider] Verifying session with server...');
                     const userResult = await Promise.race([
                         supabase.auth.getUser(),
                         new Promise<{ data: { user: User | null }; error: AuthError | Error | null }>((resolve) =>
@@ -247,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     ]);
                     const user = userResult.data?.user ?? null;
                     const error = userResult.error;
-                    console.log('[AuthProvider] Server verification result:', { hasUser: !!user, hasError: !!error });
+                    log('[AuthProvider] Server verification result:', { hasUser: !!user, hasError: !!error });
                     
                     if (error || !user) {
                         if (error && (error.message === 'User verify timeout' || error.message.includes('fetch') || error.message.includes('network'))) {
@@ -282,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         }
                         await fetchUserTier(verifiedUser.id, true);
                     } else {
-                        console.log('[AuthProvider] No verified user, setting guest tier');
+                        log('[AuthProvider] No verified user, setting guest tier');
                         setUserTier('guest');
                         setTierLoading(false);
                         // Clear cache
@@ -301,7 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 // If no session and not already determined as guest, default to guest mode internally (only if not timed out)
                 if (!finalSession && currentWasGuest !== 'true' && !getSessionTimedOut) {
-                    console.log('[AuthProvider] No active session, enabling Guest Mode');
+                    log('[AuthProvider] No active session, enabling Guest Mode');
                     if (!isUnmounted) setIsGuest(true);
                 }
             } catch (err) {
@@ -312,12 +318,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setTierLoading(false);
                 }
             } finally {
-                console.log('[AuthProvider] Setting isLoading to false');
+                log('[AuthProvider] Setting isLoading to false');
                 if (!isUnmounted) {
                     setIsLoading(false);
 
                     // Defer registration of auth state change listener until getSession has resolved
-                    console.log('[AuthProvider] Registering post-initialization onAuthStateChange listener...');
+                    log('[AuthProvider] Registering post-initialization onAuthStateChange listener...');
                     const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
                         async (_event, newSession) => {
                             if (isUnmounted) return;
@@ -408,7 +414,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const checkTier = async () => {
                 attempts++;
-                console.log(`[AuthProvider] Polling user tier on success redirect (attempt ${attempts}/${maxAttempts})...`);
+                log(`[AuthProvider] Polling user tier on success redirect (attempt ${attempts}/${maxAttempts})...`);
                 await fetchUserTier(user.id, true);
             };
 
@@ -432,7 +438,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                         const currentTier = data?.tier?.toLowerCase();
                         if (currentTier && currentTier !== 'free' && currentTier !== 'guest') {
-                            console.log('[AuthProvider] Premium tier detected via polling, stopping poll.');
+                            log('[AuthProvider] Premium tier detected via polling, stopping poll.');
                             await fetchUserTier(user.id, true);
                             if (pollInterval) clearInterval(pollInterval);
                         } else {

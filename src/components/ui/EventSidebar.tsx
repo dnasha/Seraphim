@@ -382,14 +382,16 @@ export default function EventSidebar({
           <div className={styles.liveStatusWrapper}>
             <span className={styles.pulseDot} />
             <span className={styles.lastUpdated} suppressHydrationWarning>
-              UPDATED{" "}
-              {newestEventTime && mounted
-                ? new Date(newestEventTime).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  })
-                : "--:-- --"}
+              <span className={styles.updatedLabel}>UPDATED</span>
+              <span>
+                {newestEventTime && mounted
+                  ? new Date(newestEventTime).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                    })
+                  : "--:-- --"}
+              </span>
             </span>
           </div>
         )}
