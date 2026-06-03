@@ -169,7 +169,7 @@ const clearPersistedDrawState = () => {
 type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['onMouseMove']>[0];
 
 // Modes that require touch gesture suppression and direct touch-to-draw bridging.
-const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle']);
+const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle', 'eraser']);
 
 class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
   private isDragSketchActive = false;
@@ -210,15 +210,34 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
   const [activeFill, setActiveFill] = useState<boolean>(true);
+  const [activeFillOpacity, setActiveFillOpacity] = useState<number>(40);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
+  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
   const [hasPickedCustomColor, setHasPickedCustomColor] = useState(false);
   const [customPickerColor, setCustomPickerColor] = useState<string>('#8b5cf6');
   const colorRef = useRef(activeColor);
   const sizeRef = useRef(activeSize);
   const fillRef = useRef(activeFill);
+  const fillOpacityRef = useRef(activeFillOpacity);
   
   useEffect(() => { colorRef.current = activeColor; }, [activeColor]);
   useEffect(() => { sizeRef.current = activeSize; }, [activeSize]);
   useEffect(() => { fillRef.current = activeFill; }, [activeFill]);
+  useEffect(() => { fillOpacityRef.current = activeFillOpacity; }, [activeFillOpacity]);
+
+  useEffect(() => {
+    if (selectedFeatureId && drawRef.current) {
+      drawRef.current.updateFeatureProperties(selectedFeatureId, {
+        color: activeColor,
+        size: activeSize,
+        fill: activeFill,
+        fillOpacity: activeFill ? (activeFillOpacity / 100) : 0,
+      });
+      if (userTier !== 'guest') {
+        persistDrawState(drawRef.current.getSnapshot(), textAnnotations);
+      }
+    }
+  }, [activeColor, activeSize, activeFill, activeFillOpacity, selectedFeatureId, userTier, textAnnotations]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -236,7 +255,6 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (window.innerWidth <= 860 || e.button !== 0) return;
-    if (activeMode !== 'select') return;
 
     const target = e.target as HTMLElement;
     const isInteractive = target.closest('button, input, select, textarea, label, [role="button"]');
@@ -246,16 +264,21 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     
     if (wrapperRef.current) {
       const rect = wrapperRef.current.getBoundingClientRect();
+      const parent = wrapperRef.current.offsetParent;
+      const parentRect = parent ? parent.getBoundingClientRect() : { left: 0, top: 0 };
+      const currentX = rect.left - parentRect.left;
+      const currentY = rect.top - parentRect.top;
+
       draggingRef.current = {
         isDragging: true,
         startX: e.clientX,
         startY: e.clientY,
-        initialX: position ? position.x : rect.left,
-        initialY: position ? position.y : rect.top,
+        initialX: position ? position.x : currentX,
+        initialY: position ? position.y : currentY,
       };
       
       if (!position) {
-        setPosition({ x: rect.left, y: rect.top });
+        setPosition({ x: currentX, y: currentY });
       }
     }
   };
@@ -310,7 +333,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     return readPersistedDrawState();
   }, [userTier]);
 
-  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+
 
   useEffect(() => {
     if (initialPersistedState?.textAnnotations) {
@@ -387,15 +410,17 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     const adapterPrefixId = `td-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const adapter = new TerraDrawMapLibreGLAdapter({ map, prefixId: adapterPrefixId });
 
-    type StyledFeature = { properties?: { color?: string; size?: number; fill?: boolean } };
+    type StyledFeature = { properties?: { color?: string; size?: number; fill?: boolean; fillOpacity?: number } };
 
     const polygonStyles = {
       fillColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
       fillOpacity: (feature: StyledFeature) => {
-        if (feature.properties && feature.properties.fill !== undefined) {
-          return feature.properties.fill ? 0.4 : 0;
+        const props = feature.properties as { fill?: boolean; fillOpacity?: number } | undefined;
+        if (props && props.fill !== undefined) {
+          if (!props.fill) return 0;
+          return props.fillOpacity !== undefined ? props.fillOpacity : 0.4;
         }
-        return fillRef.current ? 0.4 : 0;
+        return fillRef.current ? (fillOpacityRef.current / 100) : 0;
       },
       outlineColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
       outlineWidth: (feature: StyledFeature) => feature.properties?.size || sizeRef.current,
@@ -453,6 +478,35 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
             circle: { feature: { draggable: true, coordinates: { draggable: true } } },
             'freehand-linestring': { feature: { draggable: true, coordinates: { draggable: true, deletable: true } } },
             point: { feature: { draggable: true, coordinates: { draggable: true, deletable: true } } },
+          },
+          styles: {
+            selectedPolygonColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
+            selectedPolygonFillOpacity: (feature: StyledFeature) => {
+              const props = feature.properties;
+              if (props && props.fill !== undefined) {
+                if (!props.fill) return 0;
+                return props.fillOpacity !== undefined ? props.fillOpacity : 0.4;
+              }
+              return fillRef.current ? (fillOpacityRef.current / 100) : 0;
+            },
+            selectedPolygonOutlineColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
+            selectedPolygonOutlineWidth: (feature: StyledFeature) => feature.properties?.size || sizeRef.current,
+            
+            selectedLineStringColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
+            selectedLineStringWidth: (feature: StyledFeature) => feature.properties?.size || sizeRef.current,
+            
+            selectedPointColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
+            selectedPointWidth: (feature: StyledFeature) => ((feature.properties?.size || sizeRef.current) * 3),
+            
+            selectionPointColor: '#6366f1' as `#${string}`,
+            selectionPointOutlineColor: '#ffffff' as `#${string}`,
+            selectionPointWidth: 5,
+            selectionPointOutlineWidth: 1.5,
+            
+            midPointColor: '#6366f1' as `#${string}`,
+            midPointOutlineColor: '#ffffff' as `#${string}`,
+            midPointWidth: 4,
+            midPointOutlineWidth: 1,
           }
         }),
         new TerraDrawPolygonMode({ styles: polygonStyles }),
@@ -605,7 +659,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       draw.updateFeatureProperties(id as string, { 
         color: colorRef.current, 
         size: sizeRef.current,
-        fill: fillRef.current 
+        fill: fillRef.current,
+        fillOpacity: fillRef.current ? (fillOpacityRef.current / 100) : 0
       });
       if (drawRef.current) {
         persistentFeaturesRef.current = drawRef.current.getSnapshot();
@@ -617,11 +672,27 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     });
 
     draw.on('change', handleChange);
-    draw.on('select', () => {
+    draw.on('select', (id) => {
+      setSelectedFeatureId(id as string);
+      
+      const feature = draw.getSnapshot().find(f => f.id === id);
+      if (feature && feature.properties) {
+        const props = feature.properties as { color?: string; size?: number; fill?: boolean; fillOpacity?: number };
+        if (props.color) setActiveColor(props.color);
+        if (props.size) setActiveSize(props.size);
+        if (props.fill !== undefined) setActiveFill(props.fill);
+        if (props.fillOpacity !== undefined) {
+          setActiveFillOpacity(Math.round(props.fillOpacity * 100));
+        } else if (props.fill !== undefined) {
+          setActiveFillOpacity(props.fill ? 40 : 0);
+        }
+      }
+
       if (userTier === 'guest') return;
       handleChange();
     });
     draw.on('deselect', () => {
+      setSelectedFeatureId(null);
       if (userTier === 'guest') return;
       handleChange();
     });
@@ -653,7 +724,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   //  2. Blocks touch-originated PointerEvents (capture phase) so TerraDraw's
   //     adapter doesn't double-process the same gesture.
   useEffect(() => {
-    if (!TOUCH_DRAW_MODES.has(activeMode) || !mapReady || !mapRef.current) return;
+    if (!TOUCH_DRAW_MODES.has(activeMode) || activeMode === 'eraser' || !mapReady || !mapRef.current) return;
     if (typeof window === 'undefined') return;
 
     const map = mapRef.current;
@@ -746,6 +817,125 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     };
   }, [activeMode, mapReady, mapRef]);
 
+  // Unified Pointer-based Eraser handler for drag-to-erase (desktop and mobile)
+  useEffect(() => {
+    if (activeMode !== 'eraser' || !mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    const canvas = map.getCanvas();
+
+    let isPointerErasing = false;
+
+    const eraseAtScreenPoint = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      
+      // 1. Try MapLibre queryRenderedFeatures first (pixel-perfect)
+      const features = map.queryRenderedFeatures([x, y]);
+      const tdFeature = features.find(f => f.layer.id.includes('td-') && (f.id !== undefined || (f.properties && f.properties.id)));
+      if (tdFeature && drawRef.current) {
+        const snapshot = drawRef.current.getSnapshot();
+        const propertiesId = tdFeature.properties?.id;
+        const directId = tdFeature.id;
+        
+        let targetId: string | null = null;
+        if (propertiesId && snapshot.some(f => f.id === propertiesId.toString())) {
+          targetId = propertiesId.toString();
+        } else if (directId !== undefined && snapshot.some(f => f.id === directId.toString())) {
+          targetId = directId.toString();
+        }
+
+        if (targetId) {
+          try {
+            drawRef.current.removeFeatures([targetId]);
+            return;
+          } catch (err) {
+            console.warn('MapLibre ID lookup failed to delete, falling back to Turf:', err);
+          }
+        }
+      }
+
+      // 2. Resilient fallback using Turf geography check
+      if (drawRef.current) {
+        const lngLat = map.unproject([x, y]);
+        const turfPoint = turf.point([lngLat.lng, lngLat.lat]);
+        const snapshot = drawRef.current.getSnapshot();
+
+        for (const feature of snapshot) {
+          const type = feature.geometry.type;
+          let hit = false;
+
+          if (type === 'Polygon' || type === 'MultiPolygon') {
+            try {
+              hit = turf.booleanPointInPolygon(turfPoint, feature as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>);
+            } catch (err) {
+              console.warn('Turf polygon check error:', err);
+            }
+          } else if (type === 'LineString' || type === 'MultiLineString') {
+            try {
+              const zoom = map.getZoom();
+              const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
+              const toleranceMeters = Math.max(5, (feature.properties?.size || 4) * metersPerPixel * 2.5);
+              const distance = turf.pointToLineDistance(turfPoint, feature as GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>, { units: 'meters' });
+              hit = distance < toleranceMeters;
+            } catch (err) {
+              console.warn('Turf line check error:', err);
+            }
+          } else if (type === 'Point' || type === 'MultiPoint') {
+            try {
+              const geom = feature.geometry as GeoJSON.Point;
+              const distance = turf.distance(turfPoint, turf.point(geom.coordinates), { units: 'meters' });
+              const zoom = map.getZoom();
+              const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
+              const toleranceMeters = Math.max(10, (feature.properties?.size || 4) * 3 * metersPerPixel * 2);
+              hit = distance < toleranceMeters;
+            } catch (err) {
+              console.warn('Turf point check error:', err);
+            }
+          }
+
+          if (hit && feature.id) {
+            drawRef.current.removeFeatures([feature.id.toString()]);
+            break;
+          }
+        }
+      }
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // Left click only for mouse
+      isPointerErasing = true;
+      
+      // Prevent map dragging during erasing gestures
+      map.dragPan.disable();
+      map.touchZoomRotate.disable();
+      if (map.touchPitch) map.touchPitch.disable();
+
+      eraseAtScreenPoint(e.clientX, e.clientY);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isPointerErasing) return;
+      eraseAtScreenPoint(e.clientX, e.clientY);
+    };
+
+    const onPointerUp = () => {
+      isPointerErasing = false;
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown, { capture: true, passive: false });
+    canvas.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
+    canvas.addEventListener('pointerup', onPointerUp, { capture: true });
+    canvas.addEventListener('pointercancel', onPointerUp, { capture: true });
+
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown, true);
+      canvas.removeEventListener('pointermove', onPointerMove, true);
+      canvas.removeEventListener('pointerup', onPointerUp, true);
+      canvas.removeEventListener('pointercancel', onPointerUp, true);
+    };
+  }, [activeMode, mapReady, mapRef]);
+
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -788,13 +978,31 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     if (effectiveMode === 'text') {
       drawRef.current.setMode('static');
       if (mapRef.current) mapRef.current.getCanvas().style.cursor = 'crosshair';
+    } else if (effectiveMode === 'eraser') {
+      drawRef.current.setMode('static');
+      if (mapRef.current) {
+        mapRef.current.getCanvas().style.cursor = 'crosshair';
+        setTimeout(() => {
+          if (mapRef.current && activeModeRef.current === 'eraser') {
+            mapRef.current.dragPan.disable();
+            mapRef.current.touchZoomRotate.disable();
+            if (mapRef.current.touchPitch) mapRef.current.touchPitch.disable();
+          }
+        }, 50);
+      }
     } else {
-      if (mapRef.current) mapRef.current.getCanvas().style.cursor = '';
+      if (mapRef.current) {
+        mapRef.current.getCanvas().style.cursor = '';
+        mapRef.current.dragPan.enable();
+        mapRef.current.touchZoomRotate.enable();
+        if (mapRef.current.touchPitch) mapRef.current.touchPitch.enable();
+      }
       drawRef.current.setMode(effectiveMode);
     }
   }, [activeMode, isOpen, mapRef]);
 
   const handleClear = () => {
+    setSelectedFeatureId(null);
     if (drawRef.current) {
       drawRef.current.clear();
       setMeasurement(null);
@@ -936,6 +1144,12 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     setActiveSize(Math.max(MIN_DRAW_SIZE, Math.min(MAX_DRAW_SIZE, nextValue)));
   };
 
+  const handleOpacityInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = Number.parseInt(event.target.value, 10);
+    if (Number.isNaN(nextValue)) return;
+    setActiveFillOpacity(Math.max(0, Math.min(100, nextValue)));
+  };
+
   const handleCustomColorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextColor = event.target.value;
     setHasPickedCustomColor(true);
@@ -1053,6 +1267,14 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
                       Text
                     </button>
+                    <button className={`${styles.toolBtn} ${activeMode === 'eraser' ? styles.active : ''}`} onClick={() => setActiveMode('eraser')}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                        <path d="M22 21H7" />
+                        <path d="m5 11 9 9" />
+                      </svg>
+                      Eraser
+                    </button>
                   </div>
                 </div>
 
@@ -1085,10 +1307,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                   </div>
                 </div>
 
-                {/* Section 4: Size & Fill */}
+                 {/* Section 4: Size & Fill */}
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Style</div>
                   <div className={styles.styleRow}>
+                    <span className={styles.styleRowLabel}>Brush</span>
                     <div className={styles.presetSizes}>
                       {SIZES.map((sizeValue) => (
                         <button
@@ -1101,7 +1324,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         </button>
                       ))}
                     </div>
-                    <div className={styles.sizeInputWrap}>
+                    <div className={`${styles.sizeInputWrap} ${styles.rightAlign}`}>
                       <input
                         className={styles.sizeInput}
                         type="number"
@@ -1112,8 +1335,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         onChange={handleDrawSizeInputChange}
                         title="Custom draw size"
                       />
+                      <span className={styles.unitLabel}>px</span>
                     </div>
-                    <div className={styles.styleDivider} />
+                  </div>
+                  <div className={styles.styleRow}>
+                    <span className={styles.styleRowLabel}>Fill</span>
                     <button
                       className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
                       onClick={() => setActiveFill(!activeFill)}
@@ -1123,6 +1349,20 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                       </svg>
                     </button>
+                    <div className={`${styles.sizeInputWrap} ${styles.rightAlign}`}>
+                      <input
+                        className={styles.opacityInput}
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={activeFillOpacity}
+                        onChange={handleOpacityInputChange}
+                        title="Custom fill opacity (%)"
+                        disabled={!activeFill}
+                      />
+                      <span className={styles.unitLabel}>%</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1153,6 +1393,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
           key={annotation.id} 
           mapRef={mapRef} 
           annotation={annotation} 
+          activeMode={activeMode}
           onUpdate={(text) => updateTextAnnotation(annotation.id, text)}
           onRemove={() => removeTextAnnotation(annotation.id)}
           onDragEnd={(lngLat) => updateTextAnnotationPosition(annotation.id, lngLat)}
@@ -1165,12 +1406,14 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 function TextMarker({ 
   mapRef, 
   annotation, 
+  activeMode,
   onUpdate, 
   onRemove,
   onDragEnd,
 }: { 
   mapRef: React.MutableRefObject<maplibregl.Map | null>; 
   annotation: TextAnnotation; 
+  activeMode: string;
   onUpdate: (text: string) => void;
   onRemove: () => void;
   onDragEnd: (lngLat: [number, number]) => void;
@@ -1290,20 +1533,37 @@ function TextMarker({
         </div>
         <textarea
           ref={textareaRef}
-        className={styles.textMarker}
-        defaultValue={annotation.text}
-        placeholder="Type here..."
-        autoFocus
-        rows={1}
-        onChange={(e) => {
-          onUpdate(e.target.value);
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          e.currentTarget.focus();
-        }}
+          className={styles.textMarker}
+          defaultValue={annotation.text}
+          placeholder="Type here..."
+          autoFocus
+          rows={1}
+          style={activeMode === 'eraser' ? { cursor: 'crosshair' } : undefined}
+          onChange={(e) => {
+            onUpdate(e.target.value);
+          }}
+          onMouseDown={(e) => {
+            if (activeMode === 'eraser') {
+              e.stopPropagation();
+              onRemove();
+            } else {
+              e.stopPropagation();
+            }
+          }}
+          onPointerDown={(e) => {
+            if (activeMode === 'eraser') {
+              e.stopPropagation();
+              onRemove();
+            } else {
+              e.stopPropagation();
+            }
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (activeMode !== 'eraser') {
+              e.currentTarget.focus();
+            }
+          }}
         onBlur={(e) => {
           if (e.target.value.trim() === '') {
             onRemove();

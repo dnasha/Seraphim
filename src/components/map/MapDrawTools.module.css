@@ -181,12 +181,6 @@
     gap: 8px;
 }
 
-.styleDivider {
-    width: 1px;
-    height: 20px;
-    background: var(--border);
-}
-
 .sizeBtn {
     width: 30px;
     height: 30px;
@@ -255,6 +249,51 @@
 .sizeInput:focus {
     outline: none;
     border-color: var(--accent);
+}
+
+.opacityInput {
+    width: 46px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-primary);
+    padding: 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.opacityInput:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.opacityInput:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.unitLabel {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-left: 4px;
+    user-select: none;
+}
+
+.styleRowLabel {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    min-width: 46px; /* Grid align following controls */
+    letter-spacing: 0.5px;
+    user-select: none;
+}
+
+.rightAlign {
+    margin-left: auto;
 }
 
 .measurementBox {
@@ -573,8 +612,16 @@
         font-size: 11px;
     }
 
-    .styleDivider {
-        height: 18px;
+    .opacityInput {
+        width: 40px;
+        height: 28px;
+        font-size: 11px;
+        padding: 0 2px;
+    }
+
+    .unitLabel {
+        font-size: 10px;
+        margin-left: 2px;
     }
 
     .grid {
