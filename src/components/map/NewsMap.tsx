@@ -95,6 +95,12 @@ export default function NewsMap({
     usgs: false,
     noaa: false,
     eonet: false,
+    fires: false,
+    radiation: false,
+    aqi: false,
+    flights: false,
+    ships: false,
+    iss: false,
   });
 
   // Initialize popup container element once to prevent hydration mismatches and redundant DOM operations.
@@ -705,7 +711,135 @@ export default function NewsMap({
     setVis("overlay-usgs-point", overlays["usgs"]);
     setVis("overlay-noaa-raster", overlays["noaa"]);
     setVis("overlay-eonet-point", overlays["eonet"]);
+    setVis("overlay-fires-point", overlays["fires"]);
+    setVis("overlay-radiation-raster", overlays["radiation"]);
+    setVis("overlay-aqi-raster", overlays["aqi"]);
+    setVis("overlay-flights-point", overlays["flights"]);
+    setVis("overlay-ships-point", overlays["ships"]);
+    setVis("overlay-iss-point", overlays["iss"]);
   }, [overlays, mapReady, currentStyle]);
+
+  // Flight tracking polling logic
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    
+    if (!overlays.flights) {
+      const source = mapRef.current.getSource("overlay-flights") as maplibregl.GeoJSONSource;
+      if (source) {
+        source.setData({
+          type: "FeatureCollection",
+          features: []
+        });
+      }
+      return;
+    }
+
+    const map = mapRef.current;
+    
+    const fetchFlights = async () => {
+      try {
+        const center = map.getCenter();
+        const lat = center.lat.toFixed(4);
+        const lng = center.lng.toFixed(4);
+        
+        // Fetch flights within 150 NM of current map center (proxied to bypass CORS)
+        const res = await fetch(`/api/proxy/flights?lat=${lat}&lng=${lng}`);
+        if (!res.ok) throw new Error("ADSB API error");
+        
+        const data = await res.json();
+        const aircraftList = data.ac || data.aircraft;
+        if (!aircraftList || !Array.isArray(aircraftList)) return;
+
+        interface ADSBAircraft {
+          lat: number | null;
+          lon: number | null;
+          hex: string;
+          flight?: string;
+          r?: string;
+          track?: number;
+          alt_baro?: number;
+          alt_geom?: number;
+          gs?: number;
+        }
+
+        const geojson: GeoJSON.FeatureCollection = {
+          type: "FeatureCollection",
+          features: (aircraftList as ADSBAircraft[])
+            .filter((ac: ADSBAircraft) => ac.lat != null && ac.lon != null)
+            .map((ac: ADSBAircraft) => ({
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [ac.lon!, ac.lat!]
+              },
+              properties: {
+                id: ac.hex,
+                flight: ac.flight ? ac.flight.trim() : ac.r || "Plane",
+                track: ac.track || 0,
+                alt: ac.alt_baro || ac.alt_geom || 0,
+                speed: ac.gs || 0
+              }
+            }))
+        };
+
+        const source = map.getSource("overlay-flights") as maplibregl.GeoJSONSource;
+        if (source) {
+          source.setData(geojson);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch live flight data:", err);
+      }
+    };
+
+    // Initial fetch
+    fetchFlights();
+
+    // Set up polling every 10 seconds
+    const interval = setInterval(fetchFlights, 10000);
+
+    return () => clearInterval(interval);
+  }, [overlays.flights, mapReady]);
+
+  // Poll and update the real-time ISS location
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+
+    if (!overlays.iss) {
+      const source = mapRef.current.getSource("overlay-iss") as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData({
+          type: "FeatureCollection",
+          features: []
+        });
+      }
+      return;
+    }
+
+    const map = mapRef.current;
+
+    const fetchISS = async () => {
+      try {
+        const res = await fetch("/api/proxy/iss");
+        if (!res.ok) throw new Error("ISS API error");
+        const geojson = await res.json();
+        
+        const source = map.getSource("overlay-iss") as maplibregl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData(geojson);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch live ISS position:", err);
+      }
+    };
+
+    // Initial fetch
+    fetchISS();
+
+    // Set up polling every 8 seconds
+    const interval = setInterval(fetchISS, 8000);
+
+    return () => clearInterval(interval);
+  }, [overlays.iss, mapReady]);
 
   // Handle runtime toggling of 3D Globe and atmospheric fog.
   useEffect(() => {

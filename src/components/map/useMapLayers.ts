@@ -49,6 +49,77 @@ export function useMapLayers({
         }
       }
 
+      // Load flight plane icon
+      if (!map.hasImage("flight-plane-icon")) {
+        const svgStr = `
+          <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L14 19v-5.5l8 2.5z" fill="#0284c7" stroke="#ffffff" stroke-width="1.5" />
+          </svg>
+        `;
+        const img = new Image(24, 24);
+        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+        await new Promise((resolve) => {
+          img.onload = () => {
+            try {
+              if (!map.hasImage("flight-plane-icon")) {
+                map.addImage("flight-plane-icon", img);
+              }
+            } catch {}
+            resolve(true);
+          };
+          img.onerror = () => resolve(false);
+        });
+      }
+
+      // Load ship icon
+      if (!map.hasImage("ship-icon")) {
+        const svgStr = `
+          <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 17h20l-2 4H4l-2-4zm18-4v3H4v-3l4-3h8l4 3zm-6-6h2v3h-2V7zm-4 1h2v2H8V8z" fill="#06b6d4" stroke="#ffffff" stroke-width="1.5" />
+          </svg>
+        `;
+        const img = new Image(24, 24);
+        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+        await new Promise((resolve) => {
+          img.onload = () => {
+            try {
+              if (!map.hasImage("ship-icon")) {
+                map.addImage("ship-icon", img);
+              }
+            } catch {}
+            resolve(true);
+          };
+          img.onerror = () => resolve(false);
+        });
+      }
+
+      // Load ISS icon
+      if (!map.hasImage("iss-icon")) {
+        const svgStr = `
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="5" width="3" height="14" rx="0.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1"/>
+            <line x1="3.5" y1="6" x2="3.5" y2="18" stroke="#ffffff" stroke-dasharray="1 1"/>
+            <rect x="19" y="5" width="3" height="14" rx="0.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1"/>
+            <line x1="20.5" y1="6" x2="20.5" y2="18" stroke="#ffffff" stroke-dasharray="1 1"/>
+            <line x1="5" y1="12" x2="19" y2="12" stroke="#ffffff" stroke-width="2"/>
+            <rect x="10" y="9" width="4" height="6" rx="1" fill="#e2e8f0" stroke="#f43f5e" stroke-width="1"/>
+          </svg>
+        `;
+        const img = new Image(32, 32);
+        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+        await new Promise((resolve) => {
+          img.onload = () => {
+            try {
+              if (!map.hasImage("iss-icon")) {
+                map.addImage("iss-icon", img);
+              }
+            } catch {}
+            resolve(true);
+          };
+          img.onerror = () => resolve(false);
+        });
+      }
+
       // Re-configure the primary GeoJSON source.
       // We explicitly remove existing layers and sources to ensure that clustering settings 
       // are correctly applied during runtime toggles.
@@ -102,7 +173,7 @@ export function useMapLayers({
             ];
 
       // Layering Order:
-      // 1. External Overlays (USGS, NOAA, NASA)
+      // 1. External Overlays (USGS, NOAA, NASA, Safecast, WAQI, Flights)
       // 2. Clusters (Circles)
       // 3. Hot Story Pulses (Animated rings)
       // 4. Cluster Labels (Numeric counts)
@@ -373,7 +444,7 @@ export function useMapLayers({
       if (!map.getSource("overlay-eonet")) {
         map.addSource("overlay-eonet", {
           type: "geojson",
-          data: "https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods",
+          data: "/api/proxy/eonet",
         });
       }
       if (!map.getLayer("overlay-eonet-point")) {
@@ -386,11 +457,260 @@ export function useMapLayers({
               visibility: overlaysRef.current["eonet"] ? "visible" : "none",
             },
             paint: {
-              "circle-color": "#ef4444",
-              "circle-radius": 5,
+              "circle-color": [
+                "match",
+                ["get", "category"],
+                "wildfires", "#f97316",    // Orange for wildfires
+                "volcanoes", "#dc2626",    // Red for volcanoes
+                "severeStorms", "#8b5cf6", // Purple for severe storms
+                "floods", "#3b82f6",       // Blue for floods
+                "#ef4444"                  // Red fallback
+              ],
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                1, 3,
+                5, 6,
+                9, 10
+              ],
+              "circle-opacity": 0.85,
               "circle-stroke-width": 1,
               "circle-stroke-color": "#ffffff",
             },
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 1. NASA FIRMS Active Wildfires GeoJSON (proxied and filtered)
+      if (!map.getSource("overlay-fires")) {
+        map.addSource("overlay-fires", {
+          type: "geojson",
+          data: "/api/proxy/wildfires"
+        });
+      }
+      if (!map.getLayer("overlay-fires-point")) {
+        map.addLayer(
+          {
+            id: "overlay-fires-point",
+            type: "circle",
+            source: "overlay-fires",
+            layout: {
+              visibility: overlaysRef.current["fires"] ? "visible" : "none",
+            },
+            paint: {
+              "circle-color": [
+                "interpolate",
+                ["linear"],
+                ["get", "frp"],
+                10, "#fde047",   // Yellow for low intensity
+                50, "#f97316",   // Orange for nominal intensity
+                150, "#ef4444",  // Red for high intensity
+                500, "#7f1d1d"   // Dark Crimson for extreme intensity
+              ],
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                1, [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "frp"],
+                  10, 2,
+                  500, 4
+                ],
+                5, [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "frp"],
+                  10, 4,
+                  500, 8
+                ],
+                9, [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "frp"],
+                  10, 8,
+                  500, 16
+                ]
+              ],
+              "circle-opacity": 0.85,
+              "circle-stroke-width": 0.5,
+              "circle-stroke-color": "#ffffff"
+            },
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 2. Safecast Radiation Map (proxied to bypass CORS)
+      if (!map.getSource("overlay-radiation")) {
+        map.addSource("overlay-radiation", {
+          type: "raster",
+          tiles: [
+            "/api/proxy/safecast/{z}/{x}/{y}.png"
+          ],
+          tileSize: 512
+        });
+      }
+      if (!map.getLayer("overlay-radiation-raster")) {
+        map.addLayer(
+          {
+            id: "overlay-radiation-raster",
+            type: "raster",
+            source: "overlay-radiation",
+            layout: {
+              visibility: overlaysRef.current["radiation"] ? "visible" : "none",
+            },
+            paint: { "raster-opacity": 0.6 },
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 3. WAQI Air Quality Index Map
+      if (!map.getSource("overlay-aqi")) {
+        const token = process.env.NEXT_PUBLIC_WAQI_TOKEN || "demo";
+        map.addSource("overlay-aqi", {
+          type: "raster",
+          tiles: [
+            `https://tiles.waqi.info/tiles/usepa-aqi/{z}/{x}/{y}.png?token=${token}`
+          ],
+          tileSize: 256
+        });
+      }
+      if (!map.getLayer("overlay-aqi-raster")) {
+        map.addLayer(
+          {
+            id: "overlay-aqi-raster",
+            type: "raster",
+            source: "overlay-aqi",
+            layout: {
+              visibility: overlaysRef.current["aqi"] ? "visible" : "none",
+            },
+            paint: { "raster-opacity": 0.65 },
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 4. Live Flight Tracking Map (adsb.lol)
+      if (!map.getSource("overlay-flights")) {
+        map.addSource("overlay-flights", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: []
+          }
+        });
+      }
+      if (!map.getLayer("overlay-flights-point")) {
+        map.addLayer(
+          {
+            id: "overlay-flights-point",
+            type: "symbol",
+            source: "overlay-flights",
+            layout: {
+              visibility: overlaysRef.current["flights"] ? "visible" : "none",
+              "icon-image": "flight-plane-icon",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-rotate": ["get", "track"],
+              "icon-rotation-alignment": "map",
+              "text-field": ["get", "flight"],
+              "text-font": ["Noto Sans Regular"],
+              "text-size": 9,
+              "text-offset": [0, 1.2],
+              "text-anchor": "top",
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "#0f172a",
+              "text-halo-width": 1.5,
+            }
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 5. Maritime Tracking (Military CSGs & Tankers)
+      if (!map.getSource("overlay-ships")) {
+        map.addSource("overlay-ships", {
+          type: "geojson",
+          data: "/api/proxy/ships"
+        });
+      }
+      if (!map.getLayer("overlay-ships-point")) {
+        map.addLayer(
+          {
+            id: "overlay-ships-point",
+            type: "symbol",
+            source: "overlay-ships",
+            layout: {
+              visibility: overlaysRef.current["ships"] ? "visible" : "none",
+              "icon-image": "ship-icon",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "text-field": ["get", "name"],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": 11,
+              "text-offset": [0, 1.4],
+              "text-anchor": "top",
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "#090d16",
+              "text-halo-width": 2.0,
+            }
+          },
+          "clusters-circle",
+        );
+      }
+
+      // 6. Space Station Tracking (ISS)
+      if (!map.getSource("overlay-iss")) {
+        map.addSource("overlay-iss", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: []
+          }
+        });
+      }
+      if (!map.getLayer("overlay-iss-point")) {
+        map.addLayer(
+          {
+            id: "overlay-iss-point",
+            type: "symbol",
+            source: "overlay-iss",
+            layout: {
+              visibility: overlaysRef.current["iss"] ? "visible" : "none",
+              "icon-image": "iss-icon",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "text-field": [
+                "case",
+                ["has", "altitude"],
+                ["concat", ["get", "name"], "\nAlt: ", ["get", "altitude"], " • Vel: ", ["get", "velocity"]],
+                ["get", "name"]
+              ],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": 11,
+              "text-offset": [0, 1.6],
+              "text-anchor": "top",
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "#090d16",
+              "text-halo-width": 2.0,
+            }
           },
           "clusters-circle",
         );

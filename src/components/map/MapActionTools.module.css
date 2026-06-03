@@ -93,15 +93,15 @@
 .overlayMenu {
   position: absolute;
   right: 100px; /* Width of bottom row buttons (42*2 + 8) + gap */
-  width: 220px;
+  width: 275px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   animation: action-fade-in 0.15s ease;
   bottom: 0;
 }
@@ -119,11 +119,13 @@
 
 .menuHeader {
   font-size: 0.65rem;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 
 .overlayToggle {
@@ -131,33 +133,104 @@
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
+  padding: 2px 0;
 }
 
-.overlayToggle span {
-  font-size: 0.8125rem;
-  color: var(--text-primary);
+.toggleLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--border);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggleIcon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Custom premium colored icons */
+.eqIcon {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+.weatherIcon {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+}
+.fireIcon {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+.planeIcon {
+  color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.12);
+}
+.aqiIcon {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+.radIcon {
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.12);
+}
+.disasterIcon {
+  color: #ec4899;
+  background: rgba(236, 72, 153, 0.12);
+}
+.shipIcon {
+  color: #06b6d4;
+  background: rgba(6, 182, 212, 0.12);
+}
+.issIcon {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.overlayToggle:hover .iconWrapper {
+  transform: scale(1.05);
 }
 
 .overlayLabelInfo {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+}
+
+.overlayName {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .overlayTimeframe {
   font-size: 0.625rem !important;
   color: var(--text-muted) !important;
   font-weight: 500;
+  line-height: 1;
 }
 
 .toggleSwitch {
-  width: 38px;
-  height: 20px;
+  width: 36px;
+  height: 18px;
   border-radius: var(--radius-sm);
   background: var(--border);
   position: relative;
   cursor: pointer;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .toggleSwitchOn {
@@ -165,8 +238,8 @@
 }
 
 .toggleKnob {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 2px;
   background: var(--surface);
   position: absolute;

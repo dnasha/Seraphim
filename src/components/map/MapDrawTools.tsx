@@ -862,7 +862,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         const snapshot = drawRef.current.getSnapshot();
 
         for (const feature of snapshot) {
-          const type = feature.geometry.type;
+          const type = feature.geometry.type as string;
           let hit = false;
 
           if (type === 'Polygon' || type === 'MultiPolygon') {
@@ -875,8 +875,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
             try {
               const zoom = map.getZoom();
               const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
-              const toleranceMeters = Math.max(5, (feature.properties?.size || 4) * metersPerPixel * 2.5);
-              const distance = turf.pointToLineDistance(turfPoint, feature as GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>, { units: 'meters' });
+              const toleranceMeters = Math.max(5, ((feature.properties?.size as number) || 4) * metersPerPixel * 2.5);
+              const distance = turf.pointToLineDistance(turfPoint, feature as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
               hit = distance < toleranceMeters;
             } catch (err) {
               console.warn('Turf line check error:', err);
@@ -887,7 +887,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
               const distance = turf.distance(turfPoint, turf.point(geom.coordinates), { units: 'meters' });
               const zoom = map.getZoom();
               const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
-              const toleranceMeters = Math.max(10, (feature.properties?.size || 4) * 3 * metersPerPixel * 2);
+              const toleranceMeters = Math.max(10, ((feature.properties?.size as number) || 4) * 3 * metersPerPixel * 2);
               hit = distance < toleranceMeters;
             } catch (err) {
               console.warn('Turf point check error:', err);

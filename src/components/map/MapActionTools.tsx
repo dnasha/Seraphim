@@ -13,6 +13,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './MapActionTools.module.css';
+import { 
+    LuActivity, 
+    LuCloudRain, 
+    LuBiohazard, 
+    LuFlame, 
+    LuRadiation, 
+    LuWind, 
+    LuPlane,
+    LuShip,
+    LuRocket
+} from 'react-icons/lu';
 
 interface MapActionToolsProps {
     overlays: Record<string, boolean>;
@@ -87,30 +98,144 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
             {overlayMenuOpen && (
                 <div className={styles.overlayMenu}>
                     <div className={styles.menuHeader}>Live Overlays</div>
+                    
                     <label className={styles.overlayToggle}>
-                        <div className={styles.overlayLabelInfo}>
-                            <span>USGS Earthquakes</span>
-                            <span className={styles.overlayTimeframe}>Past 24 Hours</span>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.eqIcon}`}>
+                                <LuActivity className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>USGS Earthquakes</span>
+                                <span className={styles.overlayTimeframe}>Past 24 Hours</span>
+                            </div>
                         </div>
                         <div className={`${styles.toggleSwitch}${overlays['usgs'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('usgs', !overlays['usgs'])}>
                             <div className={styles.toggleKnob} />
                         </div>
                     </label>
+
                     <label className={styles.overlayToggle}>
-                        <div className={styles.overlayLabelInfo}>
-                            <span>NOAA Weather (Radar)</span>
-                            <span className={styles.overlayTimeframe}>Real-time (Live)</span>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.weatherIcon}`}>
+                                <LuCloudRain className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>NOAA Weather (Radar)</span>
+                                <span className={styles.overlayTimeframe}>Real-time (Live)</span>
+                            </div>
                         </div>
                         <div className={`${styles.toggleSwitch}${overlays['noaa'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('noaa', !overlays['noaa'])}>
                             <div className={styles.toggleKnob} />
                         </div>
                     </label>
+
                     <label className={styles.overlayToggle}>
-                        <div className={styles.overlayLabelInfo}>
-                            <span>NASA Events (Disasters)</span>
-                            <span className={styles.overlayTimeframe}>Past 30 Days</span>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.fireIcon}`}>
+                                <LuFlame className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Active Wildfires</span>
+                                <span className={styles.overlayTimeframe}>NASA Near Real-time</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['fires'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('fires', !overlays['fires'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.planeIcon}`}>
+                                <LuPlane className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Live Flights</span>
+                                <span className={styles.overlayTimeframe}>ADS-B Transponders</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['flights'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('flights', !overlays['flights'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.shipIcon}`}>
+                                <LuShip className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Maritime Tracking</span>
+                                <span className={styles.overlayTimeframe}>USNI & AIS Tankers</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['ships'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('ships', !overlays['ships'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.issIcon}`}>
+                                <LuRocket className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Space Station (ISS)</span>
+                                <span className={styles.overlayTimeframe}>Real-time Orbit</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['iss'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('iss', !overlays['iss'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.aqiIcon}`}>
+                                <LuWind className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Air Quality (AQI)</span>
+                                <span className={styles.overlayTimeframe}>Global Real-time</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['aqi'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('aqi', !overlays['aqi'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.radIcon}`}>
+                                <LuRadiation className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>Safecast Radiation</span>
+                                <span className={styles.overlayTimeframe}>Citizen Science Map</span>
+                            </div>
+                        </div>
+                        <div className={`${styles.toggleSwitch}${overlays['radiation'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('radiation', !overlays['radiation'])}>
+                            <div className={styles.toggleKnob} />
+                        </div>
+                    </label>
+
+                    <label className={styles.overlayToggle}>
+                        <div className={styles.toggleLeft}>
+                            <div className={`${styles.iconWrapper} ${styles.disasterIcon}`}>
+                                <LuBiohazard className={styles.toggleIcon} />
+                            </div>
+                            <div className={styles.overlayLabelInfo}>
+                                <span className={styles.overlayName}>NASA Events (EONET)</span>
+                                <span className={styles.overlayTimeframe}>Past 30 Days</span>
+                            </div>
                         </div>
                         <div className={`${styles.toggleSwitch}${overlays['eonet'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('eonet', !overlays['eonet'])}>
