@@ -109,7 +109,7 @@ export function HomeContent() {
         customEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
+        limit: isGuestUser ? 10 : undefined,
         enabled: !isAuthResolving
     });
 
@@ -295,9 +295,10 @@ export function HomeContent() {
     /** Gate guests to a maximum of 10 events across all views */
     const items = useMemo(() => {
         if (isGuestUser) return filteredNews.slice(0, 10);
-        if (userTier === 'free') return filteredNews.slice(0, 100);
+        // Deactivated for demo mode: free users get full feed access
+        // if (userTier === 'free') return filteredNews.slice(0, 100);
         return filteredNews;
-    }, [filteredNews, isGuestUser, userTier]);
+    }, [filteredNews, isGuestUser]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
