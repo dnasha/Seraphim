@@ -17,6 +17,8 @@ function LegalBackButtonContent() {
       router.push('/help');
     } else if (from === 'account') {
       router.push('/account');
+    } else if (from === 'guest') {
+      router.push('/');
     } else {
       if (typeof window !== 'undefined' && window.history.length > 2) {
         router.back();
@@ -27,7 +29,7 @@ function LegalBackButtonContent() {
   };
 
   const getLabel = () => {
-    if (from === 'auth') return 'Back to Map';
+    if (from === 'auth' || from === 'guest') return 'Back to Map';
     if (from === 'help') return 'Back to Help';
     if (from === 'account') return 'Back to Account';
     return 'Back';

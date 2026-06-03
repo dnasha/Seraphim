@@ -342,25 +342,34 @@ export default function AccountPage() {
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Update Email</h2>
-          <form onSubmit={handleUpdateEmail} className={styles.formGroup}>
-            <div className={styles.field}>
-              <label className={styles.label}>New Email Address</label>
-              <input 
-                type="email" 
-                className={styles.input} 
-                value={newEmail} 
-                onChange={(e) => setNewEmail(e.target.value)} 
-                required 
-                placeholder="Enter new email"
-                disabled={isUpdatingEmail}
-              />
-            </div>
-            {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`}>{emailMsg.text}</div>}
-            <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail}>
-              {isUpdatingEmail ? <span className={styles.spinner} /> : 'Update Email'}
-            </button>
-          </form>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Update Email</h2>
+            {provider !== 'email' && (
+              <p className={styles.helperText}>
+                Your email address is managed by your sign-in provider ({provider}) and cannot be changed here.
+              </p>
+            )}
+          </div>
+          {provider === 'email' && (
+            <form onSubmit={handleUpdateEmail} className={styles.formGroup}>
+              <div className={styles.field}>
+                <label className={styles.label}>New Email Address</label>
+                <input 
+                  type="email" 
+                  className={styles.input} 
+                  value={newEmail} 
+                  onChange={(e) => setNewEmail(e.target.value)} 
+                  required 
+                  placeholder="Enter new email"
+                  disabled={isUpdatingEmail}
+                />
+              </div>
+              {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`}>{emailMsg.text}</div>}
+              <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail}>
+                {isUpdatingEmail ? <span className={styles.spinner} /> : 'Update Email'}
+              </button>
+            </form>
+          )}
         </section>
 
         <section className={styles.section}>

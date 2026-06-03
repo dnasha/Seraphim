@@ -145,6 +145,8 @@ export async function GET(request: Request) {
     }
   }
 
+  const forceRaw = searchParams.get("force_raw") === "true";
+
   /**
    * Clustering Strategy
    * Zoom < 5: Server-side clustering via PostGIS RPC to handle massive 
@@ -152,7 +154,7 @@ export async function GET(request: Request) {
    * Zoom >= 5: Raw event streaming to allow client-side Supercluster 
    * to provide smooth, organic transitions.
    */
-  const useServerClustering = !unmappedOnly && (zoom === null || zoom < 5);
+  const useServerClustering = !unmappedOnly && !forceRaw && (zoom === null || zoom < 5);
 
   const bboxKeyPart = ignoreBBox
     ? "global"

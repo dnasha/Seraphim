@@ -745,14 +745,14 @@ Includes card expansion details and responsive mobile layouts.
 
 /* Guest CTA Card */
 .guestCtaCard {
-  margin: 12px;
-  padding: 16px;
+  margin: 10px 12px;
+  padding: 12px;
   border: 1px solid var(--accent);
   background: rgba(99, 102, 241, 0.04);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   direction: ltr;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
 }
@@ -768,7 +768,7 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .guestCtaContent h3 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-family: var(--font-ui);
   font-size: 0.875rem;
   font-weight: 700;
@@ -1253,6 +1253,30 @@ Includes card expansion details and responsive mobile layouts.
 .filterBarWrapper {
   min-height: 0;
   min-width: 0;
+}
+
+.guestCtaFooter {
+  font-family: var(--font-ui);
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.guestLink {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.guestLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 

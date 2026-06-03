@@ -22,13 +22,14 @@ import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import TierBadge from "@/components/ui/TierBadge";
 import UserButton from "@/components/auth/UserButton";
-import { canonicalEventCount, latestReportTimestamp } from "@/lib/utils/ranking";
+import {
+  canonicalEventCount,
+  latestReportTimestamp,
+} from "@/lib/utils/ranking";
 import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./EventSidebar.module.css";
-
-
 
 interface EventSidebarProps {
   items: NewsItem[];
@@ -80,7 +81,7 @@ export default function EventSidebar({
   isCapped = false,
   appliedLimit,
   disabled = false,
-  userTier = 'guest',
+  userTier = "guest",
   tierLoading = false,
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -363,7 +364,7 @@ export default function EventSidebar({
 
         <button
           className={`${styles.filterToggleBtn} ${isFiltersExpanded ? styles.filterToggleBtnActive : ""} ${disabled ? styles.filterToggleBtnDisabled : ""}`}
-          onClick={() => !disabled && setIsFiltersExpanded(prev => !prev)}
+          onClick={() => !disabled && setIsFiltersExpanded((prev) => !prev)}
           aria-pressed={isFiltersExpanded}
           aria-label="Toggle filters"
           aria-disabled={disabled}
@@ -432,22 +433,54 @@ export default function EventSidebar({
             itemContent={(index, item) => renderItem(index, item)}
             overscan={200}
             components={{
-              Header: () => disabled ? (
-                <div className={styles.guestCtaCard}>
-                  <div className={styles.guestCtaContent}>
-                    <h3>
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className={styles.guestCtaIcon} xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-                      </svg>
-                      GUEST MODE ACTIVE
-                    </h3>
-                    <p>Create a free account to access 1000+ real-time events, live filters, customization, and annotation tools.</p>
+              Header: () =>
+                disabled ? (
+                  <div className={styles.guestCtaCard}>
+                    <div className={styles.guestCtaContent}>
+                      <h3>
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="18"
+                          height="18"
+                          fill="currentColor"
+                          className={styles.guestCtaIcon}
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+                        </svg>
+                        GUEST MODE ACTIVE
+                      </h3>
+                      <p>
+                        You are currently limited to the top 10 events in view.
+                        Create a <strong>free</strong> account to access 1000+ real-time events,
+                        live filters, customization, and annotation tools.
+                      </p>
+                    </div>
+                    <button
+                      className={styles.guestCtaButton}
+                      onClick={() => setShowAuthModal(true)}
+                    >
+                      SIGN IN TO UNLOCK
+                    </button>
+                    <div className={styles.guestCtaFooter}>
+                      By using Seraphim you agree to our{" "}
+                      <Link
+                        href="/terms?from=guest"
+                        className={styles.guestLink}
+                      >
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link
+                        href="/privacy?from=guest"
+                        className={styles.guestLink}
+                      >
+                        Privacy Policy
+                      </Link>
+                      .
+                    </div>
                   </div>
-                  <button className={styles.guestCtaButton} onClick={() => setShowAuthModal(true)}>
-                    SIGN IN TO UNLOCK
-                  </button>
-                </div>
-              ) : null
+                ) : null,
             }}
           />
         )}

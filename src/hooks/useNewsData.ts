@@ -234,7 +234,7 @@ export function useNewsData({
             params.append('minLng', String(bbox.minLng));
             params.append('maxLng', String(bbox.maxLng));
             if (bbox.zoom !== undefined) params.append('zoom', String(bbox.zoom));
-            if (bbox.forceRaw) params.append('force_raw', 'true');
+            if (bbox.forceRaw || requestedLimit !== undefined) params.append('force_raw', 'true');
             if (bbox.since) params.append('since', bbox.since);
             if (bbox.until) params.append('until', bbox.until);
             if (bbox.query) params.append('query', bbox.query);
@@ -245,6 +245,7 @@ export function useNewsData({
             if (since) params.append('since', since);
             if (until) params.append('until', until);
             if (searchQuery) params.append('query', searchQuery);
+            if (requestedLimit !== undefined) params.append('force_raw', 'true');
         }
 
         if (requestedLimit) params.append('limit', String(requestedLimit));
@@ -384,11 +385,13 @@ export function useNewsData({
             if (enrichedBBox.query) params.append('query', enrichedBBox.query);
             if (enrichedBBox.since) params.append('since', enrichedBBox.since);
             if (enrichedBBox.until) params.append('until', enrichedBBox.until);
+            if (enrichedBBox.forceRaw || limit !== undefined) params.append('force_raw', 'true');
         } else {
             params.set('scope', 'global');
             if (since) params.append('since', since);
             if (until) params.append('until', until);
             if (searchQuery) params.append('query', searchQuery);
+            if (limit !== undefined) params.append('force_raw', 'true');
         }
         const requestKey = params.toString();
         const now = Date.now();
