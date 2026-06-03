@@ -86,6 +86,7 @@ export default function EventSidebar({
 }: EventSidebarProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const hasInitialScrollRef = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const { setShowAuthModal } = useAuth();
@@ -116,13 +117,31 @@ export default function EventSidebar({
   /* Reset scroll and expansion when filters change explicitly */
   useEffect(() => {
     if (virtuosoRef.current) {
-      virtuosoRef.current.scrollToIndex({ index: 0 });
+      if (disabled) {
+        virtuosoRef.current.scrollTo({ top: 0 });
+      } else {
+        virtuosoRef.current.scrollToIndex({ index: 0 });
+      }
     }
     // Use requestAnimationFrame to avoid synchronous cascading renders
     requestAnimationFrame(() => {
       setExpandedId(null);
     });
-  }, [filterVersion]);
+  }, [filterVersion, disabled]);
+
+  /* Scroll to top once on initial load */
+  useEffect(() => {
+    if (!isLoading && items.length > 0 && !hasInitialScrollRef.current) {
+      hasInitialScrollRef.current = true;
+      if (virtuosoRef.current) {
+        if (disabled) {
+          virtuosoRef.current.scrollTo({ top: 0 });
+        } else {
+          virtuosoRef.current.scrollToIndex({ index: 0 });
+        }
+      }
+    }
+  }, [isLoading, items.length, disabled]);
 
   /* Scroll to selected item */
   useEffect(() => {
