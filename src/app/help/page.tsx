@@ -4,8 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LuArrowLeft, LuHeart, LuCoffee, LuMail } from 'react-icons/lu';
-import { FaGithub, FaYoutube, FaDiscord, FaInstagram } from 'react-icons/fa';
-import { FaXTwitter, FaTiktok } from 'react-icons/fa6';
+import { FaGithub, FaYoutube, FaDiscord } from 'react-icons/fa';
+import { FaXTwitter } from 'react-icons/fa6';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './page.module.css';
 
@@ -125,24 +125,36 @@ export default function HelpPage() {
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Community & Socials</h2>
             <p className={styles.text}>
-              Join our community or follow us for the latest updates (Links coming soon!):
+              Join our community or follow us for the latest updates:
             </p>
             <div className={styles.socialGrid}>
-              <button className={styles.socialBtn} title="YouTube (Coming Soon)">
-                <FaYoutube size={20} />
-              </button>
-              <button className={styles.socialBtn} title="X / Twitter (Coming Soon)">
+              <a
+                href="https://x.com/seraphimosint"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.socialBtn}
+                title="Follow us on X"
+              >
                 <FaXTwitter size={20} />
-              </button>
-              <button className={styles.socialBtn} title="Discord (Coming Soon)">
+              </a>
+              <a
+                href="https://www.youtube.com/@seraphimosint"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.socialBtn}
+                title="Subscribe on YouTube"
+              >
+                <FaYoutube size={20} />
+              </a>
+              <a
+                href="https://discord.gg/UY93kJ6MJ"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.socialBtn}
+                title="Join our Discord"
+              >
                 <FaDiscord size={20} />
-              </button>
-              <button className={styles.socialBtn} title="Instagram (Coming Soon)">
-                <FaInstagram size={20} />
-              </button>
-              <button className={styles.socialBtn} title="TikTok (Coming Soon)">
-                <FaTiktok size={20} />
-              </button>
+              </a>
             </div>
           </section>
         </main>

@@ -53,6 +53,7 @@ export default function AccountPage() {
 
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState('');
   
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
@@ -108,12 +109,19 @@ export default function AccountPage() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPassMsg(null);
+
+    if (newPassword !== confirmPassword) {
+      setPassMsg({ type: 'error', text: 'Passwords do not match.' });
+      return;
+    }
+
     setIsUpdatingPass(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       setPassMsg({ type: 'success', text: 'Password updated successfully.' });
       setNewPassword('');
+      setConfirmPassword('');
     } catch (err: unknown) {
       setPassMsg({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update password.' });
     } finally {
@@ -336,16 +344,18 @@ export default function AccountPage() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Update Email</h2>
           <form onSubmit={handleUpdateEmail} className={styles.formGroup}>
-            <label className={styles.label}>New Email Address</label>
-            <input 
-              type="email" 
-              className={styles.input} 
-              value={newEmail} 
-              onChange={(e) => setNewEmail(e.target.value)} 
-              required 
-              placeholder="Enter new email"
-              disabled={isUpdatingEmail}
-            />
+            <div className={styles.field}>
+              <label className={styles.label}>New Email Address</label>
+              <input 
+                type="email" 
+                className={styles.input} 
+                value={newEmail} 
+                onChange={(e) => setNewEmail(e.target.value)} 
+                required 
+                placeholder="Enter new email"
+                disabled={isUpdatingEmail}
+              />
+            </div>
             {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`}>{emailMsg.text}</div>}
             <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail}>
               {isUpdatingEmail ? <span className={styles.spinner} /> : 'Update Email'}
@@ -354,21 +364,47 @@ export default function AccountPage() {
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Update Password</h2>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Update Password</h2>
+            {provider !== 'email' && (
+              <p className={styles.helperText}>
+                Note: Since you signed in via {provider}, setting a password will allow you to log in with your email and password in addition to your social account.
+              </p>
+            )}
+          </div>
           <form onSubmit={handleUpdatePassword} className={styles.formGroup}>
-            <label className={styles.label}>New Password</label>
-            <input 
-              type="password" 
-              className={styles.input} 
-              value={newPassword} 
-              onChange={(e) => setNewPassword(e.target.value)} 
-              required 
-              minLength={6}
-              placeholder="Enter new password"
-              disabled={isUpdatingPass}
-            />
+            <div className={styles.field}>
+              <label className={styles.label}>New Password</label>
+              <input 
+                type="password" 
+                className={styles.input} 
+                value={newPassword} 
+                onChange={(e) => setNewPassword(e.target.value)} 
+                required 
+                minLength={6}
+                placeholder="Enter new password"
+                disabled={isUpdatingPass}
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Confirm New Password</label>
+              <input 
+                type="password" 
+                className={styles.input} 
+                value={confirmPassword} 
+                onChange={(e) => setConfirmPassword(e.target.value)} 
+                required 
+                minLength={6}
+                placeholder="Confirm new password"
+                disabled={isUpdatingPass}
+              />
+            </div>
             {passMsg && <div className={`${styles.message} ${styles[passMsg.type]}`}>{passMsg.text}</div>}
-            <button type="submit" className={styles.button} disabled={isUpdatingPass || !newPassword}>
+            <button 
+              type="submit" 
+              className={styles.button} 
+              disabled={isUpdatingPass || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+            >
               {isUpdatingPass ? <span className={styles.spinner} /> : 'Update Password'}
             </button>
           </form>
@@ -385,17 +421,19 @@ export default function AccountPage() {
             </p>
           </div>
           <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
-            <label className={styles.label}>Type &quot;FAREWELL&quot; to confirm</label>
-            <input 
-              type="text" 
-              className={styles.input} 
-              value={deleteConfirm} 
-              onChange={(e) => setDeleteConfirm(e.target.value)} 
-              required 
-              placeholder="FAREWELL"
-              pattern="FAREWELL"
-              disabled={isDeleting}
-            />
+            <div className={styles.field}>
+              <label className={styles.label}>Type &quot;FAREWELL&quot; to confirm</label>
+              <input 
+                type="text" 
+                className={styles.input} 
+                value={deleteConfirm} 
+                onChange={(e) => setDeleteConfirm(e.target.value)} 
+                required 
+                placeholder="FAREWELL"
+                pattern="FAREWELL"
+                disabled={isDeleting}
+              />
+            </div>
             {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`}>{deleteMsg.text}</div>}
             <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>
               {isDeleting ? <span className={styles.spinner} /> : 'Delete Account'}

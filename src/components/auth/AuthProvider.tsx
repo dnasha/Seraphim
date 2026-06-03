@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRef.current = user;
     }, [user]);
 
-    const fetchUserTier = useCallback(async (userId: string | undefined, force = false) => {
+    const fetchUserTier = useCallback(async (userId: string | undefined, force = false, sessionPassed?: Session | null) => {
         if (!userId) {
             setUserTier('guest');
             setSubscriptionStatus(null);
@@ -108,7 +108,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             // Ensure the session is loaded and refreshed before making the database query.
             // This prevents race conditions during tab focus or mount where queries are sent with expired tokens.
-            const { data: { session } } = await supabase.auth.getSession();
+            let session = sessionPassed;
+            if (session === undefined) {
+                const { data: { session: activeSession } } = await supabase.auth.getSession();
+                session = activeSession;
+            }
             if (!session || session.user.id !== userId) {
                 log('[AuthProvider] No active session matching userId. Skipping database query.');
                 setUserTier('guest');
@@ -319,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         } catch (cacheErr) {
                             console.warn('[AuthProvider] Failed to save user session to cache:', cacheErr);
                         }
-                        await fetchUserTier(verifiedUser.id, true);
+                        await fetchUserTier(verifiedUser.id, true, finalSession);
                     } else {
                         log('[AuthProvider] No verified user, setting guest tier');
                         setUserTier('guest');
@@ -358,47 +362,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // Defer registration of auth state change listener until getSession has resolved
                     log('[AuthProvider] Registering post-initialization onAuthStateChange listener...');
                     const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
-                        async (_event, newSession) => {
-                            if (isUnmounted) return;
-                            setSession(newSession);
-                            setUser(newSession?.user ?? null);
+                        (_event, newSession) => {
+                            // Defer callback processing to avoid blocking internal Supabase client locks
+                            setTimeout(async () => {
+                                if (isUnmounted) return;
+                                setSession(newSession);
+                                setUser(newSession?.user ?? null);
 
-                            // If user signs in, clear guest mode and fetch profile
-                            if (newSession?.user) {
-                                setIsGuest(false);
-                                localStorage.removeItem(GUEST_STORAGE_KEY);
-                                setShowAuthModal(false);
-                                try {
-                                    localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
-                                    localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
-                                } catch (cacheErr) {
-                                    console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
-                                }
-                                
-                                // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
-                                // This prevents redundant queued queries during cold starts.
-                                if (_event !== 'INITIAL_SESSION') {
-                                    await fetchUserTier(newSession.user.id, true);
-                                }
-                            } else if (_event !== 'INITIAL_SESSION') {
-                                setUserTier('guest');
-                                setSubscriptionStatus(null);
-                                setBillingInterval(null);
-                                setCurrentPeriodEnd(null);
-                                setTrialEndsAt(null);
-                                setCancelAtPeriodEnd(false);
-                                setTierLoading(false);
+                                // If user signs in, clear guest mode and fetch profile
+                                if (newSession?.user) {
+                                    setIsGuest(false);
+                                    localStorage.removeItem(GUEST_STORAGE_KEY);
+                                    setShowAuthModal(false);
+                                    try {
+                                        localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
+                                        localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
+                                    } catch (cacheErr) {
+                                        console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
+                                    }
+                                    
+                                    // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
+                                    // This prevents redundant queued queries during cold starts.
+                                    if (_event !== 'INITIAL_SESSION') {
+                                        await fetchUserTier(newSession.user.id, true, newSession);
+                                    }
+                                } else if (_event !== 'INITIAL_SESSION') {
+                                    setUserTier('guest');
+                                    setSubscriptionStatus(null);
+                                    setBillingInterval(null);
+                                    setCurrentPeriodEnd(null);
+                                    setTrialEndsAt(null);
+                                    setCancelAtPeriodEnd(false);
+                                    setTierLoading(false);
 
-                                // Clear cache
-                                localStorage.removeItem('seraphim_cached_user');
-                                localStorage.removeItem('seraphim_cached_session');
-                                localStorage.removeItem('seraphim_cached_tier');
-                                localStorage.removeItem('seraphim_cached_sub_status');
-                                localStorage.removeItem('seraphim_cached_billing_interval');
-                                localStorage.removeItem('seraphim_cached_period_end');
-                                localStorage.removeItem('seraphim_cached_trial_ends');
-                                localStorage.removeItem('seraphim_cached_cancel_at_end');
-                            }
+                                    // Clear cache
+                                    localStorage.removeItem('seraphim_cached_user');
+                                    localStorage.removeItem('seraphim_cached_session');
+                                    localStorage.removeItem('seraphim_cached_tier');
+                                    localStorage.removeItem('seraphim_cached_sub_status');
+                                    localStorage.removeItem('seraphim_cached_billing_interval');
+                                    localStorage.removeItem('seraphim_cached_period_end');
+                                    localStorage.removeItem('seraphim_cached_trial_ends');
+                                    localStorage.removeItem('seraphim_cached_cancel_at_end');
+                                }
+                            }, 0);
                         }
                     );
                     activeSubscription = sub;
