@@ -366,3 +366,60 @@
   color: #a855f7;
   text-decoration: underline;
 }
+
+.userIdRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  background: var(--surface-alt);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.userIdText {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.copyBtn:hover {
+  color: var(--text-primary);
+  background: var(--surface);
+}
+
+.copiedState {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.copiedIcon {
+  color: var(--green);
+}
+
+.copiedTooltip {
+  font-size: 0.6875rem;
+  color: var(--green);
+  font-weight: 700;
+}

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuArrowLeft, LuTriangleAlert } from 'react-icons/lu';
+import { LuArrowLeft, LuTriangleAlert, LuCopy, LuCheck } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import TierBadge from '@/components/ui/TierBadge';
@@ -59,6 +59,18 @@ export default function AccountPage() {
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyUserId = async () => {
+    if (!user?.id) return;
+    try {
+      await navigator.clipboard.writeText(user.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy user ID:', err);
+    }
+  };
 
   const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd } = useUserTier();
 
@@ -197,6 +209,24 @@ export default function AccountPage() {
               <div className={styles.profileProvider}>
                 <ProviderIcon provider={provider} />
                 <span>Signed in via {provider}</span>
+              </div>
+              <div className={styles.userIdRow}>
+                <span className={styles.userIdText}>User ID: {user.id}</span>
+                <button
+                  onClick={handleCopyUserId}
+                  className={styles.copyBtn}
+                  title="Copy User ID"
+                  aria-label="Copy User ID"
+                >
+                  {copied ? (
+                    <span className={styles.copiedState}>
+                      <LuCheck size={12} className={styles.copiedIcon} />
+                      <span className={styles.copiedTooltip}>Copied!</span>
+                    </span>
+                  ) : (
+                    <LuCopy size={12} />
+                  )}
+                </button>
               </div>
             </div>
           </div>

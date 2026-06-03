@@ -105,6 +105,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setTierLoading(true);
         try {
             log('[AuthProvider] Fetching user tier for', userId);
+            
+            // Ensure the session is loaded and refreshed before making the database query.
+            // This prevents race conditions during tab focus or mount where queries are sent with expired tokens.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session || session.user.id !== userId) {
+                log('[AuthProvider] No active session matching userId. Skipping database query.');
+                setUserTier('guest');
+                setTierLoading(false);
+                return;
+            }
+
             // Race the database profile query against a 10-second timeout to prevent UI hangs on cold starts
             const queryPromise = supabase
                 .from('user_profiles')
