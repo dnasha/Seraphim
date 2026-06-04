@@ -311,7 +311,7 @@ export function useNewsData({
             if (rawBBox) {
                 pendingBBoxRef.current = rawBBox;
             }
-            console.log('[useNewsData] coordinateLoad called but not enabled.');
+            log('[useNewsData] coordinateLoad called but not enabled.');
             return;
         }
 
@@ -328,11 +328,11 @@ export function useNewsData({
         }
 
         const bbox = bboxSource ? snapBBox(bboxSource) : (prev?.bbox ?? null);
-        console.log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
+        log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
         const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
         if (!bbox && !unmappedOnly && !searchQuery && !limit && !isUpgradingFromLimitedFetch) {
-            console.log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
+            log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
         }
@@ -352,11 +352,11 @@ export function useNewsData({
             searchQuery === prev.query &&
             timeRange === prev.timeRange &&
             limit === prev.limit) {
-            console.log('[useNewsData] Returning early because all parameters match previous fetch params');
+            log('[useNewsData] Returning early because all parameters match previous fetch params');
             return;
         }
 
-        console.log(`[useNewsData] Proceeding to fetch. Prev limit was: ${prev?.limit}, New limit: ${limit}`);
+        log(`[useNewsData] Proceeding to fetch. Prev limit was: ${prev?.limit}, New limit: ${limit}`);
 
         const since = computeSince(timeRange, customStartDate);
         const until = computeUntil(timeRange, customEndDate);
@@ -397,7 +397,7 @@ export function useNewsData({
         const now = Date.now();
         const cached = responseCache.get(requestKey);
         const requestVersion = ++requestVersionRef.current;
-        console.log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
+        log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
 
         /**
          * Cache Hit Optimization: If fresh data exists for this specific snapped 
@@ -426,7 +426,7 @@ export function useNewsData({
         }
 
         if (abortControllerRef.current) {
-            console.log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
+            log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
             abortControllerRef.current.abort();
         }
 

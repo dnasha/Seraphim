@@ -57,6 +57,38 @@ type ExtendedMap = maplibregl.Map & {
   setFog?: (fog: unknown) => void;
 };
 
+const devDebug = (message: unknown, ...optionalParams: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug(message, ...optionalParams);
+  }
+};
+
+const devWarn = (message: unknown, ...optionalParams: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(message, ...optionalParams);
+  }
+};
+
+const MAP_RECOVERY_LIMIT = 2;
+const MAP_RECOVERY_WINDOW_MS = 60_000;
+
+function isRecoverableMapResourceError(errorMsg: string) {
+  const msg = errorMsg.toLowerCase();
+  return (
+    msg.includes("eonet.gsfc.nasa.gov") ||
+    msg.includes("earthquake.usgs.gov") ||
+    msg.includes("mesonet.agron.iastate.edu") ||
+    msg.includes("tiles.waqi.info") ||
+    msg.includes("/api/proxy/") ||
+    msg.includes("glyph") ||
+    msg.includes("font") ||
+    msg.includes("sprite") ||
+    msg.includes("tile") ||
+    msg.includes("source") ||
+    msg.includes("image")
+  );
+}
+
 export default function NewsMap({
   items,
   selectedItemId,
@@ -116,6 +148,7 @@ export default function NewsMap({
   const [isGlobe, setIsGlobe] = useState(false);
   const isGlobeRef = useRef(isGlobe);
   const currentStyleRef = useRef(currentStyle);
+  const mapReadyRef = useRef(mapReady);
 
   useEffect(() => {
     isGlobeRef.current = isGlobe;
@@ -124,6 +157,10 @@ export default function NewsMap({
   useEffect(() => {
     currentStyleRef.current = currentStyle;
   }, [currentStyle]);
+
+  useEffect(() => {
+    mapReadyRef.current = mapReady;
+  }, [mapReady]);
 
 
   const settingsPanelRef = useRef<HTMLDivElement>(null);
@@ -135,6 +172,10 @@ export default function NewsMap({
   const overlaysRef = useRef(overlays);
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contextRecoveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const recoveryAttemptsRef = useRef<number[]>([]);
 
   // Cache for GeoJSON data to ensure persistence across style reloads or container resizes.
   const pendingGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -288,6 +329,26 @@ export default function NewsMap({
     containerRef,
   });
 
+  const scheduleMapRecovery = useCallback((reason: string) => {
+    const now = Date.now();
+    recoveryAttemptsRef.current = recoveryAttemptsRef.current.filter(
+      (timestamp) => now - timestamp < MAP_RECOVERY_WINDOW_MS,
+    );
+
+    if (recoveryAttemptsRef.current.length >= MAP_RECOVERY_LIMIT) {
+      setMapError(
+        "The map engine is having trouble recovering. You can keep using the news feed while the map is unavailable.",
+      );
+      devWarn(`Map recovery limit reached after ${reason}.`);
+      return;
+    }
+
+    recoveryAttemptsRef.current.push(now);
+    setMapError(null);
+    setMapReady(false);
+    setRetryCount((prev) => prev + 1);
+  }, []);
+
   // Core map initialization and event wiring.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -357,30 +418,37 @@ export default function NewsMap({
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
-      setTimeout(() => {
-        setMapError(
-          "Could not initialize map engine. Your browser may not support WebGL.",
-        );
-      }, 0);
+      setTimeout(() => scheduleMapRecovery("initialization failure"), 0);
       return;
     }
 
-    map.on("webglcontextlost", () => {
-      console.warn("WebGL context lost!");
-      try {
-        const reloadKey = "seraphim_map_reload_count";
-        const lastReload = sessionStorage.getItem(reloadKey);
-        const now = Date.now();
+    map.on("webglcontextlost", (e) => {
+      e.originalEvent.preventDefault();
+      devWarn("WebGL context lost; waiting for browser restoration.");
+      setMapReady(false);
 
-        if (lastReload && now - parseInt(lastReload, 10) < 10000) {
-          console.error("WebGL context lost repeatedly. Showing error.");
-          setMapError("WebGL context was lost and could not be recovered automatically. Please reload the page manually.");
-        } else {
-          sessionStorage.setItem(reloadKey, now.toString());
-          window.location.reload();
-        }
-      } catch {
-        window.location.reload();
+      if (contextRecoveryTimeoutRef.current) {
+        clearTimeout(contextRecoveryTimeoutRef.current);
+      }
+      contextRecoveryTimeoutRef.current = setTimeout(() => {
+        scheduleMapRecovery("WebGL context loss");
+      }, 3000);
+    });
+
+    map.on("webglcontextrestored", () => {
+      devWarn("WebGL context restored.");
+      if (contextRecoveryTimeoutRef.current) {
+        clearTimeout(contextRecoveryTimeoutRef.current);
+        contextRecoveryTimeoutRef.current = null;
+      }
+
+      setMapError(null);
+      map.resize();
+
+      if (map.isStyleLoaded()) {
+        addSourcesAndLayers(map)
+          .then(() => setMapReady(true))
+          .catch(() => scheduleMapRecovery("post-restore layer rebuild"));
       }
     });
 
@@ -399,25 +467,16 @@ export default function NewsMap({
       const errorMsg =
         e.error?.message || (typeof e.error === "string" ? e.error : "");
 
-      // Filter non-critical errors from optional third-party overlays to prevent UI disruption.
-      const isOverlayError =
-        errorMsg.includes("eonet.gsfc.nasa.gov") ||
-        errorMsg.includes("earthquake.usgs.gov") ||
-        errorMsg.includes("mesonet.agron.iastate.edu");
+      if (isRecoverableMapResourceError(errorMsg)) {
+        devDebug("Non-critical map resource error suppressed:", errorMsg);
+        return;
+      }
 
-      const isGlyphError =
-        errorMsg.includes("glyphs") ||
-        errorMsg.includes("fonts") ||
-        errorMsg.includes("Open Sans") ||
-        errorMsg.includes("Arial Unicode");
-
-      if (e.error && !mapReady && !isOverlayError && !isGlyphError) {
+      if (e.error && !mapReadyRef.current) {
         console.error("MapLibre error event:", e.error);
-        setMapError(
-          "Failed to load map resources. Please check your connection.",
-        );
-      } else if (isOverlayError || isGlyphError) {
-        console.debug("Non-critical resource error suppressed:", errorMsg);
+        scheduleMapRecovery("MapLibre error event");
+      } else {
+        devDebug("MapLibre runtime error suppressed:", e.error);
       }
     });
 
@@ -567,13 +626,17 @@ export default function NewsMap({
     return () => {
       if (resizeEndTimeoutRef.current)
         clearTimeout(resizeEndTimeoutRef.current);
+      if (contextRecoveryTimeoutRef.current) {
+        clearTimeout(contextRecoveryTimeoutRef.current);
+        contextRecoveryTimeoutRef.current = null;
+      }
       resizeObserver.disconnect();
       container?.removeEventListener("click", handleAttributionClick);
       if (map) {
         try {
           map.remove();
         } catch (err) {
-          console.warn("Suppressing map removal error:", err);
+          devWarn("Suppressing map removal error:", err);
         }
       }
       mapRef.current = null;
@@ -789,7 +852,7 @@ export default function NewsMap({
           source.setData(geojson);
         }
       } catch (err) {
-        console.warn("Failed to fetch live flight data:", err);
+        devWarn("Failed to fetch live flight data:", err);
       }
     };
 
@@ -830,7 +893,7 @@ export default function NewsMap({
           source.setData(geojson);
         }
       } catch (err) {
-        console.warn("Failed to fetch live ISS position:", err);
+        devWarn("Failed to fetch live ISS position:", err);
       }
     };
 

@@ -1,13 +1,35 @@
 import type { NextConfig } from "next";
+import type { ManifestEntry } from "@serwist/build";
 import withSerwistInit from "@serwist/next";
 
 process.env.SERWIST_SUPPRESS_TURBOPACK_WARNING = "1";
+
+type SizedManifestEntry = ManifestEntry & { size: number };
+
+const excludeVolatileNextAssets = (entries: SizedManifestEntry[]) => ({
+  manifest: entries.filter((entry) => {
+    const url = entry.url;
+    return !(
+      url.includes("static/chunks/") ||
+      /static\/.+\/(?:_buildManifest|_ssgManifest)\.js$/.test(url)
+    );
+  }),
+  warnings: [],
+});
 
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
   register: true,
-  cacheOnNavigation: true,
+  cacheOnNavigation: false,
+  reloadOnOnline: false,
+  exclude: [
+    /\.map$/,
+    /^manifest.*\.js$/,
+    /(?:^|\/)static\/chunks\/.*\.js$/,
+    /(?:^|\/)(?:_buildManifest|_ssgManifest)\.js$/,
+  ],
+  manifestTransforms: [excludeVolatileNextAssets],
   disable: process.env.NODE_ENV === "development",
 });
 
