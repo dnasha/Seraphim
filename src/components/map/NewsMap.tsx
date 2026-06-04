@@ -766,6 +766,7 @@ export default function NewsMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
+    let cancelled = false;
 
     const setVis = (layer: string, show: boolean) => {
       if (map.getLayer(layer)) {
@@ -773,16 +774,39 @@ export default function NewsMap({
       }
     };
 
-    setVis("overlay-usgs-point", overlays["usgs"]);
-    setVis("overlay-noaa-raster", overlays["noaa"]);
-    setVis("overlay-eonet-point", overlays["eonet"]);
-    setVis("overlay-fires-point", overlays["fires"]);
-    setVis("overlay-radiation-raster", overlays["radiation"]);
-    setVis("overlay-aqi-raster", overlays["aqi"]);
-    setVis("overlay-flights-point", overlays["flights"]);
-    setVis("overlay-ships-point", overlays["ships"]);
-    setVis("overlay-iss-point", overlays["iss"]);
-  }, [overlays, mapReady, currentStyle]);
+    const overlayLayers: Array<[string, string]> = [
+      ["usgs", "overlay-usgs-point"],
+      ["noaa", "overlay-noaa-raster"],
+      ["eonet", "overlay-eonet-point"],
+      ["fires", "overlay-fires-point"],
+      ["radiation", "overlay-radiation-raster"],
+      ["aqi", "overlay-aqi-raster"],
+      ["flights", "overlay-flights-point"],
+      ["ships", "overlay-ships-point"],
+      ["iss", "overlay-iss-point"],
+    ];
+
+    const missingActiveOverlay = overlayLayers.some(
+      ([key, layer]) => overlays[key] && !map.getLayer(layer),
+    );
+
+    const syncOverlayVisibility = async () => {
+      if (missingActiveOverlay) {
+        await addSourcesAndLayers(map);
+      }
+      if (cancelled) return;
+
+      for (const [key, layer] of overlayLayers) {
+        setVis(layer, overlays[key]);
+      }
+    };
+
+    syncOverlayVisibility();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [overlays, mapReady, currentStyle, addSourcesAndLayers]);
 
   // Flight tracking polling logic
   useEffect(() => {

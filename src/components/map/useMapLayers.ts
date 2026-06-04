@@ -377,44 +377,46 @@ export function useMapLayers({
 
       // External Live Overlays: Added beneath news clusters to prevent obstruction.
       
-      if (!map.getSource("overlay-usgs")) {
-        map.addSource("overlay-usgs", {
-          type: "geojson",
-          data: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
-        });
-      }
-      if (!map.getLayer("overlay-usgs-point")) {
-        map.addLayer(
-          {
-            id: "overlay-usgs-point",
-            type: "circle",
-            source: "overlay-usgs",
-            layout: {
-              visibility: overlaysRef.current["usgs"] ? "visible" : "none",
+      if (overlaysRef.current["usgs"]) {
+        if (!map.getSource("overlay-usgs")) {
+          map.addSource("overlay-usgs", {
+            type: "geojson",
+            data: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+          });
+        }
+        if (!map.getLayer("overlay-usgs-point")) {
+          map.addLayer(
+            {
+              id: "overlay-usgs-point",
+              type: "circle",
+              source: "overlay-usgs",
+              layout: {
+                visibility: "visible",
+              },
+              paint: {
+                "circle-radius": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "mag"],
+                  1,
+                  4,
+                  5,
+                  12,
+                  8,
+                  24,
+                ],
+                "circle-color": "#f59e0b",
+                "circle-opacity": 0.6,
+                "circle-stroke-width": 1,
+                "circle-stroke-color": "#ffffff",
+              },
             },
-            paint: {
-              "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["get", "mag"],
-                1,
-                4,
-                5,
-                12,
-                8,
-                24,
-              ],
-              "circle-color": "#f59e0b",
-              "circle-opacity": 0.6,
-              "circle-stroke-width": 1,
-              "circle-stroke-color": "#ffffff",
-            },
-          },
-          "clusters-circle",
-        );
+            "clusters-circle",
+          );
+        }
       }
 
-      if (!map.getSource("overlay-noaa")) {
+      if (overlaysRef.current["noaa"] && !map.getSource("overlay-noaa")) {
         map.addSource("overlay-noaa", {
           type: "raster",
           tiles: [
@@ -426,14 +428,14 @@ export function useMapLayers({
           tileSize: 256,
         });
       }
-      if (!map.getLayer("overlay-noaa-raster")) {
+      if (overlaysRef.current["noaa"] && !map.getLayer("overlay-noaa-raster")) {
         map.addLayer(
           {
             id: "overlay-noaa-raster",
             type: "raster",
             source: "overlay-noaa",
             layout: {
-              visibility: overlaysRef.current["noaa"] ? "visible" : "none",
+              visibility: "visible",
             },
             paint: { "raster-opacity": 0.6 },
           },
@@ -441,20 +443,20 @@ export function useMapLayers({
         );
       }
 
-      if (!map.getSource("overlay-eonet")) {
+      if (overlaysRef.current["eonet"] && !map.getSource("overlay-eonet")) {
         map.addSource("overlay-eonet", {
           type: "geojson",
           data: "/api/proxy/eonet",
         });
       }
-      if (!map.getLayer("overlay-eonet-point")) {
+      if (overlaysRef.current["eonet"] && !map.getLayer("overlay-eonet-point")) {
         map.addLayer(
           {
             id: "overlay-eonet-point",
             type: "circle",
             source: "overlay-eonet",
             layout: {
-              visibility: overlaysRef.current["eonet"] ? "visible" : "none",
+              visibility: "visible",
             },
             paint: {
               "circle-color": [
@@ -484,20 +486,20 @@ export function useMapLayers({
       }
 
       // 1. NASA FIRMS Active Wildfires GeoJSON (proxied and filtered)
-      if (!map.getSource("overlay-fires")) {
+      if (overlaysRef.current["fires"] && !map.getSource("overlay-fires")) {
         map.addSource("overlay-fires", {
           type: "geojson",
           data: "/api/proxy/wildfires"
         });
       }
-      if (!map.getLayer("overlay-fires-point")) {
+      if (overlaysRef.current["fires"] && !map.getLayer("overlay-fires-point")) {
         map.addLayer(
           {
             id: "overlay-fires-point",
             type: "circle",
             source: "overlay-fires",
             layout: {
-              visibility: overlaysRef.current["fires"] ? "visible" : "none",
+              visibility: "visible",
             },
             paint: {
               "circle-color": [
@@ -545,7 +547,7 @@ export function useMapLayers({
       }
 
       // 2. Safecast Radiation Map (proxied to bypass CORS)
-      if (!map.getSource("overlay-radiation")) {
+      if (overlaysRef.current["radiation"] && !map.getSource("overlay-radiation")) {
         map.addSource("overlay-radiation", {
           type: "raster",
           tiles: [
@@ -554,14 +556,14 @@ export function useMapLayers({
           tileSize: 512
         });
       }
-      if (!map.getLayer("overlay-radiation-raster")) {
+      if (overlaysRef.current["radiation"] && !map.getLayer("overlay-radiation-raster")) {
         map.addLayer(
           {
             id: "overlay-radiation-raster",
             type: "raster",
             source: "overlay-radiation",
             layout: {
-              visibility: overlaysRef.current["radiation"] ? "visible" : "none",
+              visibility: "visible",
             },
             paint: { "raster-opacity": 0.6 },
           },
@@ -570,7 +572,7 @@ export function useMapLayers({
       }
 
       // 3. WAQI Air Quality Index Map
-      if (!map.getSource("overlay-aqi")) {
+      if (overlaysRef.current["aqi"] && !map.getSource("overlay-aqi")) {
         const token = process.env.NEXT_PUBLIC_WAQI_TOKEN || "demo";
         map.addSource("overlay-aqi", {
           type: "raster",
@@ -580,14 +582,14 @@ export function useMapLayers({
           tileSize: 256
         });
       }
-      if (!map.getLayer("overlay-aqi-raster")) {
+      if (overlaysRef.current["aqi"] && !map.getLayer("overlay-aqi-raster")) {
         map.addLayer(
           {
             id: "overlay-aqi-raster",
             type: "raster",
             source: "overlay-aqi",
             layout: {
-              visibility: overlaysRef.current["aqi"] ? "visible" : "none",
+              visibility: "visible",
             },
             paint: { "raster-opacity": 0.65 },
           },
@@ -596,7 +598,7 @@ export function useMapLayers({
       }
 
       // 4. Live Flight Tracking Map (adsb.lol)
-      if (!map.getSource("overlay-flights")) {
+      if (overlaysRef.current["flights"] && !map.getSource("overlay-flights")) {
         map.addSource("overlay-flights", {
           type: "geojson",
           data: {
@@ -605,14 +607,14 @@ export function useMapLayers({
           }
         });
       }
-      if (!map.getLayer("overlay-flights-point")) {
+      if (overlaysRef.current["flights"] && !map.getLayer("overlay-flights-point")) {
         map.addLayer(
           {
             id: "overlay-flights-point",
             type: "symbol",
             source: "overlay-flights",
             layout: {
-              visibility: overlaysRef.current["flights"] ? "visible" : "none",
+              visibility: "visible",
               "icon-image": "flight-plane-icon",
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
@@ -637,20 +639,20 @@ export function useMapLayers({
       }
 
       // 5. Maritime Tracking (Military CSGs & Tankers)
-      if (!map.getSource("overlay-ships")) {
+      if (overlaysRef.current["ships"] && !map.getSource("overlay-ships")) {
         map.addSource("overlay-ships", {
           type: "geojson",
           data: "/api/proxy/ships"
         });
       }
-      if (!map.getLayer("overlay-ships-point")) {
+      if (overlaysRef.current["ships"] && !map.getLayer("overlay-ships-point")) {
         map.addLayer(
           {
             id: "overlay-ships-point",
             type: "symbol",
             source: "overlay-ships",
             layout: {
-              visibility: overlaysRef.current["ships"] ? "visible" : "none",
+              visibility: "visible",
               "icon-image": "ship-icon",
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
@@ -673,7 +675,7 @@ export function useMapLayers({
       }
 
       // 6. Space Station Tracking (ISS)
-      if (!map.getSource("overlay-iss")) {
+      if (overlaysRef.current["iss"] && !map.getSource("overlay-iss")) {
         map.addSource("overlay-iss", {
           type: "geojson",
           data: {
@@ -682,14 +684,14 @@ export function useMapLayers({
           }
         });
       }
-      if (!map.getLayer("overlay-iss-point")) {
+      if (overlaysRef.current["iss"] && !map.getLayer("overlay-iss-point")) {
         map.addLayer(
           {
             id: "overlay-iss-point",
             type: "symbol",
             source: "overlay-iss",
             layout: {
-              visibility: overlaysRef.current["iss"] ? "visible" : "none",
+              visibility: "visible",
               "icon-image": "iss-icon",
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
