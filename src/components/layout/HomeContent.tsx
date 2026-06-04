@@ -105,6 +105,7 @@ export function HomeContent() {
     const effectiveCustomEndDate = isGuestUser ? '' : customEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
+    const newsResetKey = isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous';
 
     useEffect(() => {
         if (isAuthResolving || !isGuestUser) return;
@@ -129,7 +130,8 @@ export function HomeContent() {
         sortMode: effectiveSortMode,
         unmappedOnly,
         limit: isGuestUser ? 10 : undefined,
-        enabled: !isAuthResolving
+        enabled: !isAuthResolving,
+        resetKey: newsResetKey
     });
 
     const isLoading = dataLoading || isAuthResolving;

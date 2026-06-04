@@ -98,7 +98,8 @@ export function useNewsData({
     customEndDate,
     sortMode,
     limit,
-    enabled = true
+    enabled = true,
+    resetKey
 }: {
     unmappedOnly: boolean;
     timeRange: string;
@@ -108,6 +109,7 @@ export function useNewsData({
     sortMode?: string;
     limit?: number;
     enabled?: boolean;
+    resetKey?: string;
 }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -139,6 +141,34 @@ export function useNewsData({
     const pendingBBoxRef = useRef<BBox | null>(null);
 
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
+
+    useEffect(() => {
+        requestVersionRef.current += 1;
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+
+        lastFetchParamsRef.current = null;
+        pendingBBoxRef.current = null;
+        entitiesRef.current.clear();
+        entityTouchedAtRef.current.clear();
+        visibleMapIdsRef.current.clear();
+        visibleSidebarIdsRef.current.clear();
+        detailCache.current.clear();
+        fetchingDetailsRef.current.clear();
+
+        const timer = setTimeout(() => {
+            setNews([]);
+            setError(null);
+            setIsCapped(false);
+            setAppliedLimit(undefined);
+            setLastUpdated(null);
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [resetKey]);
 
     /**
      * Synchronizes the public news state with the internal entity store.

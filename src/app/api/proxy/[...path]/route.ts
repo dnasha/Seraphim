@@ -18,6 +18,12 @@ const proxyRatelimit = new Ratelimit({
 
 const localLimit = new Map<string, { count: number; reset: number }>();
 let lastCleanup = Date.now();
+let lastIssGeoJson: { data: unknown; timestamp: number } | null = null;
+
+const EMPTY_FEATURE_COLLECTION = {
+  type: "FeatureCollection",
+  features: []
+};
 
 function getIp(request: NextRequest) {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -347,9 +353,13 @@ export async function GET(
           "Accept": "application/json",
           "User-Agent": "SeraphimOSINT/1.0"
         }
-      }, 5000);
+      }, 8000);
       if (!res.ok) {
-        return NextResponse.json({ error: "Failed to fetch ISS location" }, { status: res.status });
+        return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
+          headers: {
+            "Cache-Control": "public, max-age=5"
+          }
+        });
       }
       const data = await res.json();
       
@@ -373,6 +383,7 @@ export async function GET(
           }
         ]
       };
+      lastIssGeoJson = { data: geojson, timestamp: Date.now() };
       
       return NextResponse.json(geojson, {
         headers: {
@@ -380,8 +391,12 @@ export async function GET(
         }
       });
     } catch (err) {
-      console.error("[proxy/iss] Error:", err);
-      return NextResponse.json({ error: "Internal error" }, { status: 500 });
+      console.warn("[proxy/iss] Returning cached or empty ISS data after upstream error:", err);
+      return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
+        headers: {
+          "Cache-Control": "public, max-age=5"
+        }
+      });
     }
   }
 

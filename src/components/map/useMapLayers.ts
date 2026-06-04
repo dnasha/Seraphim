@@ -120,39 +120,30 @@ export function useMapLayers({
         });
       }
 
-      // Re-configure the primary GeoJSON source.
-      // We explicitly remove existing layers and sources to ensure that clustering settings 
-      // are correctly applied during runtime toggles.
-      if (map.getSource("news-events")) {
-        const layers = [
-          "clusters-count",
-          "clusters-circle",
-          "hot-story-pulse",
-          "unclustered-point-active",
-          "unclustered-point",
-        ];
-        for (const l of layers) {
-          if (map.getLayer(l)) map.removeLayer(l);
-        }
-        map.removeSource("news-events");
-      }
-
-      map.addSource("news-events", {
-        type: "geojson",
-        data: pendingGeoJsonRef.current || {
+      const existingNewsSource = map.getSource("news-events") as maplibregl.GeoJSONSource | undefined;
+      if (existingNewsSource) {
+        existingNewsSource.setData(pendingGeoJsonRef.current || {
           type: "FeatureCollection",
           features: [],
-        },
-        attribution: '<a href="/help">© Seraphim 2026</a>',
-        cluster: !forceIndividualPinsRef.current,
-        clusterMaxZoom: CLUSTER_MAX_ZOOM,
-        clusterRadius: 35,
-        clusterProperties: {
-          // Accumulate metadata during clustering for use in data-driven styling.
-          summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
-          hasTopHot: ["max", ["case", ["==", ["get", "isTopHot"], true], 1, 0]],
-        },
-      });
+        });
+      } else {
+        map.addSource("news-events", {
+          type: "geojson",
+          data: pendingGeoJsonRef.current || {
+            type: "FeatureCollection",
+            features: [],
+          },
+          attribution: '<a href="/help">© Seraphim 2026</a>',
+          cluster: !forceIndividualPinsRef.current,
+          clusterMaxZoom: CLUSTER_MAX_ZOOM,
+          clusterRadius: 35,
+          clusterProperties: {
+            // Accumulate metadata during clustering for use in data-driven styling.
+            summedStoryCount: ["+", ["coalesce", ["get", "storyCount"], 1]],
+            hasTopHot: ["max", ["case", ["==", ["get", "isTopHot"], true], 1, 0]],
+          },
+        });
+      }
 
       // Define logic for when a point should be treated as a cluster vs an individual pin.
       const clusterCheck: maplibregl.FilterSpecification =
@@ -251,48 +242,48 @@ export function useMapLayers({
         });
       }
 
-      if (map.getLayer("hot-story-pulse")) map.removeLayer("hot-story-pulse");
-
-      map.addLayer({
-        id: "hot-story-pulse",
-        type: "circle",
-        source: "news-events",
-        filter: [
-          "any",
-          ["==", ["get", "hasTopHot"], 1],
-          ["==", ["get", "isTopHot"], true],
-        ],
-        paint: {
-          "circle-radius": 0,
-          "circle-color": [
-            "case",
-            ["has", "point_count"],
-            "#ef4444",
-            [
-              "match",
-              ["get", "category"],
-              "world",
-              "#dc2626",
-              "crisis",
-              "#b91c1c",
-              "nation",
-              "#2563eb",
-              "business",
-              "#d97706",
-              "technology",
-              "#0891b2",
-              "science",
-              "#059669",
-              "health",
-              "#7c3aed",
-              "#3b82f6",
-            ],
+      if (!map.getLayer("hot-story-pulse")) {
+        map.addLayer({
+          id: "hot-story-pulse",
+          type: "circle",
+          source: "news-events",
+          filter: [
+            "any",
+            ["==", ["get", "hasTopHot"], 1],
+            ["==", ["get", "isTopHot"], true],
           ],
-          "circle-opacity": 0,
-          "circle-blur": 0,
-          "circle-stroke-width": 0,
-        },
-      });
+          paint: {
+            "circle-radius": 0,
+            "circle-color": [
+              "case",
+              ["has", "point_count"],
+              "#ef4444",
+              [
+                "match",
+                ["get", "category"],
+                "world",
+                "#dc2626",
+                "crisis",
+                "#b91c1c",
+                "nation",
+                "#2563eb",
+                "business",
+                "#d97706",
+                "technology",
+                "#0891b2",
+                "science",
+                "#059669",
+                "health",
+                "#7c3aed",
+                "#3b82f6",
+              ],
+            ],
+            "circle-opacity": 0,
+            "circle-blur": 0,
+            "circle-stroke-width": 0,
+          },
+        });
+      }
 
       // Disable transitions for the pulse layer to allow the JS animation loop to drive radius/opacity frame-by-frame.
       map.setPaintProperty("hot-story-pulse", "circle-radius-transition", {
