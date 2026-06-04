@@ -139,6 +139,8 @@ export function useNewsData({
     const requestVersionRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
     const pendingBBoxRef = useRef<BBox | null>(null);
+    const lastKnownBBoxRef = useRef<BBox | null>(null);
+    const needsScopeReloadRef = useRef(false);
 
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
 
@@ -150,8 +152,10 @@ export function useNewsData({
             abortControllerRef.current = null;
         }
 
+        const knownBBox = pendingBBoxRef.current ?? lastKnownBBoxRef.current ?? lastFetchParamsRef.current?.bbox ?? null;
         lastFetchParamsRef.current = null;
-        pendingBBoxRef.current = null;
+        pendingBBoxRef.current = knownBBox;
+        needsScopeReloadRef.current = true;
         entitiesRef.current.clear();
         entityTouchedAtRef.current.clear();
         visibleMapIdsRef.current.clear();
@@ -354,6 +358,10 @@ export function useNewsData({
      * snapping, parameter change detection, and store synchronization.
      */
     const coordinateLoad = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
+        if (rawBBox) {
+            lastKnownBBoxRef.current = rawBBox;
+        }
+
         if (!enabled) {
             if (rawBBox) {
                 pendingBBoxRef.current = rawBBox;
@@ -375,10 +383,14 @@ export function useNewsData({
         }
 
         const bbox = bboxSource ? snapBBox(bboxSource) : (prev?.bbox ?? null);
+        if (bbox) {
+            lastKnownBBoxRef.current = bbox;
+        }
         log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
         const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
-        if (!bbox && !unmappedOnly && !searchQuery && !limit && !isUpgradingFromLimitedFetch) {
+        const needsScopeReload = needsScopeReloadRef.current;
+        if (!bbox && !unmappedOnly && !searchQuery && !limit && !isUpgradingFromLimitedFetch && !needsScopeReload) {
             log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
@@ -394,6 +406,7 @@ export function useNewsData({
         );
 
         if (!isRefresh && prev && isSameBBox &&
+            !needsScopeReload &&
             unmappedOnly === prev.unmappedOnly &&
             sortMode === prev.sortMode &&
             searchQuery === prev.query &&
@@ -470,6 +483,7 @@ export function useNewsData({
                 unmappedOnly,
                 limit
             };
+            needsScopeReloadRef.current = false;
             return;
         }
 
@@ -511,6 +525,7 @@ export function useNewsData({
                 unmappedOnly,
                 limit
             };
+            needsScopeReloadRef.current = false;
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
             if (requestVersion !== requestVersionRef.current) return;
@@ -541,7 +556,7 @@ export function useNewsData({
         
         coordinateLoad();
         return;
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, coordinateLoad]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, coordinateLoad]);
 
     /**
      * Lazy-loads heavy event details (description, sources) for a specific item.
