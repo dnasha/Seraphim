@@ -19,10 +19,25 @@ const log = (message: unknown, ...optionalParams: unknown[]) => {
 };
 
 const LOCAL_RESPONSE_TTL_MS = 60_000;
+const MAX_RESPONSE_CACHE_ENTRIES = 200;
 const MAX_ENTITY_COUNT = 5000;
 
 const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; appliedLimit?: number; timestamp: number }>();
 const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean; appliedLimit?: number }>>();
+
+function pruneResponseCache(now = Date.now()) {
+    for (const [key, cached] of responseCache.entries()) {
+        if (now - cached.timestamp >= LOCAL_RESPONSE_TTL_MS) {
+            responseCache.delete(key);
+        }
+    }
+
+    while (responseCache.size > MAX_RESPONSE_CACHE_ENTRIES) {
+        const oldestKey = responseCache.keys().next().value as string | undefined;
+        if (!oldestKey) break;
+        responseCache.delete(oldestKey);
+    }
+}
 
 function computeSince(timeRange: string, customStartDate?: string): string | null {
     if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
@@ -252,6 +267,7 @@ export function useNewsData({
 
         const requestKey = params.toString();
         const now = Date.now();
+        pruneResponseCache(now);
         const cached = responseCache.get(requestKey);
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
             return {
@@ -291,6 +307,7 @@ export function useNewsData({
             const isCapped = apiCapped;
             const appliedLimit = data.meta?.appliedLimit;
             responseCache.set(requestKey, { data: hydrated, isCapped, appliedLimit, timestamp: Date.now() });
+            pruneResponseCache();
             return { items: hydrated, isCapped, appliedLimit };
         })();
 
@@ -395,6 +412,7 @@ export function useNewsData({
         }
         const requestKey = params.toString();
         const now = Date.now();
+        pruneResponseCache(now);
         const cached = responseCache.get(requestKey);
         const requestVersion = ++requestVersionRef.current;
         log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);

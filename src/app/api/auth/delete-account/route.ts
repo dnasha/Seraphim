@@ -9,6 +9,10 @@ export async function POST(request: Request) {
     const origin = request.headers.get('origin') || request.headers.get('referer');
     const host = request.headers.get('host');
     
+    if (!origin || !host) {
+      return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
+    }
+
     if (origin && host) {
       try {
         const originUrl = new URL(origin);
@@ -16,7 +20,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
         }
       } catch {
-        // Invalid origin format
+        return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
       }
     }
 

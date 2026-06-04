@@ -10,8 +10,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { stripe, tierFromPriceId, intervalFromPriceId } from '@/lib/stripe';
+import { stripe, tierFromPriceId, intervalFromPriceId, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { canFulfillAngelCheckout } from '@/lib/security/payments';
 
 const supabaseAdmin = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,10 +42,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
+    const claimed = await claimStripeEvent(event.id, event.type);
+    if (!claimed) {
+        return NextResponse.json({ received: true, duplicate: true });
+    }
+
     try {
         switch (event.type) {
             case 'checkout.session.completed': {
                 await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+                break;
+            }
+            case 'checkout.session.async_payment_succeeded': {
+                await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+                break;
+            }
+            case 'checkout.session.async_payment_failed': {
                 break;
             }
             case 'customer.subscription.updated': {
@@ -68,11 +81,36 @@ export async function POST(request: NextRequest) {
         }
     } catch (err) {
         console.error(`Error processing webhook ${event.type}:`, err);
-        // Return 200 to prevent Stripe retries on application errors
-        // The error is logged for manual investigation
+        await releaseStripeEventClaim(event.id);
+        return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
     }
 
     return NextResponse.json({ received: true });
+}
+
+async function claimStripeEvent(eventId: string, eventType: string) {
+    const { error } = await supabaseAdmin
+        .from('stripe_processed_events')
+        .insert({ event_id: eventId, event_type: eventType });
+
+    if (!error) return true;
+    if (error.code === '23505') return false;
+    throw error;
+}
+
+async function releaseStripeEventClaim(eventId: string) {
+    const { error } = await supabaseAdmin
+        .from('stripe_processed_events')
+        .delete()
+        .eq('event_id', eventId);
+    if (error) {
+        console.error('Failed to release Stripe event claim:', error);
+    }
+}
+
+function getCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustomer | null) {
+    if (!customer) return null;
+    return typeof customer === 'string' ? customer : customer.id;
 }
 
 /**
@@ -88,25 +126,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
 
     if (session.mode === 'payment' && priceKey === 'angel') {
+        if (!canFulfillAngelCheckout({
+            mode: session.mode,
+            priceKey,
+            paymentStatus: session.payment_status,
+            paymentIntent: session.payment_intent,
+        })) {
+            console.warn('Angel checkout completed before payment was paid:', session.id);
+            return;
+        }
+
+        const maxQuantity = await getAngelMaxQuantity();
+        const { data: fulfilled, error } = await supabaseAdmin.rpc('fulfill_angel_purchase', {
+            p_user_id: userId,
+            p_stripe_payment_intent_id: session.payment_intent,
+            p_stripe_customer_id: typeof session.customer === 'string' ? session.customer : null,
+            p_max_quantity: maxQuantity,
+        });
+
+        if (error) throw error;
+        if (fulfilled !== true) {
+            throw new Error(`Angel tier fulfillment failed or sold out for session ${session.id}`);
+        }
+
         // Angel one-time purchase
-        await supabaseAdmin
-            .from('user_profiles')
-            .update({
-                tier: 'angel',
-                subscription_status: 'active',
-                billing_interval: 'lifetime',
-                stripe_customer_id: session.customer as string,
-            })
-            .eq('id', userId);
-
-        // Record angel purchase for quantity tracking
-        await supabaseAdmin
-            .from('angel_purchases')
-            .insert({
-                user_id: userId,
-                stripe_payment_intent_id: session.payment_intent as string,
-            });
-
         return;
     }
 
@@ -120,7 +163,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
             .from('user_profiles')
             .update({
                 tier,
-                stripe_customer_id: session.customer as string,
+                stripe_customer_id: getCustomerId(session.customer),
                 stripe_subscription_id: subscription.id,
                 subscription_status: subscription.status,
                 billing_interval: interval,
@@ -143,9 +186,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     const userId = subscription.metadata?.supabase_user_id;
     if (!userId) {
         // Try to find user by customer ID
-        const customerId = typeof subscription.customer === 'string'
-            ? subscription.customer
-            : subscription.customer;
+        const customerId = getCustomerId(subscription.customer);
+        if (!customerId) return;
         
         const { data: profile } = await supabaseAdmin
             .from('user_profiles')
@@ -173,9 +215,8 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     let targetUserId = userId;
 
     if (!targetUserId) {
-        const customerId = typeof subscription.customer === 'string'
-            ? subscription.customer
-            : subscription.customer;
+        const customerId = getCustomerId(subscription.customer);
+        if (!customerId) return;
 
         const { data: profile } = await supabaseAdmin
             .from('user_profiles')
@@ -240,9 +281,8 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
     const subRef = invoice.parent?.subscription_details?.subscription;
     if (!subRef) return;
 
-    const customerId = typeof invoice.customer === 'string'
-        ? invoice.customer
-        : invoice.customer;
+    const customerId = getCustomerId(invoice.customer);
+    if (!customerId) return;
 
     const { data: profile } = await supabaseAdmin
         .from('user_profiles')
@@ -256,6 +296,24 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
             .update({ subscription_status: 'past_due' })
             .eq('id', profile.id);
     }
+}
+
+async function getAngelMaxQuantity() {
+    const priceId = STRIPE_PRICES.angel;
+    if (!priceId) return ANGEL_MAX_QUANTITY;
+
+    try {
+        const price = await stripe.prices.retrieve(priceId, { expand: ['product'] });
+        const product = price.product as { metadata?: Record<string, string> };
+        const stripeInventory = parseInt(product?.metadata?.inventory ?? '', 10);
+        if (Number.isFinite(stripeInventory) && stripeInventory > 0) {
+            return Math.min(stripeInventory, ANGEL_MAX_QUANTITY);
+        }
+    } catch (err) {
+        console.warn('Failed to retrieve Angel inventory from Stripe metadata:', err);
+    }
+
+    return ANGEL_MAX_QUANTITY;
 }
 
 /**

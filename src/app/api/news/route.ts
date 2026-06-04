@@ -12,10 +12,8 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NewsItem, NewsResponse } from "@/lib/core/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
-import {
-  normalizeSortMode,
-  sortNewsItems,
-} from "@/lib/utils/ranking";
+import { sortNewsItems } from "@/lib/utils/ranking";
+import { validateNewsSearchParams, NEWS_DEFAULT_LIMIT } from "@/lib/security/newsParams";
 
 /**
  * Global L2 rate limiter using Upstash Redis for cross-instance state.
@@ -54,11 +52,12 @@ function performL1Cleanup() {
  * Keys are derived from serialized query parameters to ensure granular hit rates.
  */
 const sourceCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
+const SOURCE_CACHE_MAX_ENTRIES = 250;
 
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60000;
 
-const RAW_LIMIT = 1000;
+const RAW_LIMIT = NEWS_DEFAULT_LIMIT;
 
 /**
  * Optimized column selection. 
@@ -68,29 +67,42 @@ const RAW_LIMIT = 1000;
 const LIST_SELECT =
   "id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count";
 
+function pruneSourceCache() {
+  if (sourceCache.size <= SOURCE_CACHE_MAX_ENTRIES) return;
+  const overflow = sourceCache.size - SOURCE_CACHE_MAX_ENTRIES;
+  for (const key of sourceCache.keys()) {
+    sourceCache.delete(key);
+    if (sourceCache.size <= SOURCE_CACHE_MAX_ENTRIES - overflow) break;
+  }
+}
+
 export async function GET(request: Request) {
   const now = Date.now();
   const { searchParams } = new URL(request.url);
-  let forceRefresh = searchParams.get("refresh") === "true";
-  const unmappedOnly = searchParams.get("unmapped_only") === "true";
-  const viewMode = searchParams.get("view") === "sidebar" ? "sidebar" : "map";
-  const scopeMode = unmappedOnly
-    ? "global"
-    : searchParams.get("scope") === "global"
-      ? "global"
-      : "viewport";
+  const validated = validateNewsSearchParams(searchParams);
+  if (!validated.ok) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
+  }
 
-  const minLat = searchParams.get("minLat");
-  const maxLat = searchParams.get("maxLat");
-  const minLng = searchParams.get("minLng");
-  const maxLng = searchParams.get("maxLng");
-  
-  const hasBBox =
-    !unmappedOnly &&
-    minLat !== null &&
-    maxLat !== null &&
-    minLng !== null &&
-    maxLng !== null;
+  let forceRefresh = validated.params.forceRefresh;
+  const {
+    unmappedOnly,
+    viewMode,
+    scopeMode,
+    hasBBox,
+    minLat,
+    maxLat,
+    minLng,
+    maxLng,
+    searchQuery,
+    zoom,
+    sort,
+    hasRequestedLimit,
+    requestedLimit,
+    sinceStr,
+    untilStr,
+    forceRaw,
+  } = validated.params;
 
   /**
    * Numerical stability epsilon to prevent edge-case exclusion of markers 
@@ -98,27 +110,14 @@ export async function GET(request: Request) {
    */
   const EPSILON = 0.00001;
 
-  const searchQuery = searchParams.get("query");
-
   const isGlobalBBox =
     hasBBox &&
-    parseFloat(minLat!) <= -89 &&
-    parseFloat(maxLat!) >= 89 &&
-    parseFloat(minLng!) <= -179 &&
-    parseFloat(maxLng!) >= 179;
+    minLat! <= -89 &&
+    maxLat! >= 89 &&
+    minLng! <= -179 &&
+    maxLng! >= 179;
 
   const ignoreBBox = (scopeMode === 'global') || unmappedOnly || isGlobalBBox;
-
-  const zoomStr = searchParams.get("zoom");
-  const zoom = zoomStr ? parseFloat(zoomStr) : null;
-
-  const sort = normalizeSortMode(searchParams.get("sort"));
-  const hasRequestedLimit = searchParams.has("limit");
-  const requestedLimit = hasRequestedLimit
-    ? parseInt(searchParams.get("limit")!)
-    : RAW_LIMIT;
-  const sinceStr = searchParams.get("since");
-  const untilStr = searchParams.get("until");
 
   let effectiveLimit = requestedLimit;
 
@@ -144,8 +143,6 @@ export async function GET(request: Request) {
       effectiveLimit = Math.max(effectiveLimit, 1000);
     }
   }
-
-  const forceRaw = searchParams.get("force_raw") === "true";
 
   /**
    * Clustering Strategy
@@ -224,16 +221,16 @@ export async function GET(request: Request) {
       let normMaxLng: number | null = null;
 
       if (!ignoreBBox && hasBBox) {
-        normMinLng = parseFloat(minLng!) - EPSILON;
-        normMaxLng = parseFloat(maxLng!) + EPSILON;
+        normMinLng = minLng! - EPSILON;
+        normMaxLng = maxLng! + EPSILON;
       }
 
       if (useServerClustering) {
         // Execute server-side clustering via optimized PostgreSQL RPC
         const rpcParams: Record<string, unknown> = {
           p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
-          p_min_lat: ignoreBBox ? null : parseFloat(minLat!) - EPSILON,
-          p_max_lat: ignoreBBox ? null : parseFloat(maxLat!) + EPSILON,
+          p_min_lat: ignoreBBox ? null : minLat! - EPSILON,
+          p_max_lat: ignoreBBox ? null : maxLat! + EPSILON,
           p_min_lng: ignoreBBox ? null : normMinLng,
           p_max_lng: ignoreBBox ? null : normMaxLng,
           p_sort_mode: sort,
@@ -248,54 +245,65 @@ export async function GET(request: Request) {
         error = res.error;
       } else {
         // Standard SQL query for raw event retrieval
-        let query = supabase.from("events").select(LIST_SELECT);
-
-        if (sort === "hot") {
-          query = query
-            .order("impact_score", { ascending: false, nullsFirst: false })
-            .order("event_count", { ascending: false, nullsFirst: false })
-            .order("published_at", { ascending: false });
-        } else {
-          query = query.order("published_at", { ascending: false });
-        }
-
-        query = query.limit(effectiveLimit);
-
-        if (unmappedOnly) {
-          query = query.is("latitude", null);
-        }
-
-        if (sinceStr) query = query.gte("published_at", sinceStr);
-        if (untilStr) query = query.lte("published_at", untilStr);
-
         if (searchQuery) {
-          query = query.or(
-            `title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`,
-          );
-        }
+          const res = await supabase.rpc("search_events", {
+            p_search_query: searchQuery,
+            p_min_lat: hasBBox && !unmappedOnly ? minLat! - EPSILON : null,
+            p_max_lat: hasBBox && !unmappedOnly ? maxLat! + EPSILON : null,
+            p_min_lng: hasBBox && !unmappedOnly ? minLng! - EPSILON : null,
+            p_max_lng: hasBBox && !unmappedOnly ? maxLng! + EPSILON : null,
+            p_since: sinceStr,
+            p_until: untilStr,
+            p_sort_mode: sort,
+            p_limit: effectiveLimit,
+            p_unmapped_only: unmappedOnly,
+          });
+          rows = res.data;
+          error = res.error;
+        } else {
+          let query = supabase.from("events").select(LIST_SELECT);
 
-        if (hasBBox && !unmappedOnly) {
-          const latMin = parseFloat(minLat!) - EPSILON;
-          const latMax = parseFloat(maxLat!) + EPSILON;
-          const lngMin = parseFloat(minLng!) - EPSILON;
-          const lngMax = parseFloat(maxLng!) + EPSILON;
-
-          query = query.gte("latitude", latMin).lte("latitude", latMax);
-
-          /**
-           * International Date Line Handling
-           * Wraps longitude queries if the bounding box crosses the +/-180 limit.
-           */
-          if (lngMin <= lngMax) {
-            query = query.gte("longitude", lngMin).lte("longitude", lngMax);
+          if (sort === "hot") {
+            query = query
+              .order("impact_score", { ascending: false, nullsFirst: false })
+              .order("event_count", { ascending: false, nullsFirst: false })
+              .order("published_at", { ascending: false });
           } else {
-            query = query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
+            query = query.order("published_at", { ascending: false });
           }
-        }
 
-        const res = await query;
-        rows = res.data;
-        error = res.error;
+          query = query.limit(effectiveLimit);
+
+          if (unmappedOnly) {
+            query = query.is("latitude", null);
+          }
+
+          if (sinceStr) query = query.gte("published_at", sinceStr);
+          if (untilStr) query = query.lte("published_at", untilStr);
+
+          if (hasBBox && !unmappedOnly) {
+            const latMin = minLat! - EPSILON;
+            const latMax = maxLat! + EPSILON;
+            const lngMin = minLng! - EPSILON;
+            const lngMax = maxLng! + EPSILON;
+
+            query = query.gte("latitude", latMin).lte("latitude", latMax);
+
+            /**
+             * International Date Line Handling
+             * Wraps longitude queries if the bounding box crosses the +/-180 limit.
+             */
+            if (lngMin <= lngMax) {
+              query = query.gte("longitude", lngMin).lte("longitude", lngMax);
+            } else {
+              query = query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
+            }
+          }
+
+          const res = await query;
+          rows = res.data;
+          error = res.error;
+        }
       }
 
       if (error) {
@@ -395,6 +403,7 @@ export async function GET(request: Request) {
 
       if (canUseCache) {
         sourceCache.set(cacheKey, { data: allItems, isCapped: queryCapped, timestamp: now });
+        pruneSourceCache();
       }
     }
 

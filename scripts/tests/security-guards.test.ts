@@ -1,0 +1,94 @@
+import { describe, expect, it } from 'vitest';
+import { validateNewsSearchParams } from '@/lib/security/newsParams';
+import { safeRelativeRedirect } from '@/lib/security/redirects';
+import { canFulfillAngelCheckout, getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
+import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
+import { validatePublicImageUrl } from '@/lib/security/ogImage';
+
+describe('news API param validation', () => {
+  it('clamps numeric limits and accepts valid bbox searches', () => {
+    const params = new URLSearchParams({
+      limit: '5000',
+      minLat: '-10',
+      maxLat: '10',
+      minLng: '-20',
+      maxLng: '20',
+      zoom: '4.5',
+      query: 'Kyiv',
+      since: '2026-01-01T00:00:00Z',
+    });
+
+    const result = validateNewsSearchParams(params);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.params.requestedLimit).toBe(1000);
+      expect(result.params.searchQuery).toBe('Kyiv');
+      expect(result.params.hasBBox).toBe(true);
+    }
+  });
+
+  it('rejects malformed bbox and overlong search before database work', () => {
+    expect(validateNewsSearchParams(new URLSearchParams({ minLat: '1' })).ok).toBe(false);
+    expect(validateNewsSearchParams(new URLSearchParams({ query: 'x'.repeat(161) })).ok).toBe(false);
+    expect(validateNewsSearchParams(new URLSearchParams({ since: 'bad-date' })).ok).toBe(false);
+  });
+});
+
+describe('redirect guard', () => {
+  const origin = 'https://seraphi.me';
+
+  it('allows same-origin relative paths', () => {
+    expect(safeRelativeRedirect('/account?tab=billing', origin)).toBe('https://seraphi.me/account?tab=billing');
+  });
+
+  it('rejects external-looking next values', () => {
+    expect(safeRelativeRedirect('//evil.test', origin)).toBe('https://seraphi.me/');
+    expect(safeRelativeRedirect('@evil.test/path', origin)).toBe('https://seraphi.me/');
+    expect(safeRelativeRedirect('/\\evil', origin)).toBe('https://seraphi.me/');
+  });
+});
+
+describe('payment guards', () => {
+  it('requires explicit payments flag', () => {
+    expect(isPaymentsEnabled({ PAYMENTS_ENABLED: 'true' })).toBe(true);
+    expect(isPaymentsEnabled({ PAYMENTS_ENABLED: 'false' })).toBe(false);
+    expect(isPaymentsEnabled({})).toBe(false);
+  });
+
+  it('requires configured https site URL except localhost', () => {
+    expect(getConfiguredSiteUrl({ SITE_URL: 'https://seraphi.me/path' })).toBe('https://seraphi.me');
+    expect(getConfiguredSiteUrl({ SITE_URL: 'http://localhost:3000' })).toBe('http://localhost:3000');
+    expect(getConfiguredSiteUrl({ SITE_URL: 'http://evil.test' })).toBeNull();
+  });
+
+  it('fulfills Angel only after paid Checkout with a payment intent', () => {
+    expect(canFulfillAngelCheckout({
+      mode: 'payment',
+      priceKey: 'angel',
+      paymentStatus: 'paid',
+      paymentIntent: 'pi_123',
+    })).toBe(true);
+    expect(canFulfillAngelCheckout({
+      mode: 'payment',
+      priceKey: 'angel',
+      paymentStatus: 'unpaid',
+      paymentIntent: 'pi_123',
+    })).toBe(false);
+  });
+});
+
+describe('proxy and OG guards', () => {
+  it('validates coordinates and tile ranges', () => {
+    expect(parseProxyCoordinate('37.7', -90, 90)).toBe(37.7);
+    expect(parseProxyCoordinate('999', -90, 90)).toBeNull();
+    expect(validateTilePath('3', '4', '5.png')).toEqual({ z: 3, x: 4, y: 5 });
+    expect(validateTilePath('3', '99', '5.png')).toBeNull();
+  });
+
+  it('rejects local/private OG image URLs', () => {
+    expect(validatePublicImageUrl('https://example.com/image.png')).toBe('https://example.com/image.png');
+    expect(validatePublicImageUrl('file:///etc/passwd')).toBeNull();
+    expect(validatePublicImageUrl('http://localhost/image.png')).toBeNull();
+    expect(validatePublicImageUrl('http://192.168.1.5/image.png')).toBeNull();
+  });
+});

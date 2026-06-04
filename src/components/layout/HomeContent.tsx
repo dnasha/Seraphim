@@ -99,14 +99,33 @@ export function HomeContent() {
     }, [setShowAuthModal]);
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
+    const effectiveSearchQuery = isGuestUser ? '' : debouncedSearch;
+    const effectiveTimeRange = isGuestUser ? '1d' : timeRange;
+    const effectiveCustomStartDate = isGuestUser ? '' : customStartDate;
+    const effectiveCustomEndDate = isGuestUser ? '' : customEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
 
+    useEffect(() => {
+        if (isAuthResolving || !isGuestUser) return;
+        if (!searchQuery && !debouncedSearch && timeRange === '1d' && sortMode === 'hot') return;
+
+        const timer = setTimeout(() => {
+            setSearchQuery('');
+            setDebouncedSearch('');
+            setTimeRange('1d');
+            setSortMode('hot');
+            updateURL({ q: undefined, t: undefined, s: undefined });
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [isAuthResolving, isGuestUser, searchQuery, debouncedSearch, timeRange, sortMode, updateURL]);
+
     const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
-        searchQuery: debouncedSearch, 
-        timeRange,
-        customStartDate,
-        customEndDate,
+        searchQuery: effectiveSearchQuery, 
+        timeRange: effectiveTimeRange,
+        customStartDate: effectiveCustomStartDate,
+        customEndDate: effectiveCustomEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
         limit: isGuestUser ? 10 : undefined,
@@ -124,7 +143,7 @@ export function HomeContent() {
         credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, !unmappedOnly, timeRange, debouncedSearch, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
+    } = useNewsFilter(news, !unmappedOnly, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
 
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);

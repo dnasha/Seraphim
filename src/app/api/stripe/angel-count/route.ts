@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { stripe, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
+import { isPaymentsEnabled } from '@/lib/security/payments';
 
 const supabaseAdmin = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,6 +20,10 @@ const supabaseAdmin = createServiceClient(
 
 export async function GET() {
     try {
+        if (!isPaymentsEnabled()) {
+            return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
+        }
+
         // Read max inventory from Stripe product metadata
         let maxQuantity = ANGEL_MAX_QUANTITY;
         const angelPriceId = STRIPE_PRICES.angel;

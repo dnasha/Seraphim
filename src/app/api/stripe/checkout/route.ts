@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stripe, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
 
 const supabaseAdmin = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,6 +21,10 @@ type PriceKey = keyof typeof STRIPE_PRICES;
 
 export async function POST(request: NextRequest) {
     try {
+        if (!isPaymentsEnabled()) {
+            return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
+        }
+
         const supabase = await createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -83,7 +88,10 @@ export async function POST(request: NextRequest) {
         const isAngel = priceKey === 'angel';
         const isProMonthly = priceKey === 'pro_monthly';
 
-        const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://seraphi.me';
+        const origin = getConfiguredSiteUrl();
+        if (!origin) {
+            return NextResponse.json({ error: 'Site URL is not configured' }, { status: 500 });
+        }
 
         const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
             customer: customerId,

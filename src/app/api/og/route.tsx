@@ -1,16 +1,20 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from 'next/og';
 import { supabase } from '@/lib/core/supabase';
+import { safeReadImageResponse, validatePublicImageUrl } from '@/lib/security/ogImage';
 
 export const runtime = 'edge';
 
 // Helper to fetch an image and convert it to a base64 Data URL, avoiding edge issues.
-async function fetchImageAsBase64(url: string, timeoutMs = 1500): Promise<string | null> {
+async function fetchImageAsBase64(url: string, timeoutMs = 1500, allowLocal = false): Promise<string | null> {
     try {
+        const safeUrl = allowLocal ? url : validatePublicImageUrl(url);
+        if (!safeUrl) return null;
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         
-        const response = await fetch(url, { 
+        const response = await fetch(safeUrl, { 
             signal: controller.signal,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -23,15 +27,15 @@ async function fetchImageAsBase64(url: string, timeoutMs = 1500): Promise<string
             return null;
         }
         
-        const contentType = response.headers.get('content-type') || 'image/png';
-        const arrayBuffer = await response.arrayBuffer();
+        const safeImage = await safeReadImageResponse(response);
+        if (!safeImage) return null;
         
-        const bytes = new Uint8Array(arrayBuffer);
+        const bytes = new Uint8Array(safeImage.arrayBuffer);
         let binary = '';
         for (let i = 0; i < bytes.length; i++) {
             binary += String.fromCharCode(bytes[i]);
         }
-        return `data:${contentType};base64,${btoa(binary)}`;
+        return `data:${safeImage.contentType};base64,${btoa(binary)}`;
     } catch (err) {
         console.error(`Error fetching image as base64 from ${url}:`, err);
         return null;
@@ -66,8 +70,8 @@ export async function GET(request: Request) {
 
         // Pre-fetch brand assets locally for resilient rendering in Satori
         const [fallbackBase64, halfBrandBase64] = await Promise.all([
-            fetchImageAsBase64(fallbackUrl, 2000),
-            fetchImageAsBase64(halfBrandUrl, 2000),
+            fetchImageAsBase64(fallbackUrl, 2000, true),
+            fetchImageAsBase64(halfBrandUrl, 2000, true),
         ]);
 
         const fallbackImageSrc = fallbackBase64 || fallbackUrl;

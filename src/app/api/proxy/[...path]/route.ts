@@ -1,4 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+import {
+  fetchWithTimeout,
+  parseProxyCoordinate,
+  PROXY_CACHE_HEADERS,
+  validateTilePath,
+} from "@/lib/security/proxyGuards";
+
+const redis = Redis.fromEnv();
+const proxyRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(180, "1 m"),
+  analytics: true,
+  prefix: "@upstash/ratelimit/seraphim-proxy",
+});
+
+const localLimit = new Map<string, { count: number; reset: number }>();
+let lastCleanup = Date.now();
+
+function getIp(request: NextRequest) {
+  const forwarded = request.headers.get("x-forwarded-for");
+  return forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+}
+
+async function checkProxyRateLimit(request: NextRequest) {
+  const now = Date.now();
+  if (now - lastCleanup > 60000) {
+    for (const [ip, entry] of localLimit.entries()) {
+      if (now > entry.reset) localLimit.delete(ip);
+    }
+    lastCleanup = now;
+  }
+
+  const ip = getIp(request);
+  const current = localLimit.get(ip);
+  if (!current || now > current.reset) {
+    localLimit.set(ip, { count: 1, reset: now + 10000 });
+    return true;
+  }
+
+  current.count++;
+  if (current.count <= 20 && current.count % 8 !== 0) return true;
+
+  try {
+    const { success } = await proxyRatelimit.limit(ip);
+    return success;
+  } catch (error) {
+    console.error("[api/proxy] Rate limiter error (failing open):", error);
+    return true;
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -13,47 +65,57 @@ export async function GET(
 
   const service = path[0];
 
+  if (!(await checkProxyRateLimit(request))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   if (service === "flights") {
     const { searchParams } = new URL(request.url);
-    const lat = searchParams.get("lat");
-    const lng = searchParams.get("lng");
-    if (!lat || !lng) {
-      return NextResponse.json({ error: "Missing lat/lng" }, { status: 400 });
+    const lat = parseProxyCoordinate(searchParams.get("lat"), -90, 90);
+    const lng = parseProxyCoordinate(searchParams.get("lng"), -180, 180);
+    if (lat === null || lng === null) {
+      return NextResponse.json({ error: "Invalid lat/lng" }, { status: 400 });
     }
+    const latStr = lat.toFixed(4);
+    const lngStr = lng.toFixed(4);
 
     try {
-      let res = await fetch(`https://api.adsb.lol/v2/lat/${lat}/lon/${lng}/dist/150`, {
+      let res = await fetchWithTimeout(`https://api.adsb.lol/v2/lat/${latStr}/lon/${lngStr}/dist/150`, {
         headers: {
           "Accept": "application/json",
           "User-Agent": "SeraphimOSINT/1.0"
         }
-      });
+      }, 5000);
       if (!res.ok) {
         console.warn(`[proxy/flights] ADSB.lol failed with status ${res.status}, trying opendata.adsb.fi fallback...`);
-        res = await fetch(`https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lng}/dist/150`, {
+        res = await fetchWithTimeout(`https://opendata.adsb.fi/api/v3/lat/${latStr}/lon/${lngStr}/dist/150`, {
           headers: {
             "Accept": "application/json",
             "User-Agent": "SeraphimOSINT/1.0"
           }
-        });
+        }, 5000);
       }
       if (!res.ok) {
         return NextResponse.json({ error: "Failed to fetch from all ADSB endpoints" }, { status: res.status });
       }
       const data = await res.json();
-      return NextResponse.json(data);
+      return NextResponse.json(data, {
+        headers: { "Cache-Control": PROXY_CACHE_HEADERS.flights },
+      });
     } catch (err) {
       console.warn("[proxy/flights] Exception, trying opendata.adsb.fi fallback:", err);
       try {
-        const res = await fetch(`https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lng}/dist/150`, {
+        const res = await fetchWithTimeout(`https://opendata.adsb.fi/api/v3/lat/${latStr}/lon/${lngStr}/dist/150`, {
           headers: {
             "Accept": "application/json",
             "User-Agent": "SeraphimOSINT/1.0"
           }
-        });
+        }, 5000);
         if (res.ok) {
           const data = await res.json();
-          return NextResponse.json(data);
+          return NextResponse.json(data, {
+            headers: { "Cache-Control": PROXY_CACHE_HEADERS.flights },
+          });
         }
         return NextResponse.json({ error: "Failed to fetch from fallback" }, { status: res.status });
       } catch (fallbackErr) {
@@ -64,19 +126,13 @@ export async function GET(
   }
 
   if (service === "safecast") {
-    const z = path[1];
-    const x = path[2];
-    let y = path[3];
-    if (!z || !x || !y) {
-      return NextResponse.json({ error: "Missing tile coordinates" }, { status: 400 });
-    }
-
-    if (y.endsWith(".png")) {
-      y = y.substring(0, y.length - 4);
+    const tile = validateTilePath(path[1], path[2], path[3]);
+    if (!tile) {
+      return NextResponse.json({ error: "Invalid tile coordinates" }, { status: 400 });
     }
 
     try {
-      const res = await fetch(`https://s3.amazonaws.com/te512.safecast.org/${z}/${x}/${y}.png`);
+      const res = await fetchWithTimeout(`https://s3.amazonaws.com/te512.safecast.org/${tile.z}/${tile.x}/${tile.y}.png`, {}, 5000);
       if (!res.ok) {
         // Return 204 No Content for missing/forbidden tiles (S3 returns 403/404 for non-existent keys)
         // to prevent MapLibre from logging AJAX errors in the browser console.
@@ -87,7 +143,7 @@ export async function GET(
       return new NextResponse(arrayBuffer, {
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=3600, stale-while-revalidate=600"
+          "Cache-Control": PROXY_CACHE_HEADERS.safecast
         }
       });
     } catch (err) {
@@ -98,7 +154,7 @@ export async function GET(
 
   if (service === "wildfires") {
     try {
-      const res = await fetch("https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv");
+      const res = await fetchWithTimeout("https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv", {}, 8000);
       if (!res.ok) {
         return NextResponse.json({ error: "Failed to fetch active fires from FIRMS" }, { status: res.status });
       }
@@ -142,7 +198,7 @@ export async function GET(
       
       return NextResponse.json(geojson, {
         headers: {
-          "Cache-Control": "public, max-age=1800, stale-while-revalidate=300"
+          "Cache-Control": PROXY_CACHE_HEADERS.wildfires
         }
       });
     } catch (err) {
@@ -153,7 +209,7 @@ export async function GET(
 
   if (service === "eonet") {
     try {
-      const res = await fetch("https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods");
+      const res = await fetchWithTimeout("https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods", {}, 8000);
       if (!res.ok) {
         return NextResponse.json({ error: "Failed to fetch active events from EONET" }, { status: res.status });
       }
@@ -169,7 +225,7 @@ export async function GET(
       }
       return NextResponse.json(data, {
         headers: {
-          "Cache-Control": "public, max-age=3600, stale-while-revalidate=600"
+          "Cache-Control": PROXY_CACHE_HEADERS.eonet
         }
       });
     } catch (err) {
@@ -279,19 +335,19 @@ export async function GET(
 
     return NextResponse.json(geojson, {
       headers: {
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=600"
+        "Cache-Control": PROXY_CACHE_HEADERS.ships
       }
     });
   }
 
   if (service === "iss") {
     try {
-      const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544", {
+      const res = await fetchWithTimeout("https://api.wheretheiss.at/v1/satellites/25544", {
         headers: {
           "Accept": "application/json",
           "User-Agent": "SeraphimOSINT/1.0"
         }
-      });
+      }, 5000);
       if (!res.ok) {
         return NextResponse.json({ error: "Failed to fetch ISS location" }, { status: res.status });
       }

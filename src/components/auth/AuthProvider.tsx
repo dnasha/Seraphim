@@ -187,52 +187,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user, fetchUserTier]);
 
     useEffect(() => {
-        // 1. Restore cached auth and tier on client mount to bypass cold starts
-        const cachedUserStr = localStorage.getItem('seraphim_cached_user');
-        const cachedSessionStr = localStorage.getItem('seraphim_cached_session');
-        const cachedTier = localStorage.getItem('seraphim_cached_tier') as UserTier | null;
+        // Resolve only guest state synchronously. Authenticated state must come
+        // from Supabase and pass server verification before it can gate features.
         const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
         const hasSupabaseSession = Object.keys(localStorage).some(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
         
         let hasRestoredFromCache = false;
-        
-        if (cachedUserStr && cachedSessionStr && cachedTier) {
-            try {
-                const cachedUser = JSON.parse(cachedUserStr);
-                const cachedSession = JSON.parse(cachedSessionStr);
-                const status = localStorage.getItem('seraphim_cached_sub_status');
-                const interval = localStorage.getItem('seraphim_cached_billing_interval');
-                const periodEnd = localStorage.getItem('seraphim_cached_period_end');
-                const trialEnds = localStorage.getItem('seraphim_cached_trial_ends');
-                const cancelAtEnd = localStorage.getItem('seraphim_cached_cancel_at_end') === 'true';
-
-                const restoredTier = normalizeUserTier(cachedTier, true);
-
-                // Defer setting state to avoid synchronous cascading renders in the effect body (satisfies ESLint)
-                setTimeout(() => {
-                    setUser(cachedUser);
-                    setSession(cachedSession);
-                    setUserTier(restoredTier);
-                    setIsGuest(false);
-                    setSubscriptionStatus(status);
-                    setBillingInterval(interval);
-                    setCurrentPeriodEnd(periodEnd);
-                    setTrialEndsAt(trialEnds);
-                    setCancelAtPeriodEnd(cancelAtEnd);
-                    setIsLoading(false);
-                    setTierLoading(false);
-                    localStorage.removeItem(GUEST_STORAGE_KEY);
-                    if (restoredTier !== cachedTier) {
-                        localStorage.setItem('seraphim_cached_tier', restoredTier);
-                    }
-                }, 0);
-                
-                hasRestoredFromCache = true;
-                log('[AuthProvider] Restored cached auth synchronously on mount:', restoredTier);
-            } catch (e) {
-                console.error('[AuthProvider] Failed to parse cached auth state:', e);
-            }
-        }
         
         if (!hasRestoredFromCache) {
             // If we know they are a guest (either explicit choice or no Supabase session cookie/local storage at all)
@@ -292,8 +252,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     
                     if (error || !user) {
                         if (error && (error.message === 'User verify timeout' || error.message.includes('fetch') || error.message.includes('network'))) {
-                            console.warn('[AuthProvider] Network or timeout during verification. Keeping local session.');
-                            verifiedUser = initialSession.user;
+                            console.warn('[AuthProvider] Network or timeout during verification. Not trusting local session for gated state.');
+                            verifiedUser = null;
+                            finalSession = null;
                         } else {
                             // Token is mathematically valid but server rejected it (deleted/banned)
                             console.warn('[AuthProvider] Server rejected session. Signing out.', error);
@@ -316,21 +277,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (verifiedUser) {
                         setIsGuest(false);
                         localStorage.removeItem(GUEST_STORAGE_KEY);
-                        // Update cache for the session/user
-                        try {
-                            localStorage.setItem('seraphim_cached_user', JSON.stringify(verifiedUser));
-                            localStorage.setItem('seraphim_cached_session', JSON.stringify(finalSession));
-                        } catch (cacheErr) {
-                            console.warn('[AuthProvider] Failed to save user session to cache:', cacheErr);
-                        }
                         await fetchUserTier(verifiedUser.id, true, finalSession);
                     } else {
                         log('[AuthProvider] No verified user, setting guest tier');
                         setUserTier('guest');
                         setTierLoading(false);
                         // Clear cache
-                        localStorage.removeItem('seraphim_cached_user');
-                        localStorage.removeItem('seraphim_cached_session');
                         localStorage.removeItem('seraphim_cached_tier');
                         localStorage.removeItem('seraphim_cached_sub_status');
                         localStorage.removeItem('seraphim_cached_billing_interval');
@@ -339,7 +291,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         localStorage.removeItem('seraphim_cached_cancel_at_end');
                     }
                 } else {
-                    console.warn('[AuthProvider] getSession timed out. Retaining cached session and tier in background.');
+                    console.warn('[AuthProvider] getSession timed out. Leaving gated auth state disabled until verification succeeds.');
+                    if (!hasRestoredFromCache) {
+                        setUserTier('guest');
+                        setTierLoading(false);
+                    }
                 }
 
                 // If no session and not already determined as guest, default to guest mode internally (only if not timed out)
@@ -374,12 +330,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                     setIsGuest(false);
                                     localStorage.removeItem(GUEST_STORAGE_KEY);
                                     setShowAuthModal(false);
-                                    try {
-                                        localStorage.setItem('seraphim_cached_user', JSON.stringify(newSession.user));
-                                        localStorage.setItem('seraphim_cached_session', JSON.stringify(newSession));
-                                    } catch (cacheErr) {
-                                        console.warn('[AuthProvider] Failed to cache session in onAuthStateChange:', cacheErr);
-                                    }
                                     
                                     // Only fetch tier on active changes/events, not on initial mount where initializeAuth handles it.
                                     // This prevents redundant queued queries during cold starts.
@@ -396,8 +346,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                     setTierLoading(false);
 
                                     // Clear cache
-                                    localStorage.removeItem('seraphim_cached_user');
-                                    localStorage.removeItem('seraphim_cached_session');
                                     localStorage.removeItem('seraphim_cached_tier');
                                     localStorage.removeItem('seraphim_cached_sub_status');
                                     localStorage.removeItem('seraphim_cached_billing_interval');
