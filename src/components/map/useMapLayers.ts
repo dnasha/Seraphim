@@ -145,6 +145,16 @@ export function useMapLayers({
         });
       }
 
+      if (!map.getSource("selected-news-event")) {
+        map.addSource("selected-news-event", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [],
+          },
+        });
+      }
+
       // Define logic for when a point should be treated as a cluster vs an individual pin.
       const clusterCheck: maplibregl.FilterSpecification =
         forceIndividualPinsRef.current
@@ -362,6 +372,27 @@ export function useMapLayers({
           },
           paint: {
             "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
+          },
+        });
+      }
+
+      if (!map.getLayer("selected-point-active")) {
+        map.addLayer({
+          id: "selected-point-active",
+          type: "symbol",
+          source: "selected-news-event",
+          layout: {
+            "icon-image": [
+              "concat",
+              ["coalesce", ["get", "category"], "general"],
+              "_active",
+            ],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "symbol-sort-key": 1000,
+          },
+          paint: {
+            "icon-opacity": 1,
           },
         });
       }

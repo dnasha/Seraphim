@@ -6,7 +6,7 @@
 
 import { NewsItem, BBox } from '@/lib/core/types';
 import { isWithinBBox } from './geo';
-import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked, canonicalEventCount } from './ranking';
+import { compareNewsItems, latestReportTimestamp, normalizeSortMode, sortNewsItems as sortRanked, canonicalEventCount, canonicalNewsId, matchesNewsId } from './ranking';
 
 export type SortMode = 'new' | 'hot';
 
@@ -25,6 +25,7 @@ export interface FilterOptions {
     respectBBox?: boolean;
     minVolume?: number;
     credibilityTiers?: number[];
+    pinnedItemId?: string | null;
 }
 
 /**
@@ -32,7 +33,7 @@ export interface FilterOptions {
  * This is a pure function with no React dependencies or side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true, minVolume, credibilityTiers } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true, minVolume, credibilityTiers, pinnedItemId } = options;
     const mode = normalizeSortMode(sortMode);
 
     let filtered = items;
@@ -44,7 +45,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
      * This filter is bypassed when viewing global unmapped news.
      */
     if (bbox && respectBBox && !unmappedOnly) {
-        filtered = filtered.filter(item => isWithinBBox(item, bbox));
+        filtered = filtered.filter(item => matchesNewsId(item, pinnedItemId) || isWithinBBox(item, bbox));
     }
 
     /**
@@ -148,7 +149,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
      */
     const deduped = new Map<string, NewsItem>();
     for (const item of filtered) {
-        const key = item.originalId || item.id;
+        const key = canonicalNewsId(item);
         const existing = deduped.get(key);
         if (!existing) {
             deduped.set(key, item);

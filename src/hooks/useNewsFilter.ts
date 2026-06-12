@@ -21,7 +21,8 @@ export function useNewsFilter(
     currentBBox?: BBox | null,
     sidebarRespectBBox = true,
     unmappedOnly = false,
-    appliedSortMode?: string
+    appliedSortMode?: string,
+    pinnedItemId?: string | null
 ) {
     const [sources, setSources] = useState<string[]>(['news', 'reddit', 'x', 'telegram', 'extra']);
     const [categories, setCategories] = useState<string[]>(['all']);
@@ -68,8 +69,9 @@ export function useNewsFilter(
             sortMode: effectiveSortMode,
             bbox: currentBBox || undefined,
             respectBBox: sidebarRespectBBox,
+            pinnedItemId,
         });
-    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, pinnedItemId]);
 
     const mapNews = useMemo(() => {
         return applyNewsFilters(news, {
@@ -87,8 +89,9 @@ export function useNewsFilter(
             sortMode: effectiveSortMode,
             bbox: currentBBox || undefined,
             respectBBox: true,
+            pinnedItemId,
         });
-    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, pinnedItemId]);
 
     return {
         sources, setSources,

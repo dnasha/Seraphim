@@ -7,6 +7,7 @@
 import { useEffect, useCallback, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { NewsItem } from "@/lib/core/types";
+import { matchesNewsId } from "@/lib/utils/ranking";
 import { CLUSTER_MAX_ZOOM } from "./utils";
 
 interface UseMapCameraProps {
@@ -123,12 +124,12 @@ export function useMapCamera({
       map.setFilter("unclustered-point", [
         "all",
         ["!", clusterCheck],
-        ["!=", ["get", "id"], activeId],
+        ["!=", ["coalesce", ["get", "canonicalId"], ["get", "id"]], activeId],
       ]);
       map.setFilter("unclustered-point-active", [
         "all",
         ["!", clusterCheck],
-        ["==", ["get", "id"], activeId],
+        ["==", ["get", "id"], "___USE_SELECTED_NEWS_EVENT_SOURCE___"],
       ]);
 
       if (map.getLayer("clusters-circle")) {
@@ -140,13 +141,23 @@ export function useMapCamera({
     }
 
     if (selectedItemId) {
-      const item = geoItems.find(
-        (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-      );
+      const item = geoItems.find((i) => matchesNewsId(i, selectedItemId));
       if (item) {
         const isNewSelection =
           lastFlownSelectionRef.current !== selectedItemId ||
           lastFlownVersionRef.current !== selectionVersion;
+        const shouldOpenPopup = !popupRef.current.isOpen();
+
+        if (isNewSelection) {
+          isFlyingRef.current = true;
+        }
+
+        if (popupContainer && (isNewSelection || shouldOpenPopup)) {
+          popupRef.current
+            .setLngLat([item.longitude!, item.latitude!])
+            .setDOMContent(popupContainer)
+            .addTo(map);
+        }
 
         if (isNewSelection) {
           lastFlownSelectionRef.current = selectedItemId;
@@ -155,17 +166,6 @@ export function useMapCamera({
 
           const currentZoom = map.getZoom();
           const targetZoom = Math.max(currentZoom, 8.5);
-
-          isFlyingRef.current = true;
-          
-          // Open the popup immediately. 
-          // While MapLibre moves the camera, it also moves the popup. This ensures zero-latency feedback for the user.
-          if (popupContainer) {
-            popupRef.current
-              .setLngLat([item.longitude!, item.latitude!])
-              .setDOMContent(popupContainer)
-              .addTo(map);
-          }
 
           const containerHeight = containerRef.current?.clientHeight || 800;
           const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
@@ -189,8 +189,8 @@ export function useMapCamera({
           map.once("moveend", () => {
             isFlyingRef.current = false;
             const finalItem =
-              latestGeoItemsRef.current.find(
-                (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+              latestGeoItemsRef.current.find((i) =>
+                matchesNewsId(i, selectedItemId),
               ) || item;
 
             if (popupRef.current && finalItem.latitude != null) {
@@ -248,8 +248,8 @@ export function useMapCamera({
 
     // Sync popup position if coordinates shift (e.g., due to jitter re-calculation during background data refresh).
     if (selectedItemId) {
-      const selectedItem = geoItems.find(
-        (i) => i.id === selectedItemId || i.originalId === selectedItemId,
+      const selectedItem = geoItems.find((i) =>
+        matchesNewsId(i, selectedItemId),
       );
       if (
         selectedItem &&

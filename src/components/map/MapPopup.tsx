@@ -16,7 +16,7 @@ import {
     getCredibilityStyle,
     formatTimeAgo 
 } from './MapConstants';
-import { canonicalEventCount } from '@/lib/utils/ranking';
+import { canonicalEventCount, canonicalNewsId } from '@/lib/utils/ranking';
 import { LuShare2 } from 'react-icons/lu';
 
 interface MapPopupProps {
@@ -53,7 +53,7 @@ export default function MapPopup({ item }: MapPopupProps) {
 
     const handleShare = async () => {
         try {
-            const shareUrl = `${window.location.origin}/?eventId=${item.id}`;
+            const shareUrl = `${window.location.origin}/?eventId=${canonicalNewsId(item)}`;
             await navigator.clipboard.writeText(shareUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);

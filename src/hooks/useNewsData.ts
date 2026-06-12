@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
 import { snapBBox } from "@/lib/utils/geo";
-import { normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
+import { canonicalNewsId, matchesNewsId, normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
 
 const log = (message: unknown, ...optionalParams: unknown[]) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -99,7 +99,8 @@ export function useNewsData({
     sortMode,
     limit,
     enabled = true,
-    resetKey
+    resetKey,
+    pinnedEventId = null
 }: {
     unmappedOnly: boolean;
     timeRange: string;
@@ -110,6 +111,7 @@ export function useNewsData({
     limit?: number;
     enabled?: boolean;
     resetKey?: string;
+    pinnedEventId?: string | null;
 }) {
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -141,6 +143,7 @@ export function useNewsData({
     const pendingBBoxRef = useRef<BBox | null>(null);
     const lastKnownBBoxRef = useRef<BBox | null>(null);
     const needsScopeReloadRef = useRef(false);
+    const pinnedEventIdRef = useRef<string | null>(pinnedEventId);
 
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
 
@@ -181,16 +184,26 @@ export function useNewsData({
      */
     const syncNewsFromStore = useCallback((mode: string | undefined) => {
         const normalizedMode = normalizeSortMode(mode);
+        const pinnedId = pinnedEventIdRef.current;
         
         const activeItems = Array.from(entitiesRef.current.values())
             .filter(item => {
-                const key = item.originalId || item.id;
-                return visibleMapIdsRef.current.has(key) || visibleMapIdsRef.current.has(item.id);
+                const key = canonicalNewsId(item);
+                return (
+                    visibleMapIdsRef.current.has(key) ||
+                    visibleMapIdsRef.current.has(item.id) ||
+                    matchesNewsId(item, pinnedId)
+                );
             });
 
         setNews(sortNewsItems(activeItems, normalizedMode));
         setAppliedSortMode(normalizedMode);
     }, []);
+
+    useEffect(() => {
+        pinnedEventIdRef.current = pinnedEventId;
+        syncNewsFromStore(sortMode);
+    }, [pinnedEventId, sortMode, syncNewsFromStore]);
 
     /**
      * Removes stale items from the entity store based on a least-recently-touched 
@@ -204,6 +217,15 @@ export function useNewsData({
             ...visibleMapIdsRef.current,
             ...visibleSidebarIdsRef.current,
         ]);
+        const pinnedId = pinnedEventIdRef.current;
+        if (pinnedId) {
+            protectedIds.add(pinnedId);
+            for (const [entityId, item] of store.entries()) {
+                if (matchesNewsId(item, pinnedId)) {
+                    protectedIds.add(entityId);
+                }
+            }
+        }
 
         const candidates = Array.from(store.keys())
             .filter((id) => !protectedIds.has(id))
@@ -226,7 +248,7 @@ export function useNewsData({
         const now = Date.now();
 
         for (const item of items) {
-            const key = item.originalId || item.id;
+            const key = canonicalNewsId(item);
             const existing = entitiesRef.current.get(key);
             
             const merged = mergeNewsItem(existing, item);
@@ -567,7 +589,7 @@ export function useNewsData({
         
         let targetId = id;
         if (id.startsWith('cluster-')) {
-            const item = newsRef.current.find(i => i.id === id);
+            const item = newsRef.current.find(i => matchesNewsId(i, id));
             if (item?.originalId) {
                 targetId = item.originalId;
             } else {
@@ -608,10 +630,7 @@ export function useNewsData({
 
             let changed = false;
             for (const [entityId, entity] of entitiesRef.current.entries()) {
-                if (
-                    entity.id === targetId ||
-                    entity.originalId === targetId
-                ) {
+                if (matchesNewsId(entity, targetId)) {
                     entitiesRef.current.set(entityId, {
                         ...entity,
                         description: descriptionValue,

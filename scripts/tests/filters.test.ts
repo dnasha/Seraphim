@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyNewsFilters, FilterOptions } from '@/lib/utils/filters';
+import { canonicalNewsId, matchesNewsId } from '@/lib/utils/ranking';
 import type { NewsItem } from '@/lib/core/types';
 
 /*
@@ -402,6 +403,64 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
 
         const globalResult = applyNewsFilters([inView, outOfView], defaultOpts({ bbox, respectBBox: false }));
         expect(globalResult.map((i) => i.id).sort()).toEqual(['in-view', 'out-of-view']);
+    });
+
+    it('preserves the pinned selected item through bbox filtering only', () => {
+        const inView = makeItem({ id: 'in-view', latitude: 10, longitude: 10 });
+        const selectedOutOfView = makeItem({ id: 'selected-story', latitude: 70, longitude: 70 });
+        const unselectedOutOfView = makeItem({ id: 'unselected-story', latitude: 75, longitude: 75 });
+        const bbox = { minLat: 0, maxLat: 20, minLng: 0, maxLng: 20 };
+
+        const result = applyNewsFilters(
+            [inView, selectedOutOfView, unselectedOutOfView],
+            defaultOpts({ bbox, respectBBox: true, pinnedItemId: 'selected-story' }),
+        );
+
+        expect(result).toContain(inView);
+        expect(result).toContain(selectedOutOfView);
+        expect(result).not.toContain(unselectedOutOfView);
+    });
+
+    it('matches clustered and raw ids by canonical event id', () => {
+        const clustered = makeItem({
+            id: 'cluster-z4-12.0000-13.0000-4',
+            originalId: 'story-1',
+            latitude: 70,
+            longitude: 70,
+        });
+        const bbox = { minLat: 0, maxLat: 20, minLng: 0, maxLng: 20 };
+
+        expect(canonicalNewsId(clustered)).toBe('story-1');
+        expect(matchesNewsId(clustered, 'story-1')).toBe(true);
+        expect(matchesNewsId(clustered, 'cluster-z4-12.0000-13.0000-4')).toBe(true);
+
+        const result = applyNewsFilters(
+            [clustered],
+            defaultOpts({ bbox, respectBBox: true, pinnedItemId: 'story-1' }),
+        );
+        expect(result).toEqual([clustered]);
+    });
+
+    it('does not let pinned selection bypass non-viewport filters', () => {
+        const selectedOutOfView = makeItem({
+            id: 'selected-story',
+            category: 'health',
+            latitude: 70,
+            longitude: 70,
+        });
+        const bbox = { minLat: 0, maxLat: 20, minLng: 0, maxLng: 20 };
+
+        const result = applyNewsFilters(
+            [selectedOutOfView],
+            defaultOpts({
+                bbox,
+                respectBBox: true,
+                pinnedItemId: 'selected-story',
+                categories: ['crisis'],
+            }),
+        );
+
+        expect(result).toEqual([]);
     });
 });
 

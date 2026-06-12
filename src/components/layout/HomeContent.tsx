@@ -14,8 +14,8 @@ import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter } from '@/hooks/useNewsFilter';
 import { useViewState } from '@/hooks/useViewState';
 import { useAuth } from '@/hooks/useAuth';
-import { BBox } from '@/lib/core/types';
-import { SortMode } from '@/lib/utils/ranking';
+import { BBox, NewsItem } from '@/lib/core/types';
+import { matchesNewsId, SortMode } from '@/lib/utils/ranking';
 import { useUserTier } from '@/hooks/useUserTier';
 import AuthModal from '@/components/auth/AuthModal';
 import UserButton from '@/components/auth/UserButton';
@@ -24,6 +24,17 @@ import styles from './Layout.module.css';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
+
+function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string | null): NewsItem[] {
+    if (items.length <= limit) return items;
+    if (!pinnedItemId) return items.slice(0, limit);
+
+    const pinnedIndex = items.findIndex((item) => matchesNewsId(item, pinnedItemId));
+    if (pinnedIndex < 0 || pinnedIndex < limit) return items.slice(0, limit);
+    if (limit <= 1) return [items[pinnedIndex]];
+
+    return [...items.slice(0, limit - 1), items[pinnedIndex]];
+}
 
 export function HomeContent() {
     const { resolvedTheme } = useTheme();
@@ -106,6 +117,9 @@ export function HomeContent() {
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
     const newsResetKey = isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous';
+    const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
+    const [selectionVersion, setSelectionVersion] = useState(0);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     useEffect(() => {
         if (isAuthResolving || !isGuestUser) return;
@@ -131,7 +145,8 @@ export function HomeContent() {
         unmappedOnly,
         limit: isGuestUser ? 10 : undefined,
         enabled: !isAuthResolving,
-        resetKey: newsResetKey
+        resetKey: newsResetKey,
+        pinnedEventId: selectedItemId
     });
 
     const isLoading = dataLoading || isAuthResolving;
@@ -145,11 +160,7 @@ export function HomeContent() {
         credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, !unmappedOnly, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode);
-
-    const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
-    const [selectionVersion, setSelectionVersion] = useState(0);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    } = useNewsFilter(news, !unmappedOnly, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode, selectedItemId);
 
     const isDarkMode = resolvedTheme === 'dark';
 
@@ -183,13 +194,13 @@ export function HomeContent() {
     }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, effectiveSortMode, unmappedOnly, handleSelectItem]);
 
     /**
-     * Handles BBox changes by resetting sidebar scroll if the selected item is panned out.
-     * This prevents the sidebar from jumping or showing stale data during map navigation.
+     * Handles BBox changes by resetting sidebar scroll only when the selected item is
+     * no longer present in the filtered result set for non-viewport reasons.
      */
     useEffect(() => {
         if (isFirstMount.current) return;
         
-        const isVisible = selectedItemId && filteredNews.some(i => i.id === selectedItemId || i.originalId === selectedItemId);
+        const isVisible = selectedItemId && filteredNews.some(i => matchesNewsId(i, selectedItemId));
         
         if (!isVisible) {
             requestAnimationFrame(() => {
@@ -313,23 +324,21 @@ export function HomeContent() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedItemId, sortMode, isGuestUser, handleSelectItem, handleSortModeChange, handleSearchChange]);
 
-    /** Gate guests to a maximum of 10 events across all views */
-    const items = useMemo(() => {
-        if (isGuestUser) return filteredNews.slice(0, 10);
-        // Deactivated for demo mode: free users get full feed access
-        // if (userTier === 'free') return filteredNews.slice(0, 100);
-        return filteredNews;
-    }, [filteredNews, isGuestUser]);
+    /** Gate guests to a maximum of 10 map events while preserving the active selection. */
+    const visibleMapNews = useMemo(() => {
+        if (isGuestUser) return limitWithPinned(mapNews, 10, selectedItemId);
+        return mapNews;
+    }, [mapNews, isGuestUser, selectedItemId]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
         if (selectedItemId) {
-            const item = items.find(n => n.id === selectedItemId || n.originalId === selectedItemId);
+            const item = filteredNews.find(n => matchesNewsId(n, selectedItemId));
             if (item && item.description === undefined && fetchEventDetails) {
                 fetchEventDetails(selectedItemId);
             }
         }
-    }, [selectedItemId, fetchEventDetails, items]);
+    }, [selectedItemId, fetchEventDetails, filteredNews]);
 
     const activeFilterCount = useMemo(() => {
         let count = 0;
@@ -415,7 +424,7 @@ export function HomeContent() {
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
-                    items={isGuestUser ? mapNews.slice(0, 10) : mapNews}
+                    items={visibleMapNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}

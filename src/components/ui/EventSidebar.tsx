@@ -24,7 +24,9 @@ import TierBadge from "@/components/ui/TierBadge";
 import UserButton from "@/components/auth/UserButton";
 import {
   canonicalEventCount,
+  canonicalNewsId,
   latestReportTimestamp,
+  matchesNewsId,
 } from "@/lib/utils/ranking";
 import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
@@ -111,8 +113,23 @@ export default function EventSidebar({
   /* Identify the top 3 IDs for pulsing indicators (matches map logic) */
   const top3Ids = useMemo(() => {
     if (!animatedEffects) return new Set<string>();
-    return new Set(items.slice(0, 3).map((item) => item.originalId || item.id));
+    return new Set(items.slice(0, 3).map((item) => canonicalNewsId(item)));
   }, [items, animatedEffects]);
+
+  const displayItems = useMemo(() => {
+    if (!selectedItemId) return items;
+    const selectedIndex = items.findIndex((item) =>
+      matchesNewsId(item, selectedItemId),
+    );
+    if (selectedIndex <= 0) return items;
+
+    const selectedItem = items[selectedIndex];
+    return [
+      selectedItem,
+      ...items.slice(0, selectedIndex),
+      ...items.slice(selectedIndex + 1),
+    ];
+  }, [items, selectedItemId]);
 
   /* Reset scroll and expansion when filters change explicitly */
   useEffect(() => {
@@ -146,7 +163,7 @@ export default function EventSidebar({
   /* Scroll to selected item */
   useEffect(() => {
     if (!selectedItemId) return;
-    const index = items.findIndex((i) => i.id === selectedItemId);
+    const index = displayItems.findIndex((i) => matchesNewsId(i, selectedItemId));
     if (index >= 0 && virtuosoRef.current) {
       virtuosoRef.current.scrollToIndex({
         index,
@@ -154,7 +171,7 @@ export default function EventSidebar({
         behavior: "smooth",
       });
     }
-  }, [selectedItemId, selectionVersion, items]);
+  }, [selectedItemId, selectionVersion, displayItems]);
 
   const handleCardClick = useCallback(
     (item: NewsItem) => {
@@ -165,8 +182,8 @@ export default function EventSidebar({
 
       if (hasGeo) {
         /* Mapped item selection */
-        const targetId = item.originalId || item.id;
-        const isSelected = selectedItemId === targetId;
+        const targetId = canonicalNewsId(item);
+        const isSelected = matchesNewsId(item, selectedItemId);
         onSelectItem(isSelected ? null : targetId);
 
         if (!isSelected) {
@@ -187,7 +204,7 @@ export default function EventSidebar({
         }
       } else {
         /* Unmapped item expansion */
-        const targetId = item.originalId || item.id;
+        const targetId = canonicalNewsId(item);
         const isCurrentlyExpanded = expandedId === targetId;
         const nextExpanded = isCurrentlyExpanded ? null : targetId;
         setExpandedId(nextExpanded);
@@ -213,8 +230,8 @@ export default function EventSidebar({
 
   const renderItem = useCallback(
     (index: number, item: NewsItem) => {
-      const targetId = item.originalId || item.id;
-      const isSelected = targetId === selectedItemId;
+      const targetId = canonicalNewsId(item);
+      const isSelected = matchesNewsId(item, selectedItemId);
       const isExpanded = expandedId === targetId || isSelected;
       const isTop3 = top3Ids.has(targetId);
       return (
@@ -447,7 +464,7 @@ export default function EventSidebar({
         ) : (
           <Virtuoso
             ref={virtuosoRef}
-            data={items}
+            data={displayItems}
             style={{ height: "100%", width: "100%" }}
             itemContent={(index, item) => renderItem(index, item)}
             overscan={200}

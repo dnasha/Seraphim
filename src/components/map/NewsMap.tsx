@@ -16,7 +16,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import MapPopup from "./MapPopup";
 
 import { getMapLibreStyle } from "./MapConstants";
-import { canonicalEventCount, latestReportTimestamp } from "@/lib/utils/ranking";
+import {
+  canonicalEventCount,
+  canonicalNewsId,
+  latestReportTimestamp,
+  matchesNewsId,
+} from "@/lib/utils/ranking";
 import { applyClientJitter } from "./utils";
 import { useMapLayers } from "./useMapLayers";
 import { useMapCamera } from "./useMapCamera";
@@ -115,6 +120,7 @@ export default function NewsMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pulseAnimationFrameRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const suppressPopupCloseRef = useRef(false);
   const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -268,19 +274,17 @@ export default function NewsMap({
       return latestReportTimestamp(b) - latestReportTimestamp(a);
     });
 
-    const topIds = new Set(sorted.slice(0, 3).map((i) => i.id));
+    const topIds = new Set(sorted.slice(0, 3).map((i) => canonicalNewsId(i)));
 
     return jittered.map((item) => ({
       ...item,
-      isTopHot: topIds.has(item.id),
+      isTopHot: topIds.has(canonicalNewsId(item)),
     }));
   }, [items, sortMode, selectedItemId]);
 
   const selectedItem = useMemo(() => {
     if (!selectedItemId) return null;
-    return geoItems.find(
-      (i) => i.id === selectedItemId || i.originalId === selectedItemId,
-    ) || null;
+    return geoItems.find((i) => matchesNewsId(i, selectedItemId)) || null;
   }, [geoItems, selectedItemId]);
 
   // Emit current viewport bounds to the parent with a debounce to minimize network traffic.
@@ -505,6 +509,11 @@ export default function NewsMap({
     });
 
     popupRef.current.on("close", () => {
+      if (suppressPopupCloseRef.current) {
+        suppressPopupCloseRef.current = false;
+        return;
+      }
+
       if (!isFlyingRef.current) {
         onSelectItemRef.current(null);
       }
@@ -535,11 +544,21 @@ export default function NewsMap({
 
           map.on("click", "unclustered-point", (e) => {
             if (e.features?.[0])
-              onSelectItemRef.current(e.features[0].properties.id);
+              onSelectItemRef.current(
+                e.features[0].properties.canonicalId || e.features[0].properties.id,
+              );
           });
           map.on("click", "unclustered-point-active", (e) => {
             if (e.features?.[0])
-              onSelectItemRef.current(e.features[0].properties.id);
+              onSelectItemRef.current(
+                e.features[0].properties.canonicalId || e.features[0].properties.id,
+              );
+          });
+          map.on("click", "selected-point-active", (e) => {
+            if (e.features?.[0])
+              onSelectItemRef.current(
+                e.features[0].properties.canonicalId || e.features[0].properties.id,
+              );
           });
 
           map.on("click", "clusters-circle", async (e) => {
@@ -581,6 +600,7 @@ export default function NewsMap({
             "clusters-circle",
             "unclustered-point",
             "unclustered-point-active",
+            "selected-point-active",
           ]) {
             map.on("mouseenter", layer, () => {
               map.getCanvas().style.cursor = "pointer";
@@ -722,6 +742,7 @@ export default function NewsMap({
         },
         properties: {
           id: item.id,
+          canonicalId: canonicalNewsId(item),
           category: item.category,
           title: item.title,
           source: item.source,
@@ -746,6 +767,52 @@ export default function NewsMap({
     ) as maplibregl.GeoJSONSource;
     if (source) source.setData(geojson);
   }, [geoItems, mapReady]);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+
+    const source = mapRef.current.getSource(
+      "selected-news-event",
+    ) as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    const selectedGeoJson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features:
+        selectedItem && selectedItem.latitude != null && selectedItem.longitude != null
+          ? [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [selectedItem.longitude, selectedItem.latitude],
+                },
+                properties: {
+                  id: selectedItem.id,
+                  canonicalId: canonicalNewsId(selectedItem),
+                  category: selectedItem.category,
+                  title: selectedItem.title,
+                  source: selectedItem.source,
+                  storyCount: selectedItem.storyCount ?? 1,
+                  sourcesCount: selectedItem.sourcesCount ?? 1,
+                  sourceCount: canonicalEventCount(selectedItem),
+                },
+              },
+            ]
+          : [],
+    };
+
+    source.setData(selectedGeoJson);
+  }, [selectedItem, mapReady]);
+
+  useEffect(() => {
+    const popup = popupRef.current;
+    if (!popup?.isOpen()) return;
+    if (selectedItemId && selectedItem) return;
+
+    suppressPopupCloseRef.current = true;
+    popup.remove();
+  }, [selectedItemId, selectedItem]);
 
   useEffect(() => {
     if (!settingsOpen) return;

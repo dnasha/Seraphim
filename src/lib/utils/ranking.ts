@@ -9,6 +9,21 @@ import { NewsItem } from '@/lib/core/types';
 export type SortMode = 'new' | 'hot';
 
 /**
+ * Returns the stable event identity across raw events and server-generated map clusters.
+ */
+export function canonicalNewsId(item: Pick<NewsItem, 'id' | 'originalId'>): string {
+    return item.originalId || item.id;
+}
+
+/**
+ * Checks whether a news item matches a raw, clustered, or canonical event id.
+ */
+export function matchesNewsId(item: Pick<NewsItem, 'id' | 'originalId'>, id: string | null | undefined): boolean {
+    if (!id) return false;
+    return item.id === id || item.originalId === id || canonicalNewsId(item) === id;
+}
+
+/**
  * Normalizes a sort mode string to a valid SortMode. Defaults to 'hot'.
  */
 export function normalizeSortMode(mode?: string | null): SortMode {
@@ -110,7 +125,7 @@ export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): numb
     const credB = b.credibilityTier || 3;
     if (credB !== credA) return credA - credB;
 
-    return (a.originalId || a.id).localeCompare(b.originalId || b.id);
+    return canonicalNewsId(a).localeCompare(canonicalNewsId(b));
 }
 
 /**
