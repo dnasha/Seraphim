@@ -194,6 +194,55 @@ describe('applyNewsFilters - time range filtering', () => {
         expect(result).toHaveLength(1);
         expect(result[0].id).toBe('latest-activity-override');
     });
+
+    it('includes items inside a custom start/end range', () => {
+        const inside = makeItem({
+            id: 'inside-custom-range',
+            publishedAt: '2026-04-15T10:30:00.000Z',
+        });
+
+        const result = applyNewsFilters([inside], defaultOpts({
+            timeRange: 'custom',
+            customStartDate: '2026-04-15T10:00:00.000Z',
+            customEndDate: '2026-04-15T11:00:00.000Z',
+        }));
+
+        expect(result).toEqual([inside]);
+    });
+
+    it('excludes items before the custom start timestamp', () => {
+        const beforeStart = makeItem({
+            id: 'before-custom-start',
+            publishedAt: '2026-04-15T09:59:59.000Z',
+        });
+
+        const result = applyNewsFilters([beforeStart], defaultOpts({
+            timeRange: 'custom',
+            customStartDate: '2026-04-15T10:00:00.000Z',
+            customEndDate: '2026-04-15T11:00:00.000Z',
+        }));
+
+        expect(result).toEqual([]);
+    });
+
+    it('excludes items after the exact custom end timestamp', () => {
+        const atEnd = makeItem({
+            id: 'at-custom-end',
+            publishedAt: '2026-04-15T11:00:00.000Z',
+        });
+        const afterEnd = makeItem({
+            id: 'after-custom-end',
+            publishedAt: '2026-04-15T11:00:01.000Z',
+        });
+
+        const result = applyNewsFilters([atEnd, afterEnd], defaultOpts({
+            timeRange: 'custom',
+            customStartDate: '2026-04-15T10:00:00.000Z',
+            customEndDate: '2026-04-15T11:00:00.000Z',
+        }));
+
+        expect(result).toEqual([atEnd]);
+    });
 });
 
 /*

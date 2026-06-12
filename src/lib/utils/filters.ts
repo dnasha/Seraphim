@@ -80,11 +80,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
      */
     if (timeRange === 'custom') {
         const sinceTime = customStartDate ? new Date(customStartDate).getTime() : -Infinity;
-        const untilDate = customEndDate ? new Date(customEndDate) : null;
-        if (untilDate) {
-            untilDate.setUTCHours(23, 59, 59, 999);
-        }
-        const untilTime = untilDate ? untilDate.getTime() : Infinity;
+        const untilTime = customEndDate ? new Date(customEndDate).getTime() : Infinity;
         
         filtered = filtered.filter(item => {
             const time = latestReportTimestamp(item);

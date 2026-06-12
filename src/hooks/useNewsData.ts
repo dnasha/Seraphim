@@ -126,6 +126,8 @@ export function useNewsData({
         sortMode?: string;
         query?: string;
         timeRange?: string;
+        since?: string | null;
+        until?: string | null;
         unmappedOnly?: boolean;
         limit?: number;
     } | null>(null);
@@ -410,9 +412,13 @@ export function useNewsData({
         }
         log(`[useNewsData] Resolved bbox:`, bbox ? `${bbox.minLat},${bbox.minLng} to ${bbox.maxLat},${bbox.maxLng}` : 'null');
 
+        const since = computeSince(timeRange, customStartDate);
+        const until = computeUntil(timeRange, customEndDate);
+        const hasDateScope = Boolean(since || until);
+
         const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
         const needsScopeReload = needsScopeReloadRef.current;
-        if (!bbox && !unmappedOnly && !searchQuery && !limit && !isUpgradingFromLimitedFetch && !needsScopeReload) {
+        if (!bbox && !unmappedOnly && !searchQuery && !limit && !hasDateScope && !isUpgradingFromLimitedFetch && !needsScopeReload) {
             log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
@@ -433,6 +439,8 @@ export function useNewsData({
             sortMode === prev.sortMode &&
             searchQuery === prev.query &&
             timeRange === prev.timeRange &&
+            since === prev.since &&
+            until === prev.until &&
             limit === prev.limit) {
             log('[useNewsData] Returning early because all parameters match previous fetch params');
             return;
@@ -440,8 +448,6 @@ export function useNewsData({
 
         log(`[useNewsData] Proceeding to fetch. Prev limit was: ${prev?.limit}, New limit: ${limit}`);
 
-        const since = computeSince(timeRange, customStartDate);
-        const until = computeUntil(timeRange, customEndDate);
         const enrichedBBox = bbox ? {
             ...bbox,
             since: since ?? undefined,
@@ -502,6 +508,8 @@ export function useNewsData({
                 sortMode,
                 query: searchQuery,
                 timeRange,
+                since,
+                until,
                 unmappedOnly,
                 limit
             };
@@ -544,6 +552,8 @@ export function useNewsData({
                 sortMode,
                 query: searchQuery,
                 timeRange,
+                since,
+                until,
                 unmappedOnly,
                 limit
             };

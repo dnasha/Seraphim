@@ -57,6 +57,8 @@ export function HomeContent() {
     const [timeRange, setTimeRange] = useState(initialState.t || '1d');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+    const [debouncedCustomStartDate, setDebouncedCustomStartDate] = useState('');
+    const [debouncedCustomEndDate, setDebouncedCustomEndDate] = useState('');
     
     const [searchQuery, setSearchQuery] = useState(initialState.q || '');
     const [debouncedSearch, setDebouncedSearch] = useState(initialState.q || '');
@@ -76,6 +78,24 @@ export function HomeContent() {
         }, 300);
         return () => clearTimeout(timer);
     }, [searchQuery]);
+
+    /** Debounces valid custom date edits to avoid request spam while typing/picking. */
+    useEffect(() => {
+        if (timeRange !== 'custom') return;
+
+        const startTime = customStartDate ? new Date(customStartDate).getTime() : NaN;
+        const endTime = customEndDate ? new Date(customEndDate).getTime() : NaN;
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime > endTime) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            setDebouncedCustomStartDate(customStartDate);
+            setDebouncedCustomEndDate(customEndDate);
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [timeRange, customStartDate, customEndDate]);
 
     /** 
      * Handle browser back button (bfcache restore).
@@ -111,9 +131,10 @@ export function HomeContent() {
 
     const effectiveSortMode = isGuestUser ? 'hot' : sortMode;
     const effectiveSearchQuery = isGuestUser ? '' : debouncedSearch;
-    const effectiveTimeRange = isGuestUser ? '1d' : timeRange;
-    const effectiveCustomStartDate = isGuestUser ? '' : customStartDate;
-    const effectiveCustomEndDate = isGuestUser ? '' : customEndDate;
+    const hasCommittedCustomRange = Boolean(debouncedCustomStartDate && debouncedCustomEndDate);
+    const effectiveTimeRange = isGuestUser ? '1d' : (timeRange === 'custom' && !hasCommittedCustomRange ? '1d' : timeRange);
+    const effectiveCustomStartDate = isGuestUser ? '' : debouncedCustomStartDate;
+    const effectiveCustomEndDate = isGuestUser ? '' : debouncedCustomEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
     const newsResetKey = isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous';
@@ -191,7 +212,7 @@ export function HomeContent() {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
         });
-    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, effectiveSortMode, unmappedOnly, handleSelectItem]);
+    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, debouncedCustomStartDate, debouncedCustomEndDate, effectiveSortMode, unmappedOnly, handleSelectItem]);
 
     /**
      * Handles BBox changes by resetting sidebar scroll only when the selected item is
@@ -231,9 +252,13 @@ export function HomeContent() {
                 const pad = (n: number) => String(n).padStart(2, '0');
                 return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
             };
-            
-            setCustomStartDate(toLocalISO(yesterday));
-            setCustomEndDate(toLocalISO(now));
+
+            const defaultStartDate = toLocalISO(yesterday);
+            const defaultEndDate = toLocalISO(now);
+            setCustomStartDate(defaultStartDate);
+            setCustomEndDate(defaultEndDate);
+            setDebouncedCustomStartDate(defaultStartDate);
+            setDebouncedCustomEndDate(defaultEndDate);
         }
     }, [customStartDate, customEndDate, updateURL]);
 
