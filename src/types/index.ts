@@ -40,7 +40,6 @@ export interface DbEvent {
   latitude?: number | null;
   longitude?: number | null;
   location_name?: string | null;
-  tags?: string[] | null;       
   embedding?: number[] | string; 
   created_at?: string;        
   cluster_id?: number;        
@@ -88,7 +87,6 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
         latitude: row.center_lat ?? row.latitude ?? undefined,
         longitude: row.center_lng ?? row.longitude ?? undefined,
         locationName: row.location_name ?? undefined,
-        tags: row.tags ?? undefined,
         clusterId: row.cluster_id ?? undefined,
         storyCount: row.story_count ?? undefined,
         sourcesCount: Number.isFinite(parsedEventCount) ? parsedEventCount : undefined,

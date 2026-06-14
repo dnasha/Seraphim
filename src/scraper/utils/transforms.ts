@@ -52,12 +52,6 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         return null;
     }
 
-    let tags = item.tags ?? null;
-    if (Array.isArray(tags)) {
-        tags = tags.filter(t => typeof t === 'string' && t.trim().length > 0);
-        if (tags.length === 0) tags = null;
-    }
-    
     const tier = SOURCE_TIER_MAP.get(item.source) ?? 3;
     
     return {
@@ -72,7 +66,6 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         latitude: (typeof item.latitude === 'number' && Number.isFinite(item.latitude)) ? item.latitude : null,
         longitude: (typeof item.longitude === 'number' && Number.isFinite(item.longitude)) ? item.longitude : null,
         location_name: cleanString(item.locationName) || null,
-        tags: tags,
         credibility_tier: tier,
         event_count: 1,
         /* Impact score calculation: Tier 1 (3.5 - 1 = 2.5), Tier 2 (1.5), Tier 3 (0.5) */

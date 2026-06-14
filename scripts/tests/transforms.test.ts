@@ -107,22 +107,10 @@ describe('newsItemToDbEvent', () => {
         expect(event!.url).toBe('http://example.com/article');
     });
 
-    it('normalizes tags by filtering empty strings', () => {
-        const item = makeNewsItem({ tags: ['valid', '', '  ', 'also-valid'] });
+    it('omits source tags from the database payload', () => {
+        const item = makeNewsItem({ tags: ['valid', 'also-valid'] });
         const event = newsItemToDbEvent(item);
-        expect(event!.tags).toEqual(['valid', 'also-valid']);
-    });
-
-    it('sets tags to null when array is empty after filtering', () => {
-        const item = makeNewsItem({ tags: ['', '  '] });
-        const event = newsItemToDbEvent(item);
-        expect(event!.tags).toBeNull();
-    });
-
-    it('sets tags to null when undefined', () => {
-        const item = makeNewsItem({ tags: undefined });
-        const event = newsItemToDbEvent(item);
-        expect(event!.tags).toBeNull();
+        expect(event).not.toHaveProperty('tags');
     });
 
     it('cleans surrogate pairs in title and description', () => {
@@ -179,7 +167,6 @@ describe('dbEventToNewsItem', () => {
             latitude: 50.45,
             longitude: 30.52,
             location_name: 'Kyiv',
-            tags: ['conflict', 'ukraine'],
             ...overrides,
         };
     }
@@ -196,7 +183,6 @@ describe('dbEventToNewsItem', () => {
         expect(item.latitude).toBe(50.45);
         expect(item.longitude).toBe(30.52);
         expect(item.locationName).toBe('Kyiv');
-        expect(item.tags).toEqual(['conflict', 'ukraine']);
     });
 
     it('converts null lat/lon to undefined', () => {
@@ -210,12 +196,6 @@ describe('dbEventToNewsItem', () => {
         const event = makeDbEvent({ id: undefined });
         const item = dbEventToNewsItem(event);
         expect(item.id).toBe('https://example.com/db-article');
-    });
-
-    it('converts null tags to undefined', () => {
-        const event = makeDbEvent({ tags: null });
-        const item = dbEventToNewsItem(event);
-        expect(item.tags).toBeUndefined();
     });
 
     it('converts null location_name to undefined', () => {
