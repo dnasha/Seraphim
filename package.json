@@ -12,6 +12,7 @@
     "test:sources": "bun run scripts/diagnostics/test-fetchers.ts",
     "test": "bun x vitest run",
     "test:watch": "bun x vitest",
+    "test:coverage": "bun x vitest run --coverage",
     "test:accuracy": "bun x vitest run scripts/tests/geocoding-accuracy.test.ts"
   },
   "dependencies": {
@@ -47,13 +48,16 @@
     "terra-draw-maplibre-gl-adapter": "^1.4.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "4.1.8",
     "dotenv": "^17.4.2",
     "dotenv-expand": "^13.0.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.4",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
   },
