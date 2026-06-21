@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LuArrowLeft, LuTriangleAlert, LuCopy, LuCheck } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
-// import { useUserTier } from '@/hooks/useUserTier';
-// import TierBadge from '@/components/ui/TierBadge';
+import { useUserTier } from '@/hooks/useUserTier';
+import TierBadge from '@/components/ui/TierBadge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './AccountPage.module.css';
 
@@ -59,7 +59,7 @@ export default function AccountPage() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  // const [isManagingBilling, setIsManagingBilling] = useState(false);
+  const [isManagingBilling, setIsManagingBilling] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopyUserId = async () => {
@@ -73,7 +73,7 @@ export default function AccountPage() {
     }
   };
 
-  // const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd } = useUserTier();
+  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd } = useUserTier();
 
   // Redirect if not logged in
   useEffect(() => {
@@ -240,8 +240,6 @@ export default function AccountPage() {
           </div>
         </section>
 
-        {/* Subscription section deactivated for demo mode */}
-        {/*
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Subscription</h2>
           <div className={styles.profileRow}>
@@ -342,7 +340,6 @@ export default function AccountPage() {
             )}
           </div>
         </section>
-        */}
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>

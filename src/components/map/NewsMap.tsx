@@ -29,7 +29,7 @@ import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
 import MapLoading from "./MapLoading";
-// import UpgradeButton from "./UpgradeButton";
+import UpgradeButton from "./UpgradeButton";
 import MapDrawTools from "./MapDrawTools";
 import styles from "./NewsMap.module.css";
 
@@ -109,10 +109,8 @@ export default function NewsMap({
   initialZoom,
   sortMode,
   disabled = false,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isSidebarOpen = true,
   userTier = 'guest',
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tierLoading = false,
 }: NewsMapProps) {
   const [mapBearing, setMapBearing] = useState(0);
@@ -1030,10 +1028,10 @@ export default function NewsMap({
       {!mapReady && !mapError && <MapLoading />}
       {mapError && <MapError onRetry={handleRetry} error={mapError} />}
 
-      {/* Upgrade CTA for non-paying users - Deactivated for demo mode */}
-      {/* {!tierLoading && userTier === 'free' && (
+      {/* Upgrade CTA for non-paying users */}
+      {!tierLoading && userTier === 'free' && (
         <UpgradeButton isSidebarOpen={isSidebarOpen} />
-      )} */}
+      )}
 
       {!mapError && (
         <>

@@ -164,7 +164,7 @@ export function HomeContent() {
         customEndDate: effectiveCustomEndDate,
         sortMode: effectiveSortMode,
         unmappedOnly,
-        limit: isGuestUser ? 10 : undefined,
+        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
         enabled: !isAuthResolving,
         resetKey: newsResetKey,
         pinnedEventId: selectedItemId
@@ -349,11 +349,18 @@ export function HomeContent() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedItemId, sortMode, isGuestUser, handleSelectItem, handleSortModeChange, handleSearchChange]);
 
-    /** Gate guests to a maximum of 10 map events while preserving the active selection. */
+    /** Gate guests and free users while preserving the active selection. */
     const visibleMapNews = useMemo(() => {
         if (isGuestUser) return limitWithPinned(mapNews, 10, selectedItemId);
+        if (userTier === 'free') return limitWithPinned(mapNews, 100, selectedItemId);
         return mapNews;
-    }, [mapNews, isGuestUser, selectedItemId]);
+    }, [mapNews, isGuestUser, selectedItemId, userTier]);
+
+    const visibleSidebarNews = useMemo(() => {
+        if (isGuestUser) return limitWithPinned(filteredNews, 10, selectedItemId);
+        if (userTier === 'free') return limitWithPinned(filteredNews, 100, selectedItemId);
+        return filteredNews;
+    }, [filteredNews, isGuestUser, selectedItemId, userTier]);
 
     // Fetch full description when an item is selected if not already present
     useEffect(() => {
@@ -423,7 +430,7 @@ export function HomeContent() {
             )}
 
             <EventSidebar
-                items={filteredNews}
+                items={visibleSidebarNews}
                 selectedItemId={selectedItemId}
                 selectionVersion={selectionVersion}
                 onSelectItem={handleSelectItem}

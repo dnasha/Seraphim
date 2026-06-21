@@ -132,6 +132,43 @@ describe("POST /api/stripe/webhook", () => {
     }));
   });
 
+  it("does not grant a paid tier for an incomplete subscription", async () => {
+    const profileUpdate = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
+    mocks.from.mockImplementation((table: string) => {
+      if (table === "stripe_processed_events") return { insert: vi.fn(async () => ({ error: null })) };
+      if (table === "user_profiles") return { update: profileUpdate };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    mocks.retrieveSubscription.mockResolvedValue({
+      id: "sub-incomplete",
+      status: "incomplete",
+      customer: "cus-1",
+      cancel_at_period_end: false,
+      trial_end: null,
+      metadata: { supabase_user_id: "user-1" },
+      items: { data: [{ price: { id: "price-pro" }, current_period_end: null }] },
+    });
+    mocks.constructEvent.mockReturnValue({
+      id: "evt-incomplete",
+      type: "checkout.session.completed",
+      data: { object: {
+        id: "cs-incomplete",
+        mode: "subscription",
+        subscription: "sub-incomplete",
+        customer: "cus-1",
+        metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
+      } },
+    });
+
+    const response = await POST(webhookRequest("valid"));
+
+    expect(response.status).toBe(200);
+    expect(profileUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      tier: "free",
+      subscription_status: "incomplete",
+    }));
+  });
+
   it("releases an idempotency claim when event processing fails", async () => {
     const releaseEq = vi.fn(async () => ({ error: null }));
     const releaseDelete = vi.fn(() => ({ eq: releaseEq }));

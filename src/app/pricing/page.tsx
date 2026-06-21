@@ -63,7 +63,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'pro',
         name: 'Pro',
-        tagline: 'Premium features details coming soon',
+        tagline: 'Unlimited feed access for daily monitoring',
         monthlyPrice: 9.99,
         yearlyPrice: 99.99,
         isLifetime: false,
@@ -72,21 +72,23 @@ const TIERS: TierConfig[] = [
         popular: true,
         trialDays: 7,
         features: [
-            'Pro tier features coming soon',
-            'Subscription options coming soon',
-            'Verification badge coming soon',
+            'Unlimited stories in map and sidebar',
+            'Everything in Free',
+            '7 day trial on monthly billing',
+            'Monthly or yearly billing',
+            'Pro tier badge in app',
         ],
         excluded: [
             'Lifetime billing',
         ],
-        cta: 'Coming Soon',
+        cta: 'Start 7 Day Trial',
         priceKeyMonthly: 'pro_monthly',
         priceKeyYearly: 'pro_yearly',
     },
     {
         key: 'analyst',
         name: 'Analyst',
-        tagline: 'Analyst features details coming soon',
+        tagline: 'Unlimited access with Analyst status',
         monthlyPrice: 29.99,
         yearlyPrice: 299.99,
         isLifetime: false,
@@ -95,21 +97,22 @@ const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            'Analyst tier features coming soon',
-            'Everything in Pro (Coming Soon)',
-            'Analytical tools coming soon',
+            'Everything in Pro',
+            'Analyst tier badge in app',
+            'Monthly or yearly billing',
+            'Unlimited stories in map and sidebar',
         ],
         excluded: [
             'Lifetime billing',
         ],
-        cta: 'Coming Soon',
+        cta: 'Upgrade to Analyst',
         priceKeyMonthly: 'analyst_monthly',
         priceKeyYearly: 'analyst_yearly',
     },
     {
         key: 'angel',
         name: 'Angel',
-        tagline: 'Angel tier features details coming soon',
+        tagline: 'One time payment for lifetime access',
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: true,
@@ -118,30 +121,31 @@ const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            'Angel tier features coming soon',
-            'Lifetime membership options coming soon',
-            'Founder rewards coming soon',
+            'Everything in Analyst',
+            'Lifetime access with one payment',
+            'Angel tier badge in app',
+            'Limited to 100 total memberships',
         ],
         excluded: [],
-        cta: 'Coming Soon',
+        cta: 'Get Lifetime Access',
         priceKeyMonthly: 'angel',
         priceKeyYearly: 'angel',
     },
 ];
 
 const COMPARISON_ROWS = [
-    { feature: 'Story volume (map and sidebar)', free: '100 per refresh', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Search and filters', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Time range controls', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Map styles and 3D globe', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Live overlays (USGS, NOAA, NASA)', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Draw, measure, and text annotations', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'GeoJSON import and export', free: 'Included', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Tier badge in app', free: 'Free', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Billing model', free: 'Free', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Trial availability', free: 'No', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Manage billing in account', free: 'No', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
-    { feature: 'Lifetime access', free: 'No', pro: 'Coming Soon', analyst: 'Coming Soon', angel: 'Coming Soon' },
+    { feature: 'Story volume (map and sidebar)', free: '100 per refresh', pro: 'Unlimited', analyst: 'Unlimited', angel: 'Unlimited' },
+    { feature: 'Search and filters', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Time range controls', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Map styles and 3D globe', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Live overlays (USGS, NOAA, NASA)', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Draw, measure, and text annotations', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'GeoJSON import and export', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
+    { feature: 'Tier badge in app', free: 'Free', pro: 'Pro', analyst: 'Analyst', angel: 'Angel' },
+    { feature: 'Billing model', free: 'Free', pro: 'Subscription', analyst: 'Subscription', angel: 'One time' },
+    { feature: 'Trial availability', free: 'No', pro: '7 days on monthly', analyst: 'No', angel: 'No' },
+    { feature: 'Manage billing in account', free: 'No', pro: 'Yes', analyst: 'Yes', angel: 'Not needed' },
+    { feature: 'Lifetime access', free: 'No', pro: 'No', analyst: 'No', angel: 'Yes' },
 ];
 
 export default function PricingPage() {
@@ -153,11 +157,6 @@ export default function PricingPage() {
     const { user, isGuest } = useAuth();
     const { tier: currentTier } = useUserTier();
     const router = useRouter();
-
-    // Redirect to homepage since pricing/checkout is disabled for demo
-    useEffect(() => {
-        router.replace('/');
-    }, [router]);
 
     // Fetch angel remaining count
     useEffect(() => {
@@ -349,9 +348,7 @@ export default function PricingPage() {
                         const isLoading = loadingTier === priceKey;
                         const ctaText = isCurrentPlan
                             ? 'Current Plan'
-                            : isFreeTier
-                                ? 'Included'
-                                : 'Coming Soon';
+                            : tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
 
                         return (
                             <div
@@ -442,7 +439,7 @@ export default function PricingPage() {
 
                                 <button
                                     className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${isFreeTier || isCurrentPlan ? styles.ctaBtnFree : ''}`}
-                                    disabled={isCurrentPlan || !isFreeTier || isLoading}
+                                    disabled={isFreeTier || isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0)}
                                     onClick={() => handleCheckout(priceKey)}
                                 >
                                     {isLoading ? (

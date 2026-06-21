@@ -155,27 +155,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     if (session.mode === 'subscription' && session.subscription) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-        const priceId = subscription.items.data[0]?.price?.id ?? '';
-        const tier = tierFromPriceId(priceId);
-        const interval = intervalFromPriceId(priceId);
-
-        await supabaseAdmin
-            .from('user_profiles')
-            .update({
-                tier,
-                stripe_customer_id: getCustomerId(session.customer),
-                stripe_subscription_id: subscription.id,
-                subscription_status: subscription.status,
-                billing_interval: interval,
-                cancel_at_period_end: subscription.cancel_at_period_end ?? false,
-                trial_ends_at: subscription.trial_end
-                    ? new Date(subscription.trial_end * 1000).toISOString()
-                    : null,
-                current_period_end: subscription.items.data[0]?.current_period_end
-                    ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
-                    : null,
-            })
-            .eq('id', userId);
+        await syncSubscription(userId, subscription);
     }
 }
 
@@ -331,6 +311,7 @@ async function syncSubscription(userId: string, subscription: Stripe.Subscriptio
         .from('user_profiles')
         .update({
             tier: isActive ? tier : 'free',
+            stripe_customer_id: getCustomerId(subscription.customer),
             stripe_subscription_id: subscription.id,
             subscription_status: subscription.status,
             billing_interval: isActive ? interval : 'month',
