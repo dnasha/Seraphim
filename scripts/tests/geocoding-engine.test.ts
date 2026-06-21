@@ -3,7 +3,7 @@
   Verifies the core NLP pipeline for location extraction and dictionary resolution.
   Tests datelines, action-target patterns, prepositions, multi-word locations, and demonyms.
 
-  Usage: bun test scripts/tests/geocoding-engine.test.ts
+  Usage: bun run test -- scripts/tests/geocoding-engine.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';

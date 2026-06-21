@@ -3,7 +3,7 @@
   Verifies core utilities for normalization, date parsing, and UI color mapping.
   These functions are fundamental to the geocoding and scraping pipelines.
 
-  Usage: bun test scripts/tests/utils.test.ts
+  Usage: bun run test -- scripts/tests/utils.test.ts
 */
 
 import { describe, it, expect } from 'vitest';

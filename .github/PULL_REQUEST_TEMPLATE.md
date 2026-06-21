@@ -12,7 +12,7 @@ Fixes # (issue)
 ## How Has This Been Tested?
 Please describe the tests that you ran to verify your changes.
 
-- [ ] `bun test`
+- [ ] `bun run test`
 - [ ] `bun run test:accuracy`
 - [ ] Manual verification and self testing on `localhost:3000`
 

@@ -42,7 +42,7 @@ bun dev
 We use Vitest for testing. Please ensure all tests pass before submitting a PR.
 
 ```bash
-bun test
+bun run test
 bun run test:accuracy
 ```
 

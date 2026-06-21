@@ -135,6 +135,7 @@ export function useNewsData({
 
     const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number }>>(new Map());
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
+    const detailInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
     const entitiesRef = useRef<Map<string, NewsItem>>(new Map());
     const entityTouchedAtRef = useRef<Map<string, number>>(new Map());
@@ -167,6 +168,7 @@ export function useNewsData({
         visibleSidebarIdsRef.current.clear();
         detailCache.current.clear();
         fetchingDetailsRef.current.clear();
+        detailInFlightRef.current.clear();
 
         const timer = setTimeout(() => {
             setNews([]);
@@ -595,7 +597,7 @@ export function useNewsData({
      * Updates the entity store and triggers a UI sync upon completion.
      */
     const fetchEventDetails = useCallback(async (id: string) => {
-        if (!id || fetchingDetailsRef.current.has(id)) return;
+        if (!id) return;
         
         let targetId = id;
         if (id.startsWith('cluster-')) {
@@ -610,54 +612,62 @@ export function useNewsData({
         const existingDetail = detailCache.current.get(targetId);
         if (existingDetail) return;
 
+        const existingInFlight = detailInFlightRef.current.get(targetId);
+        if (existingInFlight) return existingInFlight;
+
         fetchingDetailsRef.current.add(targetId);
 
-        try {
-            const res = await fetch(`/api/news/${targetId}`);
-            if (!res.ok) return;
-            const { description, sources, latitude, longitude } = await res.json() as { 
-                description?: string; 
-                sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>;
-                latitude?: number;
-                longitude?: number;
-            };
-            const descriptionValue = typeof description === 'string' ? description : '';
-            const mappedSources = Array.isArray(sources)
-                ? sources.map((s) => ({
-                    name: s.name,
-                    url: s.url,
-                    sourceType: s.source_type,
-                    discoveredAt: s.discovered_at,
-                }))
-                : undefined;
-            
-            detailCache.current.set(targetId, { 
-                description: descriptionValue, 
-                sources: mappedSources,
-                latitude,
-                longitude
-            });
+        const detailPromise = (async () => {
+            try {
+                const res = await fetch(`/api/news/${targetId}`);
+                if (!res.ok) return;
+                const { description, sources, latitude, longitude } = await res.json() as {
+                    description?: string;
+                    sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>;
+                    latitude?: number;
+                    longitude?: number;
+                };
+                const descriptionValue = typeof description === 'string' ? description : '';
+                const mappedSources = Array.isArray(sources)
+                    ? sources.map((s) => ({
+                        name: s.name,
+                        url: s.url,
+                        sourceType: s.source_type,
+                        discoveredAt: s.discovered_at,
+                    }))
+                    : undefined;
+                detailCache.current.set(targetId, {
+                    description: descriptionValue,
+                    sources: mappedSources,
+                    latitude,
+                    longitude
+                });
 
-            let changed = false;
-            for (const [entityId, entity] of entitiesRef.current.entries()) {
-                if (matchesNewsId(entity, targetId)) {
-                    entitiesRef.current.set(entityId, {
-                        ...entity,
-                        description: descriptionValue,
-                        sources: mappedSources ?? entity.sources,
-                        latitude: latitude !== undefined ? latitude : entity.latitude,
-                        longitude: longitude !== undefined ? longitude : entity.longitude,
-                    });
-                    entityTouchedAtRef.current.set(entityId, Date.now());
-                    changed = true;
+                let changed = false;
+                for (const [entityId, entity] of entitiesRef.current.entries()) {
+                    if (matchesNewsId(entity, targetId)) {
+                        entitiesRef.current.set(entityId, {
+                            ...entity,
+                            description: descriptionValue,
+                            sources: mappedSources ?? entity.sources,
+                            latitude: latitude !== undefined ? latitude : entity.latitude,
+                            longitude: longitude !== undefined ? longitude : entity.longitude,
+                        });
+                        entityTouchedAtRef.current.set(entityId, Date.now());
+                        changed = true;
+                    }
                 }
+                if (changed) syncNewsFromStore(sortMode);
+            } catch (err) {
+                console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
+            } finally {
+                fetchingDetailsRef.current.delete(targetId);
+                detailInFlightRef.current.delete(targetId);
             }
-            if (changed) syncNewsFromStore(sortMode);
-        } catch (err) {
-            console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
-        } finally {
-            fetchingDetailsRef.current.delete(targetId);
-        }
+        })();
+
+        detailInFlightRef.current.set(targetId, detailPromise);
+        return detailPromise;
     }, [sortMode, syncNewsFromStore]);
 
     const onBoundsChange = useCallback((bbox: BBox) => {

@@ -3,7 +3,7 @@
   Verifies temporal ranking and source counting logic for stories.
   Ensures graceful handling of malformed dates and non-numeric fields.
 
-  Usage: bun test scripts/tests/ranking.test.ts
+  Usage: bun run test -- scripts/tests/ranking.test.ts
 */
 
 import { describe, it, expect } from 'vitest';

@@ -184,15 +184,18 @@ export default function EventSidebar({
         /* Mapped item selection */
         const targetId = canonicalNewsId(item);
         const isSelected = matchesNewsId(item, selectedItemId);
-        onSelectItem(isSelected ? null : targetId);
 
         if (!isSelected) {
           const itemSourceCount = canonicalEventCount(item);
           const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
           if (item.description === undefined || needsTimelineDetails) {
+            // Begin resolving the canonical location before React schedules the
+            // camera transition, so it can redirect while already in flight.
             onFetchDetails?.(targetId);
           }
         }
+
+        onSelectItem(isSelected ? null : targetId);
 
         /* If selecting a mapped item, collapse any unmapped expansion */
         if (!isSelected) {

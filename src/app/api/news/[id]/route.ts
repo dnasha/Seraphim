@@ -40,7 +40,12 @@ export async function GET(
     const cached = detailCache.get(id);
     if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
         return NextResponse.json(
-            { description: cached.description, sources: cached.sources ?? [] },
+            {
+                description: cached.description,
+                sources: cached.sources ?? [],
+                latitude: cached.latitude,
+                longitude: cached.longitude,
+            },
             { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
         );
     }

@@ -3,7 +3,7 @@
   Verifies the applyNewsFilters function for client-side filtering.
   Tests source, category, time range, search query, and mapped-only filters.
 
-  Usage: bun test scripts/tests/filters.test.ts
+  Usage: bun run test -- scripts/tests/filters.test.ts
 */
 
 import { describe, it, expect } from 'vitest';

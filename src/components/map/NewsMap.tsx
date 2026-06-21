@@ -316,7 +316,7 @@ export default function NewsMap({
     pendingGeoJsonRef,
   });
 
-  const { getInitialViewState, handleResetOrientation, isFlyingRef } = useMapCamera({
+  const { getInitialViewState, handleResetOrientation, cancelCameraFlight } = useMapCamera({
     mapRef,
     mapReady,
     popupRef,
@@ -512,9 +512,8 @@ export default function NewsMap({
         return;
       }
 
-      if (!isFlyingRef.current) {
-        onSelectItemRef.current(null);
-      }
+      cancelCameraFlight();
+      onSelectItemRef.current(null);
     });
 
     map.on("style.load", () => {

@@ -65,7 +65,7 @@ bun run scrape
 
 ### Testing
 Seraphim uses Vitest for unit and integration testing.
-* Run all tests: bun test
+* Run all tests: bun run test
 * Run geocoding accuracy benchmark: bun run test:accuracy
 
 ## Technical Deep Dive

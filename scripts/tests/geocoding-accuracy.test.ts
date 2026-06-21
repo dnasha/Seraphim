@@ -3,7 +3,7 @@
   Benchmarks the geocoding pipeline against a manually graded ground truth dataset.
   Ensures NLP heuristics and GeoNames dictionary changes do not regress accuracy.
 
-  Usage: bun test scripts/tests/geocoding-accuracy.test.ts
+  Usage: bun run test -- scripts/tests/geocoding-accuracy.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';

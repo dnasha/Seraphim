@@ -3,7 +3,7 @@
   Verifies the enrichItemsWithLocation function for bulk geocoding of news items.
   Tests coordinate attachment, source-based defaults, and jitter logic for map visualization.
 
-  Usage: bun test scripts/tests/enricher.test.ts
+  Usage: bun run test -- scripts/tests/enricher.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';

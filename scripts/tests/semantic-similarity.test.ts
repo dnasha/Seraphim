@@ -3,7 +3,7 @@
   Verifies spatial and semantic merge logic for story consolidation.
   Tests strict semantic matching, proximity-based merging, and distance gating.
 
-  Usage: bun test scripts/tests/semantic-similarity.test.ts
+  Usage: bun run test -- scripts/tests/semantic-similarity.test.ts
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';

@@ -3,7 +3,7 @@
   Verifies mapping between NewsItem (frontend) and DbEvent (database) objects.
   Tests string sanitization, URL validation, and coordinate normalization.
 
-  Usage: bun test scripts/tests/transforms.test.ts
+  Usage: bun run test -- scripts/tests/transforms.test.ts
 */
 
 import { describe, it, expect } from 'vitest';
