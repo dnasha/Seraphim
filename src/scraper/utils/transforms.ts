@@ -37,6 +37,31 @@ export function cleanString(str: unknown): string {
     return DOMPurify.sanitize(cleaned);
 }
 
+/**
+ * Returns whether an item has a coordinate pair that can be represented on the
+ * map. Events without a valid pair are intentionally excluded from ingestion:
+ * Seraphim stores map events, not a separate unlocated-news feed.
+ */
+export function hasUsableCoordinates(
+    item: Pick<NewsItem, 'latitude' | 'longitude'>,
+): item is Pick<NewsItem, 'latitude' | 'longitude'> & {
+    latitude: number;
+    longitude: number;
+} {
+    const { latitude, longitude } = item;
+
+    return (
+        typeof latitude === 'number' &&
+        Number.isFinite(latitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        typeof longitude === 'number' &&
+        Number.isFinite(longitude) &&
+        longitude >= -180 &&
+        longitude <= 180
+    );
+}
+
 /*
 Maps a scraper NewsItem to the database DbEvent schema.
 Primary validations:
@@ -52,6 +77,10 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         return null;
     }
 
+    if (!hasUsableCoordinates(item)) {
+        return null;
+    }
+
     const tier = SOURCE_TIER_MAP.get(item.source) ?? 3;
     
     return {
@@ -63,8 +92,8 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         category: item.category,
         image_url: item.imageUrl,
         published_at: ensureIsoDate(item.publishedAt),
-        latitude: (typeof item.latitude === 'number' && Number.isFinite(item.latitude)) ? item.latitude : null,
-        longitude: (typeof item.longitude === 'number' && Number.isFinite(item.longitude)) ? item.longitude : null,
+        latitude: item.latitude,
+        longitude: item.longitude,
         location_name: cleanString(item.locationName) || null,
         credibility_tier: tier,
         event_count: 1,

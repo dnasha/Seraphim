@@ -21,7 +21,7 @@ import { fetchSocialFeeds } from "@/lib/api/social";
 import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem } from "@/lib/core/types";
 import type { DbEvent, DbEventSource } from "@/types";
-import { newsItemToDbEvent } from "./utils/transforms";
+import { hasUsableCoordinates, newsItemToDbEvent } from "./utils/transforms";
 import { calculateMergedStory } from "@/lib/utils/merging";
 import {
   generateEmbeddings,
@@ -389,12 +389,28 @@ async function run(): Promise<void> {
   console.log("[scraper] Running NLP geocoding...");
   const enrichedItems = await enrichItemsWithLocation(newItems);
 
-  const geocodedCount = enrichedItems.filter((i) => i.latitude != null).length;
+  const geocodedCount = enrichedItems.filter(hasUsableCoordinates).length;
   console.log(
     `[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`,
   );
 
-  const dbEvents: DbEvent[] = enrichedItems
+  // Seraphim is a map-first product. Do not let unlocated items enter either
+  // semantic merging or the bulk-insert payload, where they could otherwise
+  // become durable unmapped events.
+  const mappedItems = enrichedItems.filter(hasUsableCoordinates);
+  const skippedUnmappedCount = enrichedItems.length - mappedItems.length;
+  if (skippedUnmappedCount > 0) {
+    console.log(
+      `[scraper] Skipping ${skippedUnmappedCount} item(s) without usable coordinates.`,
+    );
+  }
+
+  if (mappedItems.length === 0) {
+    console.log("[scraper] No mapped items to ingest. Exiting.");
+    return;
+  }
+
+  const dbEvents: DbEvent[] = mappedItems
     .map(newsItemToDbEvent)
     .filter((e): e is DbEvent => e !== null);
 

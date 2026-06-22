@@ -7,7 +7,7 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { cleanString, newsItemToDbEvent } from '@/scraper/utils/transforms';
+import { cleanString, hasUsableCoordinates, newsItemToDbEvent } from '@/scraper/utils/transforms';
 import { dbEventToNewsItem } from '@/types';
 import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
@@ -26,6 +26,8 @@ function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
         sourceType: 'rss',
         category: 'world',
         publishedAt: '2026-04-10T12:00:00Z',
+        latitude: 51.5072,
+        longitude: -0.1276,
         ...overrides,
     };
 }
@@ -123,16 +125,14 @@ describe('newsItemToDbEvent', () => {
         expect(event!.description).toBe('Desctext');
     });
 
-    it('sets NaN latitude to null', () => {
+    it('rejects an item with NaN latitude', () => {
         const item = makeNewsItem({ latitude: NaN });
-        const event = newsItemToDbEvent(item);
-        expect(event!.latitude).toBeNull();
+        expect(newsItemToDbEvent(item)).toBeNull();
     });
 
-    it('sets Infinity latitude to null', () => {
+    it('rejects an item with Infinity latitude', () => {
         const item = makeNewsItem({ latitude: Infinity });
-        const event = newsItemToDbEvent(item);
-        expect(event!.latitude).toBeNull();
+        expect(newsItemToDbEvent(item)).toBeNull();
     });
 
     it('preserves valid coordinates', () => {
@@ -140,6 +140,17 @@ describe('newsItemToDbEvent', () => {
         const event = newsItemToDbEvent(item);
         expect(event!.latitude).toBe(50.45);
         expect(event!.longitude).toBe(30.52);
+    });
+
+    it.each([
+        [{ latitude: undefined, longitude: undefined }],
+        [{ latitude: 40, longitude: undefined }],
+        [{ latitude: undefined, longitude: -74 }],
+        [{ latitude: 91, longitude: 0 }],
+        [{ latitude: 0, longitude: 181 }],
+    ])('rejects items without a usable coordinate pair: %o', (coordinates) => {
+        expect(newsItemToDbEvent(makeNewsItem(coordinates))).toBeNull();
+        expect(hasUsableCoordinates(coordinates)).toBe(false);
     });
 
     it('normalizes published_at via ensureIsoDate', () => {
