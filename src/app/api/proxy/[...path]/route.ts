@@ -4,9 +4,10 @@ import { Redis } from "@upstash/redis";
 import {
   fetchWithTimeout,
   parseProxyCoordinate,
-  PROXY_CACHE_HEADERS,
   validateTilePath,
 } from "@/lib/security/proxyGuards";
+import { canUseOverlay } from '@/lib/entitlements';
+import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 
 const redis = Redis.fromEnv();
 const proxyRatelimit = new Ratelimit({
@@ -24,6 +25,17 @@ const EMPTY_FEATURE_COLLECTION = {
   type: "FeatureCollection",
   features: []
 };
+
+const PREMIUM_PROXY_SERVICES: Record<string, string> = {
+  flights: 'flights',
+  safecast: 'radiation',
+  wildfires: 'fires',
+  eonet: 'eonet',
+  ships: 'ships',
+  iss: 'iss',
+};
+
+const PRIVATE_CACHE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
 function getIp(request: NextRequest) {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -71,6 +83,21 @@ export async function GET(
 
   const service = path[0];
 
+  const requiredOverlay = PREMIUM_PROXY_SERVICES[service];
+  if (requiredOverlay) {
+    const access = await resolveRequestEntitlements();
+    if (!canUseOverlay(access.tier, requiredOverlay)) {
+      return NextResponse.json(
+        {
+          error: `${requiredOverlay} overlay requires an upgraded plan`,
+          code: 'feature_required',
+          requiredTier: ['fires', 'eonet'].includes(requiredOverlay) ? 'pro' : 'analyst',
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   if (!(await checkProxyRateLimit(request))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -106,7 +133,7 @@ export async function GET(
       }
       const data = await res.json();
       return NextResponse.json(data, {
-        headers: { "Cache-Control": PROXY_CACHE_HEADERS.flights },
+        headers: PRIVATE_CACHE_HEADERS,
       });
     } catch (err) {
       console.warn("[proxy/flights] Exception, trying opendata.adsb.fi fallback:", err);
@@ -120,7 +147,7 @@ export async function GET(
         if (res.ok) {
           const data = await res.json();
           return NextResponse.json(data, {
-            headers: { "Cache-Control": PROXY_CACHE_HEADERS.flights },
+            headers: PRIVATE_CACHE_HEADERS,
           });
         }
         return NextResponse.json({ error: "Failed to fetch from fallback" }, { status: res.status });
@@ -149,7 +176,7 @@ export async function GET(
       return new NextResponse(arrayBuffer, {
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": PROXY_CACHE_HEADERS.safecast
+          ...PRIVATE_CACHE_HEADERS
         }
       });
     } catch (err) {
@@ -204,7 +231,7 @@ export async function GET(
       
       return NextResponse.json(geojson, {
         headers: {
-          "Cache-Control": PROXY_CACHE_HEADERS.wildfires
+          ...PRIVATE_CACHE_HEADERS
         }
       });
     } catch (err) {
@@ -231,7 +258,7 @@ export async function GET(
       }
       return NextResponse.json(data, {
         headers: {
-          "Cache-Control": PROXY_CACHE_HEADERS.eonet
+          ...PRIVATE_CACHE_HEADERS
         }
       });
     } catch (err) {
@@ -341,7 +368,7 @@ export async function GET(
 
     return NextResponse.json(geojson, {
       headers: {
-        "Cache-Control": PROXY_CACHE_HEADERS.ships
+        ...PRIVATE_CACHE_HEADERS
       }
     });
   }
@@ -357,7 +384,7 @@ export async function GET(
       if (!res.ok) {
         return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
           headers: {
-            "Cache-Control": "public, max-age=5"
+            ...PRIVATE_CACHE_HEADERS
           }
         });
       }
@@ -387,14 +414,14 @@ export async function GET(
       
       return NextResponse.json(geojson, {
         headers: {
-          "Cache-Control": "no-store"
+          ...PRIVATE_CACHE_HEADERS
         }
       });
     } catch (err) {
       console.warn("[proxy/iss] Returning cached or empty ISS data after upstream error:", err);
       return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
         headers: {
-          "Cache-Control": "public, max-age=5"
+          ...PRIVATE_CACHE_HEADERS
         }
       });
     }

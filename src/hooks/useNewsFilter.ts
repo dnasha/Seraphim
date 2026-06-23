@@ -12,7 +12,6 @@ import { SortMode, applyNewsFilters } from '@/lib/utils/filters';
 
 export function useNewsFilter(
     news: NewsItem[],
-    mappedOnly: boolean,
     timeRange: string,
     debouncedSearch: string,
     customStartDate?: string,
@@ -20,7 +19,6 @@ export function useNewsFilter(
     sortMode: SortMode = 'new',
     currentBBox?: BBox | null,
     sidebarRespectBBox = true,
-    unmappedOnly = false,
     appliedSortMode?: string,
     pinnedItemId?: string | null
 ) {
@@ -62,8 +60,6 @@ export function useNewsFilter(
             timeRange,
             customStartDate,
             customEndDate,
-            mappedOnly,
-            unmappedOnly,
             searchQuery: debouncedSearch,
             now,
             sortMode: effectiveSortMode,
@@ -71,7 +67,7 @@ export function useNewsFilter(
             respectBBox: sidebarRespectBBox,
             pinnedItemId,
         });
-    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, pinnedItemId]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, pinnedItemId]);
 
     const mapNews = useMemo(() => {
         return applyNewsFilters(news, {
@@ -82,8 +78,6 @@ export function useNewsFilter(
             timeRange,
             customStartDate,
             customEndDate,
-            mappedOnly,
-            unmappedOnly,
             searchQuery: debouncedSearch,
             now,
             sortMode: effectiveSortMode,
@@ -91,7 +85,7 @@ export function useNewsFilter(
             respectBBox: true,
             pinnedItemId,
         });
-    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, mappedOnly, unmappedOnly, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, pinnedItemId]);
+    }, [news, sources, debouncedSearch, categories, minVolume, credibilityTiers, timeRange, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, pinnedItemId]);
 
     return {
         sources, setSources,

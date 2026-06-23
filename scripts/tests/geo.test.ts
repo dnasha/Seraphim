@@ -75,8 +75,8 @@ describe("isWithinBBox", () => {
     expect(isWithinBBox(item({ title: "Elsewhere" }), scoped)).toBe(false);
   });
 
-  it("keeps unmapped stories available for higher-level filtering", () => {
-    expect(isWithinBBox(item({ latitude: undefined, longitude: undefined }), bbox())).toBe(true);
+  it("rejects items without a complete coordinate pair", () => {
+    expect(isWithinBBox(item({ latitude: undefined, longitude: undefined }), bbox())).toBe(false);
   });
 
   it("skips longitude filtering for a global low-zoom viewport while preserving latitude bounds", () => {

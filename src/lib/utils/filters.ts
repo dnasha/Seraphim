@@ -16,8 +16,6 @@ export interface FilterOptions {
     timeRange: string;
     customStartDate?: string;
     customEndDate?: string;
-    mappedOnly: boolean;
-    unmappedOnly?: boolean;
     searchQuery: string;
     now: number;
     sortMode?: SortMode;
@@ -33,7 +31,7 @@ export interface FilterOptions {
  * This is a pure function with no React dependencies or side effects.
  */
 export function applyNewsFilters(items: NewsItem[], options: FilterOptions): NewsItem[] {
-    const { sources, categories, timeRange, customStartDate, customEndDate, mappedOnly, unmappedOnly, searchQuery, now, sortMode = 'new', bbox, respectBBox = true, minVolume, credibilityTiers, pinnedItemId } = options;
+    const { sources, categories, timeRange, customStartDate, customEndDate, searchQuery, now, sortMode = 'new', bbox, respectBBox = true, minVolume, credibilityTiers, pinnedItemId } = options;
     const mode = normalizeSortMode(sortMode);
 
     let filtered = items;
@@ -42,9 +40,10 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
     /**
      * 0. Viewport Filtering
      * Synchronizes the sidebar list with the current map bounding box.
-     * This filter is bypassed when viewing global unmapped news.
+     * Events without a complete coordinate pair are excluded defensively.
      */
-    if (bbox && respectBBox && !unmappedOnly) {
+    filtered = filtered.filter(item => item.latitude != null && item.longitude != null);
+    if (bbox && respectBBox) {
         filtered = filtered.filter(item => matchesNewsId(item, pinnedItemId) || isWithinBBox(item, bbox));
     }
 
@@ -112,23 +111,14 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
     }
 
     /**
-     * 5. Geographical Visibility Filter
-     */
-    if (unmappedOnly) {
-        filtered = filtered.filter(n => n.latitude == null);
-    } else if (mappedOnly) {
-        filtered = filtered.filter(n => n.latitude != null);
-    }
-
-    /**
-     * 5b. Volume ("Hotness") Filtering
+     * 5. Volume ("Hotness") Filtering
      */
     if (minVolume !== undefined && minVolume > 1) {
         filtered = filtered.filter(item => canonicalEventCount(item) >= minVolume);
     }
 
     /**
-     * 5c. Credibility Badge Filtering
+     * 5b. Credibility Badge Filtering
      */
     if (credibilityTiers && credibilityTiers.length > 0) {
         filtered = filtered.filter(item => {

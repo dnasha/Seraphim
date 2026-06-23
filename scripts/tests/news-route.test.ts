@@ -4,10 +4,15 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   from: vi.fn(),
   rateLimit: vi.fn().mockResolvedValue({ success: true }),
+  resolveEntitlements: vi.fn(),
 }));
 
-vi.mock("@/lib/core/supabase", () => ({
-  supabase: { rpc: mocks.rpc, from: mocks.from },
+vi.mock("@/lib/core/supabase-admin", () => ({
+  supabaseAdmin: { rpc: mocks.rpc, from: mocks.from },
+}));
+
+vi.mock('@/lib/server/entitlements', () => ({
+  resolveRequestEntitlements: mocks.resolveEntitlements,
 }));
 
 vi.mock("@upstash/redis", () => ({
@@ -64,6 +69,7 @@ function rawQuery(rows = [eventRow], error: { message: string } | null = null) {
 describe("GET /api/news", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: { eventLimit: 1000 } });
   });
 
   it("rejects invalid parameters before any database call", async () => {
@@ -99,10 +105,10 @@ describe("GET /api/news", () => {
     });
   });
 
-  it("uses the search RPC for high-zoom searches and forwards unmapped intent", async () => {
+  it("uses the search RPC for high-zoom searches", async () => {
     mocks.rpc.mockResolvedValue({ data: [eventRow], error: null });
 
-    const response = await GET(request("zoom=8&query=city&unmapped_only=true&sort=hot&limit=12"));
+    const response = await GET(request("zoom=8&query=city&sort=hot&limit=12"));
     const body = await response.json();
 
     expect(mocks.rpc).toHaveBeenCalledWith("search_events", expect.objectContaining({
@@ -111,9 +117,9 @@ describe("GET /api/news", () => {
       p_max_lng: null,
       p_sort_mode: "hot",
       p_limit: 12,
-      p_unmapped_only: true,
+      p_unmapped_only: false,
     }));
-    expect(body.meta).toMatchObject({ clustered: false, scope: "global", sort: "hot" });
+    expect(body.meta).toMatchObject({ clustered: false, scope: "viewport", sort: "hot" });
   });
 
   it("uses direct event reads at high zoom and caches equivalent requests", async () => {
@@ -141,5 +147,18 @@ describe("GET /api/news", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ items: [], meta: { clustered: true } });
+  });
+
+  it('enforces the Free cap and rejects unavailable history before querying data', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 100 } });
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+
+    const capped = await GET(request('zoom=2&limit=999&time_range=1d'));
+    expect(mocks.rpc).toHaveBeenCalledWith('get_clustered_events', expect.objectContaining({ p_limit: 100 }));
+    expect((await capped.json()).meta).toMatchObject({ appliedLimit: 100 });
+
+    const historical = await GET(request('zoom=2&time_range=1w'));
+    expect(historical.status).toBe(403);
+    await expect(historical.json()).resolves.toMatchObject({ code: 'feature_required', requiredTier: 'pro' });
   });
 });

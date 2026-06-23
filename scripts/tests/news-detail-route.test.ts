@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
+  resolveEntitlements: vi.fn(),
 }));
 
-vi.mock("@/lib/core/supabase", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/lib/core/supabase-admin", () => ({ supabaseAdmin: { from: mocks.from } }));
+
+vi.mock('@/lib/server/entitlements', () => ({
+  resolveRequestEntitlements: mocks.resolveEntitlements,
+}));
 
 import { GET } from "@/app/api/news/[id]/route";
 
@@ -22,7 +27,10 @@ function detailQuery(data: unknown, error: unknown = null) {
 }
 
 describe("GET /api/news/[id]", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: { timelineSourceLimit: null } });
+  });
 
   it("rejects malformed IDs without querying Supabase", async () => {
     const response = await GET(new Request("https://seraphim.example/api/news/not-a-uuid"), params("not-a-uuid"));
@@ -44,7 +52,7 @@ describe("GET /api/news/[id]", () => {
     const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
 
     expect(await response.json()).toEqual(expect.objectContaining({ description: "Full story", latitude: 1, longitude: 2 }));
-    expect(response.headers.get("cache-control")).toContain("s-maxage=1800");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(query.select).toHaveBeenCalledWith("description, sources, latitude, longitude");
 
     const cachedResponse = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
@@ -58,5 +66,27 @@ describe("GET /api/news/[id]", () => {
 
     const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
     expect(response.status).toBe(404);
+  });
+
+  it('returns a Free timeline preview instead of every corroborating source', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { timelineSourceLimit: 2 } });
+    mocks.from.mockReturnValue(detailQuery({
+      description: 'Story',
+      sources: [
+        { name: 'First', url: 'https://first.example', source_type: 'rss', discovered_at: '2026-01-01T00:00:00Z' },
+        { name: 'Middle', url: 'https://middle.example', source_type: 'rss', discovered_at: '2026-01-02T00:00:00Z' },
+        { name: 'Latest', url: 'https://latest.example', source_type: 'rss', discovered_at: '2026-01-03T00:00:00Z' },
+      ],
+      latitude: 1,
+      longitude: 2,
+    }));
+
+    const id = '33333333-3333-4333-8333-333333333333';
+    const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    await expect(response.json()).resolves.toMatchObject({
+      timelineRestricted: true,
+      totalSources: 3,
+      sources: [expect.objectContaining({ name: 'First' }), expect.objectContaining({ name: 'Latest' })],
+    });
   });
 });

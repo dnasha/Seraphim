@@ -88,11 +88,7 @@ export function snapBBox(b: BBox): BBox {
  * 3. Real-time Filtering: Applies search query matches if a query is present.
  */
 export function isWithinBBox(item: NewsItem, bbox: BBox): boolean {
-    /** 
-     * Unmapped items are technically global but are usually handled 
-     * by higher-level filters.
-     */
-    if (item.latitude == null || item.longitude == null) return true;
+    if (item.latitude == null || item.longitude == null) return false;
     
     /** 
      * Text Search: Item must match the query string in title, 

@@ -442,6 +442,22 @@
     margin-bottom: 60px;
 }
 
+.guestPreview {
+    max-width: 760px;
+    margin: 0 auto 28px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+
+.guestPreview p { margin: 4px 0 0; }
+.guestPreviewEyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+
 .comparisonTitle {
     font-family: var(--font-logo);
     font-size: 1.75rem;
@@ -477,9 +493,14 @@
     white-space: nowrap;
 }
 
+.comparisonTable thead th { position: sticky; top: 0; z-index: 2; }
+
 .thFeature {
     text-align: left !important;
     width: 35%;
+    position: sticky !important;
+    left: 0;
+    z-index: 3 !important;
 }
 
 .thPopular {
@@ -501,6 +522,10 @@
 .tdFeature {
     text-align: left !important;
     font-weight: 500;
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 1;
 }
 
 .tdValue {
@@ -519,6 +544,18 @@
 .comparisonTable tbody tr:last-child td {
     border-bottom: none;
 }
+
+.tableGroupRow th {
+    padding: 9px 16px;
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.comparisonMobilePicker, .comparisonMobileCards { display: none; }
 
 /* ═══════════════ FAQ ═══════════════ */
 .faqSection {
@@ -603,14 +640,39 @@
         grid-template-columns: 1fr;
     }
 
-    .comparisonTable {
-        font-size: 0.75rem;
+    .tableWrapper { display: none; }
+
+    .comparisonMobilePicker {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-bottom: 12px;
     }
 
-    .comparisonTable th,
-    .comparisonTable td {
-        padding: 8px 10px;
+    .comparisonMobilePicker button {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.73rem;
+        font-weight: 700;
+        padding: 9px 4px;
     }
+
+    .comparisonMobilePickerActive {
+        border-color: var(--accent) !important;
+        background: rgba(99, 102, 241, 0.1) !important;
+        color: var(--accent) !important;
+    }
+
+    .comparisonMobileCards { display: grid; gap: 10px; }
+    .comparisonMobileGroup { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+    .comparisonMobileGroup h3 { margin: 0; padding: 9px 12px; background: var(--surface-alt); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .comparisonMobileRow { display: flex; justify-content: space-between; gap: 14px; padding: 10px 12px; border-top: 1px solid var(--border); font-size: 0.78rem; }
+    .comparisonMobileRow span { color: var(--text-secondary); }
+    .comparisonMobileRow strong { max-width: 52%; text-align: right; color: var(--text-primary); }
 }
 
 @media (max-width: 480px) {

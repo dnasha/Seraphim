@@ -3,12 +3,14 @@
  * 
  * Provides a configuration interface for customizing the map experience.
  * Users can adjust visual styles, toggle performance-heavy features, and 
- * apply visibility filters to surface specific data subsets.
+ * configure presentation and display preferences.
  */
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { MAP_STYLES } from './MapConstants';
+import { canUseMapStyle, hasFeature, type UserTier } from '@/lib/entitlements';
+import { GatedButton } from '@/components/ui/FeatureGate';
 import styles from './MapSettings.module.css';
 
 interface MapSettingsProps {
@@ -19,11 +21,9 @@ interface MapSettingsProps {
     isOpen: boolean;
     onToggleOpen: () => void;
     panelRef: React.RefObject<HTMLDivElement>;
-    unmappedOnly: boolean;
-    onUnmappedOnlyChange: (val: boolean) => void;
     animatedEffects: boolean;
     onAnimatedEffectsChange: (val: boolean) => void;
-    disabled?: boolean;
+    userTier?: UserTier;
 }
 
 const PREVIEW_IMAGES: Record<string, string> = {
@@ -43,11 +43,9 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     isOpen,
     onToggleOpen,
     panelRef,
-    unmappedOnly,
-    onUnmappedOnlyChange,
     animatedEffects,
     onAnimatedEffectsChange,
-    disabled = false
+    userTier = 'guest'
 }) => {
     const router = useRouter();
     const [showBadge, setShowBadge] = React.useState(false);
@@ -90,11 +88,10 @@ const MapSettings: React.FC<MapSettingsProps> = ({
             </button>
 
             <button
-                className={`${styles.mapSettingsBtn}${disabled ? ` ${styles.disabled}` : ''}`}
-                onClick={disabled ? undefined : handleButtonClick}
+                className={styles.mapSettingsBtn}
+                onClick={handleButtonClick}
                 title="Map settings"
                 aria-label="Map settings"
-                disabled={disabled}
             >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                     <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/>
@@ -111,11 +108,14 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                             {Object.entries(MAP_STYLES).map(([key, style]) => {
                                 const previewImg = PREVIEW_IMAGES[key] || '/map_previews/Default.webp';
                                 return (
-                                    <button
+                                    <GatedButton
                                         key={key}
                                         className={`${styles.settingsStyleBtn}${mapStyle === key ? ` ${styles.settingsStyleBtnActive}` : ''}`}
                                         onClick={() => onStyleChange(key)}
                                         title={`Switch to ${style.label} style`}
+                                        allowed={canUseMapStyle(userTier, key)}
+                                        requiredTier={userTier === 'guest' ? 'free' : 'pro'}
+                                        featureName={`${style.label} map style`}
                                     >
                                         <div className={styles.previewImgWrapper}>
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -126,7 +126,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                                             />
                                         </div>
                                         <span className={styles.previewLabel}>{style.label}</span>
-                                    </button>
+                                    </GatedButton>
                                 );
                             })}
                         </div>
@@ -141,29 +141,12 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                      */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
-                        <div className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} style={{ cursor: 'pointer' }}>
+                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode">
                             <span className={styles.settingsToggleLabel}>Force individual pins</span>
                             <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
-                        </div>
-                    </div>
-
-                    <div className={styles.settingsDivider} />
-
-                    {/**
-                     * Visibility - Unmapped only:
-                     * Filters the view to show only news items that failed geocoding.
-                     * Used by OSINT analysts to identify data gaps or manual geocoding needs.
-                     */}
-                    <div className={styles.settingsSection}>
-                        <div className={styles.settingsLabel}>Visibility</div>
-                        <div className={styles.settingsToggle} onClick={() => onUnmappedOnlyChange(!unmappedOnly)} style={{ cursor: 'pointer' }}>
-                            <span className={styles.settingsToggleLabel}>Unmapped only</span>
-                            <div className={`${styles.toggleSwitch}${unmappedOnly ? ` ${styles.toggleSwitchOn}` : ''}`}>
-                                <div className={styles.toggleKnob} />
-                            </div>
-                        </div>
+                        </GatedButton>
                     </div>
 
                     <div className={styles.settingsDivider} />

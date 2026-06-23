@@ -32,6 +32,7 @@ import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./EventSidebar.module.css";
+import type { UserTier as EntitlementTier } from '@/lib/entitlements';
 
 interface EventSidebarProps {
   items: NewsItem[];
@@ -175,60 +176,28 @@ export default function EventSidebar({
 
   const handleCardClick = useCallback(
     (item: NewsItem) => {
-      const hasGeo = item.latitude != null;
-
       /* Viewport check for mobile-specific interactions */
       const isMobile = () => window.innerWidth < 860;
+      const targetId = canonicalNewsId(item);
+      const isSelected = matchesNewsId(item, selectedItemId);
 
-      if (hasGeo) {
-        /* Mapped item selection */
-        const targetId = canonicalNewsId(item);
-        const isSelected = matchesNewsId(item, selectedItemId);
-
-        if (!isSelected) {
-          const itemSourceCount = canonicalEventCount(item);
-          const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
-          if (item.description === undefined || needsTimelineDetails) {
-            // Begin resolving the canonical location before React schedules the
-            // camera transition, so it can redirect while already in flight.
-            onFetchDetails?.(targetId);
-          }
-        }
-
-        onSelectItem(isSelected ? null : targetId);
-
-        /* If selecting a mapped item, collapse any unmapped expansion */
-        if (!isSelected) {
-          setExpandedId(null);
-          /* On mobile, close the sidebar so the map is fully visible */
-          if (isMobile()) {
-            onToggleSidebar();
-          }
-        }
-      } else {
-        /* Unmapped item expansion */
-        const targetId = canonicalNewsId(item);
-        const isCurrentlyExpanded = expandedId === targetId;
-        const nextExpanded = isCurrentlyExpanded ? null : targetId;
-        setExpandedId(nextExpanded);
-
+      if (!isSelected) {
         const itemSourceCount = canonicalEventCount(item);
         const needsTimelineDetails = itemSourceCount > 1 && !item.sources;
-        /* Fetches details lazily for description and timeline sources. */
-        if (
-          nextExpanded &&
-          (item.description === undefined || needsTimelineDetails)
-        ) {
+        if (item.description === undefined || needsTimelineDetails) {
           onFetchDetails?.(targetId);
         }
+      }
 
-        /* If expanding an unmapped item, deselect any mapped item */
-        if (!isCurrentlyExpanded) {
-          onSelectItem(null);
+      onSelectItem(isSelected ? null : targetId);
+      if (!isSelected) {
+        setExpandedId(null);
+        if (isMobile()) {
+          onToggleSidebar();
         }
       }
     },
-    [selectedItemId, onSelectItem, expandedId, onToggleSidebar, onFetchDetails],
+    [selectedItemId, onSelectItem, onToggleSidebar, onFetchDetails],
   );
 
   const renderItem = useCallback(
@@ -246,10 +215,11 @@ export default function EventSidebar({
           isExpanded={isExpanded}
           isTop3={isTop3}
           onCardClick={handleCardClick}
+          userTier={userTier as EntitlementTier}
         />
       );
     },
-    [selectedItemId, expandedId, handleCardClick, top3Ids],
+    [selectedItemId, expandedId, handleCardClick, top3Ids, userTier],
   );
 
   return (

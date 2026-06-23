@@ -29,6 +29,7 @@ export const MAP_STYLES: Record<
     isPmtiles?: boolean;
     theme?: string;
     isMapTiler?: boolean;
+    requiresEntitlement?: boolean;
   }
 > = {
   standard: {
@@ -51,6 +52,7 @@ export const MAP_STYLES: Record<
     label: "Black",
     isPmtiles: true,
     theme: "black",
+    requiresEntitlement: true,
   },
   light: {
     url: "https://tiles.seraphi.me/world_11/{z}/{x}/{y}.mvt",
@@ -58,22 +60,21 @@ export const MAP_STYLES: Record<
     label: "White",
     isPmtiles: true,
     theme: "white",
+    requiresEntitlement: true,
   },
   satellite: {
-    url: process.env.NEXT_PUBLIC_MAPTILER_API_KEY
-      ? `https://api.maptiler.com/maps/hybrid/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`
-      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    // Premium styles resolve through the entitlement-aware server route. Keep
+    // browser bundles free of any MapTiler credential.
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Satellite",
-    isMapTiler: !!process.env.NEXT_PUBLIC_MAPTILER_API_KEY,
+    requiresEntitlement: true,
   },
   topographic: {
-    url: process.env.NEXT_PUBLIC_MAPTILER_API_KEY
-      ? `https://api.maptiler.com/maps/topo-v2/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`
-      : "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+    url: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Terrain",
-    isMapTiler: !!process.env.NEXT_PUBLIC_MAPTILER_API_KEY,
+    requiresEntitlement: true,
   },
 };
 
@@ -132,8 +133,12 @@ export async function generateCategoryIcon(
  * @returns A MapLibre compatible style object.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getMapLibreStyle(styleKey: string): any {
+export function getMapLibreStyle(styleKey: string, resolveProtected = true): any {
   const style = MAP_STYLES[styleKey] || MAP_STYLES.standard;
+
+  if (resolveProtected && style.requiresEntitlement) {
+    return `/api/map-style/${styleKey}`;
+  }
 
   if (style.isMapTiler) {
     return style.url;
@@ -177,6 +182,11 @@ export function getMapLibreStyle(styleKey: string): any {
       },
     ],
   };
+}
+
+/** Used only by the protected map-style route to build the real style payload. */
+export function getMapLibreStyleForServer(styleKey: string): unknown {
+  return getMapLibreStyle(styleKey, false);
 }
 
 /**

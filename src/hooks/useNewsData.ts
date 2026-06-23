@@ -91,7 +91,6 @@ function mergeNewsItem(existing: NewsItem | undefined, incoming: NewsItem): News
 }
 
 export function useNewsData({
-    unmappedOnly,
     timeRange,
     searchQuery,
     customStartDate,
@@ -102,7 +101,6 @@ export function useNewsData({
     resetKey,
     pinnedEventId = null
 }: {
-    unmappedOnly: boolean;
     timeRange: string;
     searchQuery?: string;
     customStartDate?: string;
@@ -128,12 +126,11 @@ export function useNewsData({
         timeRange?: string;
         since?: string | null;
         until?: string | null;
-        unmappedOnly?: boolean;
         limit?: number;
     } | null>(null);
     const isFirstMount = useRef(true);
 
-    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number }>>(new Map());
+    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
     const detailInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
@@ -297,13 +294,13 @@ export function useNewsData({
         const { isRefresh, bbox, limit: requestedLimit, signal, view = 'map', scope = 'viewport', globalTopN } = options;
         const params = new URLSearchParams();
         if (isRefresh) params.append('refresh', 'true');
-        if (unmappedOnly) params.append('unmapped_only', 'true');
         if (sortMode) params.append('sort', sortMode);
+        params.append('time_range', timeRange);
         params.append('view', view);
         params.append('scope', scope);
         if (globalTopN) params.append('global_top_n', String(globalTopN));
 
-        if (bbox && !unmappedOnly) {
+        if (bbox) {
             params.append('minLat', String(bbox.minLat));
             params.append('maxLat', String(bbox.maxLat));
             params.append('minLng', String(bbox.minLng));
@@ -377,7 +374,7 @@ export function useNewsData({
         } finally {
             inFlightFetches.delete(requestKey);
         }
-    }, [unmappedOnly, searchQuery, sortMode, timeRange, customStartDate, customEndDate]);
+    }, [searchQuery, sortMode, timeRange, customStartDate, customEndDate]);
 
     /**
      * Orchestrates the data loading sequence. It handles bounding box 
@@ -420,13 +417,13 @@ export function useNewsData({
 
         const isUpgradingFromLimitedFetch = prev?.limit !== undefined && limit === undefined;
         const needsScopeReload = needsScopeReloadRef.current;
-        if (!bbox && !unmappedOnly && !searchQuery && !limit && !hasDateScope && !isUpgradingFromLimitedFetch && !needsScopeReload) {
-            log('[useNewsData] Returning early because bbox, unmappedOnly, searchQuery, and limit are all empty/falsy');
+        if (!bbox && !searchQuery && !limit && !hasDateScope && !isUpgradingFromLimitedFetch && !needsScopeReload) {
+            log('[useNewsData] Returning early because bbox, searchQuery, and limit are all empty/falsy');
             setIsLoading(false);
             return;
         }
 
-        const isSameBBox = unmappedOnly || (!bbox && !prev?.bbox) || (
+        const isSameBBox = (!bbox && !prev?.bbox) || (
             bbox && prev?.bbox &&
             bbox.minLat === prev.bbox.minLat &&
             bbox.maxLat === prev.bbox.maxLat &&
@@ -437,7 +434,6 @@ export function useNewsData({
 
         if (!isRefresh && prev && isSameBBox &&
             !needsScopeReload &&
-            unmappedOnly === prev.unmappedOnly &&
             sortMode === prev.sortMode &&
             searchQuery === prev.query &&
             timeRange === prev.timeRange &&
@@ -460,13 +456,13 @@ export function useNewsData({
         } : undefined;
 
         const params = new URLSearchParams();
-        if (unmappedOnly) params.append('unmapped_only', 'true');
         if (sortMode) params.append('sort', sortMode);
+        params.append('time_range', timeRange);
         params.append('view', 'map');
-        params.append('scope', unmappedOnly ? 'global' : 'viewport');
+        params.append('scope', 'viewport');
         if (limit) params.append('limit', String(limit));
         
-        if (enrichedBBox && !unmappedOnly) {
+        if (enrichedBBox) {
             params.append('minLat', String(enrichedBBox.minLat));
             params.append('maxLat', String(enrichedBBox.maxLat));
             params.append('minLng', String(enrichedBBox.minLng));
@@ -512,7 +508,6 @@ export function useNewsData({
                 timeRange,
                 since,
                 until,
-                unmappedOnly,
                 limit
             };
             needsScopeReloadRef.current = false;
@@ -556,7 +551,6 @@ export function useNewsData({
                 timeRange,
                 since,
                 until,
-                unmappedOnly,
                 limit
             };
             needsScopeReloadRef.current = false;
@@ -569,7 +563,7 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, unmappedOnly, limit, enabled, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
         if (!enabled) return;
@@ -621,11 +615,13 @@ export function useNewsData({
             try {
                 const res = await fetch(`/api/news/${targetId}`);
                 if (!res.ok) return;
-                const { description, sources, latitude, longitude } = await res.json() as {
+                const { description, sources, latitude, longitude, timelineRestricted, totalSources } = await res.json() as {
                     description?: string;
                     sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>;
                     latitude?: number;
                     longitude?: number;
+                    timelineRestricted?: boolean;
+                    totalSources?: number;
                 };
                 const descriptionValue = typeof description === 'string' ? description : '';
                 const mappedSources = Array.isArray(sources)
@@ -640,7 +636,9 @@ export function useNewsData({
                     description: descriptionValue,
                     sources: mappedSources,
                     latitude,
-                    longitude
+                    longitude,
+                    timelineRestricted,
+                    totalSources,
                 });
 
                 let changed = false;
@@ -652,6 +650,8 @@ export function useNewsData({
                             sources: mappedSources ?? entity.sources,
                             latitude: latitude !== undefined ? latitude : entity.latitude,
                             longitude: longitude !== undefined ? longitude : entity.longitude,
+                            timelineRestricted,
+                            totalSources,
                         });
                         entityTouchedAtRef.current.set(entityId, Date.now());
                         changed = true;

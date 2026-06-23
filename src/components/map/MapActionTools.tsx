@@ -13,6 +13,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './MapActionTools.module.css';
+import { canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
+import { GatedButton } from '@/components/ui/FeatureGate';
 import { 
     LuActivity, 
     LuCloudRain, 
@@ -35,6 +37,7 @@ interface MapActionToolsProps {
     onToggleDrawTools: () => void;
     bearing?: number;
     disabled?: boolean;
+    userTier?: UserTier;
 }
 
 const MapActionTools: React.FC<MapActionToolsProps> = ({
@@ -46,7 +49,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     drawToolsOpen,
     onToggleDrawTools,
     bearing = 0,
-    disabled = false
+    disabled = false,
+    userTier = 'guest'
 }) => {
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
     const [showBadge, setShowBadge] = useState(false);
@@ -109,10 +113,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Past 24 Hours</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['usgs'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('usgs', !overlays['usgs'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['usgs'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('usgs', !overlays['usgs'])} allowed={canUseOverlay(userTier, 'usgs')} requiredTier="free" featureName="Earthquake overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -125,10 +129,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Real-time (Live)</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['noaa'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('noaa', !overlays['noaa'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['noaa'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('noaa', !overlays['noaa'])} allowed={canUseOverlay(userTier, 'noaa')} requiredTier="pro" featureName="Weather radar overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -141,10 +145,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>NASA Near Real-time</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['fires'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('fires', !overlays['fires'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['fires'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('fires', !overlays['fires'])} allowed={canUseOverlay(userTier, 'fires')} requiredTier="pro" featureName="Wildfire overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -157,10 +161,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>ADS-B Transponders</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['flights'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('flights', !overlays['flights'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['flights'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('flights', !overlays['flights'])} allowed={canUseOverlay(userTier, 'flights')} requiredTier="analyst" featureName="Live flight tracking">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -173,10 +177,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>USNI & AIS Tankers</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['ships'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('ships', !overlays['ships'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['ships'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('ships', !overlays['ships'])} allowed={canUseOverlay(userTier, 'ships')} requiredTier="analyst" featureName="Maritime tracking">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -189,10 +193,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Real-time Orbit</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['iss'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('iss', !overlays['iss'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['iss'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('iss', !overlays['iss'])} allowed={canUseOverlay(userTier, 'iss')} requiredTier="analyst" featureName="ISS tracking">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -205,10 +209,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Global Real-time</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['aqi'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('aqi', !overlays['aqi'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['aqi'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('aqi', !overlays['aqi'])} allowed={canUseOverlay(userTier, 'aqi')} requiredTier="analyst" featureName="Air quality overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -221,10 +225,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Citizen Science Map</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['radiation'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('radiation', !overlays['radiation'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['radiation'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('radiation', !overlays['radiation'])} allowed={canUseOverlay(userTier, 'radiation')} requiredTier="analyst" featureName="Radiation overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
 
                     <label className={styles.overlayToggle}>
@@ -237,10 +241,10 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                                 <span className={styles.overlayTimeframe}>Past 30 Days</span>
                             </div>
                         </div>
-                        <div className={`${styles.toggleSwitch}${overlays['eonet'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('eonet', !overlays['eonet'])}>
+                        <GatedButton className={`${styles.toggleSwitch}${overlays['eonet'] ? ` ${styles.toggleSwitchOn}` : ''}`}
+                             onClick={() => onOverlayToggle('eonet', !overlays['eonet'])} allowed={canUseOverlay(userTier, 'eonet')} requiredTier="pro" featureName="NASA events overlay">
                             <div className={styles.toggleKnob} />
-                        </div>
+                        </GatedButton>
                     </label>
                 </div>
             )}
@@ -267,34 +271,37 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 </svg>
             </button>
 
-            <button
+            <GatedButton
                 className={`${styles.actionBtn}${isGlobe ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
-                onClick={disabled ? undefined : onToggleGlobe}
+                onClick={onToggleGlobe}
                 title={isGlobe ? "Switch to 2D Map" : "Switch to 3D Globe"}
-                disabled={disabled}
+                allowed={!disabled && hasFeature(userTier, 'globe')}
+                requiredTier={userTier === 'guest' ? 'free' : 'pro'}
+                featureName="3D globe"
             >
                 <span className={styles.btnText}>3D</span>
-            </button>
+            </GatedButton>
 
             <div className={styles.bottomRow}>
-                <button
+                <GatedButton
                     className={`${styles.actionBtn}${drawToolsOpen ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
-                    onClick={disabled ? undefined : onToggleDrawTools}
+                    onClick={onToggleDrawTools}
                     title="Draw & Measure"
-                    disabled={disabled}
+                    allowed={!disabled && hasFeature(userTier, 'drawTools')}
+                    requiredTier="free"
+                    featureName="Draw and measure tools"
                 >
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
                         <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
                         <path d="M2 2l7.58 7.58"></path>
                     </svg>
-                </button>
+                </GatedButton>
 
-                <button
-                    className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
-                    onClick={disabled ? undefined : handleOverlayButtonClick}
-                    title="Environmental Overlays"
-                    disabled={disabled}
+            <button
+                className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                onClick={handleOverlayButtonClick}
+                title="Environmental Overlays"
                 >
                     <svg viewBox="0 0 1200 1200" width="20" height="20" fill="currentColor">
                         <path d="M381.64,1200C135.779,1061.434,71.049,930.278,108.057,751.148 c27.321-132.271,116.782-239.886,125.36-371.903c38.215,69.544,54.183,119.691,58.453,192.364 C413.413,422.695,493.731,216.546,498.487,0c0,0,316.575,186.01,337.348,466.98c27.253-57.913,40.972-149.892,13.719-209.504 c81.757,59.615,560.293,588.838-64.818,942.524c117.527-228.838,30.32-537.611-173.739-680.218 c13.628,61.319-10.265,290.021-100.542,390.515c25.014-167.916-23.8-238.918-23.8-238.918s-16.754,94.054-81.758,189.065 C345.537,947.206,304.407,1039.291,381.64,1200L381.64,1200z"/>

@@ -596,7 +596,7 @@ Includes card expansion details and responsive mobile layouts.
   opacity: 0.5;
 }
 
-/* expand hint for unmapped cards */
+/* Expand hint for event cards */
 .eventCardExpandHint {
   display: block;
   font-size: 0.625rem;
@@ -1152,6 +1152,24 @@ Includes card expansion details and responsive mobile layouts.
   text-overflow: ellipsis;
   flex: 1;
   outline: none;
+}
+
+.timelineUpgradeBtn {
+  margin-left: auto;
+  border: 1px solid #d4a72c;
+  border-radius: 5px;
+  background: transparent;
+  color: #d4a72c;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 6px;
+}
+
+.timelinePreview {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
 }
 
 @media (hover: hover) {

@@ -262,6 +262,11 @@ export default function AccountPage() {
                   Lifetime Access
                 </span>
               )}
+              {userTier === 'angel' && (
+                <p className={styles.helperText} style={{ margin: 0 }}>
+                  Angel Founder Discord role: join the community, then email support@seraphi.me from this account email for manual role fulfillment.
+                </p>
+              )}
               {trialEndsAt && subscriptionStatus === 'trialing' && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   Trial ends {new Date(trialEndsAt).toLocaleDateString()}

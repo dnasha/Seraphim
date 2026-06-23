@@ -48,6 +48,9 @@ export interface NewsItem {
   impactScore?: number;
   credibilityTier?: number;
   sources?: EventSource[];
+  /** True when the API intentionally returned a timeline preview for this tier. */
+  timelineRestricted?: boolean;
+  totalSources?: number;
 }
 
 /**

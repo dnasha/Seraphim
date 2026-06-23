@@ -9,6 +9,8 @@ import { useState, useRef, useEffect } from 'react';
 import styles from './FilterBar.module.css';
 
 import { CATEGORY_COLORS, getSourceStyle, CATEGORY_ICONS } from '@/lib/styles/colors';
+import { canUseTimeRange, hasFeature, type UserTier } from '@/lib/entitlements';
+import { GatedButton } from './FeatureGate';
 
 interface FilterBarProps {
     sources: string[];
@@ -27,6 +29,7 @@ interface FilterBarProps {
     onCredibilityTiersChange: (tiers: number[]) => void;
     /** When true, all filter controls are greyed out for guest users */
     disabled?: boolean;
+    userTier?: UserTier;
 }
 
 const categoryOptions = [
@@ -152,6 +155,7 @@ export default function FilterBar({
     credibilityTiers,
     onCredibilityTiersChange,
     disabled = false,
+    userTier = 'guest',
 }: FilterBarProps) {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [customValue, setCustomValue] = useState<string>(() => {
@@ -315,12 +319,14 @@ export default function FilterBar({
                         <div className={styles.scrollWrapper}>
                             <div className={styles.sourceToggles}>
                                 {timeOptions.map((option) => (
-                                    <button
+                                    <GatedButton
                                         key={option.value}
                                         className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
-                                        onClick={() => !disabled && handleTimeToggleClick(option.value)}
+                                        onClick={() => handleTimeToggleClick(option.value)}
                                         aria-pressed={timeRange === option.value}
-                                        disabled={disabled}
+                                        allowed={!disabled && canUseTimeRange(userTier, option.value)}
+                                        requiredTier={option.value === 'custom' ? 'analyst' : userTier === 'guest' ? 'free' : 'pro'}
+                                        featureName={option.value === 'custom' ? 'Custom date windows' : `${option.label} history`}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {option.value === 'custom' && (
@@ -336,7 +342,7 @@ export default function FilterBar({
                                             </svg>
                                         )}
                                         {option.label}
-                                    </button>
+                                    </GatedButton>
                                 ))}
                             </div>
                         </div>
@@ -433,22 +439,22 @@ export default function FilterBar({
                             {volumeOptions.map((opt) => {
                                 const isActive = customValue === '' && minVolume === opt.value;
                                 return (
-                                    <button
+                                    <GatedButton
                                         key={opt.value}
                                         className={`${styles.timeToggle} ${isActive ? styles.timeToggleActive : ''}`}
                                         onClick={() => {
-                                            if (!disabled) {
-                                                setCustomValue('');
-                                                onMinVolumeChange(opt.value);
-                                            }
+                                            setCustomValue('');
+                                            onMinVolumeChange(opt.value);
                                         }}
                                         aria-pressed={isActive}
-                                        disabled={disabled}
+                                        allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
+                                        requiredTier="pro"
+                                        featureName="Story-volume filtering"
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {renderVolumeIcon(isActive, isActive ? '#ffffff' : 'var(--text-secondary)')}
                                         {opt.label}
-                                    </button>
+                                    </GatedButton>
                                 );
                             })}
                             <div className={`${styles.customVolumeContainer} ${customValue !== '' ? styles.customVolumeContainerActive : ''}`}>
@@ -457,7 +463,7 @@ export default function FilterBar({
                                     type="number"
                                     min="1"
                                     max="999"
-                                    disabled={disabled}
+                                    disabled={disabled || !hasFeature(userTier, 'advancedFilters')}
                                     value={customValue}
                                     placeholder="Min"
                                     className={styles.customVolumeInput}
@@ -480,12 +486,14 @@ export default function FilterBar({
                             {credibilityOptions.map((opt) => {
                                 const isActive = credibilityTiers.includes(opt.value);
                                 return (
-                                    <button
+                                    <GatedButton
                                         key={opt.value}
                                         className={`${styles.sourceToggle} ${isActive ? styles.credibilityToggleActive : ''}`}
-                                        onClick={() => !disabled && toggleCredibilityTier(opt.value)}
+                                        onClick={() => toggleCredibilityTier(opt.value)}
                                         aria-pressed={isActive}
-                                        disabled={disabled}
+                                        allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
+                                        requiredTier="pro"
+                                        featureName="Credibility filtering"
                                         style={{
                                             '--btn-color': opt.color,
                                             backgroundColor: isActive ? opt.color : undefined,
@@ -503,7 +511,7 @@ export default function FilterBar({
                                             <path fillRule="evenodd" clipRule="evenodd" d="M21.007 8.27C22.194 9.125 23 10.45 23 12c0 1.55-.806 2.876-1.993 3.73.24 1.442-.134 2.958-1.227 4.05-1.095 1.095-2.61 1.459-4.046 1.225C14.883 22.196 13.546 23 12 23c-1.55 0-2.878-.807-3.731-1.996-1.438.235-2.954-.128-4.05-1.224-1.095-1.095-1.459-2.611-1.217-4.05C1.816 14.877 1 13.551 1 12s.816-2.878 2.002-3.73c-.242-1.439.122-2.955 1.218-4.05 1.093-1.094 2.61-1.467 4.057-1.227C9.125 1.804 10.453 1 12 1c1.545 0 2.88.803 3.732 1.993 1.442-.24 2.956.135 4.048 1.227 1.093 1.092 1.468 2.608 1.227 4.05Zm-4.426-.084a1 1 0 0 1 .233 1.395l-5 7a1 1 0 0 1-1.521.126l-3-3a1 1 0 0 1 1.414-1.414l2.165 2.165 4.314-6.04a1 1 0 0 1 1.395-.232Z" />
                                         </svg>
                                         {opt.label}
-                                    </button>
+                                    </GatedButton>
                                 );
                             })}
                         </div>

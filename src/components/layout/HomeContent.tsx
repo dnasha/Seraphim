@@ -51,8 +51,6 @@ export function HomeContent() {
     const isFirstMount = React.useRef(true);
     const [filterVersion, setFilterVersion] = useState(0);
     
-    /** Global filter and UI state initialized from URL params for persistence */
-    const [unmappedOnly, setUnmappedOnly] = useState(false);
     const [animatedEffects, setAnimatedEffects] = useState(true);
     const [timeRange, setTimeRange] = useState(initialState.t || '1d');
     const [customStartDate, setCustomStartDate] = useState('');
@@ -163,7 +161,6 @@ export function HomeContent() {
         customStartDate: effectiveCustomStartDate,
         customEndDate: effectiveCustomEndDate,
         sortMode: effectiveSortMode,
-        unmappedOnly,
         limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
         enabled: !isAuthResolving,
         resetKey: newsResetKey,
@@ -181,7 +178,7 @@ export function HomeContent() {
         credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, !unmappedOnly, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, unmappedOnly, appliedSortMode, selectedItemId);
+    } = useNewsFilter(news, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, appliedSortMode, selectedItemId);
 
     const isDarkMode = resolvedTheme === 'dark';
 
@@ -212,7 +209,7 @@ export function HomeContent() {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
         });
-    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, debouncedCustomStartDate, debouncedCustomEndDate, effectiveSortMode, unmappedOnly, handleSelectItem]);
+    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, debouncedCustomStartDate, debouncedCustomEndDate, effectiveSortMode, handleSelectItem]);
 
     /**
      * Handles BBox changes by resetting sidebar scroll only when the selected item is
@@ -330,13 +327,6 @@ export function HomeContent() {
                 return;
             }
 
-            // 'a': Toggle unmappedOnly filter (mapped only vs unmapped only)
-            if (key === 'a') {
-                e.preventDefault();
-                setUnmappedOnly(prev => !prev);
-                return;
-            }
-
             // 'c': Clear the search query
             if (key === 'c') {
                 e.preventDefault();
@@ -409,6 +399,7 @@ export function HomeContent() {
             credibilityTiers={credibilityTiers}
             onCredibilityTiersChange={setCredibilityTiers}
             disabled={isGuestUser}
+            userTier={effectiveUserTier}
         />
     );
 
@@ -461,8 +452,6 @@ export function HomeContent() {
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
                     isDarkMode={isDarkMode}
-                    unmappedOnly={unmappedOnly}
-                    onUnmappedOnlyChange={setUnmappedOnly}
                     animatedEffects={animatedEffects}
                     onAnimatedEffectsChange={setAnimatedEffects}
                     onBoundsChange={handleBoundsChange}

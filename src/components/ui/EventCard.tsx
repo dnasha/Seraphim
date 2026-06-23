@@ -12,6 +12,8 @@ import { canonicalEventCount } from "@/lib/utils/ranking";
 import styles from "./EventSidebar.module.css";
 import React from "react";
 import Image from "next/image";
+import { hasFeature, type UserTier } from '@/lib/entitlements';
+import { GatedButton } from './FeatureGate';
 
 interface EventCardProps {
   item: NewsItem;
@@ -20,6 +22,7 @@ interface EventCardProps {
   isExpanded: boolean;
   isTop3: boolean;
   onCardClick: (item: NewsItem) => void;
+  userTier: UserTier;
 }
 
 export default function EventCard({
@@ -29,8 +32,8 @@ export default function EventCard({
   isExpanded,
   isTop3,
   onCardClick,
+  userTier,
 }: EventCardProps) {
-  const hasGeo = item.latitude != null;
   const catColor = CATEGORY_COLORS[item.category || "general"] || CATEGORY_COLORS.general;
   const credStyle = getCredibilityStyle(item.credibilityTier);
   const sourceCount = canonicalEventCount(item);
@@ -70,6 +73,7 @@ export default function EventCard({
         new Date(a.discoveredAt).getTime(),
     );
   const visibleSources = sortedSources;
+  const timelineLocked = sourceCount > 1 && !hasFeature(userTier, 'fullTimeline');
 
   return (
     /** Gutter padding for Virtuoso virtualization items */
@@ -87,7 +91,7 @@ export default function EventCard({
         className={[
           styles.eventCard,
           isSelected ? styles.eventCardActive : "",
-          hasGeo ? styles.eventCardGeo : styles.eventCardUnmapped,
+          styles.eventCardGeo,
           isExpanded ? styles.eventCardExpanded : "",
           isTier1 ? styles.eventCardTier1 : "",
         ]
@@ -290,6 +294,16 @@ export default function EventCard({
                   {sourceCount}
                 </span>
               )}
+              {timelineLocked && (
+                <GatedButton
+                  className={styles.timelineUpgradeBtn}
+                  allowed={false}
+                  requiredTier="pro"
+                  featureName="Full story timeline"
+                >
+                  Unlock full timeline
+                </GatedButton>
+              )}
             </div>
             <div className={styles.timelineList}>
               {item.sources == null ? (
@@ -339,6 +353,9 @@ export default function EventCard({
                     </div>
                   );
                 })
+              )}
+              {timelineLocked && item.sources?.length === 0 && (
+                <p className={styles.timelinePreview}>A source timeline preview is available with Pro.</p>
               )}
             </div>
           </div>

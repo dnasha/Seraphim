@@ -32,6 +32,7 @@ import MapLoading from "./MapLoading";
 import UpgradeButton from "./UpgradeButton";
 import MapDrawTools from "./MapDrawTools";
 import styles from "./NewsMap.module.css";
+import type { UserTier } from '@/lib/entitlements';
 
 interface NewsMapProps {
   items: NewsItem[];
@@ -39,8 +40,6 @@ interface NewsMapProps {
   selectionVersion: number;
   onSelectItem: (id: string | null) => void;
   isDarkMode: boolean;
-  unmappedOnly: boolean;
-  onUnmappedOnlyChange: (val: boolean) => void;
   animatedEffects: boolean;
   onAnimatedEffectsChange: (val: boolean) => void;
   onBoundsChange?: (bbox: BBox) => void;
@@ -49,7 +48,7 @@ interface NewsMapProps {
   sortMode: "new" | "hot";
   disabled?: boolean;
   isSidebarOpen?: boolean;
-  userTier?: string;
+  userTier?: UserTier;
   /** True while the tier is still being resolved from DB */
   tierLoading?: boolean;
 }
@@ -100,8 +99,6 @@ export default function NewsMap({
   selectionVersion,
   onSelectItem,
   isDarkMode,
-  unmappedOnly,
-  onUnmappedOnlyChange,
   animatedEffects,
   onAnimatedEffectsChange,
   onBoundsChange,
@@ -1044,11 +1041,9 @@ export default function NewsMap({
             isOpen={settingsOpen}
             onToggleOpen={() => setSettingsOpen((o) => !o)}
             panelRef={settingsPanelRef as React.RefObject<HTMLDivElement>}
-            unmappedOnly={unmappedOnly}
-            onUnmappedOnlyChange={onUnmappedOnlyChange}
             animatedEffects={animatedEffects}
             onAnimatedEffectsChange={onAnimatedEffectsChange}
-            disabled={disabled}
+            userTier={userTier}
           />
           <MapActionTools
             overlays={overlays}
@@ -1062,6 +1057,7 @@ export default function NewsMap({
             onToggleDrawTools={() => setDrawToolsOpen((o) => !o)}
             bearing={mapBearing}
             disabled={disabled}
+            userTier={userTier}
           />
           <MapDrawTools
             mapRef={mapRef}

@@ -34,8 +34,8 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
         const title = toStr(item.title);
         const description = toStr(item.description);
         const ext = extractLocation(title, description);
-        let placeName = ext.match;
-        let candidates = ext.candidates;
+        const placeName = ext.match;
+        const candidates = ext.candidates;
 
         if (!placeName) {
             enriched.push({ ...item, foundLocations: candidates });

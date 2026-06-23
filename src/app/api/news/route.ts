@@ -7,13 +7,15 @@
  */
 
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/core/supabase";
+import { supabaseAdmin } from "@/lib/core/supabase-admin";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NewsItem, NewsResponse } from "@/lib/core/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
 import { sortNewsItems } from "@/lib/utils/ranking";
 import { validateNewsSearchParams, NEWS_DEFAULT_LIMIT } from "@/lib/security/newsParams";
+import { canUseTimeRange } from '@/lib/entitlements';
+import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 
 /**
  * Global L2 rate limiter using Upstash Redis for cross-instance state.
@@ -86,7 +88,6 @@ export async function GET(request: Request) {
 
   let forceRefresh = validated.params.forceRefresh;
   const {
-    unmappedOnly,
     viewMode,
     scopeMode,
     hasBBox,
@@ -102,7 +103,33 @@ export async function GET(request: Request) {
     sinceStr,
     untilStr,
     forceRaw,
+    timeRange,
   } = validated.params;
+
+  const access = await resolveRequestEntitlements();
+  if (!canUseTimeRange(access.tier, timeRange)) {
+    return NextResponse.json(
+      {
+        error: 'This time range requires an upgraded plan',
+        code: 'feature_required',
+        requiredTier: timeRange === 'custom' ? 'analyst' : 'pro',
+      },
+      { status: 403 },
+    );
+  }
+
+  const presetRangeMs: Record<Exclude<typeof timeRange, 'custom'>, number> = {
+    '1d': 24 * 60 * 60 * 1000,
+    '3d': 3 * 24 * 60 * 60 * 1000,
+    '1w': 7 * 24 * 60 * 60 * 1000,
+    '1m': 30 * 24 * 60 * 60 * 1000,
+  };
+  // Presets are normalized server-side so a forged `since` value cannot turn a
+  // 24-hour button into an archive query. Custom ranges remain Analyst-only.
+  const normalizedSince = timeRange === 'custom'
+    ? sinceStr
+    : new Date(now - presetRangeMs[timeRange]).toISOString();
+  const cacheSinceKey = timeRange === 'custom' ? normalizedSince : timeRange;
 
   /**
    * Numerical stability epsilon to prevent edge-case exclusion of markers 
@@ -117,9 +144,9 @@ export async function GET(request: Request) {
     minLng! <= -179 &&
     maxLng! >= 179;
 
-  const ignoreBBox = (scopeMode === 'global') || unmappedOnly || isGlobalBBox;
+  const ignoreBBox = scopeMode === 'global' || isGlobalBBox;
 
-  let effectiveLimit = requestedLimit;
+  let effectiveLimit = Math.min(requestedLimit, access.entitlements.eventLimit);
 
   /**
    * Dynamic Capping Logic
@@ -127,7 +154,7 @@ export async function GET(request: Request) {
    * of high-density areas. Lower zoom levels use larger limits to populate 
    * the global view.
    */
-  if (zoom !== null && !unmappedOnly && !searchQuery) {
+  if (zoom !== null && !searchQuery) {
     if (zoom >= 6.5) {
       effectiveLimit = Math.min(requestedLimit, 250);
     } else if (zoom >= 4) {
@@ -136,8 +163,8 @@ export async function GET(request: Request) {
   }
 
   // Extend limits for broad historical queries
-  if (sinceStr && !hasRequestedLimit) {
-    const sinceTime = new Date(sinceStr).getTime();
+  if (normalizedSince && !hasRequestedLimit) {
+    const sinceTime = new Date(normalizedSince).getTime();
     const untilTime = untilStr ? new Date(untilStr).getTime() : now;
     if (untilTime - sinceTime > 24 * 60 * 60 * 1000 + 5000) {
       effectiveLimit = Math.max(effectiveLimit, 1000);
@@ -151,15 +178,15 @@ export async function GET(request: Request) {
    * Zoom >= 5: Raw event streaming to allow client-side Supercluster 
    * to provide smooth, organic transitions.
    */
-  const useServerClustering = !unmappedOnly && !forceRaw && (zoom === null || zoom < 5);
+  const useServerClustering = !forceRaw && (zoom === null || zoom < 5);
 
   const bboxKeyPart = ignoreBBox
     ? "global"
     : `${minLat},${maxLat},${minLng},${maxLng}`;
   const cacheKey =
     hasBBox || ignoreBBox
-      ? `view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`
-      : `view:${viewMode},scope:${scopeMode},events${sinceStr ? `,s:${sinceStr}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}${unmappedOnly ? ",unmappedOnly:1" : ""}`;
+      ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
+      : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`;
   const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
 
@@ -236,32 +263,32 @@ export async function GET(request: Request) {
           p_sort_mode: sort,
           p_limit: effectiveLimit,
         };
-        if (sinceStr) rpcParams.p_since = sinceStr;
+        if (normalizedSince) rpcParams.p_since = normalizedSince;
         if (untilStr) rpcParams.p_until = untilStr;
         if (searchQuery) rpcParams.p_search_query = searchQuery;
 
-        const res = await supabase.rpc("get_clustered_events", rpcParams);
+        const res = await supabaseAdmin.rpc("get_clustered_events", rpcParams);
         rows = res.data;
         error = res.error;
       } else {
         // Standard SQL query for raw event retrieval
         if (searchQuery) {
-          const res = await supabase.rpc("search_events", {
+          const res = await supabaseAdmin.rpc("search_events", {
             p_search_query: searchQuery,
-            p_min_lat: hasBBox && !unmappedOnly ? minLat! - EPSILON : null,
-            p_max_lat: hasBBox && !unmappedOnly ? maxLat! + EPSILON : null,
-            p_min_lng: hasBBox && !unmappedOnly ? minLng! - EPSILON : null,
-            p_max_lng: hasBBox && !unmappedOnly ? maxLng! + EPSILON : null,
-            p_since: sinceStr,
+            p_min_lat: hasBBox ? minLat! - EPSILON : null,
+            p_max_lat: hasBBox ? maxLat! + EPSILON : null,
+            p_min_lng: hasBBox ? minLng! - EPSILON : null,
+            p_max_lng: hasBBox ? maxLng! + EPSILON : null,
+            p_since: normalizedSince,
             p_until: untilStr,
             p_sort_mode: sort,
             p_limit: effectiveLimit,
-            p_unmapped_only: unmappedOnly,
+            p_unmapped_only: false,
           });
           rows = res.data;
           error = res.error;
         } else {
-          let query = supabase.from("events").select(LIST_SELECT);
+          let query = supabaseAdmin.from("events").select(LIST_SELECT);
 
           if (sort === "hot") {
             query = query
@@ -274,14 +301,10 @@ export async function GET(request: Request) {
 
           query = query.limit(effectiveLimit);
 
-          if (unmappedOnly) {
-            query = query.is("latitude", null);
-          }
-
-          if (sinceStr) query = query.gte("published_at", sinceStr);
+          if (normalizedSince) query = query.gte("published_at", normalizedSince);
           if (untilStr) query = query.lte("published_at", untilStr);
 
-          if (hasBBox && !unmappedOnly) {
+          if (hasBBox) {
             const latMin = minLat! - EPSILON;
             const latMax = maxLat! + EPSILON;
             const lngMin = minLng! - EPSILON;
@@ -338,8 +361,7 @@ export async function GET(request: Request) {
               },
               {
                 headers: {
-                  "Cache-Control":
-                    "public, s-maxage=30, stale-while-revalidate=30",
+                  "Cache-Control": "private, no-store",
                 },
               },
             );
@@ -426,14 +448,8 @@ export async function GET(request: Request) {
       },
     };
 
-    const cacheControl = !canUseCache
-      ? "no-store"
-      : !hasBBox
-        ? "public, s-maxage=900, stale-while-revalidate=59"
-        : "public, s-maxage=60, stale-while-revalidate=10";
-
     return NextResponse.json(response, {
-      headers: { "Cache-Control": cacheControl },
+      headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
     console.error("[api/news] Unhandled error:", error);

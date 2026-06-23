@@ -7,8 +7,9 @@
  */
 
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/core/supabase';
+import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { DbEvent } from '@/types';
+import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 
 /**
  * In-memory cache for event details. 
@@ -18,10 +19,25 @@ import { DbEvent } from '@/types';
 const detailCache = new Map<string, { description: string; sources: DbEvent['sources']; latitude?: number; longitude?: number; timestamp: number }>();
 const DETAIL_CACHE_TTL = 1800000;
 
+function sourcesForTier(sources: DbEvent['sources'], sourceLimit: number | null) {
+    const sorted = [...(sources ?? [])].sort((a, b) =>
+        new Date(a.discovered_at).getTime() - new Date(b.discovered_at).getTime(),
+    );
+    if (sourceLimit === null) return { sources: sorted, timelineRestricted: false, totalSources: sorted.length };
+    if (sourceLimit === 0) return { sources: [], timelineRestricted: sorted.length > 0, totalSources: sorted.length };
+    if (sorted.length <= sourceLimit) return { sources: sorted, timelineRestricted: false, totalSources: sorted.length };
+    return {
+        sources: [sorted[0], sorted[sorted.length - 1]],
+        timelineRestricted: true,
+        totalSources: sorted.length,
+    };
+}
+
 export async function GET(
     _request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const access = await resolveRequestEntitlements();
     const { id } = await params;
 
     if (!id) {
@@ -39,18 +55,19 @@ export async function GET(
 
     const cached = detailCache.get(id);
     if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
+        const timeline = sourcesForTier(cached.sources, access.entitlements.timelineSourceLimit);
         return NextResponse.json(
             {
                 description: cached.description,
-                sources: cached.sources ?? [],
+                ...timeline,
                 latitude: cached.latitude,
                 longitude: cached.longitude,
             },
-            { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
+            { headers: { 'Cache-Control': 'private, no-store' } }
         );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('events')
         .select('description, sources, latitude, longitude')
         .eq('id', id)
@@ -69,14 +86,15 @@ export async function GET(
         timestamp: Date.now() 
     });
 
+    const timeline = sourcesForTier(data.sources, access.entitlements.timelineSourceLimit);
     return NextResponse.json(
         { 
             description: data.description ?? '', 
-            sources: data.sources ?? [],
+            ...timeline,
             latitude: data.latitude,
             longitude: data.longitude
         },
-        { headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=60' } }
+        { headers: { 'Cache-Control': 'private, no-store' } }
     );
 }
 

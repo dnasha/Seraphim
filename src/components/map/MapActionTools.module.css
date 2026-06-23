@@ -231,6 +231,8 @@
   cursor: pointer;
   transition: background 0.2s;
   flex-shrink: 0;
+  border: 0;
+  padding: 0;
 }
 
 .toggleSwitchOn {

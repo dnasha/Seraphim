@@ -34,13 +34,12 @@ describe("applyClientJitter", () => {
     expect(distance(selected)).toBeGreaterThan(0);
   });
 
-  it("does not move unmapped, unique, or server-clustered items", () => {
+  it("does not move unique or server-clustered items", () => {
     const unique = story("unique", { latitude: 1, longitude: 2 });
-    const unmapped = story("unmapped", { latitude: undefined, longitude: undefined });
     const cluster = story("cluster", { storyCount: 2 });
-    const result = applyClientJitter([unique, unmapped, cluster]);
+    const result = applyClientJitter([unique, cluster]);
 
-    expect(result).toEqual([unique, unmapped, cluster]);
+    expect(result).toEqual([unique, cluster]);
   });
 
   it("wraps jittered markers around the dateline", () => {

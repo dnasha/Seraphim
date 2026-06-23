@@ -1,7 +1,7 @@
 /*
   Seraphim News Filtering Tests
   Verifies the applyNewsFilters function for client-side filtering.
-  Tests source, category, time range, search query, and mapped-only filters.
+  Tests source, category, time range, search query, and map-event filtering.
 
   Usage: bun run test -- scripts/tests/filters.test.ts
 */
@@ -38,7 +38,6 @@ function defaultOpts(overrides: Partial<FilterOptions> = {}): FilterOptions {
         sources: ['news', 'reddit', 'x', 'telegram'],
         categories: ['all'],
         timeRange: '1d',
-        mappedOnly: false,
         searchQuery: '',
         now: NOW,
         ...overrides,
@@ -280,22 +279,13 @@ describe('applyNewsFilters - search query', () => {
     });
 });
 
-/*
-  Mapped Only Filter
-  Ensures toggle visibility for items lacking geographic coordinates.
-*/
-describe('applyNewsFilters - mapped only', () => {
+describe('applyNewsFilters - map events', () => {
     const mappedItem = makeItem({ latitude: 50.45, longitude: 30.52 });
     const unmappedItem = makeItem({ latitude: undefined, longitude: undefined });
 
-    it('hides unmapped items when true', () => {
-        const result = applyNewsFilters([mappedItem, unmappedItem], defaultOpts({ mappedOnly: true }));
+    it('excludes items without a complete coordinate pair', () => {
+        const result = applyNewsFilters([mappedItem, unmappedItem], defaultOpts());
         expect(result).toEqual([mappedItem]);
-    });
-
-    it('shows all items when false', () => {
-        const result = applyNewsFilters([mappedItem, unmappedItem], defaultOpts({ mappedOnly: false }));
-        expect(result).toHaveLength(2);
     });
 });
 

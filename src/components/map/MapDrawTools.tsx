@@ -14,12 +14,14 @@ import {
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import * as turf from '@turf/turf';
 import styles from './MapDrawTools.module.css';
+import { hasFeature, type UserTier } from '@/lib/entitlements';
+import { GatedButton } from '@/components/ui/FeatureGate';
 
 interface MapDrawToolsProps {
   mapRef: React.MutableRefObject<maplibregl.Map | null>;
   mapReady: boolean;
   isOpen: boolean;
-  userTier?: string;
+  userTier?: UserTier;
   onClose?: () => void;
 }
 
@@ -1014,6 +1016,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   };
 
   const handleExport = () => {
+    if (!hasFeature(userTier, 'geoJsonTransfer')) return;
     if (!drawRef.current) return;
     const features = drawRef.current.getSnapshot();
     
@@ -1064,6 +1067,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   };
 
   const handleImport = () => {
+    if (!hasFeature(userTier, 'geoJsonTransfer')) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.geojson,application/json';
@@ -1372,14 +1376,14 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                     Clear
                   </button>
-                  <button className={styles.actionBtn} onClick={handleImport}>
+                  <GatedButton className={styles.actionBtn} onClick={handleImport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON import">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     Import
-                  </button>
-                  <button className={styles.actionBtn} onClick={handleExport}>
+                  </GatedButton>
+                  <GatedButton className={styles.actionBtn} onClick={handleExport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON export">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                     Export
-                  </button>
+                  </GatedButton>
                 </div>
               </div>
             )}

@@ -6,7 +6,6 @@ export const NEWS_MAX_SEARCH_LENGTH = 160;
 
 export interface ValidatedNewsParams {
   forceRefresh: boolean;
-  unmappedOnly: boolean;
   viewMode: "map" | "sidebar";
   scopeMode: "viewport" | "global";
   hasBBox: boolean;
@@ -22,6 +21,7 @@ export interface ValidatedNewsParams {
   sinceStr: string | null;
   untilStr: string | null;
   forceRaw: boolean;
+  timeRange: '1d' | '3d' | '1w' | '1m' | 'custom';
 }
 
 type ParseResult<T> = { value: T } | { error: string };
@@ -52,13 +52,8 @@ const clamp = (value: number, min: number, max: number) =>
 export function validateNewsSearchParams(searchParams: URLSearchParams):
   | { ok: true; params: ValidatedNewsParams }
   | { ok: false; error: string } {
-  const unmappedOnly = searchParams.get("unmapped_only") === "true";
   const viewMode = searchParams.get("view") === "sidebar" ? "sidebar" : "map";
-  const scopeMode = unmappedOnly
-    ? "global"
-    : searchParams.get("scope") === "global"
-      ? "global"
-      : "viewport";
+  const scopeMode = searchParams.get("scope") === "global" ? "global" : "viewport";
 
   const bboxValues = {
     minLat: searchParams.get("minLat"),
@@ -75,7 +70,7 @@ export function validateNewsSearchParams(searchParams: URLSearchParams):
   let maxLat: number | null = null;
   let minLng: number | null = null;
   let maxLng: number | null = null;
-  const hasBBox = !unmappedOnly && bboxPresentCount === 4;
+  const hasBBox = bboxPresentCount === 4;
 
   if (hasBBox) {
     const parsedMinLat = parseFinite(bboxValues.minLat, "minLat");
@@ -152,11 +147,15 @@ export function validateNewsSearchParams(searchParams: URLSearchParams):
     return { ok: false, error: `query must be ${NEWS_MAX_SEARCH_LENGTH} characters or fewer` };
   }
 
+  const rawTimeRange = searchParams.get('time_range') || '1d';
+  if (!['1d', '3d', '1w', '1m', 'custom'].includes(rawTimeRange)) {
+    return { ok: false, error: 'time_range is invalid' };
+  }
+
   return {
     ok: true,
     params: {
       forceRefresh: searchParams.get("refresh") === "true",
-      unmappedOnly,
       viewMode,
       scopeMode,
       hasBBox,
@@ -172,6 +171,7 @@ export function validateNewsSearchParams(searchParams: URLSearchParams):
       sinceStr: since.value,
       untilStr: until.value,
       forceRaw: searchParams.get("force_raw") === "true",
+      timeRange: rawTimeRange as ValidatedNewsParams['timeRange'],
     },
   };
 }

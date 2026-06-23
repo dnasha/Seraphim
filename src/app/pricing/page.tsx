@@ -36,7 +36,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'free',
         name: 'Free',
-        tagline: 'Full toolkit with a 100 story cap',
+        tagline: 'Follow the signal every day',
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: false,
@@ -45,16 +45,13 @@ const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            'Up to 100 stories per refresh',
-            'Search, source filters, and category filters',
-            'Time range controls with custom dates',
-            'Hot and New sorting',
-            'Live overlays: USGS, NOAA, NASA EONET',
-            'Map styles, 3D globe, and draw tools',
-            'Import and export GeoJSON annotations',
+            '100 events per request, refreshed in real time',
+            '24-hour feed with search, source, and category filters',
+            'Standard and Dark maps plus earthquake overlay',
+            'Draw, measure, and local text annotations',
         ],
         excluded: [
-            'Unlimited story volume',
+            'Historical monitoring and full source timelines',
         ],
         cta: 'Included',
         priceKeyMonthly: '',
@@ -63,7 +60,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'pro',
         name: 'Pro',
-        tagline: 'Unlimited feed access for daily monitoring',
+        tagline: 'Monitor deeply as stories develop',
         monthlyPrice: 9.99,
         yearlyPrice: 99.99,
         isLifetime: false,
@@ -72,7 +69,10 @@ const TIERS: TierConfig[] = [
         popular: true,
         trialDays: 7,
         features: [
-            'Unlimited stories in map and sidebar',
+            'Full feed: up to 1,000 events per request',
+            '3-day, 1-week, and 1-month history',
+            'Full source timelines and advanced filters',
+            'All map styles, 3D globe, weather, fire, and NASA overlays',
             'Everything in Free',
             '7 day trial on monthly billing',
             'Monthly or yearly billing',
@@ -88,7 +88,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'analyst',
         name: 'Analyst',
-        tagline: 'Unlimited access with Analyst status',
+        tagline: 'Investigate, compare, and export',
         monthlyPrice: 29.99,
         yearlyPrice: 299.99,
         isLifetime: false,
@@ -98,9 +98,11 @@ const TIERS: TierConfig[] = [
         trialDays: 0,
         features: [
             'Everything in Pro',
-            'Analyst tier badge in app',
+            'All retained history and custom time windows',
+            'GeoJSON annotation import and export',
+            'Flight, maritime, ISS, AQI, and radiation layers',
+            'Analyst inspection modes',
             'Monthly or yearly billing',
-            'Unlimited stories in map and sidebar',
         ],
         excluded: [
             'Lifetime billing',
@@ -112,7 +114,7 @@ const TIERS: TierConfig[] = [
     {
         key: 'angel',
         name: 'Angel',
-        tagline: 'One time payment for lifetime access',
+        tagline: 'Founder lifetime access',
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: true,
@@ -123,7 +125,7 @@ const TIERS: TierConfig[] = [
         features: [
             'Everything in Analyst',
             'Lifetime access with one payment',
-            'Angel tier badge in app',
+            'Angel Founder badge and manual Discord role',
             'Limited to 100 total memberships',
         ],
         excluded: [],
@@ -133,19 +135,28 @@ const TIERS: TierConfig[] = [
     },
 ];
 
-const COMPARISON_ROWS = [
-    { feature: 'Story volume (map and sidebar)', free: '100 per refresh', pro: 'Unlimited', analyst: 'Unlimited', angel: 'Unlimited' },
-    { feature: 'Search and filters', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'Time range controls', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'Map styles and 3D globe', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'Live overlays (USGS, NOAA, NASA)', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'Draw, measure, and text annotations', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'GeoJSON import and export', free: 'Included', pro: 'Included', analyst: 'Included', angel: 'Included' },
-    { feature: 'Tier badge in app', free: 'Free', pro: 'Pro', analyst: 'Analyst', angel: 'Angel' },
-    { feature: 'Billing model', free: 'Free', pro: 'Subscription', analyst: 'Subscription', angel: 'One time' },
-    { feature: 'Trial availability', free: 'No', pro: '7 days on monthly', analyst: 'No', angel: 'No' },
-    { feature: 'Manage billing in account', free: 'No', pro: 'Yes', analyst: 'Yes', angel: 'Not needed' },
-    { feature: 'Lifetime access', free: 'No', pro: 'No', analyst: 'No', angel: 'Yes' },
+const COMPARISON_SECTIONS = [
+    { label: 'Feed access', rows: [
+        { feature: 'Events per request', free: '100', pro: '1,000', analyst: '1,000', angel: '1,000' },
+        { feature: 'History', free: '24 hours', pro: 'Up to 1 month', analyst: 'All retained + custom', angel: 'All retained + custom' },
+        { feature: 'Source timeline', free: 'First + latest', pro: 'Full', analyst: 'Full', angel: 'Full' },
+    ]},
+    { label: 'Investigation workflow', rows: [
+        { feature: 'Search / source / category filters', free: '✓', pro: '✓', analyst: '✓', angel: '✓' },
+        { feature: 'Volume and credibility filters', free: '—', pro: '✓', analyst: '✓', angel: '✓' },
+        { feature: 'Draw and measure annotations', free: 'Local', pro: 'Local', analyst: 'Local', angel: 'Local' },
+        { feature: 'GeoJSON import / export', free: '—', pro: '—', analyst: '✓', angel: '✓' },
+    ]},
+    { label: 'Map intelligence', rows: [
+        { feature: 'Map styles and 3D globe', free: 'Standard + Dark', pro: 'All styles + 3D', analyst: 'All styles + 3D', angel: 'All styles + 3D' },
+        { feature: 'Live overlays', free: 'Earthquakes', pro: 'Weather, fires, NASA', analyst: 'All overlays', angel: 'All overlays' },
+        { feature: 'Analyst inspection modes', free: '—', pro: '—', analyst: '✓', angel: '✓' },
+    ]},
+    { label: 'Ownership', rows: [
+        { feature: 'Billing', free: 'Free', pro: 'Subscription', analyst: 'Subscription', angel: 'One-time' },
+        { feature: 'Trial', free: '—', pro: '7 days monthly', analyst: '—', angel: '—' },
+        { feature: 'Lifetime / Founder role', free: '—', pro: '—', analyst: '—', angel: '✓' },
+    ]},
 ];
 
 export default function PricingPage() {
@@ -154,6 +165,7 @@ export default function PricingPage() {
     const [angelRemaining, setAngelRemaining] = useState<number | null>(null);
     const [angelTotal, setAngelTotal] = useState<number>(100);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [comparisonTier, setComparisonTier] = useState<'free' | 'pro' | 'analyst' | 'angel'>('pro');
     const { user, isGuest } = useAuth();
     const { tier: currentTier } = useUserTier();
     const router = useRouter();
@@ -266,8 +278,13 @@ export default function PricingPage() {
                 <section className={styles.hero}>
                     <h2 className={styles.heroTitle}>See more of the global signal</h2>
                     <p className={styles.heroSubtitle}>
-                        Free includes the full toolkit with a 100 story cap. Paid plans remove the cap and include subscription management.
+                        Start with a useful free command center, then unlock monitoring depth and investigation tools when the signal demands it.
                     </p>
+                </section>
+
+                <section className={styles.guestPreview}>
+                    <span className={styles.guestPreviewEyebrow}>Try before signing up</span>
+                    <p><strong>Guest mode</strong> lets anyone explore the live map and its top 10 events from the last 24 hours. Create a Free account for 100 events, filtering, and local annotations.</p>
                 </section>
 
                 {/* Error Toast */}
@@ -457,7 +474,32 @@ export default function PricingPage() {
 
                 {/* Feature Comparison Table */}
                 <section className={styles.comparisonSection}>
-                    <h2 className={styles.comparisonTitle}>Full Feature Comparison</h2>
+                    <h2 className={styles.comparisonTitle}>Choose the depth you need</h2>
+                    <div className={styles.comparisonMobilePicker} role="tablist" aria-label="Compare plan features">
+                        {(['free', 'pro', 'analyst', 'angel'] as const).map((tier) => (
+                            <button
+                                key={tier}
+                                role="tab"
+                                aria-selected={comparisonTier === tier}
+                                className={comparisonTier === tier ? styles.comparisonMobilePickerActive : ''}
+                                onClick={() => setComparisonTier(tier)}
+                            >
+                                {tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                    <div className={styles.comparisonMobileCards}>
+                        {COMPARISON_SECTIONS.map((section) => (
+                            <div key={section.label} className={styles.comparisonMobileGroup}>
+                                <h3>{section.label}</h3>
+                                {section.rows.map((row) => (
+                                    <div key={row.feature} className={styles.comparisonMobileRow}>
+                                        <span>{row.feature}</span><strong>{row[comparisonTier]}</strong>
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
                     <div className={styles.tableWrapper}>
                         <table className={styles.comparisonTable}>
                             <thead>
@@ -470,15 +512,20 @@ export default function PricingPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {COMPARISON_ROWS.map((row) => (
-                                    <tr key={row.feature}>
-                                        <td className={styles.tdFeature}>{row.feature}</td>
-                                        <td className={styles.tdValue}>{row.free}</td>
-                                        <td className={`${styles.tdValue} ${styles.tdPopular}`}>{row.pro}</td>
-                                        <td className={styles.tdValue}>{row.analyst}</td>
-                                        <td className={`${styles.tdValue} ${styles.tdAngel}`}>{row.angel}</td>
-                                    </tr>
-                                ))}
+                                {COMPARISON_SECTIONS.flatMap((section) => [
+                                    <tr key={section.label} className={styles.tableGroupRow}>
+                                        <th colSpan={5}>{section.label}</th>
+                                    </tr>,
+                                    ...section.rows.map((row) => (
+                                        <tr key={row.feature}>
+                                            <td className={styles.tdFeature}>{row.feature}</td>
+                                            <td className={styles.tdValue}>{row.free}</td>
+                                            <td className={`${styles.tdValue} ${styles.tdPopular}`}>{row.pro}</td>
+                                            <td className={styles.tdValue}>{row.analyst}</td>
+                                            <td className={`${styles.tdValue} ${styles.tdAngel}`}>{row.angel}</td>
+                                        </tr>
+                                    )),
+                                ])}
                             </tbody>
                         </table>
                     </div>
@@ -494,7 +541,7 @@ export default function PricingPage() {
                         </div>
                         <div className={styles.faqItem}>
                             <h3>What is the core difference between Free and paid?</h3>
-                            <p>Free is capped at 100 stories per refresh. Pro, Analyst, and Angel remove that cap so you can monitor the full stream.</p>
+                            <p>Free covers the current 24-hour signal with up to 100 events per request. Pro and above can monitor up to 1,000 events per request and unlock more history.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Can I switch plans?</h3>
@@ -506,7 +553,7 @@ export default function PricingPage() {
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Is the Angel tier really lifetime?</h3>
-                            <p>Yes. Angel is a one time payment for lifetime access. Only 100 Angel memberships are available.</p>
+                            <p>Yes. Angel includes all Analyst capabilities forever with one payment. Angel Founders can join the Discord community role through manual fulfillment after purchase.</p>
                         </div>
                         <div className={styles.faqItem}>
                             <h3>Where do I manage billing?</h3>
