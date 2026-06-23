@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ rateLimit: vi.fn().mockResolvedValue({ success: true }) }));
+const mocks = vi.hoisted(() => ({
+  rateLimit: vi.fn().mockResolvedValue({ success: true }),
+  resolveEntitlements: vi.fn(),
+}));
 
+vi.mock("@/lib/server/entitlements", () => ({
+  resolveRequestEntitlements: mocks.resolveEntitlements,
+}));
 vi.mock("@upstash/redis", () => ({ Redis: { fromEnv: vi.fn(() => ({})) } }));
 vi.mock("@upstash/ratelimit", () => ({
   Ratelimit: class {
@@ -19,7 +25,10 @@ function call(path: string[], query = "") {
 }
 
 describe("GET /api/proxy/[...path]", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveEntitlements.mockResolvedValue({ tier: "analyst", entitlements: {} });
+  });
 
   it("rejects missing and unknown services without making an upstream request", async () => {
     const missing = await call([]);
@@ -40,12 +49,12 @@ describe("GET /api/proxy/[...path]", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns the static ship feed with cache headers", async () => {
+  it("returns the static ship feed with private cache headers", async () => {
     const response = await call(["ships"]);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toContain("max-age=3600");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(body).toMatchObject({ type: "FeatureCollection" });
     expect(body.features.length).toBeGreaterThan(0);
   });
