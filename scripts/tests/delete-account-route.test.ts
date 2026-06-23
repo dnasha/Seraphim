@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   cookies: vi.fn(),
@@ -21,11 +21,18 @@ function request(headers: Record<string, string>) {
 describe("POST /api/auth/delete-account", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The admin client is mocked below; use a dummy value so this unit test is
+    // independent of local .env files and GitHub Actions secrets.
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
     mocks.cookies.mockResolvedValue({ get: vi.fn(), set: vi.fn(), delete: vi.fn() });
     mocks.createServerClient.mockReturnValue({ auth: { getUser: mocks.getUser } });
     mocks.createAdminClient.mockReturnValue({ auth: { admin: { deleteUser: mocks.deleteUser } } });
     mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
     mocks.deleteUser.mockResolvedValue({ error: null });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("rejects requests without a same-origin CSRF signal before creating clients", async () => {
