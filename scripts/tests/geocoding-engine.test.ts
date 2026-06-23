@@ -292,6 +292,16 @@ describe('extractLocation - description fallback', () => {
   Ensures common terms or entities matching dictionary entries are excluded.
 */
 describe('extractLocation - false positives', () => {
+    it('does not pin an uncorroborated title-subject place/person collision', () => {
+        const { match } = extractLocation('Burnham announces a new leadership team', 'The company will expand its product line.');
+        expect(match).toBeNull();
+    });
+
+    it('preserves a location after stripping a recognized outlet suffix', () => {
+        const { match } = extractLocation('Explosions reported overnight in Kyiv — Reuters', '');
+        expect(match?.toLowerCase()).toContain('kyiv');
+    });
+
     it('does not match "Arsenal" as a location', () => {
         const { match, candidates } = extractLocation('Arsenal signs new striker from Serie A', '');
         if (match) {
@@ -305,6 +315,29 @@ describe('extractLocation - false positives', () => {
         const { candidates } = extractLocation('Amazon reports record quarterly revenue growth', '');
         const allLower = candidates.map(c => c.toLowerCase());
         expect(allLower).not.toContain('amazon');
+    });
+
+    it.each([
+        'What’s the cheapest way to score Brooks sneakers?',
+        'Only three of 62 death cases from Saba Saba protests are in court',
+        '10 Best Budgeting Books To Read Now',
+        'How solar wind forecasting will help New Horizons spacecraft',
+        'Hawthorne Bridge closed to vehicle traffic',
+    ])('does not pin known non-geographic collision: %s', (title) => {
+        expect(extractLocation(title, '').match).toBeNull();
+    });
+
+    it('does not treat a person surname as a location', () => {
+        expect(extractLocation('Wikipedia cofounder Jimmy Wales rejects AI edits', '').match).toBeNull();
+    });
+
+    it.each([
+        ['SAN NICOLAS, Mexico, June 22 - World Cup preview', 'San Nicolas, Mexico'],
+        ['Report: Kennedy Space Center not ready for heavy rockets', 'Kennedy Space Center, Florida'],
+        ['Workers picket at Target Field ahead of Twins game', 'Minneapolis, Minnesota'],
+        ['Starmer speaks from Downing Street', 'London'],
+    ])('resolves an unambiguous venue or contextual place: %s', (title, expected) => {
+        expect(extractLocation(title, '').match).toBe(expected);
     });
 });
 

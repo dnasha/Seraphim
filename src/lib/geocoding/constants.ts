@@ -297,19 +297,11 @@ export const FALSE_POSITIVES = new Set([
     'can', 'meta', 'sam', 'post', 'battle', 'eagle', 'enterprise',
     'nigel', 'kim', 'pacific', 'aung san', 'golders green',
     'sanchez', 'harvard', 'irani', 'free',
+    // Names and brands that repeatedly collide with place records. Precision wins:
+    // a true event location needs context beyond these bare terms.
+    'brooks', 'saba', 'hilton', 'lalo', 'best', 'new horizons',
+    'konstantinovka', 'hawthorne',
 ]);
-
-/**
- * Fallback locations for news sources where the content is often local
- * to a specific headquarters.
- */
-export const NEWS_SOURCE_DEFAULTS: Record<string, string> = {
-    'nasa': 'Washington DC',
-    'nature': 'London',
-    'ars technica': 'San Francisco',
-    'the verge': 'New York',
-    'world health organization': 'Geneva',
-};
 
 /**
  * Keywords that identify global superpowers, used for weighted scoring
@@ -325,6 +317,12 @@ export const SUPERPOWER_KEYS = new Set(['united states', 'united kingdom', 'wash
 export const OVERRIDE_LOCATIONS: Record<string, { lat: number; lon: number; type: 'country' | 'admin1' | 'city' }> = {
     'georgia': { lat: 42.3154, lon: 43.3569, type: 'country' },
     'ocean county': { lat: 39.87, lon: -74.26, type: 'admin1' },
+    'launceston': { lat: -41.43, lon: 147.14, type: 'city' },
+    'san nicolas': { lat: 25.75, lon: -100.30, type: 'city' },
+    'kennedy space center': { lat: 28.57, lon: -80.65, type: 'city' },
+    'east rutherford': { lat: 40.83, lon: -74.10, type: 'city' },
+    'minneapolis': { lat: 44.98, lon: -93.27, type: 'city' },
+    'london': { lat: 51.51, lon: -0.13, type: 'city' },
 };
 
 /** 
@@ -332,7 +330,7 @@ export const OVERRIDE_LOCATIONS: Record<string, { lat: number; lon: number; type
  */
 
 /** Strips common media outlet names from the end of headlines */
-export const MEDIA_ATTRIBUTION_SUFFIX = /\s*[-–—|]\s*(?:BBC|CNN|Reuters|AP|AFP|Al Jazeera|Fox News|NBC|CBS|ABC|NPR|Guardian|Telegraph|NYT|New York Times|Washington Post|Wall Street Journal|WaPo|WSJ|Financial Times|FT|Bloomberg|Politico|The Hill|Axios|Vox|Vice|BuzzFeed|Daily Mail|Daily Mirror|The Sun|Sky News|DW|Deutsche Welle|France 24|RFI|SCMP|South China Morning Post|Haaretz|Times of Israel|Jerusalem Post|Arab News|Middle East Eye|Al Monitor|Al-Monitor|Bellingcat|Coda Story|RFERL|Radio Free Europe|Radio Liberty|War on the Rocks|Geopolitical Futures|OSINTdefender|IntelSlava|liveukraine_media|Defence One|Defense One|thecradle|Philenews|airlive|Marine Insight|BulgarianMilitary|Yahoo|MSN|Brucke|Ukrinform|Ukrainska Pravda|Kyiv Independent|UNIAN|Sky News Arabia|Al Arabiya English|Al Arabiya|Press TV|PressTV|Tasnim|IRNA|Mehr News|Newsweek|Time Magazine|The Atlantic|Foreign Policy|Foreign Affairs|Chatham House|ISW|Institute for the Study of War|War Monitor|Military Summary|The Drive|The Aviationist|Jane|Janes|PopularMechanics|Popular Mechanics|Wired|Ars Technica|The Verge|TechCrunch|Engadget|9to5Mac|MacRumors|[A-Za-z ]{3,40}?)\s*$/;
+export const MEDIA_ATTRIBUTION_SUFFIX = /\s*[-–—|]\s*(?:BBC|CNN|Reuters|AP|AFP|Al Jazeera|Fox News|NBC|CBS|ABC|NPR|Guardian|Telegraph|NYT|New York Times|Washington Post|Wall Street Journal|WaPo|WSJ|Financial Times|FT|Bloomberg|Politico|The Hill|Axios|Vox|Vice|BuzzFeed|Daily Mail|Daily Mirror|The Sun|Sky News|DW|Deutsche Welle|France 24|RFI|SCMP|South China Morning Post|Haaretz|Times of Israel|Jerusalem Post|Arab News|Middle East Eye|Al Monitor|Al-Monitor|Bellingcat|Coda Story|RFERL|Radio Free Europe|Radio Liberty|War on the Rocks|Geopolitical Futures|OSINTdefender|IntelSlava|liveukraine_media|Defence One|Defense One|thecradle|Philenews|airlive|Marine Insight|BulgarianMilitary|Yahoo|MSN|Brucke|Ukrinform|Ukrainska Pravda|Kyiv Independent|UNIAN|Sky News Arabia|Al Arabiya English|Al Arabiya|Press TV|PressTV|Tasnim|IRNA|Mehr News|Newsweek|Time Magazine|The Atlantic|Foreign Policy|Foreign Affairs|Chatham House|ISW|Institute for the Study of War|War Monitor|Military Summary|The Drive|The Aviationist|Jane|Janes|PopularMechanics|Popular Mechanics|Wired|Ars Technica|The Verge|TechCrunch|Engadget|9to5Mac|MacRumors)\s*$/;
 
 /** Removes social media calls to action and subscription links */
 export const SOCIAL_MEDIA_TRAILER = /(?:Subscribe to @\S+|Subscribe to Live:\s*\S+|Subscribe here:\s*\S+|🪐\s*Subscribe|Follow us|Join our|Telegram|t\.me|Links:\s|@\w+\s*Chat room|appeared first on).*/i;

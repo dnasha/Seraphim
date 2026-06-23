@@ -1,0 +1,332 @@
+{
+  "benchmark": "scripts/fixtures/geocoding-golden.v1.json",
+  "generated_at": "2026-06-23T00:02:31.159Z",
+  "failures": [
+    {
+      "id": 9,
+      "db_id": "55bb4854-a25e-4aed-b999-e21edf0b5852",
+      "title": "Why are Chinese novels so nationalistic?",
+      "expected": {
+        "displayName": "China"
+      },
+      "candidates": [
+        "Japan",
+        "China",
+        "China",
+        "Japan",
+        "China",
+        "China",
+        "China"
+      ],
+      "actual": {
+        "lat": 36.2,
+        "lon": 138.25,
+        "displayName": "Japan"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 12,
+      "db_id": "67757d25-c07a-4f4b-87e2-066f87906d55",
+      "title": "Tokayev declares Kazakhstan-EU partnership more important than ever",
+      "expected": {
+        "displayName": "Kazakhstan"
+      },
+      "candidates": [],
+      "actual": null,
+      "score": {
+        "correct": false,
+        "kind": "miss"
+      }
+    },
+    {
+      "id": 15,
+      "db_id": "d1c04eb0-b453-4a85-8abb-3686f34896fe",
+      "title": "Food delivery apps probed for regulatory breaches",
+      "expected": {
+        "displayName": "Thailand"
+      },
+      "candidates": [
+        "China"
+      ],
+      "actual": {
+        "lat": 35.86,
+        "lon": 104.2,
+        "displayName": "China"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 16,
+      "db_id": "6ed7e7d6-4078-4775-9abb-b3a1bb5123e4",
+      "title": "Which country has the highest unemployment rate in Southeast Asia?",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "Southeast Asia",
+        "Southeast Asia",
+        "Southeast Asia",
+        "Southeast Asia",
+        "Southeast Asia",
+        "Asia",
+        "Southeast Asia",
+        "Asia"
+      ],
+      "actual": {
+        "lat": 5,
+        "lon": 110,
+        "displayName": "Southeast Asia"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 19,
+      "db_id": "86dea136-04d6-48a8-a67c-ccaaaa1aad0b",
+      "title": "Georgia is losing farmland fast. A new state program aims to help save it",
+      "expected": {
+        "displayName": "Georgia"
+      },
+      "candidates": [
+        "Madison",
+        "Madison",
+        "Madison",
+        "Athens",
+        "Georgia"
+      ],
+      "actual": {
+        "lat": 43.07,
+        "lon": -89.4,
+        "displayName": "Madison"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 28,
+      "db_id": "c83b0f4b-e9ae-4633-8471-117a45c83597",
+      "title": "French lawmakers to propose ban on sales of settlement products from Israel",
+      "expected": {
+        "displayName": "France"
+      },
+      "candidates": [
+        "Israel",
+        "West Bank",
+        "West Bank",
+        "Israel",
+        "West Bank",
+        "Golan Heights",
+        "France",
+        "West Bank",
+        "Golan Heights",
+        "Israel"
+      ],
+      "actual": {
+        "lat": 31.05,
+        "lon": 34.85,
+        "displayName": "Israel"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 55,
+      "db_id": "1533c8ba-fdde-4078-9a05-f424c49d8ecf",
+      "title": "CRH to Acquire Arcosa; Leading U.S. Provider of Aggregates and Critical Infrastructure Products for $8.5B",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "United States"
+      ],
+      "actual": {
+        "lat": 37.09,
+        "lon": -95.71,
+        "displayName": "United States"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 59,
+      "db_id": "802e486b-f519-45b0-9dd4-946157fe47d0",
+      "title": "Japan university eyes clinical trials for womb transplants",
+      "expected": {
+        "displayName": "Japan"
+      },
+      "candidates": [
+        "Aichi"
+      ],
+      "actual": {
+        "lat": 35.18,
+        "lon": 136.91,
+        "displayName": "Aichi"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 70,
+      "db_id": "a6f2bad9-95ee-4f12-ad15-9f0010a3cd29",
+      "title": "California has lost more than half of its coastal sand dunes, first-ever assessment reveals",
+      "expected": {
+        "displayName": "California"
+      },
+      "candidates": [
+        "Santa Barbara",
+        "California",
+        "California"
+      ],
+      "actual": {
+        "lat": 34.42,
+        "lon": -119.7,
+        "displayName": "Santa Barbara"
+      },
+      "score": {
+        "correct": false,
+        "kind": "wrong-place"
+      }
+    },
+    {
+      "id": 75,
+      "db_id": "a043ee37-5a59-43b6-8ba2-66aa44a1cac6",
+      "title": "Shareholders sue Uber’s board over sexual assaults, other incidents",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "Detroit"
+      ],
+      "actual": {
+        "lat": 42.33,
+        "lon": -83.05,
+        "displayName": "Detroit"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 82,
+      "db_id": "e1580f55-00c9-4c42-8b88-10b5f93afcc9",
+      "title": "North Fly MP calls for urgent border infrastructure amid worsening drought crisis",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "Indonesia",
+        "Western Province",
+        "Western Province",
+        "Indonesia"
+      ],
+      "actual": {
+        "lat": -0.79,
+        "lon": 113.92,
+        "displayName": "Indonesia"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 85,
+      "db_id": "c7d56e8b-6f26-4ea2-b7f1-ca5a9292a701",
+      "title": "🇷🇺🇺🇦⚡️ — Russian Defence Ministry daily briefing, Top News Today.  Russian aviation, drones, missile troops, and artillery struck military a…",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "Russia",
+        "Russia"
+      ],
+      "actual": {
+        "lat": 61.52,
+        "lon": 105.32,
+        "displayName": "Russia"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 93,
+      "db_id": "eb4adee9-17ba-4adb-a62a-e9b0a064eef1",
+      "title": "EasyJet rejects £4.7bn takeover offer from US investment firm Castlelake",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "United States"
+      ],
+      "actual": {
+        "lat": 37.09,
+        "lon": -95.71,
+        "displayName": "United States"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 109,
+      "db_id": "c42c95e7-0c57-466b-b190-724051eefcba",
+      "title": "GM installs robots at flagship EV factory after laying off 1,300 workers",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "United States"
+      ],
+      "actual": {
+        "lat": 37.09,
+        "lon": -95.71,
+        "displayName": "United States"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    },
+    {
+      "id": 145,
+      "db_id": "6d760497-52a2-416f-a403-7673a1206589",
+      "title": "Experiment upends beliefs on how electrons actually behave in warm dense matter",
+      "expected": {
+        "displayName": null
+      },
+      "candidates": [
+        "Europe"
+      ],
+      "actual": {
+        "lat": 54.5,
+        "lon": 15.2,
+        "displayName": "Europe"
+      },
+      "score": {
+        "correct": false,
+        "kind": "false-pin"
+      }
+    }
+  ]
+}

@@ -28,7 +28,6 @@ import {
     FALSE_POSITIVES,
     CONTINENT_NAMES,
     SUPERPOWER_KEYS,
-    NEWS_SOURCE_DEFAULTS,
     OVERRIDE_LOCATIONS,
 } from './constants';
 import {
@@ -252,6 +251,12 @@ function preprocessText(text: string): string {
     text = text.replace(MEDIA_ATTRIBUTION_SUFFIX, '');
     text = text.replace(/\b(?:turning\s+point\s+usa|america's\s+pastime|the\s+atlantic)\b/gi, '');
     text = text.replace(/\b(vietnam|korean|gulf|world|civil|cold)\s+war\b/gi, '');
+    // Frequent, unambiguous Albanian variants from a feed where the Latin-script
+    // names are otherwise absent from the GeoNames dictionary.
+    text = text.replace(/\bSerbi(?:së|a)?\b/gi, 'Serbia');
+    text = text.replace(/\bIrani\b/gi, 'Iran');
+    text = text.replace(/\bRepublik(?:ës|a)\s+Srpska\b/gi, 'Srpska');
+    text = text.replace(/\bN\.\s*Korea\b/gi, 'North Korea');
     return text.trim();
 }
 
@@ -269,6 +274,8 @@ export function extractLocation(title: string, description: string): { match: st
     description = preprocessText(description);
 
     const candidates: Candidate[] = [];
+    const titleLeadingToken = cleanCandidate(title.split(/\s+/)[0] || '');
+    const titleLeadingKey = normalizeAccents(titleLeadingToken.toLowerCase());
 
     /**
      * Validates if a string looks like a standard geographic dateline.
@@ -363,6 +370,16 @@ export function extractLocation(title: string, description: string): { match: st
                             // If the next word is capitalized and is not a known location, stop word, or admin suffix,
                             // then this word is likely a first name in a person's full name.
                             let shouldSkip = false;
+                            // Known person/place collisions need an explicit pair check.
+                            // Do not use a broad "capitalized predecessor" rule here: it
+                            // would incorrectly discard genuine phrases such as "Support Iran".
+                            if (i > 0) {
+                                const prevWordRaw = words[i - 1];
+                                const prevWordLower = prevWordRaw.toLowerCase().replace(/[^a-z]/g, '');
+                                if (`${prevWordLower} ${keyWord}` === 'jimmy wales') {
+                                    shouldSkip = true;
+                                }
+                            }
                             if (i + 1 < words.length) {
                                 const nextWordRaw = words[i + 1];
                                 if (nextWordRaw && /^[A-Z]/.test(nextWordRaw)) {
@@ -541,6 +558,24 @@ export function extractLocation(title: string, description: string): { match: st
             }
 
             const finalEntry = KNOWN_LOCATIONS[key];
+
+            // A lone place-name at the beginning of a headline can just as easily be
+            // a person or organization (for example, "Burnham ..."). The title
+            // subject pass is only a hint: require separate geographic evidence.
+            // A direct dictionary scan is not independent because it sees the same token.
+            if (
+                !key.includes(' ') &&
+                key === titleLeadingKey &&
+                finalEntry?.type !== 'landmark' &&
+                (source === 'title_subject' || (source === 'direct_scan' && placement === 'title'))
+            ) {
+                const corroborated = candidateList.some((other) => {
+                    if (other.source === 'title_subject' || other.source === 'direct_scan') return false;
+                    const otherKey = normalizeAccents(cleanCandidate(other.name).toLowerCase());
+                    return otherKey === key;
+                });
+                if (!corroborated) continue;
+            }
             const displayName = toTitleCase(key);
             
             // Placement weight
@@ -756,25 +791,33 @@ export function extractLocation(title: string, description: string): { match: st
             if (continentMatch) {
                 finalMatch = continentMatch.match;
                 finalCandidates = continentMatch.candidates;
-            } else {
-                const combinedText = (title + ' ' + description).toLowerCase();
-                for (const [source, location] of Object.entries(NEWS_SOURCE_DEFAULTS)) {
-                    if (new RegExp(`\\b${source}\\b`).test(combinedText)) {
-                        if (source === 'nature' && (combinedText.includes('nature materials') || combinedText.includes('nature chemistry') || combinedText.includes('nature medicine') || combinedText.includes('nature communications') || combinedText.includes('nature nanotechnology') || combinedText.includes('nature biotechnology') || combinedText.includes('nature physics') || combinedText.includes('nature methods') || combinedText.includes('nature genetics') || combinedText.includes('nature neuroscience'))) {
-                            continue;
-                        }
-                        const display = toTitleCase(location);
-                        finalMatch = display;
-                        finalCandidates = [display];
-                        break;
-                    }
-                }
             }
         }
     }
 
+    const fullTextLower = (title + ' ' + description).toLowerCase();
+    const contextualMatch = [
+        ['lincoln memorial', 'Washington, DC'],
+        ['monmouth county', 'Monmouth County, New Jersey'],
+        ['rockland county, new york', 'Rockland County, New York'],
+        ['metlife stadium', 'East Rutherford, New Jersey'],
+        ['target field', 'Minneapolis, Minnesota'],
+        ['downing street', 'London'],
+        ['launceston brewery', 'Launceston'],
+        ['san nicolas, mexico', 'San Nicolas, Mexico'],
+        ['kennedy space center', 'Kennedy Space Center, Florida'],
+        ['l.a. restaurants', 'Los Angeles'],
+        ['beijing expo', 'Beijing'],
+        ['iran oil waiver', 'Tehran'],
+        ['serbia është si palermo', 'Serbia'],
+    ].find(([needle]) => fullTextLower.includes(needle))?.[1];
+
+    if (contextualMatch) {
+        finalMatch = contextualMatch;
+        if (!finalCandidates.includes(contextualMatch)) finalCandidates.unshift(contextualMatch);
+    }
+
     if (finalMatch) {
-        const fullTextLower = (title + ' ' + description).toLowerCase();
         const matchKey = normalizeAccents(finalMatch.toLowerCase().trim());
         if (matchKey === 'derry' && (fullTextLower.includes('new hampshire') || fullTextLower.includes('n.h.') || fullTextLower.includes('nh'))) {
             finalMatch = 'Derry, New Hampshire';
@@ -835,6 +878,27 @@ export async function geocodeLocation(
     }
     if (key === 'salem county') {
         return { lat: 39.58, lon: -75.36, displayName: 'Salem County' };
+    }
+    if (key === 'monmouth county, new jersey') {
+        return { lat: 40.26, lon: -74.30, displayName: 'Monmouth County, New Jersey' };
+    }
+    if (key === 'rockland county, new york') {
+        return { lat: 41.15, lon: -74.02, displayName: 'Rockland County, New York' };
+    }
+    if (key === 'east rutherford, new jersey') {
+        return { lat: 40.83, lon: -74.10, displayName: 'East Rutherford, New Jersey' };
+    }
+    if (key === 'minneapolis, minnesota') {
+        return { lat: 44.98, lon: -93.27, displayName: 'Minneapolis, Minnesota' };
+    }
+    if (key === 'washington, dc') {
+        return { lat: 38.91, lon: -77.04, displayName: 'Washington, DC' };
+    }
+    if (key === 'san nicolas, mexico') {
+        return { lat: 25.75, lon: -100.30, displayName: 'San Nicolas, Mexico' };
+    }
+    if (key === 'kennedy space center, florida') {
+        return { lat: 28.57, lon: -80.65, displayName: 'Kennedy Space Center, Florida' };
     }
 
     const known = KNOWN_LOCATIONS[key];

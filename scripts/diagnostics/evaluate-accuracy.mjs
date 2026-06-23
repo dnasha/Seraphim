@@ -1,183 +1,104 @@
 /**
- * Purpose: Evaluates the geocoding engine's performance by comparing current extraction results against a hand-graded ground truth dataset.
- * Usage: bun run scripts/diagnostics/evaluate-accuracy.mjs
+ * Evaluate a human-reviewed geocoding benchmark. Expectations must be explicit:
+ * { expected: { displayName: string | null, lat?, lon?, toleranceKm? } }.
+ *
+ * Usage:
+ *   GRADED_RESULTS_PATH=scripts/fixtures/geocoding-golden.v1.json bun run scripts/diagnostics/evaluate-accuracy.mjs
  */
 
 import fs from 'fs';
 import { performance } from 'perf_hooks';
 
-const GRADED_RESULTS_PATH = process.env.GRADED_RESULTS_PATH || 'scripts/results/graded-results.json';
-const FAILURES_PATH = 'scripts/results/accuracy-failures.txt';
+const GRADED_RESULTS_PATH = process.env.GRADED_RESULTS_PATH || 'scripts/fixtures/geocoding-golden.v1.json';
+const FAILURES_PATH = process.env.FAILURES_PATH || 'scripts/results/accuracy-failures.json';
 
-/**
- * Normalizes a location name or coordinate value for consistent comparison.
- * Handles null/undefined and string representations of 'null'.
- */
-function normalize(val) {
-  if (val === null || val === undefined) return null;
-  if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
-  return String(val).toLowerCase().trim();
+const ALIASES = {
+  uk: 'united kingdom', usa: 'united states', 'u.s.': 'united states',
+  america: 'united states', britain: 'united kingdom', kiev: 'ukraine',
+  kyiv: 'ukraine', gaza: 'palestine', uae: 'united arab emirates',
+};
+
+function normalize(value) {
+  if (value == null || (typeof value === 'string' && value.toLowerCase() === 'null')) return null;
+  const normalized = String(value).toLowerCase().trim();
+  return ALIASES[normalized] || normalized;
+}
+
+function distanceKm(a, b) {
+  const toRadians = degrees => degrees * Math.PI / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(b.lat - a.lat);
+  const dLon = toRadians(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(a.lat)) * Math.cos(toRadians(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(h));
+}
+
+function expectedFor(item) {
+  if (!Object.hasOwn(item, 'expected') || !item.expected || !Object.hasOwn(item.expected, 'displayName')) {
+    throw new Error(`Case ${item.id ?? item.title} has no explicit expected.displayName.`);
+  }
+  return item.expected;
+}
+
+function score(expected, actual) {
+  const expectedName = normalize(expected.displayName);
+  const actualName = normalize(actual?.displayName);
+  if (expectedName === null) return { correct: actualName === null, kind: actualName === null ? 'unmapped-correct' : 'false-pin' };
+  if (actualName === null) return { correct: false, kind: 'miss' };
+  if (actualName !== expectedName) return { correct: false, kind: 'wrong-place' };
+  if (expected.lat != null && expected.lon != null && actual?.lat != null && actual?.lon != null) {
+    const km = distanceKm(expected, actual);
+    if (km > (expected.toleranceKm ?? 25)) return { correct: false, kind: 'wrong-coordinate', distanceKm: km };
+  }
+  return { correct: true, kind: 'mapped-correct' };
+}
+
+function summarize(label, results) {
+  const total = results.length;
+  const correct = results.filter(result => result.score.correct).length;
+  const counts = Object.groupBy(results, result => result.score.kind);
+  console.log(`${label}: ${correct}/${total} (${total ? (correct / total * 100).toFixed(1) : '0.0'}%)`);
+  console.log(`  mapped correct: ${(counts['mapped-correct'] || []).length}; unmapped correct: ${(counts['unmapped-correct'] || []).length}; misses: ${(counts.miss || []).length}; wrong place: ${(counts['wrong-place'] || []).length}; wrong coordinate: ${(counts['wrong-coordinate'] || []).length}; false pins: ${(counts['false-pin'] || []).length}`);
 }
 
 async function run() {
-  const startTime = performance.now();
-  try {
-    process.env.IS_BENCHMARK = 'true';
-    const { extractLocation, geocodeLocation } = await import('../../src/lib/geocoding');
+  const started = performance.now();
+  process.env.IS_BENCHMARK = 'true';
+  if (!fs.existsSync(GRADED_RESULTS_PATH)) throw new Error(`Benchmark file not found: ${GRADED_RESULTS_PATH}`);
 
-    if (!fs.existsSync(GRADED_RESULTS_PATH)) {
-      console.error(`Error: Graded results file not found at ${GRADED_RESULTS_PATH}`);
-      return;
-    }
+  const benchmark = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
+  if (!Array.isArray(benchmark) || benchmark.length === 0) throw new Error('Benchmark must be a non-empty JSON array.');
+  const { extractLocation, geocodeLocation } = await import('../../src/lib/geocoding/index.ts');
+  const currentResults = [];
+  const baselineResults = [];
 
-    // Parse the hand-graded results containing truth data for each test case.
-    const gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
-
-    let passCount = 0;
-    let totalCount = 0;
-    let skippedCount = 0;
-    const failures = [];
-
-    console.log(`\nRunning live geocode accuracy test on ${gradedResults.length} cases...\n`);
-
-    for (const item of gradedResults) {
-      const isApproved = item.graded_status === 'approved';
-      const rawExpected = isApproved
-        ? (item.engine_result?.displayName || item.final_mapped_location?.displayName || item.db_location?.displayName || null)
-        : item.expected_location;
-      const normExpected = normalize(rawExpected);
-      
-      // Items marked with 'ignore' or 'default' are excluded from accuracy metrics as they typically represent ambiguous cases.
-      if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
-        skippedCount++;
-        continue;
-      }
-
-      totalCount++;
-
-      // Re-run the extraction logic against current heuristics to detect regressions or improvements.
-      const ext = extractLocation(item.title, item.description || '');
-      let placeName = ext.match;
-      const candidates = ext.candidates;
-
-      let actualLocationFullName = null;
-      if (placeName) {
-        const geo = await geocodeLocation(placeName);
-        if (geo) {
-          actualLocationFullName = geo.displayName;
-        }
-      }
-      
-      const normActual = normalize(actualLocationFullName);
-
-      // Aliases allow for lenient matching between different naming conventions of the same geographical entity.
-      const ALIASES = {
-        'uk': 'united kingdom',
-        'usa': 'united states',
-        'u.s.': 'united states',
-        'america': 'united states',
-        'britain': 'united kingdom',
-        'moscow': 'russia',
-        'berlin': 'germany',
-        'budapest': 'hungary',
-        'tehran': 'iran',
-        'beijing': 'china',
-        'kyiv': 'ukraine',
-        'kiev': 'ukraine',
-        'gaza': 'palestine',
-        'uae': 'united arab emirates',
-        'sino-russian': 'russia',
-        'sino': 'china',
-        'strait of hormuz': 'hormuz',
-      };
-
-      const evalActual = ALIASES[normActual] || normActual;
-      const evalExpected = ALIASES[normExpected] || normExpected;
-
-      let isCorrect = false;
-      if (isApproved) {
-        // Approved items pass if they match the expected result or if they return null (indicating a safe skip).
-        if (normActual === null || evalActual === evalExpected) {
-          isCorrect = true;
-        }
-      } else {
-        // Denied or manual entries require an exact match against the correction.
-        if (evalActual === evalExpected) {
-          isCorrect = true;
-        }
-      }
-
-      if (isCorrect) {
-        passCount++;
-      } else {
-        failures.push({
-          title: item.title,
-          description: item.description || item.desc || '',
-          expected: rawExpected,
-          actual: actualLocationFullName,
-          candidates: candidates,
-          statusInGraded: item.graded_status
-        });
-      }
-    }
-
-    if (skippedCount > 0) {
-      console.log(`(Skipped ${skippedCount} items with 'ignore' or 'default' instructions)\n`);
-    }
-
-    const duration = ((performance.now() - startTime) / 1000).toFixed(2);
-    const percentage = totalCount > 0 ? ((passCount / totalCount) * 100).toFixed(2) : 0;
-
-    const failedCount = failures.length;
-    const missCount = failures.filter(f => !f.actual && f.expected).length;
-    const wrongCount = failures.filter(f => f.actual && f.expected && f.actual !== f.expected).length;
-    const falsePosCount = failures.filter(f => f.actual && !f.expected).length;
-    
-
-    console.log(`Accuracy Report:`);
-    console.log(`================`);
-    console.log(`Pass Count:     ${passCount} / ${totalCount}`);
-    console.log(`Percentage:     ${percentage}%`);
-    console.log(`Duration:       ${duration}s`);
-    console.log(`----------------`);
-    console.log(`Total Failures: ${failedCount}`);
-    console.log(` - No match:    ${missCount} (found nothing, expected something)`);
-    console.log(` - Wrong match: ${wrongCount} (found wrong location)`);
-    console.log(` - False pos:   ${falsePosCount} (found something, expected nothing)`);
-    console.log(`================\n`);
-
-    if (failures.length > 0) {
-      console.log(`Top 10 Failures:`);
-      failures.slice(0, 10).forEach((f) => {
-        const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
-        console.log(`[${type}] ${f.title}`);
-        console.log(`      Desc:     ${f.description ? (f.description.split('\n')[0].substring(0, 120) + (f.description.length > 120 ? '...' : '')) : 'null'}`);
-        console.log(`      Expected: ${f.expected || 'null'}`);
-        console.log(`      Actual:   ${f.actual || 'null'}`);
-        console.log(`      Found:    [${f.candidates.join(', ')}]`);
-        console.log('');
-      });
-
-      if (failures.length > 10) {
-        console.log(`... and ${failures.length - 10} more failures.`);
-      }
-
-      // Record detailed failure logs to facilitate manual review of problematic cases.
-      const failureOutput = failures.map((f) => {
-        const type = !f.actual ? 'MISS' : (!f.expected ? 'FALSE POS' : 'WRONG');
-        const indentedDesc = f.description ? f.description.replace(/\n/g, '\n                ') : 'null';
-        return `[${type}] ${f.title}\n      Desc:     ${indentedDesc}\n      Expected: ${f.expected || 'null'}\n      Actual:   ${f.actual || 'null'}\n      Found:    [${f.candidates.join(', ')}]\n      Grade:    ${f.statusInGraded}\n`;
-      }).join('\n');
-      
-      fs.writeFileSync(FAILURES_PATH, failureOutput);
-      console.log(`Full list of ${failures.length} failures written to ${FAILURES_PATH}`);
-    } else {
-      console.log(`All ${totalCount} tests passed!`);
-    }
-
-  } catch (error) {
-    console.error('Error running accuracy test:', error);
+  for (const item of benchmark) {
+    if (item.grade === 'unsure') continue;
+    const expected = expectedFor(item);
+    const ext = extractLocation(item.title || '', item.description || '');
+    const actual = ext.match ? await geocodeLocation(ext.match) : null;
+    const baseline = item.engine_result || null;
+    const shared = { id: item.id, db_id: item.db_id, title: item.title, expected, candidates: ext.candidates };
+    currentResults.push({ ...shared, actual, score: score(expected, actual) });
+    baselineResults.push({ ...shared, actual: baseline, score: score(expected, baseline) });
   }
+
+  console.log(`\nGeocoding accuracy on ${currentResults.length} explicitly graded cases`);
+  summarize('Baseline recorded in benchmark', baselineResults);
+  summarize('Current extractor', currentResults);
+  const failures = currentResults.filter(result => !result.score.correct);
+  fs.writeFileSync(FAILURES_PATH, JSON.stringify({
+    benchmark: GRADED_RESULTS_PATH,
+    generated_at: new Date().toISOString(),
+    failures,
+  }, null, 2));
+  console.log(`Failures: ${failures.length}; details: ${FAILURES_PATH}`);
+  console.log(`Duration: ${((performance.now() - started) / 1000).toFixed(2)}s`);
+  if (failures.length > 0) process.exitCode = 1;
 }
 
-run();
+run().catch(error => {
+  console.error('Error running accuracy test:', error);
+  process.exitCode = 1;
+});

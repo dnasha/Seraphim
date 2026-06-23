@@ -30,7 +30,8 @@ describe("applyClientJitter", () => {
     const distance = (entry: NewsItem) => Math.hypot(entry.latitude! - 40, entry.longitude! + 74);
 
     expect(selected.id).toBe("a");
-    expect(distance(other)).toBeLessThan(distance(selected));
+    expect(distance(other)).toBe(0);
+    expect(distance(selected)).toBeGreaterThan(0);
   });
 
   it("does not move unmapped, unique, or server-clustered items", () => {

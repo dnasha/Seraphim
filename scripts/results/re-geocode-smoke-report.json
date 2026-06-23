@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-06-22T23:54:54.225Z",
+  "fetched": 10,
+  "proposed_changes": [
+    {
+      "id": "5f5f56b0-0ae8-4dd4-a068-af6a1f1b3a57",
+      "latitude": 40.74,
+      "longitude": -74.17,
+      "location_name": "New Jersey",
+      "old_location": "New Jersey",
+      "old_latitude": 40.592544532638,
+      "old_longitude": -74.0348819584769,
+      "candidate_source": "regex",
+      "candidate_score": 8,
+      "reason": "canonical coordinates replace legacy ingestion jitter"
+    }
+  ]
+}

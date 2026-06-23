@@ -25,7 +25,8 @@ export const CATEGORIES = [
  * Logic:
  * 1. Groups items by coordinate (rounded to 5 decimal places).
  * 2. If a group has multiple items, it sorts them by ID (anchoring the selected item at the center).
- * 3. Applies a Golden-Angle Spiral (approx. 137.5 degrees) to distribute pins outward.
+ * 3. Keeps the selected pin (or deterministic first pin) at its canonical coordinate
+ *    and applies a bounded Golden-Angle Spiral to remaining display-only pins.
  * 4. Accounts for Mercator projection distortion by scaling longitude offsets based on latitude.
  */
 export function applyClientJitter(
@@ -67,14 +68,14 @@ export function applyClientJitter(
     
     // Convert kilometers to approximate degrees for visual spacing.
     const kmToLatDeg = (km: number) => km / 111.32;
-    const baseRadius = kmToLatDeg(2.2);
-    const growth = kmToLatDeg(1.0);
+    const growth = kmToLatDeg(0.9);
+    const maxRadius = kmToLatDeg(6);
 
     for (let i = 0; i < group.length; i++) {
       const item = group[i];
       const angle = i * goldenAngle;
       // Square root growth ensures an even density as the spiral expands.
-      const radius = baseRadius + Math.sqrt(i) * growth * 1.2;
+      const radius = i === 0 ? 0 : Math.min(maxRadius, Math.sqrt(i) * growth * 1.2);
       const latOffset = radius * Math.cos(angle);
       const lngOffset = (radius * Math.sin(angle)) / lngScale;
 

@@ -1,7 +1,7 @@
 /*
   Seraphim Enricher Pipeline Tests
   Verifies the enrichItemsWithLocation function for bulk geocoding of news items.
-  Tests coordinate attachment, source-based defaults, and jitter logic for map visualization.
+  Tests coordinate attachment and canonical coordinate persistence.
 
   Usage: bun run test -- scripts/tests/enricher.test.ts
 */
@@ -71,31 +71,28 @@ describe('enrichItemsWithLocation - passthrough', () => {
 });
 
 /*
-  Source Default Fallback
-  Verifies source-specific location defaults (e.g. NASA to Washington DC)
-  when no specific location is identified in the text.
+  Source-default suppression
+  A publisher's headquarters is not evidence that an event occurred there.
 */
-describe('enrichItemsWithLocation - source defaults', () => {
-    it('falls back to NASA source default (Washington DC)', async () => {
+describe('enrichItemsWithLocation - source-default suppression', () => {
+    it('does not pin a locationless NASA story to Washington DC', async () => {
         const items = [makeItem({
             title: 'Hubble telescope captures stunning nebula image',
             description: 'The image was taken using the Wide Field Camera 3.',
             source: 'NASA',
         })];
         const result = await enrichItemsWithLocation(items);
-        expect(result[0].latitude).toBeDefined();
-        expect(result[0].longitude).toBeDefined();
-        // NASA default coordinates roughly correspond to Washington DC
-        expect(result[0].latitude).toBeCloseTo(38.91, 0);
+        expect(result[0].latitude).toBeUndefined();
+        expect(result[0].longitude).toBeUndefined();
     });
 });
 
 /*
-  Golden-Angle Spiral Jitter
-  Tests mathematical jitter applied to co-located items to prevent pin stacking.
+  Canonical Coordinates
+  The enricher must persist the geocoder output unchanged; display offsets are client-only.
 */
-describe('enrichItemsWithLocation - jitter', () => {
-    it('applies jitter to prevent coordinate stacking', async () => {
+describe('enrichItemsWithLocation - canonical coordinates', () => {
+    it('does not jitter co-located events', async () => {
         // Create two items that map to the exact same city
         const items = [
             makeItem({ title: 'KYIV (Reuters) - First event in capital' }),
@@ -107,11 +104,11 @@ describe('enrichItemsWithLocation - jitter', () => {
         expect(geocoded.length).toBeGreaterThanOrEqual(2);
 
         if (geocoded.length >= 2) {
-            // Coordinates must differ slightly due to jitter logic
+            // Both persisted locations must be the canonical geocoder coordinate.
             const coordsMatch =
                 geocoded[0].latitude === geocoded[1].latitude &&
                 geocoded[0].longitude === geocoded[1].longitude;
-            expect(coordsMatch).toBe(false);
+            expect(coordsMatch).toBe(true);
         }
     });
 });

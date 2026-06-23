@@ -1,9 +1,7 @@
 /*
-  Seraphim Geocoding Accuracy Regression Suite
-  Benchmarks the geocoding pipeline against a manually graded ground truth dataset.
-  Ensures NLP heuristics and GeoNames dictionary changes do not regress accuracy.
-
-  Usage: bun run test -- scripts/tests/geocoding-accuracy.test.ts
+  Explicit human-reviewed geocoding regression suite.
+  The golden fixture is immutable test data: database pins and a prior engine
+  result must never be substituted for its expected value.
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -11,146 +9,75 @@ import fs from 'fs';
 import path from 'path';
 import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geocoding';
 
-/*
-  ACCURACY_THRESHOLD
-  Minimum percentage of correctly geocoded items required for the suite to pass.
-*/
-const ACCURACY_THRESHOLD = 70;
+const ACCURACY_THRESHOLD = 80;
+const MAX_FALSE_PINS = 8;
+const GOLDEN_PATH = path.resolve(__dirname, '../fixtures/geocoding-golden.v1.json');
 
-const GRADED_RESULTS_PATH = path.resolve(__dirname, '../results/new-graded-6d.json');
-interface GradedResult {
+interface GoldenCase {
+    id: number;
     title: string;
     description?: string;
-    graded_status: string;
-    expected_location?: string;
-    final_mapped_location?: {
-        displayName?: string;
-    };
-    db_location?: {
-        displayName?: string;
-    };
+    grade: 'correct' | 'incorrect' | 'should-unmap' | 'unsure';
+    expected: { displayName: string | null };
 }
 
-/*
-  normalize
-  Standardizes strings for comparison by trimming, lowercasing, and handling null literals.
-*/
-function normalize(val: unknown): string | null {
-    if (val === null || val === undefined) return null;
-    if (typeof val === 'string' && val.toLowerCase() === 'null') return null;
-    return String(val).toLowerCase().trim();
+const aliases: Record<string, string> = {
+    uk: 'united kingdom', usa: 'united states', 'u.s.': 'united states',
+    america: 'united states', britain: 'united kingdom',
+};
+
+function normalize(value: unknown): string | null {
+    if (value == null || (typeof value === 'string' && value.toLowerCase() === 'null')) return null;
+    const normalized = String(value).toLowerCase().trim();
+    return aliases[normalized] || normalized;
 }
 
-let gradedResults: GradedResult[] = [];
-let testResults: { title: string; expected: string | null; actual: string | null; correct: boolean; type: string }[] = [];
+let cases: GoldenCase[] = [];
 
 beforeAll(() => {
     ensureInitialized();
-
-    if (!fs.existsSync(GRADED_RESULTS_PATH)) {
-        console.warn(`Graded results file not found at ${GRADED_RESULTS_PATH}. Skipping accuracy tests.`);
-        return;
-    }
-    gradedResults = JSON.parse(fs.readFileSync(GRADED_RESULTS_PATH, 'utf8'));
+    cases = JSON.parse(fs.readFileSync(GOLDEN_PATH, 'utf8'));
 });
 
 describe('geocoding accuracy regression', () => {
-    it('graded results file exists and is populated', () => {
-        expect(fs.existsSync(GRADED_RESULTS_PATH)).toBe(true);
-        expect(gradedResults.length).toBeGreaterThan(0);
+    it('uses a populated, explicit human-reviewed 100–200 case fixture', () => {
+        expect(fs.existsSync(GOLDEN_PATH)).toBe(true);
+        expect(cases.length).toBeGreaterThanOrEqual(100);
+        expect(cases.length).toBeLessThanOrEqual(200);
+        for (const item of cases) {
+            expect(item.expected).toHaveProperty('displayName');
+            expect(['correct', 'incorrect', 'should-unmap', 'unsure']).toContain(item.grade);
+        }
     });
 
-    /*
-      Accuracy Benchmark
-      Iterates through the graded dataset, executes the geocoding pipeline,
-      and compares results against ground truth.
-    */
-    it(`maintains accuracy above ${ACCURACY_THRESHOLD}%`, async () => {
-        let passCount = 0;
-        let totalCount = 0;
-        let skipCount = 0;
-        testResults = [];
+    it(`maintains at least ${ACCURACY_THRESHOLD}% exact accuracy with no more than ${MAX_FALSE_PINS} false pins`, async () => {
+        const reviewedCases = cases.filter(item => item.grade !== 'unsure');
+        let correct = 0;
+        let misses = 0;
+        let wrong = 0;
+        let falsePins = 0;
 
-        for (const item of gradedResults) {
-            const isApproved = item.graded_status === 'approved';
-
-            /*
-              Determine expected location.
-              Approved items use final mapped location; others use manually specified location.
-            */
-            const rawExpected = isApproved
-                ? (item.final_mapped_location?.displayName || item.db_location?.displayName || null)
-                : item.expected_location;
-
-            const normExpected = normalize(rawExpected);
-
-            // Skip items flagged for exclusion.
-            if (normExpected && (normExpected.includes('ignore') || normExpected.includes('default'))) {
-                skipCount++;
-                continue;
-            }
-
-            totalCount++;
-
-            // Execute geocoding pipeline.
-            const ext = extractLocation(item.title, item.description || '');
-            let actualLocationFullName: string | null = null;
-
-            if (ext.match) {
-                const geo = await geocodeLocation(ext.match);
-                if (geo) {
-                    actualLocationFullName = geo.displayName;
-                }
-            }
-
-            const normActual = normalize(actualLocationFullName);
-
-            /*
-              Verification Logic
-              Ensures actual geocoded result matches the expected ground truth.
-            */
-            const isCorrect = normActual === normExpected;
-
-            if (isCorrect) passCount++;
-
-            const type = !actualLocationFullName
-                ? 'MISS'
-                : (!rawExpected ? 'FALSE_POS' : (isCorrect ? 'PASS' : 'WRONG'));
-
-            testResults.push({
-                title: item.title,
-                expected: rawExpected || null,
-                actual: actualLocationFullName,
-                correct: isCorrect,
-                type,
-            });
+        for (const item of reviewedCases) {
+            const extracted = extractLocation(item.title, item.description || '');
+            const actual = extracted.match ? await geocodeLocation(extracted.match) : null;
+            const expected = normalize(item.expected.displayName);
+            const received = normalize(actual?.displayName);
+            const passes = expected === received;
+            if (passes) correct++;
+            else if (expected === null) falsePins++;
+            else if (received === null) misses++;
+            else wrong++;
         }
 
-        const percentage = totalCount > 0 ? (passCount / totalCount) * 100 : 0;
+        const accuracy = correct / reviewedCases.length * 100;
+        console.log(`\nGeocoding Golden Report`);
+        console.log(`  Cases:       ${reviewedCases.length} (${cases.length - reviewedCases.length} unsure excluded)`);
+        console.log(`  Accuracy:    ${correct}/${reviewedCases.length} (${accuracy.toFixed(1)}%)`);
+        console.log(`  Misses:      ${misses}`);
+        console.log(`  Wrong place: ${wrong}`);
+        console.log(`  False pins:  ${falsePins}\n`);
 
-        // Log accuracy summary for CI visibility.
-        const failures = testResults.filter(r => !r.correct);
-        const misses = failures.filter(f => f.type === 'MISS').length;
-        const wrongs = failures.filter(f => f.type === 'WRONG').length;
-        const falsePos = failures.filter(f => f.type === 'FALSE_POS').length;
-
-        console.log('\nGeocoding Accuracy Report');
-        console.log(`  Total:      ${totalCount} (skipped: ${skipCount})`);
-        console.log(`  Passed:     ${passCount}/${totalCount} (${percentage.toFixed(1)}%)`);
-        console.log(`  Failures:   ${failures.length}`);
-        console.log(`    No match: ${misses}`);
-        console.log(`    Wrong:    ${wrongs}`);
-        console.log(`    False+:   ${falsePos}\n`);
-
-        if (failures.length > 0) {
-            console.log('Top failures:');
-            for (const f of failures) {
-                console.log(`  [${f.type}] ${f.title.slice(0, 80)}`);
-                console.log(`         expected: ${f.expected || 'null'} -> got: ${f.actual || 'null'}`);
-            }
-        }
-
-        expect(percentage).toBeGreaterThanOrEqual(ACCURACY_THRESHOLD);
+        expect(accuracy).toBeGreaterThanOrEqual(ACCURACY_THRESHOLD);
+        expect(falsePins).toBeLessThanOrEqual(MAX_FALSE_PINS);
     });
 });
-

@@ -1,21 +1,24 @@
 /*
   Seraphim DB Location Re-Geocoder
-  Re-processes all events through the current geocoding engine and updates
-  rows where the engine now resolves a different location name.
+  Re-processes events through the current geocoding engine and produces a
+  reviewable change report. Writes require an explicit approved-ID manifest.
 
   This is useful after tweaking extraction heuristics or updating the
   GeoNames dictionary to propagate improvements to historical data.
 
   Usage:
     $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --dry-run --limit 50
-    $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --all
+    $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --dry-run --limit 50
+    $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --approved-manifest scripts/results/re-geocode-approved.json --limit 50
 
   Flags:
     --dry-run       Show changes without writing to DB
-    --all           Process all rows (ignores --limit)
+    --all           Process all rows (ignores --limit; still produces a report)
     --limit N       Process N rows (default: 10)
     --offset N      Start from row N (default: 0)
     --oldest        Sort ascending (targets oldest/most stale rows first)
+    --report PATH   Write the review report to PATH
+    --approved-manifest PATH  JSON array of reviewed event IDs, or {"approved_ids": [...]}
 
   Environment (loaded from .env.local by Bun automatically):
     SUPABASE_URL               - Supabase project URL
@@ -47,6 +50,12 @@ const args = process.argv.slice(2);
 const DRY_RUN    = args.includes('--dry-run');
 const FULL_RUN   = args.includes('--all');
 const OLDEST     = args.includes('--oldest'); // sort ascending = oldest first
+const reportIdx = args.indexOf('--report');
+const REPORT_PATH = reportIdx !== -1 && args[reportIdx + 1]
+  ? args[reportIdx + 1]
+  : `scripts/results/re-geocode-report-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+const manifestIdx = args.indexOf('--approved-manifest');
+const APPROVED_MANIFEST_PATH = manifestIdx !== -1 ? args[manifestIdx + 1] : null;
 
 let LIMIT = 10; // default: safe test batch
 const limitIdx = args.indexOf('--limit');
@@ -85,6 +94,11 @@ interface UpdatePayload {
   longitude: number | null;
   location_name: string | null;
   old_location: string | null;  // for logging only
+  old_latitude: number | null;
+  old_longitude: number | null;
+  candidate_source: string | null;
+  candidate_score: number | null;
+  reason: string;
 }
 
 // Supabase client
@@ -122,7 +136,7 @@ async function remapRow(row: EventRow): Promise<UpdatePayload | null> {
   const title       = row.title ?? '';
   const description = row.description ?? '';
 
-  const { match } = extractLocation(title, description);
+  const { match, scored } = extractLocation(title, description);
   if (!match) {
     /* 
     Engine found nothing. Never downgrade an existing location to null -
@@ -139,12 +153,15 @@ async function remapRow(row: EventRow): Promise<UpdatePayload | null> {
   }
 
   const nameChanged = locationNameChanged(row.location_name, geo.displayName);
+  const coordsChanged = row.latitude !== geo.lat || row.longitude !== geo.lon;
 
   /*
-  If the location name is the same, skip - coord differences are just ingestion jitter.
-  We only want to update rows where the engine resolves a genuinely different place.
+  Canonical coordinates are now persisted, so a row with the same resolved name
+  but old jittered coordinates is eligible for manual review as well.
   */
-  if (!nameChanged) return null;
+  if (!nameChanged && !coordsChanged) return null;
+
+  const winningCandidate = scored?.find(candidate => candidate.name.toLowerCase() === match.toLowerCase()) ?? null;
 
   return {
     id: row.id,
@@ -152,7 +169,29 @@ async function remapRow(row: EventRow): Promise<UpdatePayload | null> {
     longitude: geo.lon,
     location_name: geo.displayName,
     old_location: row.location_name,
+    old_latitude: row.latitude,
+    old_longitude: row.longitude,
+    candidate_source: winningCandidate?.source ?? null,
+    candidate_score: winningCandidate?.score ?? null,
+    reason: nameChanged
+      ? 'text-supported location changed'
+      : 'canonical coordinates replace legacy ingestion jitter',
   };
+}
+
+async function loadApprovedIds(): Promise<Set<string>> {
+  if (!APPROVED_MANIFEST_PATH) return new Set();
+  const { readFile } = await import('node:fs/promises');
+  const parsed = JSON.parse(await readFile(APPROVED_MANIFEST_PATH, 'utf8')) as unknown;
+  const ids = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { approved_ids?: unknown }).approved_ids)
+      ? (parsed as { approved_ids: unknown[] }).approved_ids
+      : null);
+  if (!ids || ids.some(id => typeof id !== 'string')) {
+    throw new Error('[re-geocode] Approved manifest must be an ID array or {"approved_ids": ["..."]}.');
+  }
+  return new Set(ids);
 }
 
 // Batch update
@@ -198,7 +237,11 @@ async function batchUpdate(updates: UpdatePayload[]): Promise<number> {
 async function run() {
   const startMs = Date.now();
   console.log('[re-geocode] Seraphim DB Location Re-Geocoder');
-  console.log(`[re-geocode] Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'} | Scope: ${FULL_RUN ? 'ALL rows' : `${LIMIT} rows`} | Sort: ${OLDEST ? 'oldest first' : 'newest first'}${START_OFFSET > 0 ? ` | Offset: ${START_OFFSET}` : ''}`);
+  if (!DRY_RUN && !APPROVED_MANIFEST_PATH) {
+    throw new Error('[re-geocode] Refusing to write without --approved-manifest. Run --dry-run first and approve explicit IDs.');
+  }
+  const approvedIds = await loadApprovedIds();
+  console.log(`[re-geocode] Mode: ${DRY_RUN ? 'DRY RUN' : `APPROVED WRITES (${approvedIds.size} IDs)`} | Scope: ${FULL_RUN ? 'ALL rows' : `${LIMIT} rows`} | Sort: ${OLDEST ? 'oldest first' : 'newest first'}${START_OFFSET > 0 ? ` | Offset: ${START_OFFSET}` : ''}`);
   console.log('[re-geocode] Initializing geocoding engine...');
 
   ensureInitialized();
@@ -247,6 +290,14 @@ async function run() {
   console.log(`[re-geocode] Rows changed  : ${allUpdates.length}`);
   console.log(`[re-geocode] Rows unchanged: ${totalFetched - allUpdates.length}`);
 
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(REPORT_PATH, JSON.stringify({
+    generated_at: new Date().toISOString(),
+    fetched: totalFetched,
+    proposed_changes: allUpdates,
+  }, null, 2));
+  console.log(`[re-geocode] Review report : ${REPORT_PATH}`);
+
   if (allUpdates.length === 0) {
     console.log('[re-geocode] Nothing to update. All locations are current.');
     return;
@@ -257,9 +308,9 @@ async function run() {
     return;
   }
 
-  // Write updates
-  console.log(`\n[re-geocode] Writing ${allUpdates.length} updates to Supabase...`);
-  const totalUpdated = await batchUpdate(allUpdates);
+  const approvedUpdates = allUpdates.filter(update => approvedIds.has(update.id));
+  console.log(`\n[re-geocode] Writing ${approvedUpdates.length}/${allUpdates.length} explicitly approved updates to Supabase...`);
+  const totalUpdated = await batchUpdate(approvedUpdates);
 
   const finalElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(`\n[re-geocode] Done in ${finalElapsed}s. Successfully updated ${totalUpdated}/${allUpdates.length} rows.`);
