@@ -8,6 +8,7 @@ import {
 } from "@/lib/security/proxyGuards";
 import { canUseOverlay } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
+import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
 
 const redis = Redis.fromEnv();
 const proxyRatelimit = new Ratelimit({
@@ -37,12 +38,7 @@ const PREMIUM_PROXY_SERVICES: Record<string, string> = {
 
 const PRIVATE_CACHE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
-function getIp(request: NextRequest) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
-}
-
-async function checkProxyRateLimit(request: NextRequest) {
+async function checkProxyRateLimit(clientIp: string, userId?: string | null) {
   const now = Date.now();
   if (now - lastCleanup > 60000) {
     for (const [ip, entry] of localLimit.entries()) {
@@ -51,10 +47,11 @@ async function checkProxyRateLimit(request: NextRequest) {
     lastCleanup = now;
   }
 
-  const ip = getIp(request);
-  const current = localLimit.get(ip);
+  const rateLimitKeys = getRateLimitKeys(clientIp, userId);
+  const localKey = rateLimitKeys[0];
+  const current = localLimit.get(localKey);
   if (!current || now > current.reset) {
-    localLimit.set(ip, { count: 1, reset: now + 10000 });
+    localLimit.set(localKey, { count: 1, reset: now + 10000 });
     return true;
   }
 
@@ -62,8 +59,8 @@ async function checkProxyRateLimit(request: NextRequest) {
   if (current.count <= 20 && current.count % 8 !== 0) return true;
 
   try {
-    const { success } = await proxyRatelimit.limit(ip);
-    return success;
+    const results = await Promise.all(rateLimitKeys.map((key) => proxyRatelimit.limit(key)));
+    return results.every(({ success }) => success);
   } catch (error) {
     console.error("[api/proxy] Rate limiter error (failing open):", error);
     return true;
@@ -83,9 +80,16 @@ export async function GET(
 
   const service = path[0];
 
+  const clientIp = getTrustedClientIp(request.headers);
+  if (!clientIp) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const requiredOverlay = PREMIUM_PROXY_SERVICES[service];
+  let userId: string | null | undefined;
   if (requiredOverlay) {
     const access = await resolveRequestEntitlements();
+    userId = access.userId;
     if (!canUseOverlay(access.tier, requiredOverlay)) {
       return NextResponse.json(
         {
@@ -98,7 +102,7 @@ export async function GET(
     }
   }
 
-  if (!(await checkProxyRateLimit(request))) {
+  if (!(await checkProxyRateLimit(clientIp, userId))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 

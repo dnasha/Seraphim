@@ -24,7 +24,7 @@ describe('premium proxy entitlements', () => {
 
   it('rejects Analyst tracking layers for Free users before upstream work', async () => {
     const response = await GET(
-      new Request('https://seraphim.example/api/proxy/flights?lat=10&lng=20') as never,
+      new Request('https://seraphim.example/api/proxy/flights?lat=10&lng=20', { headers: { 'x-vercel-forwarded-for': '198.51.100.20' } }) as never,
       { params: Promise.resolve({ path: ['flights'] }) },
     );
     expect(response.status).toBe(403);
@@ -33,7 +33,7 @@ describe('premium proxy entitlements', () => {
 
   it('rejects Pro environmental layers for Free users', async () => {
     const response = await GET(
-      new Request('https://seraphim.example/api/proxy/wildfires') as never,
+      new Request('https://seraphim.example/api/proxy/wildfires', { headers: { 'x-vercel-forwarded-for': '198.51.100.21' } }) as never,
       { params: Promise.resolve({ path: ['wildfires'] }) },
     );
     expect(response.status).toBe(403);

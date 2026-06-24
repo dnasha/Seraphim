@@ -16,6 +16,7 @@ import { sortNewsItems } from "@/lib/utils/ranking";
 import { validateNewsSearchParams, NEWS_DEFAULT_LIMIT } from "@/lib/security/newsParams";
 import { canUseTimeRange } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
+import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
 
 /**
  * Global L2 rate limiter using Upstash Redis for cross-instance state.
@@ -86,6 +87,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
+  const clientIp = getTrustedClientIp(request.headers);
+  if (!clientIp) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   let forceRefresh = validated.params.forceRefresh;
   const {
     viewMode,
@@ -107,6 +113,7 @@ export async function GET(request: Request) {
   } = validated.params;
 
   const access = await resolveRequestEntitlements();
+  const rateLimitKeys = getRateLimitKeys(clientIp, access.userId);
   if (!canUseTimeRange(access.tier, timeRange)) {
     return NextResponse.json(
       {
@@ -200,20 +207,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const ipHeader = request.headers.get("x-forwarded-for");
-    const ip = ipHeader ? ipHeader.split(",")[0].trim() : "127.0.0.1";
-
     performL1Cleanup();
 
-    const l1 = localL1Limit.get(ip);
+    const l1Key = rateLimitKeys[0];
+    const l1 = localL1Limit.get(l1Key);
     if (!l1 || now > l1.reset) {
-      localL1Limit.set(ip, { count: 1, reset: now + 10000 });
+      localL1Limit.set(l1Key, { count: 1, reset: now + 10000 });
     } else {
       l1.count++;
       if (l1.count > 15 || l1.count % 5 === 0) {
         try {
-          const { success } = await ratelimit.limit(ip);
-          if (!success) {
+          const results = await Promise.all(rateLimitKeys.map((key) => ratelimit.limit(key)));
+          if (results.some(({ success }) => !success)) {
             return NextResponse.json(
               { error: "Too many requests" },
               { status: 429 },

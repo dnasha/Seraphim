@@ -45,9 +45,12 @@ const eventRow = {
   event_count: 3,
 };
 
-function request(query: string) {
+function request(query: string, headers: HeadersInit = {}) {
   return new Request(`https://seraphim.example/api/news?${query}`, {
-    headers: { "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 250) + 1}` },
+    headers: {
+      'x-vercel-forwarded-for': `198.51.100.${Math.floor(Math.random() * 250) + 1}`,
+      ...headers,
+    },
   });
 }
 
@@ -147,6 +150,46 @@ describe("GET /api/news", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ items: [], meta: { clustered: true } });
+  });
+
+  it('rejects requests without Vercel client identity before database work', async () => {
+    const response = await GET(new Request('https://seraphim.example/api/news?zoom=2'));
+
+    expect(response.status).toBe(429);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('does not use client-supplied X-Forwarded-For for rate-limit buckets', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    const clientIp = '198.51.100.240';
+
+    for (let index = 0; index < 5; index++) {
+      await GET(request('zoom=2', {
+        'x-vercel-forwarded-for': clientIp,
+        'x-forwarded-for': `203.0.113.${index}`,
+      }));
+    }
+
+    expect(mocks.rateLimit).toHaveBeenCalled();
+    expect(mocks.rateLimit.mock.calls.every(([key]) => key === `net:${clientIp}`)).toBe(true);
+  });
+
+  it('enforces both network and authenticated-subject buckets', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.resolveEntitlements.mockResolvedValue({
+      tier: 'analyst',
+      entitlements: { eventLimit: 1000 },
+      userId: 'user-123',
+    });
+    const clientIp = '198.51.100.241';
+
+    for (let index = 0; index < 5; index++) {
+      await GET(request('zoom=2', { 'x-vercel-forwarded-for': clientIp }));
+    }
+
+    expect(mocks.rateLimit).toHaveBeenCalledWith(`net:${clientIp}`);
+    expect(mocks.rateLimit).toHaveBeenCalledWith('user:user-123');
   });
 
   it('enforces the Free cap and rejects unavailable history before querying data', async () => {

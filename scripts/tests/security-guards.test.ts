@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { validateNewsSearchParams } from '@/lib/security/newsParams';
 import { safeRelativeRedirect } from '@/lib/security/redirects';
 import { canFulfillAngelCheckout, getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
 import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
-import { validatePublicImageUrl } from '@/lib/security/ogImage';
+import { fetchPublicImage, isPublicIpAddress, validatePublicImageUrl } from '@/lib/security/ogImage';
+import { getTrustedClientIp } from '@/lib/security/clientIdentity';
 
 describe('news API param validation', () => {
   it('clamps numeric limits and accepts valid bbox searches', () => {
@@ -90,5 +91,54 @@ describe('proxy and OG guards', () => {
     expect(validatePublicImageUrl('file:///etc/passwd')).toBeNull();
     expect(validatePublicImageUrl('http://localhost/image.png')).toBeNull();
     expect(validatePublicImageUrl('http://192.168.1.5/image.png')).toBeNull();
+    expect(validatePublicImageUrl('http://[::1]/image.png')).toBeNull();
+    expect(isPublicIpAddress('fd12::1')).toBe(false);
+    expect(isPublicIpAddress('fe80::1')).toBe(false);
+    expect(isPublicIpAddress('::ffff:127.0.0.1')).toBe(false);
+  });
+
+  it('uses only Vercel-provided client identity', () => {
+    expect(getTrustedClientIp(new Headers({
+      'x-vercel-forwarded-for': '198.51.100.1',
+      'x-forwarded-for': '10.0.0.1',
+    }))).toBe('198.51.100.1');
+    expect(getTrustedClientIp(new Headers({ 'x-forwarded-for': '198.51.100.1' }))).toBeNull();
+    expect(getTrustedClientIp(new Headers({ 'x-vercel-forwarded-for': '198.51.100.1, 10.0.0.1' }))).toBeNull();
+  });
+
+  it('rejects private DNS results and public-to-private redirects before fetching them', async () => {
+    const blockedFetch = vi.fn();
+    await expect(fetchPublicImage('https://private-dns.example/image.png', {
+      resolveHost: async () => [{ address: '10.0.0.1', family: 4 }],
+      fetchHop: blockedFetch,
+    })).resolves.toBeNull();
+    expect(blockedFetch).not.toHaveBeenCalled();
+
+    const fetchHop = vi.fn(async () => ({
+      response: new Response(null, { status: 302, headers: { location: 'http://private.example/image.png' } }),
+      close: async () => undefined,
+    }));
+    const resolver = vi.fn(async (hostname: string) => hostname === 'private.example'
+      ? [{ address: '10.0.0.1', family: 4 as const }]
+      : [{ address: '198.51.100.2', family: 4 as const }]);
+
+    await expect(fetchPublicImage('https://public.example/image.png', { resolveHost: resolver, fetchHop })).resolves.toBeNull();
+    expect(fetchHop).toHaveBeenCalledTimes(1);
+    expect(resolver).toHaveBeenNthCalledWith(2, 'private.example');
+  });
+
+  it('pins a vetted DNS answer into the outbound transport', async () => {
+    const fetchHop = vi.fn(async () => ({
+      response: new Response('image', { headers: { 'content-type': 'image/png' } }),
+      close: async () => undefined,
+    }));
+
+    const result = await fetchPublicImage('https://images.example/image.png', {
+      resolveHost: async () => [{ address: '198.51.100.77', family: 4 }],
+      fetchHop,
+    });
+
+    expect(result?.arrayBuffer.byteLength).toBeGreaterThan(0);
+    expect(fetchHop).toHaveBeenCalledWith(expect.any(URL), '198.51.100.77', 1500);
   });
 });

@@ -1,15 +1,17 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from 'next/og';
 import { supabase } from '@/lib/core/supabase';
-import { safeReadImageResponse, validatePublicImageUrl } from '@/lib/security/ogImage';
+import { getConfiguredSiteUrl } from '@/lib/security/payments';
+import { fetchPublicImage, safeReadImageResponse } from '@/lib/security/ogImage';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const BRAND_IMAGE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const EVENT_IMAGE_CACHE_TTL_MS = 60 * 60 * 1000;
 const IMAGE_CACHE_MAX_ENTRIES = 32;
 const OG_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800';
 const BASE64_CHUNK_SIZE = 0x8000;
+const DEFAULT_SITE_ORIGIN = 'https://seraphi.me';
 
 const imageDataUrlCache = new Map<string, { dataUrl: string; expiresAt: number }>();
 
@@ -49,51 +51,47 @@ function imageResponse(element: React.ReactElement) {
 async function fetchImageAsBase64(
     url: string,
     timeoutMs = 1500,
-    allowLocal = false,
+    trustedAsset = false,
     cacheTtlMs = EVENT_IMAGE_CACHE_TTL_MS,
 ): Promise<string | null> {
     try {
-        const safeUrl = allowLocal ? url : validatePublicImageUrl(url);
-        if (!safeUrl) return null;
-
         const now = Date.now();
         pruneImageDataUrlCache(now);
 
-        const cached = imageDataUrlCache.get(safeUrl);
+        const cached = imageDataUrlCache.get(url);
         if (cached && cached.expiresAt > now) {
             return cached.dataUrl;
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        let response: Response;
-        try {
-            response = await fetch(safeUrl, {
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                }
-            });
-        } finally {
-            clearTimeout(timeoutId);
-        }
-        
-        if (!response.ok) {
-            console.warn(`Failed to fetch image from ${url}, status: ${response.status}`);
-            return null;
-        }
-        
-        const safeImage = await safeReadImageResponse(response);
+        const safeImage = trustedAsset
+            ? await fetchTrustedAsset(url, timeoutMs)
+            : await fetchPublicImage(url, { timeoutMs });
         if (!safeImage) return null;
         
         const bytes = new Uint8Array(safeImage.arrayBuffer);
         const dataUrl = `data:${safeImage.contentType};base64,${uint8ArrayToBase64(bytes)}`;
-        imageDataUrlCache.set(safeUrl, { dataUrl, expiresAt: now + cacheTtlMs });
+        imageDataUrlCache.set(url, { dataUrl, expiresAt: now + cacheTtlMs });
         pruneImageDataUrlCache();
         return dataUrl;
     } catch (err) {
         console.error(`Error fetching image as base64 from ${url}:`, err);
         return null;
+    }
+}
+
+async function fetchTrustedAsset(url: string, timeoutMs: number) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, {
+            signal: controller.signal,
+            redirect: 'error',
+            headers: { 'User-Agent': 'Seraphim/1.0 (OG brand asset)' },
+        });
+        if (!response.ok) return null;
+        return safeReadImageResponse(response);
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -118,8 +116,7 @@ export async function GET(request: Request) {
             .eq('id', eventId)
             .single();
 
-        const urlObj = new URL(request.url);
-        const origin = urlObj.origin;
+        const origin = getConfiguredSiteUrl() || DEFAULT_SITE_ORIGIN;
         const fallbackUrl = `${origin}/Seraphim_OG_Dynamic.png`;
         const halfBrandUrl = `${origin}/Seraphim_OG_Dynamic_Half.png`;
 
