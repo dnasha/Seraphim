@@ -1076,7 +1076,7 @@ export default function NewsMap({
       />
 
       {selectedItem && popupContainer && createPortal(
-        <MapPopup item={selectedItem} />,
+        <MapPopup item={selectedItem} userTier={userTier} />,
         popupContainer
       )}
     </div>

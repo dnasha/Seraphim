@@ -50,7 +50,10 @@ export function PricingCard({
     const isLoading = loadingTier === priceKey;
     const ctaText = isCurrentPlan
         ? 'Current Plan'
-        : tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
+        : isFreeTier && currentTier === 'guest'
+            ? 'Sign Up Free'
+            : tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
+    const isDisabled = isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0) || (isFreeTier && currentTier !== 'guest');
 
     return (
         <div
@@ -139,8 +142,8 @@ export function PricingCard({
             </ul>
 
             <button
-                className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${isFreeTier || isCurrentPlan ? styles.ctaBtnFree : ''}`}
-                disabled={isFreeTier || isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0)}
+                className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${(isFreeTier && currentTier !== 'guest') || isCurrentPlan ? styles.ctaBtnFree : ''}`}
+                disabled={isDisabled}
                 onClick={() => handleCheckout(priceKey)}
             >
                 {isLoading ? (

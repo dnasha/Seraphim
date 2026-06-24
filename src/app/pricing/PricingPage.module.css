@@ -7,12 +7,27 @@
     color: var(--text-primary);
     overflow-y: auto;
     overflow-x: hidden;
+    position: relative;
+}
+
+.container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 15%;
+    width: 70%;
+    height: 600px;
+    background: radial-gradient(circle at top, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0) 70%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .content {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 24px 60px;
+    position: relative;
+    z-index: 1;
 }
 
 /* ═══════════════ Header ═══════════════ */
@@ -444,19 +459,21 @@
 
 .guestPreview {
     max-width: 760px;
-    margin: 0 auto 28px;
-    padding: 14px 18px;
+    margin: 0 auto 32px;
+    padding: 18px 24px;
     border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius-md);
-    background: var(--surface-alt);
+    background: rgba(99, 102, 241, 0.04);
+    backdrop-filter: blur(8px);
     color: var(--text-secondary);
     font-size: 0.875rem;
-    line-height: 1.55;
+    line-height: 1.6;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    text-align: center;
 }
 
-.guestPreview p { margin: 4px 0 0; }
-.guestPreviewEyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.guestPreview p { margin: 6px 0 0; }
+.guestPreviewEyebrow { color: var(--accent); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .comparisonTitle {
     font-family: var(--font-logo);
@@ -517,6 +534,15 @@
     border-bottom: 1px solid var(--border);
     text-align: center;
     color: var(--text-primary);
+    transition: background-color 0.15s ease;
+}
+
+.comparisonTable tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.comparisonTable tbody tr:hover:not(.tableGroupRow) td {
+    background-color: rgba(99, 102, 241, 0.02) !important;
 }
 
 .tdFeature {

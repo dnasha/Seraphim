@@ -43,7 +43,6 @@ export function GatedButton({
         aria-expanded={open}
         aria-controls={dialogId}
       >
-        <span className={styles.lockGlyph} aria-hidden="true">⌁</span>
         {children}
       </button>
       {open && (

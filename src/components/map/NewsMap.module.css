@@ -589,3 +589,23 @@
     padding: 6px 14px 8px;
   }
 }
+
+.mapWrapper :global(.timeline-popup-upgrade-btn) {
+  margin-left: auto;
+  border: 1px solid #d4a72c !important;
+  border-radius: 5px;
+  background: transparent;
+  color: #d4a72c !important;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  line-height: 1;
+}
+
+.mapWrapper :global(.news-popup-timeline-preview) {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+

@@ -4,12 +4,6 @@
   color: inherit;
 }
 
-.lockGlyph {
-  color: #d4a72c;
-  font-size: 1.05em;
-  line-height: 1;
-  margin-right: 3px;
-}
 
 .backdrop {
   position: fixed;
