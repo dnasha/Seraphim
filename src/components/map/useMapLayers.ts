@@ -7,8 +7,29 @@
 
 import { useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { generateCategoryIcon } from "./MapConstants";
-import { CATEGORIES, CLUSTER_MAX_ZOOM } from "./utils";
+import { CLUSTER_MAX_ZOOM } from "./utils";
+import { loadMapIcons } from "./layers/mapIcons";
+import {
+  CLUSTERS_CIRCLE_PAINT,
+  HOT_STORY_PULSE_PAINT,
+  CLUSTERS_COUNT_LAYOUT,
+  CLUSTERS_COUNT_PAINT,
+  UNCLUSTERED_POINT_LAYOUT,
+  UNCLUSTERED_POINT_PAINT,
+  UNCLUSTERED_POINT_ACTIVE_LAYOUT,
+  UNCLUSTERED_POINT_ACTIVE_PAINT,
+  SELECTED_POINT_ACTIVE_LAYOUT,
+  SELECTED_POINT_ACTIVE_PAINT,
+  USGS_PAINT,
+  EONET_PAINT,
+  FIRES_PAINT,
+  FLIGHTS_LAYOUT,
+  FLIGHTS_PAINT,
+  SHIPS_LAYOUT,
+  SHIPS_PAINT,
+  ISS_LAYOUT,
+  ISS_PAINT,
+} from "./layers/mapLayerStyles";
 
 interface UseMapLayersProps {
   forceIndividualPinsRef: React.MutableRefObject<boolean>;
@@ -23,102 +44,8 @@ export function useMapLayers({
 }: UseMapLayersProps) {
   const addSourcesAndLayers = useCallback(
     async (map: maplibregl.Map) => {
-      // Idempotent registration of category-specific SVG icons.
-      // Generates both 'active' and 'inactive' variants for each news category.
-      const iconsToLoad = CATEGORIES.flatMap((cat) => [
-        { name: `${cat}_inactive`, active: false, cat },
-        { name: `${cat}_active`, active: true, cat },
-      ]).filter((item) => !map.hasImage(item.name));
-
-      if (iconsToLoad.length > 0) {
-        const loaded = await Promise.all(
-          iconsToLoad.map(async (item) => ({
-            name: item.name,
-            img: await generateCategoryIcon(item.cat, item.active),
-          })),
-        );
-
-        for (const { name, img } of loaded) {
-          if (!map.hasImage(name)) {
-            try {
-              map.addImage(name, img);
-            } catch {
-              // Silently handle race conditions if the map style reloads during icon registration.
-            }
-          }
-        }
-      }
-
-      // Load flight plane icon
-      if (!map.hasImage("flight-plane-icon")) {
-        const svgStr = `
-          <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L14 19v-5.5l8 2.5z" fill="#0284c7" stroke="#ffffff" stroke-width="1.5" />
-          </svg>
-        `;
-        const img = new Image(24, 24);
-        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-        await new Promise((resolve) => {
-          img.onload = () => {
-            try {
-              if (!map.hasImage("flight-plane-icon")) {
-                map.addImage("flight-plane-icon", img);
-              }
-            } catch {}
-            resolve(true);
-          };
-          img.onerror = () => resolve(false);
-        });
-      }
-
-      // Load ship icon
-      if (!map.hasImage("ship-icon")) {
-        const svgStr = `
-          <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 17h20l-2 4H4l-2-4zm18-4v3H4v-3l4-3h8l4 3zm-6-6h2v3h-2V7zm-4 1h2v2H8V8z" fill="#06b6d4" stroke="#ffffff" stroke-width="1.5" />
-          </svg>
-        `;
-        const img = new Image(24, 24);
-        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-        await new Promise((resolve) => {
-          img.onload = () => {
-            try {
-              if (!map.hasImage("ship-icon")) {
-                map.addImage("ship-icon", img);
-              }
-            } catch {}
-            resolve(true);
-          };
-          img.onerror = () => resolve(false);
-        });
-      }
-
-      // Load ISS icon
-      if (!map.hasImage("iss-icon")) {
-        const svgStr = `
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="5" width="3" height="14" rx="0.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1"/>
-            <line x1="3.5" y1="6" x2="3.5" y2="18" stroke="#ffffff" stroke-dasharray="1 1"/>
-            <rect x="19" y="5" width="3" height="14" rx="0.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1"/>
-            <line x1="20.5" y1="6" x2="20.5" y2="18" stroke="#ffffff" stroke-dasharray="1 1"/>
-            <line x1="5" y1="12" x2="19" y2="12" stroke="#ffffff" stroke-width="2"/>
-            <rect x="10" y="9" width="4" height="6" rx="1" fill="#e2e8f0" stroke="#f43f5e" stroke-width="1"/>
-          </svg>
-        `;
-        const img = new Image(32, 32);
-        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-        await new Promise((resolve) => {
-          img.onload = () => {
-            try {
-              if (!map.hasImage("iss-icon")) {
-                map.addImage("iss-icon", img);
-              }
-            } catch {}
-            resolve(true);
-          };
-          img.onerror = () => resolve(false);
-        });
-      }
+      // Load all news categories and other custom SVGs/images
+      await loadMapIcons(map);
 
       const existingNewsSource = map.getSource("news-events") as maplibregl.GeoJSONSource | undefined;
       if (existingNewsSource) {
@@ -194,61 +121,7 @@ export function useMapLayers({
               0,
             ],
           },
-          paint: {
-            "circle-color": [
-              "step",
-              ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-              "#fca5a5",
-              10,
-              "#f87171",
-              25,
-              "#ef4444",
-              50,
-              "#dc2626",
-              100,
-              "#b91c1c",
-              250,
-              "#991b1b",
-              500,
-              "#7f1d1d",
-            ],
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-              2,
-              14,
-              10,
-              18,
-              50,
-              22,
-              100,
-              26,
-              250,
-              28,
-              500,
-              32,
-              1000,
-              36,
-            ],
-            "circle-opacity": [
-              "interpolate",
-              ["linear"],
-              ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-              2,
-              0.8,
-              20,
-              0.85,
-              100,
-              0.9,
-              500,
-              0.93,
-              1000,
-              0.95,
-            ],
-            "circle-stroke-width": 0,
-            "circle-stroke-color": "#ffffff",
-          },
+          paint: CLUSTERS_CIRCLE_PAINT,
         });
       }
 
@@ -262,36 +135,7 @@ export function useMapLayers({
             ["==", ["get", "hasTopHot"], 1],
             ["==", ["get", "isTopHot"], true],
           ],
-          paint: {
-            "circle-radius": 0,
-            "circle-color": [
-              "case",
-              ["has", "point_count"],
-              "#ef4444",
-              [
-                "match",
-                ["get", "category"],
-                "world",
-                "#dc2626",
-                "crisis",
-                "#b91c1c",
-                "nation",
-                "#2563eb",
-                "business",
-                "#d97706",
-                "technology",
-                "#0891b2",
-                "science",
-                "#059669",
-                "health",
-                "#7c3aed",
-                "#3b82f6",
-              ],
-            ],
-            "circle-opacity": 0,
-            "circle-blur": 0,
-            "circle-stroke-width": 0,
-          },
+          paint: HOT_STORY_PULSE_PAINT,
         });
       }
 
@@ -307,30 +151,18 @@ export function useMapLayers({
       });
 
       if (!map.getLayer("clusters-count")) {
+        const sortKey: maplibregl.ExpressionSpecification = [
+          "*",
+          -1,
+          ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
+        ];
         map.addLayer({
           id: "clusters-count",
           type: "symbol",
           source: "news-events",
           filter: clusterCheck,
-          layout: {
-            "symbol-sort-key": [
-              "*",
-              -1,
-              ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
-            ],
-            "text-field": [
-              "to-string",
-              ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"]],
-            ],
-            "text-size": 12,
-            "text-font": ["Noto Sans Bold"],
-            "text-allow-overlap": false,
-            "text-ignore-placement": false,
-            "text-padding": 6,
-          },
-          paint: {
-            "text-color": "#ffffff",
-          },
+          layout: CLUSTERS_COUNT_LAYOUT(sortKey),
+          paint: CLUSTERS_COUNT_PAINT,
         });
       }
 
@@ -340,18 +172,8 @@ export function useMapLayers({
           type: "symbol",
           source: "news-events",
           filter: ["all", ["!", clusterCheck], ["!=", ["get", "id"], ""]],
-          layout: {
-            "icon-image": [
-              "concat",
-              ["coalesce", ["get", "category"], "general"],
-              "_inactive",
-            ],
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-          },
-          paint: {
-            "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 8, 1.0],
-          },
+          layout: UNCLUSTERED_POINT_LAYOUT,
+          paint: UNCLUSTERED_POINT_PAINT,
         });
       }
 
@@ -361,18 +183,8 @@ export function useMapLayers({
           type: "symbol",
           source: "news-events",
           filter: ["all", ["!", clusterCheck], ["==", ["get", "id"], ""]],
-          layout: {
-            "icon-image": [
-              "concat",
-              ["coalesce", ["get", "category"], "general"],
-              "_active",
-            ],
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-          },
-          paint: {
-            "icon-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 8, 1.0],
-          },
+          layout: UNCLUSTERED_POINT_ACTIVE_LAYOUT,
+          paint: UNCLUSTERED_POINT_ACTIVE_PAINT,
         });
       }
 
@@ -381,19 +193,8 @@ export function useMapLayers({
           id: "selected-point-active",
           type: "symbol",
           source: "selected-news-event",
-          layout: {
-            "icon-image": [
-              "concat",
-              ["coalesce", ["get", "category"], "general"],
-              "_active",
-            ],
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-            "symbol-sort-key": 1000,
-          },
-          paint: {
-            "icon-opacity": 1,
-          },
+          layout: SELECTED_POINT_ACTIVE_LAYOUT,
+          paint: SELECTED_POINT_ACTIVE_PAINT,
         });
       }
 
@@ -415,23 +216,7 @@ export function useMapLayers({
               layout: {
                 visibility: "visible",
               },
-              paint: {
-                "circle-radius": [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "mag"],
-                  1,
-                  4,
-                  5,
-                  12,
-                  8,
-                  24,
-                ],
-                "circle-color": "#f59e0b",
-                "circle-opacity": 0.6,
-                "circle-stroke-width": 1,
-                "circle-stroke-color": "#ffffff",
-              },
+              paint: USGS_PAINT,
             },
             "clusters-circle",
           );
@@ -480,28 +265,7 @@ export function useMapLayers({
             layout: {
               visibility: "visible",
             },
-            paint: {
-              "circle-color": [
-                "match",
-                ["get", "category"],
-                "wildfires", "#f97316",    // Orange for wildfires
-                "volcanoes", "#dc2626",    // Red for volcanoes
-                "severeStorms", "#8b5cf6", // Purple for severe storms
-                "floods", "#3b82f6",       // Blue for floods
-                "#ef4444"                  // Red fallback
-              ],
-              "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                1, 3,
-                5, 6,
-                9, 10
-              ],
-              "circle-opacity": 0.85,
-              "circle-stroke-width": 1,
-              "circle-stroke-color": "#ffffff",
-            },
+            paint: EONET_PAINT,
           },
           "clusters-circle",
         );
@@ -523,46 +287,7 @@ export function useMapLayers({
             layout: {
               visibility: "visible",
             },
-            paint: {
-              "circle-color": [
-                "interpolate",
-                ["linear"],
-                ["get", "frp"],
-                10, "#fde047",   // Yellow for low intensity
-                50, "#f97316",   // Orange for nominal intensity
-                150, "#ef4444",  // Red for high intensity
-                500, "#7f1d1d"   // Dark Crimson for extreme intensity
-              ],
-              "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                1, [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "frp"],
-                  10, 2,
-                  500, 4
-                ],
-                5, [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "frp"],
-                  10, 4,
-                  500, 8
-                ],
-                9, [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "frp"],
-                  10, 8,
-                  500, 16
-                ]
-              ],
-              "circle-opacity": 0.85,
-              "circle-stroke-width": 0.5,
-              "circle-stroke-color": "#ffffff"
-            },
+            paint: FIRES_PAINT,
           },
           "clusters-circle",
         );
@@ -635,26 +360,8 @@ export function useMapLayers({
             id: "overlay-flights-point",
             type: "symbol",
             source: "overlay-flights",
-            layout: {
-              visibility: "visible",
-              "icon-image": "flight-plane-icon",
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "icon-rotate": ["get", "track"],
-              "icon-rotation-alignment": "map",
-              "text-field": ["get", "flight"],
-              "text-font": ["Noto Sans Regular"],
-              "text-size": 9,
-              "text-offset": [0, 1.2],
-              "text-anchor": "top",
-              "text-allow-overlap": false,
-              "text-ignore-placement": false,
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "#0f172a",
-              "text-halo-width": 1.5,
-            }
+            layout: FLIGHTS_LAYOUT,
+            paint: FLIGHTS_PAINT
           },
           "clusters-circle",
         );
@@ -673,24 +380,8 @@ export function useMapLayers({
             id: "overlay-ships-point",
             type: "symbol",
             source: "overlay-ships",
-            layout: {
-              visibility: "visible",
-              "icon-image": "ship-icon",
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "text-field": ["get", "name"],
-              "text-font": ["Noto Sans Bold"],
-              "text-size": 11,
-              "text-offset": [0, 1.4],
-              "text-anchor": "top",
-              "text-allow-overlap": false,
-              "text-ignore-placement": false,
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "#090d16",
-              "text-halo-width": 2.0,
-            }
+            layout: SHIPS_LAYOUT,
+            paint: SHIPS_PAINT
           },
           "clusters-circle",
         );
@@ -712,29 +403,8 @@ export function useMapLayers({
             id: "overlay-iss-point",
             type: "symbol",
             source: "overlay-iss",
-            layout: {
-              visibility: "visible",
-              "icon-image": "iss-icon",
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "text-field": [
-                "case",
-                ["has", "altitude"],
-                ["concat", ["get", "name"], "\nAlt: ", ["get", "altitude"], " • Vel: ", ["get", "velocity"]],
-                ["get", "name"]
-              ],
-              "text-font": ["Noto Sans Bold"],
-              "text-size": 11,
-              "text-offset": [0, 1.6],
-              "text-anchor": "top",
-              "text-allow-overlap": false,
-              "text-ignore-placement": false,
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "#090d16",
-              "text-halo-width": 2.0,
-            }
+            layout: ISS_LAYOUT,
+            paint: ISS_PAINT
           },
           "clusters-circle",
         );

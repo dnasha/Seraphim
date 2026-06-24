@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import { createPortal } from 'react-dom';
 import {
   TerraDraw,
   TerraDrawSelectMode,
@@ -8,7 +7,6 @@ import {
   TerraDrawLineStringMode,
   TerraDrawRectangleMode,
   TerraDrawCircleMode,
-  TerraDrawFreehandLineStringMode,
   TerraDrawPointMode,
 } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
@@ -16,6 +14,14 @@ import * as turf from '@turf/turf';
 import styles from './MapDrawTools.module.css';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from '@/components/ui/FeatureGate';
+import { DragFriendlyFreehandLineStringMode, type FreehandPointerEvent } from './draw/DragFriendlyFreehandLineStringMode';
+import { TextMarker } from './draw/TextMarker';
+import {
+  type TextAnnotation,
+  readPersistedDrawState,
+  persistDrawState,
+  clearPersistedDrawState,
+} from './draw/drawPersistence';
 
 interface MapDrawToolsProps {
   mapRef: React.MutableRefObject<maplibregl.Map | null>;
@@ -31,7 +37,6 @@ const MIN_DRAW_SIZE = 1;
 const MAX_DRAW_SIZE = 50;
 const FREEHAND_OVERLAY_SOURCE_ID = 'td-freehand-lines-overlay-source';
 const FREEHAND_OVERLAY_LAYER_ID = 'td-freehand-lines-overlay-layer';
-const DRAW_STORAGE_KEY = 'seraphim-map-draw-tools-v1';
 
 const hasMapStyleObject = (map: maplibregl.Map): boolean => {
   return Boolean((map as maplibregl.Map & { style?: unknown }).style);
@@ -92,116 +97,8 @@ const stopTerraDrawSafely = (draw: TerraDraw, map: maplibregl.Map) => {
   }
 };
 
-interface TextAnnotation {
-  id: string;
-  lngLat: [number, number];
-  text: string;
-  initialZoom: number;
-}
-
-interface PersistedDrawState {
-  version: number;
-  drawFeatures: unknown[];
-  textAnnotations: TextAnnotation[];
-}
-
-const isValidTextAnnotation = (annotation: unknown): annotation is TextAnnotation => {
-  if (!annotation || typeof annotation !== 'object') return false;
-  const candidate = annotation as Partial<TextAnnotation>;
-  return typeof candidate.id === 'string'
-    && Array.isArray(candidate.lngLat)
-    && candidate.lngLat.length === 2
-    && typeof candidate.lngLat[0] === 'number'
-    && typeof candidate.lngLat[1] === 'number'
-    && typeof candidate.text === 'string'
-    && typeof candidate.initialZoom === 'number';
-};
-
-const readPersistedDrawState = (): PersistedDrawState | null => {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const raw = window.localStorage.getItem(DRAW_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as {
-      version?: number;
-      drawFeatures?: unknown;
-      textAnnotations?: unknown;
-    };
-
-    if (!Array.isArray(parsed.drawFeatures) || !Array.isArray(parsed.textAnnotations)) {
-      console.warn('Ignoring invalid persisted map annotations payload.');
-      return null;
-    }
-
-    return {
-      version: typeof parsed.version === 'number' ? parsed.version : 1,
-      drawFeatures: parsed.drawFeatures,
-      textAnnotations: parsed.textAnnotations.filter(isValidTextAnnotation),
-    };
-  } catch (err) {
-    console.warn('Failed to load persisted map annotations:', err);
-    return null;
-  }
-};
-
-const persistDrawState = (drawFeatures: unknown[], annotations: TextAnnotation[]) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(DRAW_STORAGE_KEY, JSON.stringify({
-      version: 1,
-      drawFeatures,
-      textAnnotations: annotations,
-    }));
-  } catch (err) {
-    console.warn('Failed to persist map annotations:', err);
-  }
-};
-
-const clearPersistedDrawState = () => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(DRAW_STORAGE_KEY);
-  } catch (err) {
-    console.warn('Failed to clear persisted map annotations:', err);
-  }
-};
-
-type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['onMouseMove']>[0];
-
 // Modes that require touch gesture suppression and direct touch-to-draw bridging.
 const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle', 'eraser']);
-
-class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
-  private isDragSketchActive = false;
-
-  public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
-    if (!event) return;
-    this.isDragSketchActive = true;
-    setMapDraggability?.(false);
-    this.onClick({ ...event, button: 'left', isContextMenu: false });
-  }
-
-  public onDrag(event?: FreehandPointerEvent): void {
-    if (!event || !this.isDragSketchActive) return;
-    this.onMouseMove(event);
-  }
-
-  public onDragEnd(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
-    if (event && this.isDragSketchActive) {
-      this.onMouseMove(event);
-      this.onClick({ ...event, button: 'left', isContextMenu: false });
-    }
-    this.isDragSketchActive = false;
-    setMapDraggability?.(true);
-  }
-
-  public cleanUp(): void {
-    this.isDragSketchActive = false;
-    super.cleanUp();
-  }
-}
 
 export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
@@ -1404,189 +1301,5 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         />
       ))}
     </>
-  );
-}
-
-function TextMarker({ 
-  mapRef, 
-  annotation, 
-  activeMode,
-  onUpdate, 
-  onRemove,
-  onDragEnd,
-}: { 
-  mapRef: React.MutableRefObject<maplibregl.Map | null>; 
-  annotation: TextAnnotation; 
-  activeMode: string;
-  onUpdate: (text: string) => void;
-  onRemove: () => void;
-  onDragEnd: (lngLat: [number, number]) => void;
-}) {
-  const [markerContainer] = useState(() => {
-    if (typeof document !== 'undefined') {
-      const el = document.createElement('div');
-      el.style.pointerEvents = 'auto'; // Ensure the container is interactive
-      return el;
-    }
-    return null;
-  });
-  const markerRef = useRef<maplibregl.Marker | null>(null);
-  const onDragEndRef = useRef(onDragEnd);
-  
-  useEffect(() => { onDragEndRef.current = onDragEnd; }, [onDragEnd]);
-
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-
-    const updateScale = () => {
-      const currentZoom = map.getZoom();
-      const zoomDiff = currentZoom - annotation.initialZoom;
-      // Scale by 2^zoomDiff, constrained between 0.1 and 10
-      const newScale = Math.max(0.1, Math.min(10, Math.pow(2, zoomDiff)));
-      setScale(newScale);
-    };
-
-    map.on('zoom', updateScale);
-    updateScale();
-
-    return () => {
-      const instance = map;
-      if (instance && typeof instance.off === 'function') {
-        instance.off('zoom', updateScale);
-      }
-    };
-  }, [mapRef, annotation.initialZoom]);
-
-  useEffect(() => {
-    if (!mapRef.current || !markerContainer) return;
-
-    if (!markerRef.current) {
-      markerRef.current = new maplibregl.Marker({ element: markerContainer, draggable: true })
-        .setLngLat(annotation.lngLat)
-        .addTo(mapRef.current);
-
-      markerRef.current.on('dragend', () => {
-        const lngLat = markerRef.current!.getLngLat();
-        onDragEndRef.current([lngLat.lng, lngLat.lat]);
-      });
-    } else {
-      markerRef.current.setLngLat(annotation.lngLat);
-    }
-  }, [mapRef, annotation.lngLat, markerContainer]);
-
-  useEffect(() => {
-    return () => {
-      if (markerRef.current) {
-        markerRef.current.remove();
-        markerRef.current = null;
-      }
-    };
-  }, []);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (!textareaRef.current) return;
-
-    let raf2: number | null = null;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        const el = textareaRef.current;
-        if (!el) return;
-        el.focus();
-        const cursorPosition = el.value.length;
-        el.setSelectionRange(cursorPosition, cursorPosition);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(raf1);
-      if (raf2 !== null) {
-        cancelAnimationFrame(raf2);
-      }
-    };
-  }, [annotation.id]);
-
-  useEffect(() => {
-    if (!textareaRef.current) return;
-    const el = textareaRef.current;
-    const stop = (e: Event) => e.stopPropagation();
-    
-    // Use native event listeners to prevent MapLibre from intercepting the resize handle
-    el.addEventListener('mousedown', stop);
-    el.addEventListener('touchstart', stop);
-    el.addEventListener('pointerdown', stop);
-    
-    return () => {
-      el.removeEventListener('mousedown', stop);
-      el.removeEventListener('touchstart', stop);
-      el.removeEventListener('pointerdown', stop);
-    };
-  }, []);
-
-  if (!markerContainer) return null;
-
-  return createPortal(
-    <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
-      <div className={styles.textMarkerContainer}>
-        <div className={styles.textMarkerDrag} title="Drag to move">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 9h14M5 15h14"/></svg>
-        </div>
-        <textarea
-          ref={textareaRef}
-          className={styles.textMarker}
-          defaultValue={annotation.text}
-          placeholder="Type here..."
-          autoFocus
-          rows={1}
-          style={activeMode === 'eraser' ? { cursor: 'crosshair' } : undefined}
-          onChange={(e) => {
-            onUpdate(e.target.value);
-          }}
-          onMouseDown={(e) => {
-            if (activeMode === 'eraser') {
-              e.stopPropagation();
-              onRemove();
-            } else {
-              e.stopPropagation();
-            }
-          }}
-          onPointerDown={(e) => {
-            if (activeMode === 'eraser') {
-              e.stopPropagation();
-              onRemove();
-            } else {
-              e.stopPropagation();
-            }
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (activeMode !== 'eraser') {
-              e.currentTarget.focus();
-            }
-          }}
-        onBlur={(e) => {
-          if (e.target.value.trim() === '') {
-            onRemove();
-          }
-        }}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            e.currentTarget.blur();
-          }
-        }}
-        onKeyUp={(e) => e.stopPropagation()}
-      />
-        <button className={styles.textMarkerDelete} onClick={(e) => { e.stopPropagation(); onRemove(); }}>
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>,
-    markerContainer
   );
 }

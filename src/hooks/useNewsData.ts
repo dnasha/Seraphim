@@ -18,77 +18,18 @@ const log = (message: unknown, ...optionalParams: unknown[]) => {
     }
 };
 
-const LOCAL_RESPONSE_TTL_MS = 60_000;
-const MAX_RESPONSE_CACHE_ENTRIES = 200;
-const MAX_ENTITY_COUNT = 5000;
-
-const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; appliedLimit?: number; timestamp: number }>();
-const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean; appliedLimit?: number }>>();
-
-function pruneResponseCache(now = Date.now()) {
-    for (const [key, cached] of responseCache.entries()) {
-        if (now - cached.timestamp >= LOCAL_RESPONSE_TTL_MS) {
-            responseCache.delete(key);
-        }
-    }
-
-    while (responseCache.size > MAX_RESPONSE_CACHE_ENTRIES) {
-        const oldestKey = responseCache.keys().next().value as string | undefined;
-        if (!oldestKey) break;
-        responseCache.delete(oldestKey);
-    }
-}
-
-function computeSince(timeRange: string, customStartDate?: string): string | null {
-    if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
-    const ms: Record<string, number> = { '1d': 86400000, '3d': 259200000, '1w': 604800000, '1m': 2592000000 };
-    return ms[timeRange] ? new Date(Date.now() - ms[timeRange]).toISOString() : null;
-}
-
-function computeUntil(timeRange: string, customEndDate?: string): string | null {
-    return (timeRange === 'custom' && customEndDate) ? new Date(customEndDate).toISOString() : null;
-}
-
-/**
- * Merges an incoming news item with an existing one in the store.
- * It prioritizes the highest source count and preserves impact scores.
- * This prevents data downgrades when receiving partial updates from the API.
- */
-function mergeNewsItem(existing: NewsItem | undefined, incoming: NewsItem): NewsItem {
-    if (!existing) return incoming;
-    
-    // Reporting strength is determined by the maximum known source count across all updates.
-    const raw = incoming as unknown as Record<string, unknown>;
-    const sCount = Number(
-        incoming.sourcesCount ?? 
-        raw.sourceCount ?? 
-        raw.event_count ?? 
-        raw.source_count ?? 
-        raw.eventCount ?? 
-        0
-    );
-
-    const sourcesCount = Math.max(
-        Number(existing.sourcesCount) || 0,
-        sCount
-    );
-
-    const impactScore = Math.max(
-        Number(existing.impactScore) || 0,
-        Number(incoming.impactScore) || 0
-    );
-
-    return {
-        ...existing,
-        ...incoming,
-        sourcesCount: sourcesCount > 0 ? sourcesCount : undefined,
-        impactScore: impactScore > 0 ? impactScore : undefined,
-        description: incoming.description ?? existing.description,
-        sources: incoming.sources ?? existing.sources,
-        originalId: incoming.originalId ?? existing.originalId,
-        isTopHot: incoming.isTopHot || existing.isTopHot,
-    };
-}
+import {
+    LOCAL_RESPONSE_TTL_MS,
+    responseCache,
+    inFlightFetches,
+    pruneResponseCache,
+    computeSince,
+    computeUntil,
+} from './news/cacheUtils';
+import {
+    MAX_ENTITY_COUNT,
+    mergeNewsItem,
+} from './news/newsStore';
 
 export function useNewsData({
     timeRange,
