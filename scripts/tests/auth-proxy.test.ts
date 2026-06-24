@@ -45,4 +45,26 @@ describe("auth session proxy", () => {
 
     expect(response.cookies.get("sb-project-auth-token")?.value).toBe("fresh");
   });
+
+  it("clears cookies if session validation fails with refresh token not found", async () => {
+    const authError = {
+      name: "AuthApiError",
+      message: "Invalid Refresh Token: Refresh Token Not Found",
+      status: 400,
+      code: "refresh_token_not_found",
+    };
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: authError });
+
+    const request = new NextRequest("https://seraphim.example/account", {
+      headers: { cookie: "sb-project-auth-token=bad-token" },
+    });
+
+    const response = await proxy(request);
+
+    // Should delete the cookie from the response (instructing browser to clear it)
+    expect(response.cookies.get("sb-project-auth-token")?.value).toBe("");
+    
+    // Should also delete it from the request object so downstream route handlers don't see it
+    expect(request.cookies.get("sb-project-auth-token")).toBeUndefined();
+  });
 });

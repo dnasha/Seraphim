@@ -106,6 +106,19 @@ describe('proxy and OG guards', () => {
     expect(getTrustedClientIp(new Headers({ 'x-vercel-forwarded-for': '198.51.100.1, 10.0.0.1' }))).toBeNull();
   });
 
+  it('falls back to 127.0.0.1 in development mode', () => {
+    const originalEnv = process.env.NODE_ENV;
+    try {
+      // @ts-expect-error: process.env.NODE_ENV is read-only
+      process.env.NODE_ENV = 'development';
+      expect(getTrustedClientIp(new Headers({}))).toBe('127.0.0.1');
+      expect(getTrustedClientIp(new Headers({ 'x-forwarded-for': '10.0.0.1' }))).toBe('127.0.0.1');
+    } finally {
+      // @ts-expect-error: process.env.NODE_ENV is read-only
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
   it('rejects private DNS results and public-to-private redirects before fetching them', async () => {
     const blockedFetch = vi.fn();
     await expect(fetchPublicImage('https://private-dns.example/image.png', {

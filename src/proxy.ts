@@ -53,7 +53,35 @@ export async function proxy(request: NextRequest) {
 
     // IMPORTANT: DO NOT REMOVE auth.getUser()
     // This call refreshes the auth token if expired and syncs cookies.
-    await supabase.auth.getUser();
+    const { error } = await supabase.auth.getUser();
+
+    if (error) {
+        // If session is definitively invalid, clear auth cookies to prevent infinite refresh loops.
+        const isSessionInvalid = error.status === 400 && (
+            error.code === 'refresh_token_not_found' ||
+            error.code === 'invalid_grant' ||
+            error.message?.includes('refresh token')
+        );
+        if (isSessionInvalid) {
+            console.warn('[proxy] Invalid session detected. Clearing auth cookies.', error.message);
+            const authCookies = request.cookies.getAll().filter(cookie => cookie.name.startsWith('sb-'));
+            
+            // Delete from request so downstream route handlers/Server Components see guest state
+            authCookies.forEach(cookie => {
+                request.cookies.delete(cookie.name);
+            });
+            
+            // Recreate the response to propagate request cookie modifications
+            supabaseResponse = NextResponse.next({
+                request,
+            });
+            
+            // Instruct client browser to delete these cookies
+            authCookies.forEach(cookie => {
+                supabaseResponse.cookies.delete(cookie.name);
+            });
+        }
+    }
 
     // IMPORTANT: Return the supabaseResponse object as-is.
     // Modifying cookies on a new response object will desync
