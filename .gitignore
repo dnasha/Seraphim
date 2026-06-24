@@ -46,8 +46,8 @@ artifacts
 GEMINI.md
 
 *.sql
-# Database migrations are the reviewed source of truth for schema changes.
-supabase/migrations/*.sql
+# Database configurations, migrations, and local schemas are ignored.
+supabase/
 copilot-instructions.md
 
 docs/
