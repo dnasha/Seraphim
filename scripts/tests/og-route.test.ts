@@ -9,7 +9,7 @@ vi.mock("next/og", () => ({
     }
   },
 }));
-vi.mock("@/lib/core/supabase", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/lib/core/supabase-admin", () => ({ supabaseAdmin: { from: mocks.from } }));
 vi.mock('@/lib/security/ogImage', () => ({
   fetchPublicImage: mocks.fetchPublicImage,
   safeReadImageResponse: vi.fn(async () => ({

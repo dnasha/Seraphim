@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from 'next/og';
-import { supabase } from '@/lib/core/supabase';
+import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { getConfiguredSiteUrl } from '@/lib/security/payments';
 import { fetchPublicImage, safeReadImageResponse } from '@/lib/security/ogImage';
 
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         }
 
         // Query the database to retrieve the event's image_url
-        const { data: event } = await supabase
+        const { data: event } = await supabaseAdmin
             .from('events')
             .select('image_url')
             .eq('id', eventId)
