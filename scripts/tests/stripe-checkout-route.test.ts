@@ -41,10 +41,10 @@ vi.mock("@/lib/security/payments", () => ({
 
 import { POST } from "@/app/api/stripe/checkout/route";
 
-function request(priceKey: string) {
+function request(priceKey: string, returnTo?: string) {
   return new Request("https://seraphim.example/api/stripe/checkout", {
     method: "POST",
-    body: JSON.stringify({ priceKey }),
+    body: JSON.stringify({ priceKey, returnTo }),
     headers: { "content-type": "application/json" },
   }) as never;
 }
@@ -112,6 +112,22 @@ describe("POST /api/stripe/checkout", () => {
         trial_period_days: 7,
         metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
       },
+    }));
+  });
+
+  it("returns Checkout to a validated originating path", async () => {
+    await POST(request("pro_monthly", "/account?tab=billing"));
+
+    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
+      success_url: "https://seraphim.example/account?tab=billing&checkout=success",
+      cancel_url: "https://seraphim.example/account?tab=billing&checkout=cancelled",
+    }));
+
+    mocks.checkoutCreate.mockClear();
+    await POST(request("pro_monthly", "//evil.example/path"));
+    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
+      success_url: "https://seraphim.example/?checkout=success",
+      cancel_url: "https://seraphim.example/?checkout=cancelled",
     }));
   });
 

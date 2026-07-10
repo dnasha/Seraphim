@@ -84,26 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         // Resolve only guest state synchronously. Authenticated state must come
         // from Supabase and pass server verification before it can gate features.
-        const wasGuest = localStorage.getItem(GUEST_STORAGE_KEY);
-        const hasSupabaseSession = Object.keys(localStorage).some(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
-        
-        let hasRestoredFromCache = false;
-        
-        if (!hasRestoredFromCache) {
-            // If we know they are a guest (either explicit choice or no Supabase session cookie/local storage at all)
-            if (wasGuest === 'true' || !hasSupabaseSession) {
-                const isGuestPref = wasGuest === 'true';
-                setTimeout(() => {
-                    setIsGuest(isGuestPref);
-                    setUserTier('guest');
-                    setIsLoading(false);
-                    setTierLoading(false);
-                }, 0);
-                hasRestoredFromCache = true;
-                log('[AuthProvider] Synchronously resolved guest status on mount');
-            }
-        }
-
+        // Keep auth loading until Supabase has restored and verified the
+        // session. Cookie-backed sessions are not guaranteed to have a matching
+        // localStorage key, so resolving "guest" synchronously causes protected
+        // pages and paid filters to redirect/reset during cold navigation.
         let activeSubscription: { unsubscribe: () => void } | null = null;
         let isUnmounted = false;
 
@@ -187,10 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     }
                 } else {
                     console.warn('[AuthProvider] getSession timed out. Leaving gated auth state disabled until verification succeeds.');
-                    if (!hasRestoredFromCache) {
-                        setUserTier('guest');
-                        setTierLoading(false);
-                    }
+                    setUserTier('guest');
+                    setTierLoading(false);
                 }
 
                 // If no session and not already determined as guest, default to guest mode internally (only if not timed out)
@@ -200,11 +182,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             } catch (err) {
                 console.error('[AuthProvider] Failed to initialize auth:', err);
-                if (!hasRestoredFromCache) {
-                    if (isUnmounted) return;
-                    setUserTier('guest');
-                    setTierLoading(false);
-                }
+                if (isUnmounted) return;
+                setUserTier('guest');
+                setTierLoading(false);
             } finally {
                 log('[AuthProvider] Setting isLoading to false');
                 if (!isUnmounted) {

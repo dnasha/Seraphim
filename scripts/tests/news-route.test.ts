@@ -142,10 +142,25 @@ describe("GET /api/news", () => {
     await expect(second.json()).resolves.toMatchObject({ meta: { clustered: false } });
   });
 
+  it("uses a raw bounded-limit query when no viewport is supplied", async () => {
+    const query = rawQuery();
+    mocks.from.mockReturnValue(query);
+
+    const response = await GET(request("zoom=2&limit=17"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).toHaveBeenCalledWith("events");
+    await expect(response.json()).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: eventRow.id })],
+      meta: { clustered: false },
+    });
+  });
+
   it("fails open with an empty feed for database timeouts", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { message: "statement timeout" } });
 
-    const response = await GET(request("zoom=2&limit=17"));
+    const response = await GET(request("zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=17"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -196,11 +211,11 @@ describe("GET /api/news", () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 100 } });
     mocks.rpc.mockResolvedValue({ data: [], error: null });
 
-    const capped = await GET(request('zoom=2&limit=999&time_range=1d'));
+    const capped = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=999&time_range=1d'));
     expect(mocks.rpc).toHaveBeenCalledWith('get_clustered_events', expect.objectContaining({ p_limit: 100 }));
     expect((await capped.json()).meta).toMatchObject({ appliedLimit: 100 });
 
-    const historical = await GET(request('zoom=2&time_range=1w'));
+    const historical = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&time_range=1w'));
     expect(historical.status).toBe(403);
     await expect(historical.json()).resolves.toMatchObject({ code: 'feature_required', requiredTier: 'pro' });
   });

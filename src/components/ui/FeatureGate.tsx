@@ -2,6 +2,7 @@
 
 import React, { useId, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import styles from './FeatureGate.module.css';
 import type { UserTier } from '@/lib/entitlements';
 
@@ -27,6 +28,7 @@ export function GatedButton({
 }: GatedButtonProps) {
   const [open, setOpen] = useState(false);
   const dialogId = useId();
+  const pathname = usePathname();
 
   if (allowed) {
     return <button className={className} onClick={onClick} title={title} {...buttonProps}>{children}</button>;
@@ -60,7 +62,10 @@ export function GatedButton({
             <p>Upgrade to unlock this monitoring capability without losing your current view.</p>
             <div className={styles.promptActions}>
               <button onClick={() => setOpen(false)} className={styles.dismiss}>Not now</button>
-              <Link href={`/pricing?feature=${encodeURIComponent(featureName)}`} className={styles.upgradeLink}>View plans</Link>
+              <Link
+                href={`/pricing?feature=${encodeURIComponent(featureName)}&returnTo=${encodeURIComponent(pathname || '/')}`}
+                className={styles.upgradeLink}
+              >View plans</Link>
             </div>
           </section>
         </div>

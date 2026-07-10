@@ -461,7 +461,7 @@ export default function EventSidebar({
                       </h3>
                       <p>
                         You are currently limited to the top 10 events in view.
-                        Create a <strong>free</strong> account to access 1000+ real-time events,
+                        Create a <strong>free</strong> account to access up to 100 real-time events,
                         live filters, customization, and annotation tools.
                       </p>
                     </div>

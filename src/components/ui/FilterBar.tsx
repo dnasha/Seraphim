@@ -325,7 +325,7 @@ export default function FilterBar({
                                         onClick={() => handleTimeToggleClick(option.value)}
                                         aria-pressed={timeRange === option.value}
                                         allowed={!disabled && canUseTimeRange(userTier, option.value)}
-                                        requiredTier={option.value === 'custom' ? 'analyst' : userTier === 'guest' ? 'free' : 'pro'}
+                                        requiredTier={option.value === 'custom' ? 'analyst' : 'pro'}
                                         featureName={option.value === 'custom' ? 'Custom date windows' : `${option.label} history`}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >

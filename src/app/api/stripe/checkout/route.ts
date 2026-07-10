@@ -32,8 +32,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const body = await request.json() as { priceKey: string };
+        const body = await request.json() as { priceKey: string; returnTo?: string };
         const { priceKey } = body;
+        const returnTo = body.returnTo?.startsWith('/') && !body.returnTo.startsWith('//')
+            ? body.returnTo
+            : '/';
 
         if (!priceKey || !(priceKey in STRIPE_PRICES)) {
             return NextResponse.json({ error: 'Invalid price key' }, { status: 400 });
@@ -97,8 +100,8 @@ export async function POST(request: NextRequest) {
             customer: customerId,
             line_items: [{ price: priceId, quantity: 1 }],
             mode: isAngel ? 'payment' : 'subscription',
-            success_url: `${origin}/?checkout=success`,
-            cancel_url: `${origin}/pricing?checkout=cancelled`,
+            success_url: `${origin}${returnTo}${returnTo.includes('?') ? '&' : '?'}checkout=success`,
+            cancel_url: `${origin}${returnTo}${returnTo.includes('?') ? '&' : '?'}checkout=cancelled`,
             metadata: {
                 supabase_user_id: user.id,
                 price_key: priceKey,

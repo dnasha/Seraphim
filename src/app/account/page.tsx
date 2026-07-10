@@ -161,7 +161,7 @@ export default function AccountPage() {
         
         <header className={styles.header}>
           <div className={styles.headerLeft}>
-            <button onClick={() => router.push('/')} className={styles.backBtn} aria-label="Go back">
+            <button onClick={() => router.back()} className={styles.backBtn} aria-label="Go back">
               <LuArrowLeft size={24} />
             </button>
           </div>
@@ -283,7 +283,7 @@ export default function AccountPage() {
             {userTier === 'free' ? (
               <button
                 className={styles.button}
-                onClick={() => router.push('/pricing')}
+                onClick={() => router.push('/pricing?returnTo=%2Faccount')}
                 style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}
               >
                 Upgrade Plan
@@ -314,7 +314,7 @@ export default function AccountPage() {
                 </button>
                 <button
                   className={`${styles.button} ${styles.buttonSecondary}`}
-                  onClick={() => router.push('/pricing')}
+                  onClick={() => router.push('/pricing?returnTo=%2Faccount')}
                 >
                   Upgrade Plan
                 </button>

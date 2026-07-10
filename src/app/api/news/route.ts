@@ -186,13 +186,14 @@ export async function GET(request: Request) {
    * to provide smooth, organic transitions.
    */
   const useServerClustering = !forceRaw && (zoom === null || zoom < 5);
+  const isClusteredQuery = useServerClustering && hasBBox && !ignoreBBox;
 
   const bboxKeyPart = ignoreBBox
     ? "global"
     : `${minLat},${maxLat},${minLng},${maxLng}`;
   const cacheKey =
     hasBBox || ignoreBBox
-      ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${useServerClustering ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
+      ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${isClusteredQuery ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
       : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`;
   const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
@@ -257,7 +258,10 @@ export async function GET(request: Request) {
         normMaxLng = maxLng! + EPSILON;
       }
 
-      if (useServerClustering) {
+      // The clustering function builds a spatial predicate dynamically and
+      // requires a complete viewport. Global/no-bbox requests use the bounded
+      // raw query path instead of passing null coordinates into the RPC.
+      if (isClusteredQuery) {
         // Execute server-side clustering via optimized PostgreSQL RPC
         const rpcParams: Record<string, unknown> = {
           p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
@@ -358,7 +362,7 @@ export async function GET(request: Request) {
                   sort,
                   view: viewMode,
                   scope: scopeMode,
-                  clustered: useServerClustering,
+                  clustered: isClusteredQuery,
                   zoomBucket: zoom !== null ? Math.floor(zoom) : null,
                   isCapped: stale.isCapped,
                 },
@@ -379,7 +383,7 @@ export async function GET(request: Request) {
               sort,
               view: viewMode,
               scope: scopeMode,
-              clustered: useServerClustering,
+              clustered: isClusteredQuery,
               zoomBucket: zoom !== null ? Math.floor(zoom) : null,
             },
             sources: { gnews: true, rss: true, social: true },
@@ -393,7 +397,7 @@ export async function GET(request: Request) {
       }
 
       const safeRows = rows || [];
-      const totalRawCount = useServerClustering
+      const totalRawCount = isClusteredQuery
         ? (safeRows as DbEvent[]).reduce((acc, r) => acc + (Number(r.story_count) || 1), 0)
         : safeRows.length;
 
@@ -410,7 +414,7 @@ export async function GET(request: Request) {
          * the primary event for detail fetching.
          */
         if (
-          useServerClustering &&
+          isClusteredQuery &&
           item.clusterId &&
           (item.storyCount ?? 1) > 1
         ) {
@@ -421,7 +425,7 @@ export async function GET(request: Request) {
         return item;
       });
 
-      if (!useServerClustering) {
+      if (!isClusteredQuery) {
         allItems = sortNewsItems(allItems, sort);
         if (effectiveLimit < allItems.length) {
           allItems = allItems.slice(0, effectiveLimit);
@@ -441,7 +445,7 @@ export async function GET(request: Request) {
         sort,
         view: viewMode,
         scope: scopeMode,
-        clustered: useServerClustering,
+        clustered: isClusteredQuery,
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
         isCapped: queryCapped,
         appliedLimit: effectiveLimit,

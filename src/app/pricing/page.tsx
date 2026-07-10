@@ -7,8 +7,8 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -17,7 +17,7 @@ import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
 import { FaqSection } from './FaqSection';
 
-export default function PricingPage() {
+function PricingPageContent() {
     const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
     const [loadingTier, setLoadingTier] = useState<string | null>(null);
     const [angelRemaining, setAngelRemaining] = useState<number | null>(null);
@@ -27,6 +27,11 @@ export default function PricingPage() {
     const { user, isGuest } = useAuth();
     const { tier: currentTier } = useUserTier();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const requestedReturnTo = searchParams.get('returnTo');
+    const returnTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
+        ? requestedReturnTo
+        : '/';
 
     // Fetch angel remaining count
     useEffect(() => {
@@ -60,7 +65,7 @@ export default function PricingPage() {
             const res = await fetch('/api/stripe/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ priceKey }),
+                body: JSON.stringify({ priceKey, returnTo }),
             });
 
             const data = await res.json() as { url?: string; error?: string };
@@ -75,7 +80,7 @@ export default function PricingPage() {
         } finally {
             setLoadingTier(null);
         }
-    }, [user, isGuest, router]);
+    }, [user, isGuest, router, returnTo]);
 
     return (
         <div className={styles.container}>
@@ -83,7 +88,7 @@ export default function PricingPage() {
                 {/* Header */}
                 <header className={styles.header}>
                     <div className={styles.headerLeft}>
-                        <button onClick={() => router.push('/')} className={styles.backBtn} aria-label="Go back">
+                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="19" y1="12" x2="5" y2="12"></line>
                                 <polyline points="12 19 5 12 12 5"></polyline>
@@ -274,5 +279,13 @@ export default function PricingPage() {
                 </footer>
             </div>
         </div>
+    );
+}
+
+export default function PricingPage() {
+    return (
+        <Suspense fallback={<div className={styles.container} aria-busy="true" />}>
+            <PricingPageContent />
+        </Suspense>
     );
 }

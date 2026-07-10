@@ -19,7 +19,7 @@ interface UpgradeButtonProps {
 const UpgradeButton: React.FC<UpgradeButtonProps> = ({ isSidebarOpen }) => {
     return (
         <Link
-            href="/pricing"
+            href="/pricing?returnTo=%2F"
             className={`${styles.upgradeBtn} ${!isSidebarOpen ? styles.upgradeBtnShifted : ''}`}
             aria-label="View pricing plans"
         >
