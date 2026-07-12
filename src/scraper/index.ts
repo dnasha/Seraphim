@@ -180,7 +180,11 @@ async function run(): Promise<void> {
   let upserted_count = 0;
   let merged_count = 0;
 
-  const CHUNK_SIZE = 15;
+  // Embedding inserts update the large HNSW index. Keep each PostgREST
+  // transaction comfortably below the normal 8-second API timeout even
+  // when the database is busy; the RPC itself has a longer, scoped timeout
+  // for exceptional index-maintenance latency.
+  const CHUNK_SIZE = 5;
   
   const eventChunks = [];
   for (let i = 0; i < newEvents.length; i += CHUNK_SIZE) {
