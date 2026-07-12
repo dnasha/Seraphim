@@ -44,6 +44,28 @@ describe("lean ingestion content normalization", () => {
     expect(result[0].url).toBe("https://example.com/story?article=7");
   });
 
+  it("coerces malformed XML title, URL, and description fields without crashing", () => {
+    const malformed = item({
+      title: { _: "Flood warning issued for Port City" } as unknown as string,
+      url: ["https://example.com/flood?utm_source=feed"] as unknown as string,
+      description: { "#text": "Officials issued an evacuation warning." } as unknown as string,
+    });
+
+    expect(prepareIncomingItems([malformed])).toEqual([
+      expect.objectContaining({
+        title: "Flood warning issued for Port City",
+        url: "https://example.com/flood",
+        description: "Officials issued an evacuation warning.",
+      }),
+    ]);
+  });
+
+  it("drops entries whose malformed title cannot be converted to meaningful text", () => {
+    expect(prepareIncomingItems([
+      item({ title: { unexpected: true } as unknown as string }),
+    ])).toEqual([]);
+  });
+
   it("normalizes conservative exact-title fingerprints", () => {
     expect(normalizeTitleFingerprint("Café blast — officials respond"))
       .toBe("café blast officials respond");

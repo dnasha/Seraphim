@@ -31,8 +31,24 @@ const LOW_SIGNAL_ARCHIVE_PATTERNS = /\b(?:analysis|commentary|opinion|interview|
 
 const BOILERPLATE_LINE = /^(?:advertisement|sponsored content|sign up for (?:our|the) newsletter|subscribe (?:now|to continue|for more)|follow us on|read more:?|click here|all rights reserved|copyright \d{4}|download (?:our|the) app)\b/i;
 
-export function canonicalizeEventUrl(rawUrl: string): string {
-  const input = rawUrl.trim();
+function coerceFeedText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return value.map(coerceFeedText).filter(Boolean).join(" ");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["_", "#text", "text", "value"]) {
+      const text = coerceFeedText(record[key]);
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+export function canonicalizeEventUrl(rawUrl: unknown): string {
+  const input = coerceFeedText(rawUrl).trim();
   if (!input) return "";
 
   try {
@@ -69,10 +85,11 @@ export function normalizeTitleFingerprint(title: string): string {
     .trim();
 }
 
-export function cleanAndCapDescription(description?: string | null): string {
-  if (!description) return "";
+export function cleanAndCapDescription(description?: unknown): string {
+  const rawDescription = coerceFeedText(description);
+  if (!rawDescription) return "";
 
-  const normalized = description
+  const normalized = rawDescription
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/\r\n?/g, "\n")
     .replace(/[\t ]+/g, " ")
@@ -128,7 +145,7 @@ export function prepareIncomingItems(items: NewsItem[]): NewsItem[] {
 
   for (const original of items) {
     const url = canonicalizeEventUrl(original.url);
-    const title = original.title.replace(/\s+/g, " ").trim();
+    const title = coerceFeedText(original.title).replace(/\s+/g, " ").trim();
     const description = cleanAndCapDescription(original.description);
     if (!url || !title) continue;
 
