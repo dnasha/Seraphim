@@ -13,6 +13,8 @@ import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
 
 const DEFAULT_TIMEOUT = 15000;
+const X_MAX_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
+const X_MAX_FUTURE_SKEW_MS = 2 * 60 * 60 * 1000;
 
 const parser = new Parser({
     customFields: {
@@ -23,6 +25,7 @@ const parser = new Parser({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
 });
+type XFeed = Awaited<ReturnType<typeof parser.parseURL>>;
 
 /**
  * Verified Nitter instances for X/Twitter fallback.
@@ -62,6 +65,11 @@ function safeSlice(str: string, limit: number): string {
     return chars.slice(0, limit).join('');
 }
 
+function cleanTelegramText(sourceName: string, text: string): string {
+    if (sourceName !== 'Bellum Acta News (Telegram)') return text;
+    return text.replace(/[➖━─-]{4,}[\s\S]{0,160}?rainbet\.com[\s\S]*$/i, '').trim();
+}
+
 /**
  * Scrapes Telegram channels by parsing the static HTML preview page.
  * Relies on Cheerio for DOM traversal. This method avoids the need for 
@@ -98,7 +106,7 @@ export async function scrapeTelegramChannel(
             const $text = $msg.find('.tgme_widget_message_text');
             if (!$text.length) return;
 
-            const plainText = $text.text().trim();
+            const plainText = cleanTelegramText(source.name, $text.text().trim());
             if (!plainText || plainText.length < 10) return;
 
             const links: string[] = [];
@@ -209,11 +217,23 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
  * Remembers the 'best' instance to optimize subsequent requests.
  */
 let bestNitterInstance: string | null = null;
+function feedHasRecentItems(feed: XFeed, now = Date.now()): boolean {
+    return (feed.items ?? []).some((item) => {
+        const value = item.pubDate || item.isoDate;
+        const publishedMs = value ? new Date(value).getTime() : Number.NaN;
+        return Number.isFinite(publishedMs) &&
+            publishedMs >= now - X_MAX_ITEM_AGE_MS &&
+            publishedMs <= now + X_MAX_FUTURE_SKEW_MS;
+    });
+}
+
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         if (bestNitterInstance) {
             try {
-                return await fetchInstanceTimeout(`${bestNitterInstance}/${username}/rss`);
+                const feed = await fetchInstanceTimeout(`${bestNitterInstance}/${username}/rss`);
+                if (!feedHasRecentItems(feed)) throw new Error('Stale Nitter feed');
+                return feed;
             } catch {
                 bestNitterInstance = null;
             }
@@ -221,6 +241,7 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
 
         const promises = NITTER_INSTANCES.map(async (instance) => {
             const res = await fetchInstanceTimeout(`${instance}/${username}/rss`);
+            if (!feedHasRecentItems(res)) throw new Error('Stale Nitter feed');
             bestNitterInstance = instance;
             return res;
         });
@@ -239,7 +260,9 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
     try {
         if (bestRSSHubInstance) {
             try {
-                return await fetchInstanceTimeout(`${bestRSSHubInstance}/twitter/user/${username}`);
+                const feed = await fetchInstanceTimeout(`${bestRSSHubInstance}/twitter/user/${username}`);
+                if (!feedHasRecentItems(feed)) throw new Error('Stale RSSHub feed');
+                return feed;
             } catch {
                 bestRSSHubInstance = null;
             }
@@ -247,6 +270,7 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
 
         const promises = RSSHUB_INSTANCES.map(async (instance) => {
             const res = await fetchInstanceTimeout(`${instance}/twitter/user/${username}`);
+            if (!feedHasRecentItems(res)) throw new Error('Stale RSSHub feed');
             bestRSSHubInstance = instance;
             return res;
         });
@@ -256,49 +280,89 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
     }
 }
 
-/**
- * Strategy 4: Google News RSS
- * Final resort using Google News' indexed view of specific social accounts.
- */
-async function tryGoogleNewsFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
-    try {
-        const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`@${username} OR from:${username}`)}&hl=en`;
-        return await fetchInstanceTimeout(url);
-    } catch {
-        return null;
+/** Normalizes candidate timelines and rejects stale or content-free posts. */
+function meaningfulXText(value: unknown): string | null {
+    const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+    if (text.length < 20) return null;
+    if (/^(gif|image|video|photo)$/i.test(text)) return null;
+    if (/^R to @[^:]+:\s*(?:read more|full (?:interview|story)|geolocation)?\s*(?:https?:\/\/\S+)?$/i.test(text)) return null;
+    if (/^R to @[^:]+:\s*(?:related|sources?|thread|map|location|geolocation)?:?\s*(?:https?:\/\/\S+)?$/i.test(text)) return null;
+    return text;
+}
+
+function normalizeXFeed(source: SocialSource, feed: XFeed, now = Date.now()): NewsItem[] {
+    const seen = new Set<string>();
+    const items: NewsItem[] = [];
+
+    for (const item of feed.items ?? []) {
+        const rawPublishedAt = item.pubDate || item.isoDate;
+        const publishedMs = rawPublishedAt ? new Date(rawPublishedAt).getTime() : Number.NaN;
+        if (!Number.isFinite(publishedMs)) continue;
+        if (publishedMs < now - X_MAX_ITEM_AGE_MS || publishedMs > now + X_MAX_FUTURE_SKEW_MS) continue;
+        const publishedAt = new Date(publishedMs).toISOString();
+
+        const description = meaningfulXText(item.contentSnippet || item.content || item.title);
+        const title = meaningfulXText(item.title || description);
+        const url = typeof item.link === 'string' ? item.link : '';
+        if (!title || !description || !url) continue;
+
+        const statusId = url.match(/\/status\/(\d+)/)?.[1];
+        const dedupeKey = statusId ?? url;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        items.push({
+            id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${dedupeKey}-${Date.now()}`,
+            title: safeSlice(title, 200),
+            description: safeSlice(description, 1000),
+            url,
+            source: source.name,
+            sourceType: 'social' as const,
+            category: source.category,
+            publishedAt,
+            tags: ['OSINT', 'x'],
+        });
     }
+
+    return items.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 20);
+}
+
+function bestXCandidate(candidates: Array<{ strategy: string; items: NewsItem[] }>): { strategy: string; items: NewsItem[] } | null {
+    return candidates.filter(({ items }) => items.length > 0).sort((a, b) => {
+        const freshness = new Date(b.items[0].publishedAt).getTime() - new Date(a.items[0].publishedAt).getTime();
+        return freshness || b.items.length - a.items.length;
+    })[0] ?? null;
 }
 
 /**
  * Multi-strategy X/Twitter feed fetcher.
- * Executes multiple discovery strategies in parallel and returns the fastest 
- * successful response.
+ * Compares credential-free direct account timelines by freshness. RSSHub is a
+ * last resort. Google News is not an account timeline and is intentionally
+ * excluded to prevent false/stale attribution.
  */
 export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const username = source.url;
-    const feed = await Promise.any([
-        trySyndicationFeed(username).then(res => res ? res : Promise.reject('syndication failed')),
-        tryNitterFeed(username).then(res => res ? res : Promise.reject('nitter failed')),
-        tryRSSHubFeed(username).then(res => res ? res : Promise.reject('rsshub failed')),
-        tryGoogleNewsFeed(username).then(res => res ? res : Promise.reject('gnews failed'))
-    ]).catch(() => null);
+    const [syndication, nitter] = await Promise.all([
+        trySyndicationFeed(username),
+        tryNitterFeed(username),
+    ]);
+    const directCandidate = bestXCandidate([
+        { strategy: 'syndication', items: syndication ? normalizeXFeed(source, syndication) : [] },
+        { strategy: 'nitter', items: nitter ? normalizeXFeed(source, nitter) : [] },
+    ]);
+    if (directCandidate) {
+        console.log(`[X] ${source.name}: ${directCandidate.strategy} (${directCandidate.items.length} fresh items)`);
+        return directCandidate.items;
+    }
 
-    if (!feed || !feed.items || feed.items.length === 0) {
+    const rssHub = await tryRSSHubFeed(username);
+    const fallbackItems = rssHub ? normalizeXFeed(source, rssHub) : [];
+    if (fallbackItems.length === 0) {
         console.warn(`all X feed strategies failed for ${source.name} (@${username})`);
         return [];
     }
-
-    return (feed.items || []).slice(0, 20).map((item, index) => ({
-        id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
-        title: safeSlice(item.title || item.contentSnippet || 'No title', 200),
-        description: safeSlice(item.contentSnippet || item.content || '', 1000),
-        url: item.link || '',
-        source: source.name,
-        sourceType: 'social' as const,
-        category: source.category,
-        publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
-        tags: ['OSINT', 'x'],
-    }));
+    console.log(`[X] ${source.name}: rsshub (${fallbackItems.length} fresh items)`);
+    return fallbackItems;
 }
 
 /**

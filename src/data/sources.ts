@@ -190,8 +190,8 @@ export const TELEGRAM_CHANNELS: SocialSource[] = [
     
     { name: 'War Translated (Telegram)', url: 'https://t.me/s/wartranslated', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTdefender (Telegram)', url: 'https://t.me/s/osintdefender', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
-    { name: 'Bellum Acta News (Telegram)', url: 'https://t.me/s/BellumActaNews', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
-    { name: 'Rybar in English (Telegram)', url: 'https://t.me/s/rybar_in_english', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
+    { name: 'Bellum Acta News (Telegram)', url: 'https://t.me/s/BellumActaNews', platform: 'telegram', category: 'crisis', credibility_tier: 3 },
+    { name: 'Rybar in English (Telegram)', url: 'https://t.me/s/rybar_in_english', platform: 'telegram', category: 'crisis', credibility_tier: 3 },
     { name: 'Middle East Eye (Telegram)', url: 'https://t.me/s/MiddleEastEye_TG', platform: 'telegram', category: 'world', credibility_tier: 2 },
     
     { name: 'LiveUkraine (Telegram)', url: 'https://t.me/s/liveukraine_media', platform: 'telegram', category: 'crisis', credibility_tier: 3 },
@@ -205,13 +205,10 @@ export const X_ACCOUNTS: SocialSource[] = [
     
     { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis', credibility_tier: 2 },
-    { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis', credibility_tier: 2 },
-    { name: 'Oliver Alexander (X)', url: 'OAlexanderDK', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTdefender (X)', url: 'sentdefender', platform: 'x', category: 'crisis', credibility_tier: 2 },
+    { name: 'BRICSinfo (X)', url: 'BRICSinfo', platform: 'x', category: 'world', credibility_tier: 3 },
     
-    { name: 'Clash Report (X)', url: 'clashreport', platform: 'x', category: 'crisis', credibility_tier: 3 },
-    { name: 'IsraelWarRoom (X)', url: 'IsraelWarRoom', platform: 'x', category: 'crisis', credibility_tier: 3 },
 ];
