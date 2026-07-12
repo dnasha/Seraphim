@@ -45,6 +45,16 @@ describe("source quality gate", () => {
     expect(result.rejectedByReason).toEqual({
       irrelevant_section: 1,
       insubstantial_description: 1,
+      clearly_non_event: 0,
     });
+  });
+
+  it("rejects only unmistakable non-events and preserves significant exceptions", () => {
+    expect(getQualityRejectionReason(item({ title: "Daily horoscope for every star sign" })))
+      .toBe("clearly_non_event");
+    expect(getQualityRejectionReason(item({
+      title: "Stadium evacuation after explosion interrupts match",
+      description: "Authorities evacuated spectators after an explosion near the venue.",
+    }))).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
+import { lowSignalExpiry, shouldExpireLowSignalEvent } from './content';
 
 /* 
 Pre-computes a static lookup map of source names to their assigned credibility tiers.
@@ -82,6 +83,12 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
     }
 
     const tier = SOURCE_TIER_MAP.get(item.source) ?? 3;
+    const expiresAt = shouldExpireLowSignalEvent({
+        title: item.title,
+        description: item.description,
+        sourceType: item.sourceType,
+        credibilityTier: tier,
+    }) ? lowSignalExpiry(item.publishedAt) : null;
     
     return {
         title: cleanString(item.title),
@@ -92,6 +99,7 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         category: item.category,
         image_url: item.imageUrl,
         published_at: ensureIsoDate(item.publishedAt),
+        primary_discovered_at: ensureIsoDate(item.publishedAt),
         latitude: item.latitude,
         longitude: item.longitude,
         location_name: cleanString(item.locationName) || null,
@@ -101,5 +109,6 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         impact_score: 3.5 - tier,
         // Corroborators only; the primary article already lives in source/url.
         sources: [],
+        expires_at: expiresAt,
     };
 }

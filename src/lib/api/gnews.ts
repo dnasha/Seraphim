@@ -178,3 +178,29 @@ export async function fetchOSINTGNews(
         return [];
     }
 }
+
+const HEALTH_EVENT_QUERY = [
+    '"public health emergency"',
+    '"disease outbreak"',
+    '"outbreak reported"',
+    '"epidemic declared"',
+    '"mass poisoning"',
+    '"hospital evacuation"',
+].join(' OR ');
+
+/**
+ * Fills Seraphim's weakest category without reintroducing a broad headline
+ * firehose. The query is deliberately about place-bound health occurrences,
+ * not wellness, medicine reviews, or general health advice.
+ */
+export async function fetchHealthEventGNews(
+    maxResults: number = 20,
+    timeoutMs: number = DEFAULT_TIMEOUT,
+): Promise<NewsItem[]> {
+    const items = await searchGNews(HEALTH_EVENT_QUERY, maxResults, timeoutMs);
+    return items.map((item) => ({
+        ...item,
+        category: 'health',
+        tags: ['health-event'],
+    }));
+}

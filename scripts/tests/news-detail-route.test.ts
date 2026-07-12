@@ -42,6 +42,11 @@ describe("GET /api/news/[id]", () => {
   it("returns deferred details and preserves coordinates on cache hits", async () => {
     const query = detailQuery({
       description: "Full story",
+      source: "Primary",
+      source_type: "rss",
+      url: "https://primary.example",
+      primary_discovered_at: "2025-12-31T00:00:00Z",
+      published_at: "2026-01-01T00:00:00Z",
       sources: [{ name: "Source", url: "https://example.com", source_type: "rss", discovered_at: "2026-01-01T00:00:00Z" }],
       latitude: 1,
       longitude: 2,
@@ -53,7 +58,7 @@ describe("GET /api/news/[id]", () => {
 
     expect(await response.json()).toEqual(expect.objectContaining({ description: "Full story", latitude: 1, longitude: 2 }));
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(query.select).toHaveBeenCalledWith("description, sources, latitude, longitude");
+    expect(query.select).toHaveBeenCalledWith("description, sources, source, source_type, url, primary_discovered_at, published_at, latitude, longitude");
 
     const cachedResponse = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
     expect(await cachedResponse.json()).toEqual(expect.objectContaining({ latitude: 1, longitude: 2 }));
@@ -72,6 +77,11 @@ describe("GET /api/news/[id]", () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { timelineSourceLimit: 2 } });
     mocks.from.mockReturnValue(detailQuery({
       description: 'Story',
+      source: 'Primary',
+      source_type: 'rss',
+      url: 'https://primary.example',
+      primary_discovered_at: '2025-12-31T00:00:00Z',
+      published_at: '2026-01-03T00:00:00Z',
       sources: [
         { name: 'First', url: 'https://first.example', source_type: 'rss', discovered_at: '2026-01-01T00:00:00Z' },
         { name: 'Middle', url: 'https://middle.example', source_type: 'rss', discovered_at: '2026-01-02T00:00:00Z' },
@@ -85,8 +95,8 @@ describe("GET /api/news/[id]", () => {
     const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
     await expect(response.json()).resolves.toMatchObject({
       timelineRestricted: true,
-      totalSources: 3,
-      sources: [expect.objectContaining({ name: 'First' }), expect.objectContaining({ name: 'Latest' })],
+      totalSources: 4,
+      sources: [expect.objectContaining({ name: 'Primary' }), expect.objectContaining({ name: 'Latest' })],
     });
   });
 });

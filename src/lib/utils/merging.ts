@@ -176,6 +176,9 @@ export function calculateMergedStory(
     published_at: latestPublishedAt,
     event_count: eventCount,
     impact_score: impactScore,
+    // Any independent corroboration promotes a temporary low-signal report
+    // into the durable archive.
+    expires_at: null,
     // Apply content updates if evaluation returned true
     ...(updateTitle ? {
       title: incomingEvent.title,
@@ -183,6 +186,7 @@ export function calculateMergedStory(
       source_type: incomingEvent.source_type,
       url: incomingEvent.url,
       credibility_tier: incomingTier, 
+      primary_discovered_at: incomingEvent.primary_discovered_at ?? incomingEvent.published_at,
     } : {}),
     ...(updateDescription ? {
       description: incomingEvent.description,

@@ -72,4 +72,16 @@ describe("GNews adapter", () => {
     expect(result).toMatchObject({ category: "crisis" });
     expect(result.tags).toEqual(expect.arrayContaining(["OSINT", "imagery", "strike"]));
   });
+
+  it("uses targeted outbreak discovery for the health category", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ totalArticles: 1, articles: [article] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchHealthEventGNews } = await loadGNews();
+
+    const [result] = await fetchHealthEventGNews(12);
+    expect(result).toMatchObject({ category: "health", tags: ["health-event"] });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("%22disease+outbreak%22");
+    expect(url).toContain("max=12");
+  });
 });

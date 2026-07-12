@@ -1,4 +1,5 @@
 import type { NewsItem } from "@/lib/core/types";
+import { isClearlyNonEvent } from "./content";
 
 const DEGRADED_SUMMARY_SOURCES = new Set([
   "Indian Express",
@@ -22,10 +23,11 @@ const MIN_SUMMARY_WORDS = 12;
 
 export type QualityRejectionReason =
   | "irrelevant_section"
-  | "insubstantial_description";
+  | "insubstantial_description"
+  | "clearly_non_event";
 
 export function getQualityRejectionReason(
-  item: Pick<NewsItem, "source" | "url" | "description">,
+  item: Pick<NewsItem, "source" | "url" | "title" | "description">,
 ): QualityRejectionReason | null {
   if (
     item.source === "Indian Express" &&
@@ -35,6 +37,10 @@ export function getQualityRejectionReason(
   ) {
     return "irrelevant_section";
   }
+
+  // This is intentionally a narrow deny-list. Any concrete emergency,
+  // conflict, political, infrastructure, or public-safety signal overrides it.
+  if (isClearlyNonEvent(item)) return "clearly_non_event";
 
   if (!DEGRADED_SUMMARY_SOURCES.has(item.source)) return null;
 
@@ -58,6 +64,7 @@ export function filterItemsByQuality(items: NewsItem[]): {
   const rejectedByReason: Record<QualityRejectionReason, number> = {
     irrelevant_section: 0,
     insubstantial_description: 0,
+    clearly_non_event: 0,
   };
 
   for (const item of items) {

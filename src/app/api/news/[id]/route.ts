@@ -16,18 +16,41 @@ import { resolveRequestEntitlements } from '@/lib/server/entitlements';
  * Stores the heavy JSONB 'sources' and 'description' columns which are 
  * excluded from the primary list fetch.
  */
-const detailCache = new Map<string, { description: string; sources: DbEvent['sources']; latitude?: number; longitude?: number; timestamp: number }>();
+type CachedDetail = {
+    description: string;
+    sources: DbEvent['sources'];
+    source: string;
+    sourceType: DbEvent['source_type'];
+    url: string;
+    primaryDiscoveredAt: string;
+    latitude?: number;
+    longitude?: number;
+    timestamp: number;
+};
+
+const detailCache = new Map<string, CachedDetail>();
 const DETAIL_CACHE_TTL = 1800000;
 
-function sourcesForTier(sources: DbEvent['sources'], sourceLimit: number | null) {
-    const sorted = [...(sources ?? [])].sort((a, b) =>
+function sourcesForTier(detail: Pick<CachedDetail, 'sources' | 'source' | 'sourceType' | 'url' | 'primaryDiscoveredAt'>, sourceLimit: number | null) {
+    const primary = {
+        name: detail.source,
+        url: detail.url,
+        source_type: detail.sourceType,
+        discovered_at: detail.primaryDiscoveredAt,
+    };
+    const unique = new Map<string, NonNullable<DbEvent['sources']>[number]>();
+    for (const source of [primary, ...(detail.sources ?? [])]) {
+        if (!unique.has(source.url)) unique.set(source.url, source);
+    }
+    const sorted = [...unique.values()].sort((a, b) =>
         new Date(a.discovered_at).getTime() - new Date(b.discovered_at).getTime(),
     );
     if (sourceLimit === null) return { sources: sorted, timelineRestricted: false, totalSources: sorted.length };
-    if (sourceLimit === 0) return { sources: [], timelineRestricted: sorted.length > 0, totalSources: sorted.length };
+    if (sourceLimit === 0) return { sources: [primary], timelineRestricted: sorted.length > 1, totalSources: sorted.length };
     if (sorted.length <= sourceLimit) return { sources: sorted, timelineRestricted: false, totalSources: sorted.length };
+    const otherSources = sorted.filter((source) => source.url !== primary.url);
     return {
-        sources: [sorted[0], sorted[sorted.length - 1]],
+        sources: [primary, ...otherSources.slice(-(Math.max(0, sourceLimit - 1)))],
         timelineRestricted: true,
         totalSources: sorted.length,
     };
@@ -55,7 +78,7 @@ export async function GET(
 
     const cached = detailCache.get(id);
     if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
-        const timeline = sourcesForTier(cached.sources, access.entitlements.timelineSourceLimit);
+        const timeline = sourcesForTier(cached, access.entitlements.timelineSourceLimit);
         return NextResponse.json(
             {
                 description: cached.description,
@@ -69,9 +92,9 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
         .from('events')
-        .select('description, sources, latitude, longitude')
+        .select('description, sources, source, source_type, url, primary_discovered_at, published_at, latitude, longitude')
         .eq('id', id)
-        .single<Pick<DbEvent, 'description' | 'sources' | 'latitude' | 'longitude'>>();
+        .single<Pick<DbEvent, 'description' | 'sources' | 'source' | 'source_type' | 'url' | 'primary_discovered_at' | 'published_at' | 'latitude' | 'longitude'>>();
 
     if (error || !data) {
         console.error('[api/news/[id]] Supabase query failed:', error?.message);
@@ -81,12 +104,22 @@ export async function GET(
     detailCache.set(id, { 
         description: data.description ?? '', 
         sources: data.sources ?? [], 
+        source: data.source,
+        sourceType: data.source_type,
+        url: data.url,
+        primaryDiscoveredAt: data.primary_discovered_at ?? data.published_at,
         latitude: data.latitude ?? undefined,
         longitude: data.longitude ?? undefined,
         timestamp: Date.now() 
     });
 
-    const timeline = sourcesForTier(data.sources, access.entitlements.timelineSourceLimit);
+    const timeline = sourcesForTier({
+        sources: data.sources,
+        source: data.source,
+        sourceType: data.source_type,
+        url: data.url,
+        primaryDiscoveredAt: data.primary_discovered_at ?? data.published_at,
+    }, access.entitlements.timelineSourceLimit);
     return NextResponse.json(
         { 
             description: data.description ?? '', 

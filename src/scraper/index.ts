@@ -16,13 +16,15 @@ Requirements:
 
 import { supabaseAdmin as supabase } from "@/lib/core/supabase-admin";
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "@/lib/api/rss";
-import { fetchGNews } from "@/lib/api/gnews";
+import { fetchHealthEventGNews } from "@/lib/api/gnews";
 import { fetchSocialFeeds } from "@/lib/api/social";
 import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem } from "@/lib/core/types";
 import type { DbEvent } from "@/types";
 import { hasUsableCoordinates, newsItemToDbEvent } from "./utils/transforms";
 import { filterItemsByQuality } from "./utils/quality";
+import { prepareIncomingItems } from "./utils/content";
+import { applySourceNoveltyLimits, loadSourceNoveltyLimits } from "./sourceBudget";
 import { resolveStoryMerges } from "./merger";
 import {
   ingestSequentially,
@@ -61,7 +63,7 @@ async function run(): Promise<void> {
     (await Promise.allSettled([
       fetchAllRSSFeeds(),
       fetchAllRedditFeeds(),
-      fetchGNews("general", 20),
+      fetchHealthEventGNews(20),
       fetchSocialFeeds(),
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
@@ -78,7 +80,7 @@ async function run(): Promise<void> {
     `[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length}, social=${socialItems.length})`,
   );
 
-  const itemsWithUrl = rawItems.filter((item) => !!item.url);
+  const itemsWithUrl = prepareIncomingItems(rawItems.filter((item) => !!item.url));
   const { accepted: qualityItems, rejectedByReason } =
     filterItemsByQuality(itemsWithUrl);
   const rejectedQualityCount = itemsWithUrl.length - qualityItems.length;
@@ -86,7 +88,8 @@ async function run(): Promise<void> {
     console.log(
       `[scraper] Quality gate rejected ${rejectedQualityCount} item(s) ` +
         `(irrelevant_section=${rejectedByReason.irrelevant_section}, ` +
-        `insubstantial_description=${rejectedByReason.insubstantial_description}).`,
+        `insubstantial_description=${rejectedByReason.insubstantial_description}, ` +
+        `clearly_non_event=${rejectedByReason.clearly_non_event}).`,
     );
   }
 
@@ -125,7 +128,13 @@ async function run(): Promise<void> {
     }
   });
 
-  const newItems = qualityItems.filter((item) => !knownUrls.has(item.url));
+  const unseenItems = qualityItems.filter((item) => !knownUrls.has(item.url));
+  const sourceLimits = await loadSourceNoveltyLimits(db);
+  const { accepted: newItems, cappedBySource } = applySourceNoveltyLimits(unseenItems, sourceLimits);
+  const cappedCount = Object.values(cappedBySource).reduce((sum, count) => sum + count, 0);
+  if (cappedCount > 0) {
+    console.warn(`[scraper] Adaptive source safety cap deferred ${cappedCount} item(s):`, cappedBySource);
+  }
   console.log(`[scraper] New items to process: ${newItems.length}`);
 
   if (newItems.length === 0) {

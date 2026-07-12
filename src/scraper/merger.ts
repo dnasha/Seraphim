@@ -11,6 +11,7 @@ import {
   SIMILARITY_THRESHOLD_PROXIMITY,
   MAX_MERGE_DISTANCE_KM,
 } from "@/lib/utils/vectorize";
+import { canonicalizeEventUrl, normalizeTitleFingerprint } from "./utils/content";
 
 /*
 Fetches events from the last 48 hours that contain vector embeddings.
@@ -120,6 +121,8 @@ export async function resolveStoryMerges(
       published_at?: string;
       event_count?: number;
       impact_score?: number;
+      expires_at?: string | null;
+      primary_discovered_at?: string | null;
     }
   >;
 }> {
@@ -137,6 +140,8 @@ export async function resolveStoryMerges(
       published_at?: string;
       event_count?: number;
       impact_score?: number;
+      expires_at?: string | null;
+      primary_discovered_at?: string | null;
     }
   >();
 
@@ -153,14 +158,14 @@ export async function resolveStoryMerges(
   );
   const startMs = Date.now();
 
-  let embeddings: number[][];
+  let embeddings: Array<number[] | null>;
   try {
     embeddings = await generateEmbeddings(texts);
   } catch {
     console.error(
-      "[vectorize] Embedding generation failed. Items will be inserted without vectors.",
+      "[vectorize] Embedding generation failed. Exact matching will continue without vectors.",
     );
-    return { newEvents: dbEvents, merges };
+    embeddings = dbEvents.map(() => null);
   }
 
   console.log(
@@ -173,21 +178,27 @@ export async function resolveStoryMerges(
   );
 
   let mergeCount = 0;
+  const pendingExactTitles = new Map<string, number>();
 
   for (let i = 0; i < dbEvents.length; i++) {
     const event = dbEvents[i];
     const embedding = embeddings[i];
 
-    event.embedding = `[${embedding.join(",")}]`;
+    if (embedding) event.embedding = `[${embedding.join(",")}]`;
 
     let bestMatchId: string | null = null;
     let highestSim = -1;
 
     for (const candidate of candidates) {
-      const sim = cosineSimilarity(embedding, candidate.embedding);
+      const eventFingerprint = normalizeTitleFingerprint(event.title);
+      const candidateFingerprint = normalizeTitleFingerprint(candidate.title);
+      const isExactTitle = eventFingerprint.length >= 24 && eventFingerprint === candidateFingerprint;
+      const sim = embedding ? cosineSimilarity(embedding, candidate.embedding) : -1;
       let shouldMerge = false;
 
-      if (sim >= SIMILARITY_THRESHOLD_STRICT) {
+      if (isExactTitle) {
+        shouldMerge = true;
+      } else if (sim >= SIMILARITY_THRESHOLD_STRICT) {
         shouldMerge = true;
       } else if (
         sim >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
@@ -214,8 +225,9 @@ export async function resolveStoryMerges(
         }
       }
 
-      if (shouldMerge && sim > highestSim) {
-        highestSim = sim;
+      const matchScore = isExactTitle ? 2 : sim;
+      if (shouldMerge && matchScore > highestSim) {
+        highestSim = matchScore;
         bestMatchId = candidate.id;
       }
     }
@@ -229,9 +241,9 @@ export async function resolveStoryMerges(
         : matchedCandidate;
 
       const sourceExists =
-        matchedCandidate.url === event.url ||
-        storyState.url === event.url ||
-        storyState.sources.some(s => s.url === event.url);
+        canonicalizeEventUrl(matchedCandidate.url) === event.url ||
+        canonicalizeEventUrl(storyState.url) === event.url ||
+        storyState.sources.some(s => canonicalizeEventUrl(s.url) === event.url);
       
       if (!sourceExists) {
         const mergedResult = calculateMergedStory(storyState, event);
@@ -259,7 +271,32 @@ export async function resolveStoryMerges(
         }
       }
     } else {
-      newEvents.push(event);
+      const fingerprint = normalizeTitleFingerprint(event.title);
+      const pendingIndex = fingerprint.length >= 24
+        ? pendingExactTitles.get(fingerprint)
+        : undefined;
+
+      if (pendingIndex !== undefined) {
+        const pending = newEvents[pendingIndex];
+        const mergedResult = calculateMergedStory({
+          id: `pending-${pendingIndex}`,
+          title: pending.title,
+          description: pending.description,
+          source: pending.source,
+          source_type: pending.source_type,
+          url: pending.url,
+          credibility_tier: pending.credibility_tier ?? 3,
+          published_at: pending.published_at,
+          sources: pending.sources ?? [],
+        }, event);
+        const mergedPending = { ...mergedResult };
+        delete (mergedPending as { id?: string }).id;
+        newEvents[pendingIndex] = { ...pending, ...mergedPending };
+        mergeCount++;
+      } else {
+        const index = newEvents.push(event) - 1;
+        if (fingerprint.length >= 24) pendingExactTitles.set(fingerprint, index);
+      }
     }
   }
   console.log(

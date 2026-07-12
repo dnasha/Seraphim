@@ -51,6 +51,8 @@ export interface DbEvent {
   impact_score?: number;
   credibility_tier?: number;
   sources?: DbEventSource[];
+  expires_at?: string | null;
+  primary_discovered_at?: string | null;
 }
 
 /**
