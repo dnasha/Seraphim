@@ -22,6 +22,7 @@ import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem } from "@/lib/core/types";
 import type { DbEvent } from "@/types";
 import { hasUsableCoordinates, newsItemToDbEvent } from "./utils/transforms";
+import { filterItemsByQuality } from "./utils/quality";
 import { resolveStoryMerges } from "./merger";
 import {
   ingestSequentially,
@@ -78,6 +79,16 @@ async function run(): Promise<void> {
   );
 
   const itemsWithUrl = rawItems.filter((item) => !!item.url);
+  const { accepted: qualityItems, rejectedByReason } =
+    filterItemsByQuality(itemsWithUrl);
+  const rejectedQualityCount = itemsWithUrl.length - qualityItems.length;
+  if (rejectedQualityCount > 0) {
+    console.log(
+      `[scraper] Quality gate rejected ${rejectedQualityCount} item(s) ` +
+        `(irrelevant_section=${rejectedByReason.irrelevant_section}, ` +
+        `insubstantial_description=${rejectedByReason.insubstantial_description}).`,
+    );
+  }
 
   /*
     Deep Deduplication:
@@ -88,7 +99,7 @@ async function run(): Promise<void> {
   console.log(
     "[scraper] Running deep deduplication check...",
   );
-  const incomingUrls = itemsWithUrl.map((i) => i.url);
+  const incomingUrls = qualityItems.map((i) => i.url);
   const knownUrls = new Set<string>();
   const DEDUPE_CHUNK_SIZE = 1000;
   const dedupePromises = [];
@@ -114,7 +125,7 @@ async function run(): Promise<void> {
     }
   });
 
-  const newItems = itemsWithUrl.filter((item) => !knownUrls.has(item.url));
+  const newItems = qualityItems.filter((item) => !knownUrls.has(item.url));
   console.log(`[scraper] New items to process: ${newItems.length}`);
 
   if (newItems.length === 0) {

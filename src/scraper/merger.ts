@@ -30,6 +30,7 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<
     impact_score: number;
     event_count: number;
     source: string;
+    source_type: DbEvent["source_type"];
     url: string;
     published_at: string;
   }[]
@@ -39,7 +40,7 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<
   const { data, error } = await db
     .from("events")
     .select(
-      "id, embedding, sources, latitude, longitude, title, description, credibility_tier, impact_score, event_count, source, url, published_at",
+      "id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, published_at",
     )
     .not("embedding", "is", null)
     .gte("published_at", since);
@@ -65,6 +66,7 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<
     impact_score: number | null;
     event_count: number | null;
     source: string;
+    source_type: DbEvent["source_type"];
     url: string;
     published_at: string;
   }
@@ -87,6 +89,7 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<
       impact_score: r.impact_score ?? 0,
       event_count: r.event_count ?? 1,
       source: r.source,
+      source_type: r.source_type,
       url: r.url,
       published_at: r.published_at,
     }));
@@ -111,6 +114,7 @@ export async function resolveStoryMerges(
       title?: string;
       description?: string;
       source?: string;
+      source_type?: DbEvent["source_type"];
       url?: string;
       credibility_tier?: number;
       published_at?: string;
@@ -127,6 +131,7 @@ export async function resolveStoryMerges(
       title?: string;
       description?: string;
       source?: string;
+      source_type?: DbEvent["source_type"];
       url?: string;
       credibility_tier?: number;
       published_at?: string;
@@ -223,7 +228,10 @@ export async function resolveStoryMerges(
         ? { ...matchedCandidate, ...existingMerge } 
         : matchedCandidate;
 
-      const sourceExists = matchedCandidate.sources.some(s => s.url === event.url);
+      const sourceExists =
+        matchedCandidate.url === event.url ||
+        storyState.url === event.url ||
+        storyState.sources.some(s => s.url === event.url);
       
       if (!sourceExists) {
         const mergedResult = calculateMergedStory(storyState, event);

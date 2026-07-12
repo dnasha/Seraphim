@@ -78,6 +78,7 @@ describe("calculateMergedStory", () => {
       title: "Initial report",
       description: "Initial details.",
       source: "Current source",
+      source_type: "rss" as const,
       url: "https://example.com/current",
       credibility_tier: 3,
       published_at: at(0),
@@ -93,11 +94,12 @@ describe("calculateMergedStory", () => {
       source: "Incoming source",
       url: "https://example.com/incoming",
       credibility_tier: 1,
+      source_type: "rss",
       published_at: at(2),
       event_count: 2,
       impact_score: 8,
     });
-    expect(result.sources).toEqual([source(), expect.objectContaining({ url: "https://example.com/incoming", discovered_at: at(2) })]);
+    expect(result.sources).toEqual([source()]);
   });
 
   it("keeps the current master timestamp when an older source is merely corroborating", () => {
@@ -106,6 +108,7 @@ describe("calculateMergedStory", () => {
       title: "Current report",
       description: "Current details that remain better.",
       source: "Current source",
+      source_type: "rss" as const,
       url: "https://example.com/current",
       credibility_tier: 1,
       published_at: at(4),
@@ -122,5 +125,39 @@ describe("calculateMergedStory", () => {
     expect(result).toMatchObject({ published_at: at(4), event_count: 2, impact_score: 8 });
     expect(result).not.toHaveProperty("title");
     expect(result).not.toHaveProperty("description");
+  });
+
+  it("removes the primary from corroborators and deduplicates legacy entries", () => {
+    const existing = {
+      id: "event-1",
+      title: "Current report",
+      description: "Current details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      credibility_tier: 1,
+      published_at: at(4),
+      sources: [source(), source(), source({
+        name: "Prior corroborator",
+        url: "https://example.com/prior",
+      })],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      source: "Incoming social",
+      source_type: "social",
+      credibility_tier: 1,
+      published_at: at(5),
+    }));
+
+    expect(result.source_type).toBe("social");
+    expect(result.sources.map((entry) => entry.url)).toEqual([
+      "https://example.com/current",
+      "https://example.com/prior",
+    ]);
+    expect(result.sources).not.toContainEqual(expect.objectContaining({
+      url: "https://example.com/incoming",
+    }));
+    expect(result.event_count).toBe(3);
   });
 });

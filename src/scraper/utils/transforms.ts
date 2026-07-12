@@ -99,11 +99,7 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         event_count: 1,
         /* Impact score calculation: Tier 1 (3.5 - 1 = 2.5), Tier 2 (1.5), Tier 3 (0.5) */
         impact_score: 3.5 - tier,
-        sources: [{
-            name: item.source,
-            url: item.url,
-            source_type: item.sourceType,
-            discovered_at: ensureIsoDate(item.publishedAt),
-        }],
+        // Corroborators only; the primary article already lives in source/url.
+        sources: [],
     };
 }

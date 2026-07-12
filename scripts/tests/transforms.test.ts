@@ -80,6 +80,8 @@ describe('newsItemToDbEvent', () => {
         expect(event!.source).toBe('BBC News');
         expect(event!.source_type).toBe('rss');
         expect(event!.category).toBe('world');
+        expect(event!.sources).toEqual([]);
+        expect(event!.event_count).toBe(1);
     });
 
     it('returns null for items without a URL', () => {

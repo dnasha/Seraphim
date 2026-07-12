@@ -95,6 +95,7 @@ export function calculateMergedStory(
     title: string;
     description?: string;
     source: string;
+    source_type: DbEvent["source_type"];
     url: string;
     credibility_tier: number;
     published_at: string; // The Master timestamp
@@ -139,15 +140,27 @@ export function calculateMergedStory(
   const incomingTime = new Date(incomingEvent.published_at).getTime();
   const latestPublishedAt = incomingTime > latestClusterTime ? incomingEvent.published_at : existingStory.published_at;
 
-  const newSource: DbEventSource = {
+  const incomingSource: DbEventSource = {
     name: incomingEvent.source,
     url: incomingEvent.url,
     source_type: incomingEvent.source_type,
     discovered_at: incomingEvent.published_at,
   };
 
-  const updatedSources = [...existingStory.sources, newSource];
-  const eventCount = updatedSources.length;
+  const existingPrimary: DbEventSource = {
+    name: existingStory.source,
+    url: existingStory.url,
+    source_type: existingStory.source_type,
+    discovered_at: masterSource?.discovered_at ?? existingStory.published_at,
+  };
+  const finalPrimaryUrl = updateTitle ? incomingEvent.url : existingStory.url;
+  const uniqueByUrl = new Map<string, DbEventSource>();
+  for (const article of [existingPrimary, ...existingStory.sources, incomingSource]) {
+    if (!uniqueByUrl.has(article.url)) uniqueByUrl.set(article.url, article);
+  }
+  uniqueByUrl.delete(finalPrimaryUrl);
+  const updatedSources = [...uniqueByUrl.values()];
+  const eventCount = 1 + updatedSources.length;
   
   /**
    * Impact Score Calculation:
@@ -167,6 +180,7 @@ export function calculateMergedStory(
     ...(updateTitle ? {
       title: incomingEvent.title,
       source: incomingEvent.source,
+      source_type: incomingEvent.source_type,
       url: incomingEvent.url,
       credibility_tier: incomingTier, 
     } : {}),

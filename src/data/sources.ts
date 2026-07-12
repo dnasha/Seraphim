@@ -136,7 +136,6 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'AL.com', url: 'https://www.al.com/arc/outboundfeeds/rss/category/news/', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'Star Tribune', url: 'https://www.startribune.com/local/index.rss2', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'WBEZ Chicago', url: 'https://www.wbez.org/rss', category: 'nation', credibility_tier: 1, region: 'north_america' },
-    { name: 'Bridge Michigan', url: 'https://www.bridgemi.com/feed', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'Los Angeles Times', url: 'https://www.latimes.com/rss2.0.xml', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'Washington State Standard', url: 'https://washingtonstatestandard.com/feed/', category: 'nation', credibility_tier: 1, region: 'north_america' },
     { name: 'OregonLive News', url: 'https://www.oregonlive.com/arc/outboundfeeds/rss/category/news/', category: 'nation', credibility_tier: 1, region: 'north_america' },
@@ -148,7 +147,6 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Buenos Aires Times', url: 'https://www.batimes.com.ar/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'The Santiago Times', url: 'https://santiagotimes.cl/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'Colombia Reports', url: 'https://colombiareports.com/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
-    { name: 'InSight Crime', url: 'https://insightcrime.org/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
 
     // AFRICA
     { name: 'Daily Maverick', url: 'https://www.dailymaverick.co.za/dmrss/', category: 'world', credibility_tier: 1, region: 'africa' },
@@ -166,7 +164,6 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Indian Express', url: 'https://indianexpress.com/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
 
     // OCEANIA & PACIFIC
-    { name: 'Cook Islands News', url: 'https://www.cookislandsnews.com/feed', category: 'world', credibility_tier: 1, region: 'oceania' },
     { name: 'Post Courier', url: 'https://postcourier.com.pg/feed/', category: 'world', credibility_tier: 1, region: 'oceania' },
 ];
 
@@ -175,7 +172,6 @@ export const REDDIT_SOURCES: RedditSource[] = [
     { name: 'Reddit CredibleDefense', subreddit: 'CredibleDefense', category: 'crisis', credibility_tier: 2, region: 'global' },
     { name: 'Reddit UkraineWarVideoReport', subreddit: 'UkraineWarVideoReport', category: 'crisis', credibility_tier: 3, region: 'global' },
     { name: 'Reddit ukraine', subreddit: 'ukraine', category: 'crisis', credibility_tier: 3, region: 'europe' },
-    { name: 'Reddit GlobalConflict', subreddit: 'GlobalConflict', category: 'crisis', credibility_tier: 2, region: 'global' },
     { name: 'Reddit LessCredibleDefence', subreddit: 'LessCredibleDefence', category: 'crisis', credibility_tier: 2, region: 'global' },
     { name: 'Reddit SyrianCivilWar', subreddit: 'syriancivilwar', category: 'crisis', credibility_tier: 3, region: 'middle_east' },
     
@@ -191,8 +187,6 @@ export const REDDIT_SOURCES: RedditSource[] = [
 ];
 
 export const TELEGRAM_CHANNELS: SocialSource[] = [
-    { name: 'Kyiv Independent (Telegram)', url: 'https://t.me/s/kyivindependent', platform: 'telegram', category: 'crisis', credibility_tier: 1 },
-    { name: 'bloomberg (Telegram)', url: 'https://t.me/s/bloomberg', platform: 'telegram', category: 'business', credibility_tier: 1 },
     
     { name: 'War Translated (Telegram)', url: 'https://t.me/s/wartranslated', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTdefender (Telegram)', url: 'https://t.me/s/osintdefender', platform: 'telegram', category: 'crisis', credibility_tier: 2 },
@@ -211,7 +205,6 @@ export const X_ACCOUNTS: SocialSource[] = [
     
     { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis', credibility_tier: 2 },
-    { name: 'The Intel Crab (X)', url: 'IntelCrab', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'Aurora Intel (X)', url: 'AuroraIntel', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis', credibility_tier: 2 },
