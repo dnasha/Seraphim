@@ -250,10 +250,9 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
             )}
             
             <button
-                className={`${styles.actionBtn}${disabled ? ` ${styles.disabled}` : ''}`}
-                onClick={disabled ? undefined : onResetOrientation}
+                className={styles.actionBtn}
+                onClick={onResetOrientation}
                 title="Reset Orientation (North up)"
-                disabled={disabled}
             >
                 <svg 
                     viewBox="0 0 512 512" 

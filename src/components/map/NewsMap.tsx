@@ -201,31 +201,52 @@ export default function NewsMap({
     overlaysRef.current = overlays;
   }, [overlays]);
 
-  // Main animation loop for hot story pulses. Keep the decorative effect at a
-  // modest frame rate and stop it completely when disabled or backgrounded.
+  // Drive the hot-story pulse continuously with a linear curve. MapLibre paint
+  // transitions are hard-coded to cubic easing, which makes a repeating pulse
+  // appear to pause at both ends of the cycle.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
+    const setTransitionDuration = (duration: number) => {
+      if (!map.getLayer("hot-story-pulse")) return;
+      map.setPaintProperty("hot-story-pulse", "circle-radius-transition", { duration, delay: 0 });
+      map.setPaintProperty("hot-story-pulse", "circle-opacity-transition", { duration, delay: 0 });
+    };
+
     if (!animatedEffects) {
       if (map.getLayer("hot-story-pulse")) {
+        setTransitionDuration(0);
         map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
         map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
       }
       return;
     }
 
-    let lastPaintAt = 0;
     let running = false;
+    let cycleStartedAt: number | null = null;
+    // Use a calm 2:1 motion-to-rest rhythm within the 2.5s pulse cycle.
+    const duration = 1667;
+    const pauseDuration = 833;
+    const cycleDuration = duration + pauseDuration;
+    let inPause = false;
 
     const animate = (timestamp: number) => {
       if (!running) return;
-      if (timestamp - lastPaintAt >= 50 && map.getLayer("hot-story-pulse")) {
-        lastPaintAt = timestamp;
-        const duration = 2000;
-        const t = (timestamp % duration) / duration;
-        map.setPaintProperty("hot-story-pulse", "circle-radius", 20 + t * 35);
-        map.setPaintProperty("hot-story-pulse", "circle-opacity", Math.max(0, 0.6 * (1 - t)));
+      if (cycleStartedAt == null) cycleStartedAt = timestamp;
+
+      if (map.getLayer("hot-story-pulse")) {
+        const elapsed = (timestamp - cycleStartedAt) % cycleDuration;
+        if (elapsed < duration) {
+          inPause = false;
+          const t = elapsed / duration;
+          map.setPaintProperty("hot-story-pulse", "circle-radius", 4 + t * 51);
+          map.setPaintProperty("hot-story-pulse", "circle-opacity", 0.6 * (1 - t));
+        } else if (!inPause) {
+          inPause = true;
+          map.setPaintProperty("hot-story-pulse", "circle-radius", 55);
+          map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
+        }
       }
       pulseAnimationFrameRef.current = requestAnimationFrame(animate);
     };
@@ -233,6 +254,9 @@ export default function NewsMap({
     const start = () => {
       if (running || document.hidden) return;
       running = true;
+      cycleStartedAt = null;
+      inPause = false;
+      setTransitionDuration(0);
       pulseAnimationFrameRef.current = requestAnimationFrame(animate);
     };
     const stop = () => {
@@ -240,6 +264,11 @@ export default function NewsMap({
       if (pulseAnimationFrameRef.current != null) {
         cancelAnimationFrame(pulseAnimationFrameRef.current);
         pulseAnimationFrameRef.current = null;
+      }
+      if (map.getLayer("hot-story-pulse")) {
+        setTransitionDuration(0);
+        map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
+        map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
       }
     };
     const onVisibilityChange = () => document.hidden ? stop() : start();
