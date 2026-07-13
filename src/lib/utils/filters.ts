@@ -36,6 +36,9 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
 
     let filtered = items;
     if (now === 0) return filtered;
+    const pinnedItem = pinnedItemId
+        ? items.find((item) => matchesNewsId(item, pinnedItemId))
+        : undefined;
 
     /**
      * 0. Viewport Filtering
@@ -44,7 +47,7 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
      */
     filtered = filtered.filter(item => item.latitude != null && item.longitude != null);
     if (bbox && respectBBox) {
-        filtered = filtered.filter(item => matchesNewsId(item, pinnedItemId) || isWithinBBox(item, bbox));
+        filtered = filtered.filter(item => isWithinBBox(item, bbox));
     }
 
     /**
@@ -125,6 +128,13 @@ export function applyNewsFilters(items: NewsItem[], options: FilterOptions): New
             const tier = item.credibilityTier ?? 3;
             return credibilityTiers.includes(tier);
         });
+    }
+
+    // An exact shared-event link acts as a capability for one event, not as a
+    // historical feed query. Keep that single pinned event visible even when
+    // its age, source, category, or location falls outside the active view.
+    if (pinnedItem?.latitude != null && pinnedItem.longitude != null && !filtered.some((item) => matchesNewsId(item, pinnedItemId))) {
+        filtered = [...filtered, pinnedItem];
     }
 
     /**

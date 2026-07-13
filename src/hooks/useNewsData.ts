@@ -571,13 +571,14 @@ export function useNewsData({
             try {
                 const res = await fetch(`/api/news/${targetId}`);
                 if (!res.ok) return;
-                const { description, sources, latitude, longitude, timelineRestricted, totalSources } = await res.json() as {
+                const { description, sources, latitude, longitude, timelineRestricted, totalSources, event } = await res.json() as {
                     description?: string;
                     sources?: Array<{ name: string; url: string; source_type: string; discovered_at: string }>;
                     latitude?: number;
                     longitude?: number;
                     timelineRestricted?: boolean;
                     totalSources?: number;
+                    event?: NewsItem;
                 };
                 const descriptionValue = typeof description === 'string' ? description : '';
                 const mappedSources = Array.isArray(sources)
@@ -597,6 +598,19 @@ export function useNewsData({
                     totalSources,
                 });
 
+                if (event) {
+                    const hydratedEvent: NewsItem = {
+                        ...event,
+                        description: descriptionValue,
+                        sources: mappedSources ?? event.sources,
+                        latitude: latitude !== undefined ? latitude : event.latitude,
+                        longitude: longitude !== undefined ? longitude : event.longitude,
+                        timelineRestricted,
+                        totalSources,
+                    };
+                    mergeItemsIntoStore([hydratedEvent]);
+                }
+
                 let changed = false;
                 for (const [entityId, entity] of entitiesRef.current.entries()) {
                     if (matchesNewsId(entity, targetId)) {
@@ -613,7 +627,7 @@ export function useNewsData({
                         changed = true;
                     }
                 }
-                if (changed) syncNewsFromStore(sortMode);
+                if (changed || event) syncNewsFromStore(sortMode);
             } catch (err) {
                 console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
             } finally {
@@ -624,7 +638,7 @@ export function useNewsData({
 
         detailInFlightRef.current.set(targetId, detailPromise);
         return detailPromise;
-    }, [sortMode, syncNewsFromStore]);
+    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
 
     const onBoundsChange = useCallback((bbox: BBox) => {
         coordinateLoad(false, bbox);

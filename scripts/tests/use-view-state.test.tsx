@@ -4,7 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({
-  params: "lat=37.7749&lng=-122.4194&zoom=5.5&q=Kyiv&t=1w&src=news%2Creddit&cat=world&s=new&eventId=event-1",
+  params: "lat=37.7749&lng=-122.4194&zoom=5.5&q=Kyiv&t=custom&from=2026-07-01T12%3A00&to=2026-07-02T12%3A00&src=news%2Creddit&cat=world&s=new&eventId=event-1",
   pathname: "/",
 }));
 
@@ -29,7 +29,9 @@ describe("useViewState", () => {
       lng: -122.4194,
       zoom: 5.5,
       q: "Kyiv",
-      t: "1w",
+      t: "custom",
+      from: "2026-07-01T12:00",
+      to: "2026-07-02T12:00",
       src: "news,reddit",
       cat: "world",
       s: "new",
@@ -81,5 +83,23 @@ describe("useViewState", () => {
     expect(replaceState).toHaveBeenCalledTimes(1);
     expect(window.location.search).toBe("?q=final&src=news%2Creddit&cat=world&s=new");
     replaceState.mockRestore();
+  });
+
+  it('serializes custom bounds only for a custom time window', () => {
+    vi.useFakeTimers();
+    navigation.params = '';
+    const { result } = renderHook(() => useViewState());
+
+    act(() => {
+      result.current.updateURL({ t: 'custom', from: '2026-07-01T12:00', to: '2026-07-02T12:00' });
+      vi.advanceTimersByTime(300);
+    });
+    expect(window.location.search).toContain('from=2026-07-01T12%3A00');
+
+    act(() => {
+      result.current.updateURL({ t: '1d' });
+      vi.advanceTimersByTime(300);
+    });
+    expect(window.location.search).toBe('');
   });
 });

@@ -1,45 +1,87 @@
 /**
- * News Detail API
- * 
- * Fetches the full content (description and source list) for a specific event 
- * by its unique UUID. Implements server-side caching to optimize for 
- * repetitive detail requests.
+ * Exact Event Detail API
+ *
+ * UUIDs are unguessable capability identifiers. This route intentionally
+ * returns one event by exact ID so a shared link continues to work outside the
+ * viewer's time-range entitlement, while never exposing historical listing or
+ * search access.
  */
 
 import { NextResponse } from 'next/server';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 import { supabaseAdmin } from '@/lib/core/supabase-admin';
-import { DbEvent } from '@/types';
+import { dbEventToNewsItem, type DbEvent } from '@/types';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
+import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
 
-/**
- * In-memory cache for event details. 
- * Stores the heavy JSONB 'sources' and 'description' columns which are 
- * excluded from the primary list fetch.
- */
 type CachedDetail = {
-    description: string;
-    sources: DbEvent['sources'];
-    source: string;
-    sourceType: DbEvent['source_type'];
-    url: string;
-    primaryDiscoveredAt: string;
-    latitude?: number;
-    longitude?: number;
+    row: DbEvent;
     timestamp: number;
 };
 
 const detailCache = new Map<string, CachedDetail>();
-const DETAIL_CACHE_TTL = 1800000;
+const DETAIL_CACHE_TTL = 30 * 60 * 1000;
+const DETAIL_CACHE_MAX_ENTRIES = 250;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIVATE_HEADERS = {
+    'Cache-Control': 'private, no-store',
+    'X-Robots-Tag': 'noindex, nofollow, noarchive',
+};
 
-function sourcesForTier(detail: Pick<CachedDetail, 'sources' | 'source' | 'sourceType' | 'url' | 'primaryDiscoveredAt'>, sourceLimit: number | null) {
+const redis = Redis.fromEnv();
+const distributedRateLimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(60, '1 m'),
+    analytics: true,
+    prefix: '@upstash/ratelimit/seraphim-exact-event',
+});
+const localRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function pruneCaches(now: number) {
+    for (const [id, cached] of detailCache) {
+        if (now - cached.timestamp >= DETAIL_CACHE_TTL) detailCache.delete(id);
+    }
+    while (detailCache.size > DETAIL_CACHE_MAX_ENTRIES) {
+        const oldest = detailCache.keys().next().value as string | undefined;
+        if (!oldest) break;
+        detailCache.delete(oldest);
+    }
+    for (const [key, state] of localRateLimit) {
+        if (state.resetAt <= now) localRateLimit.delete(key);
+    }
+}
+
+async function allowExactEventRequest(keys: string[], now: number) {
+    for (const key of keys) {
+        const state = localRateLimit.get(key);
+        if (!state || state.resetAt <= now) {
+            localRateLimit.set(key, { count: 1, resetAt: now + 60_000 });
+        } else {
+            state.count += 1;
+            if (state.count > 60) return false;
+        }
+    }
+
+    try {
+        const results = await Promise.all(keys.map((key) => distributedRateLimit.limit(key)));
+        return results.every((result) => result.success);
+    } catch (error) {
+        // The local hard limit still protects this instance during a Redis outage.
+        console.error('[api/news/[id]] Distributed rate limiter unavailable.', error);
+        return true;
+    }
+}
+
+function sourcesForTier(row: DbEvent, sourceLimit: number | null) {
     const primary = {
-        name: detail.source,
-        url: detail.url,
-        source_type: detail.sourceType,
-        discovered_at: detail.primaryDiscoveredAt,
+        name: row.source,
+        url: row.url,
+        source_type: row.source_type,
+        discovered_at: row.primary_discovered_at ?? row.published_at,
     };
     const unique = new Map<string, NonNullable<DbEvent['sources']>[number]>();
-    for (const source of [primary, ...(detail.sources ?? [])]) {
+    for (const source of [primary, ...(row.sources ?? [])]) {
         if (!unique.has(source.url)) unique.set(source.url, source);
     }
     const sorted = [...unique.values()].sort((a, b) =>
@@ -56,78 +98,62 @@ function sourcesForTier(detail: Pick<CachedDetail, 'sources' | 'source' | 'sourc
     };
 }
 
-export async function GET(
-    _request: Request,
-    { params }: { params: Promise<{ id: string }> }
-) {
-    const access = await resolveRequestEntitlements();
-    const { id } = await params;
+function responseForRow(row: DbEvent, sourceLimit: number | null) {
+    const timeline = sourcesForTier(row, sourceLimit);
+    const event = dbEventToNewsItem({ ...row, sources: timeline.sources });
+    return {
+        description: row.description ?? '',
+        ...timeline,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        event: {
+            ...event,
+            description: row.description ?? '',
+            timelineRestricted: timeline.timelineRestricted,
+            totalSources: timeline.totalSources,
+        },
+    };
+}
 
-    if (!id) {
-        return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> },
+) {
+    const { id } = await params;
+    if (!id) return NextResponse.json({ error: 'Invalid event id' }, { status: 400, headers: PRIVATE_HEADERS });
+    if (!UUID_PATTERN.test(id)) {
+        return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400, headers: PRIVATE_HEADERS });
     }
 
-    /**
-     * Strict UUID validation to prevent injection attempts or malformed 
-     * database queries.
-     */
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(id)) {
-        return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400 });
+    const access = await resolveRequestEntitlements();
+    const clientIp = getTrustedClientIp(request.headers);
+    if (!clientIp) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: PRIVATE_HEADERS });
+    }
+    const now = Date.now();
+    pruneCaches(now);
+    const allowed = await allowExactEventRequest(getRateLimitKeys(clientIp, access.userId), now);
+    if (!allowed) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: PRIVATE_HEADERS });
     }
 
     const cached = detailCache.get(id);
-    if (cached && Date.now() - cached.timestamp < DETAIL_CACHE_TTL) {
-        const timeline = sourcesForTier(cached, access.entitlements.timelineSourceLimit);
-        return NextResponse.json(
-            {
-                description: cached.description,
-                ...timeline,
-                latitude: cached.latitude,
-                longitude: cached.longitude,
-            },
-            { headers: { 'Cache-Control': 'private, no-store' } }
-        );
+    if (cached && now - cached.timestamp < DETAIL_CACHE_TTL) {
+        return NextResponse.json(responseForRow(cached.row, access.entitlements.timelineSourceLimit), { headers: PRIVATE_HEADERS });
     }
 
     const { data, error } = await supabaseAdmin
         .from('events')
-        .select('description, sources, source, source_type, url, primary_discovered_at, published_at, latitude, longitude')
+        .select('id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at')
         .eq('id', id)
-        .single<Pick<DbEvent, 'description' | 'sources' | 'source' | 'source_type' | 'url' | 'primary_discovered_at' | 'published_at' | 'latitude' | 'longitude'>>();
+        .single<DbEvent>();
 
     if (error || !data) {
         console.error('[api/news/[id]] Supabase query failed:', error?.message);
-        return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+        return NextResponse.json({ error: 'Event not found' }, { status: 404, headers: PRIVATE_HEADERS });
     }
 
-    detailCache.set(id, { 
-        description: data.description ?? '', 
-        sources: data.sources ?? [], 
-        source: data.source,
-        sourceType: data.source_type,
-        url: data.url,
-        primaryDiscoveredAt: data.primary_discovered_at ?? data.published_at,
-        latitude: data.latitude ?? undefined,
-        longitude: data.longitude ?? undefined,
-        timestamp: Date.now() 
-    });
-
-    const timeline = sourcesForTier({
-        sources: data.sources,
-        source: data.source,
-        sourceType: data.source_type,
-        url: data.url,
-        primaryDiscoveredAt: data.primary_discovered_at ?? data.published_at,
-    }, access.entitlements.timelineSourceLimit);
-    return NextResponse.json(
-        { 
-            description: data.description ?? '', 
-            ...timeline,
-            latitude: data.latitude,
-            longitude: data.longitude
-        },
-        { headers: { 'Cache-Control': 'private, no-store' } }
-    );
+    detailCache.set(id, { row: data, timestamp: now });
+    pruneCaches(now);
+    return NextResponse.json(responseForRow(data, access.entitlements.timelineSourceLimit), { headers: PRIVATE_HEADERS });
 }
-

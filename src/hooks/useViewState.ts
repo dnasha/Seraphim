@@ -25,6 +25,9 @@ export interface ViewState {
     cat?: string;
     /** Sort mode ('new' or 'hot') */
     s?: string;
+    /** Custom time-window bounds (local datetime strings). */
+    from?: string;
+    to?: string;
     /** Selected event ID */
     eventId?: string;
 }
@@ -46,6 +49,8 @@ function parseInitialState(params: URLSearchParams): ViewState {
     const src = params.get('src');
     const cat = params.get('cat');
     const s = params.get('s');
+    const from = params.get('from');
+    const to = params.get('to');
     const eventId = params.get('eventId');
 
     if (lat) state.lat = parseFloat(lat);
@@ -56,6 +61,8 @@ function parseInitialState(params: URLSearchParams): ViewState {
     if (src) state.src = src;
     if (cat) state.cat = cat;
     if (s) state.s = s;
+    if (from && from.length <= 32 && Number.isFinite(new Date(from).getTime())) state.from = from;
+    if (to && to.length <= 32 && Number.isFinite(new Date(to).getTime())) state.to = to;
     if (eventId) state.eventId = eventId;
 
     return state;
@@ -111,6 +118,10 @@ export function useViewState() {
                 }
             }
             if (s.s && s.s !== 'hot') params.set('s', s.s);
+            if (s.t === 'custom' && s.from && s.to) {
+                params.set('from', s.from);
+                params.set('to', s.to);
+            }
             if (s.eventId) params.set('eventId', s.eventId);
 
             const qs = params.toString();

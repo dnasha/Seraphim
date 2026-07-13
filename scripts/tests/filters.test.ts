@@ -480,7 +480,7 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
         expect(result).toEqual([clustered]);
     });
 
-    it('does not let pinned selection bypass non-viewport filters', () => {
+    it('keeps an exact shared event visible through age and filter gates', () => {
         const selectedOutOfView = makeItem({
             id: 'selected-story',
             category: 'health',
@@ -499,7 +499,7 @@ describe('applyNewsFilters - dedupe and bbox scope', () => {
             }),
         );
 
-        expect(result).toEqual([]);
+        expect(result).toEqual([selectedOutOfView]);
     });
 });
 

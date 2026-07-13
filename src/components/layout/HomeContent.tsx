@@ -17,6 +17,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { BBox, NewsItem } from '@/lib/core/types';
 import { matchesNewsId, SortMode } from '@/lib/utils/ranking';
 import { useUserTier } from '@/hooks/useUserTier';
+import { useSyncedPreferences, sanitizeSyncedPreferences } from '@/hooks/useSyncedPreferences';
+import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
 import UserButton from '@/components/auth/UserButton';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import styles from './Layout.module.css';
@@ -37,8 +39,9 @@ function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string 
 }
 
 export function HomeContent() {
-    const { resolvedTheme } = useTheme();
-    const { user, isLoading: authLoading, isGuest, setShowAuthModal } = useAuth();
+    const { resolvedTheme, setTheme } = useTheme();
+    const { user, supabase, isLoading: authLoading, isGuest, setShowAuthModal } = useAuth();
+    const { preferences, isLoaded: preferencesLoaded, updatePreferences } = useSyncedPreferences(supabase, user);
     const isGuestUser = isGuest || (!user && !authLoading);
     const { tier: userTier, isLoading: tierLoading } = useUserTier();
     /** Hydration guard to detect client-side mounting without triggering cascading renders */
@@ -53,10 +56,10 @@ export function HomeContent() {
     
     const [animatedEffects, setAnimatedEffects] = useState(true);
     const [timeRange, setTimeRange] = useState(initialState.t || '1d');
-    const [customStartDate, setCustomStartDate] = useState('');
-    const [customEndDate, setCustomEndDate] = useState('');
-    const [debouncedCustomStartDate, setDebouncedCustomStartDate] = useState('');
-    const [debouncedCustomEndDate, setDebouncedCustomEndDate] = useState('');
+    const [customStartDate, setCustomStartDate] = useState(initialState.from || '');
+    const [customEndDate, setCustomEndDate] = useState(initialState.to || '');
+    const [debouncedCustomStartDate, setDebouncedCustomStartDate] = useState(initialState.from || '');
+    const [debouncedCustomEndDate, setDebouncedCustomEndDate] = useState(initialState.to || '');
     
     const [searchQuery, setSearchQuery] = useState(initialState.q || '');
     const [debouncedSearch, setDebouncedSearch] = useState(initialState.q || '');
@@ -180,6 +183,63 @@ export function HomeContent() {
         mapNews,
     } = useNewsFilter(news, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, appliedSortMode, selectedItemId);
 
+    const hydratedPreferencesForRef = React.useRef<string | null>(null);
+    const applyingPreferencesRef = React.useRef(false);
+    useEffect(() => {
+        if (!user || tierLoading || !preferencesLoaded || !preferences || hydratedPreferencesForRef.current === user.id) return;
+        hydratedPreferencesForRef.current = user.id;
+        applyingPreferencesRef.current = true;
+
+        const urlPreferences = sanitizeSyncedPreferences({
+            ...preferences,
+            ...(initialState.src ? { sources: initialState.src.split(',') } : {}),
+            ...(initialState.cat ? { categories: initialState.cat.split(',') } : {}),
+        });
+        setSources(urlPreferences.sources);
+        setCategories(urlPreferences.categories);
+        const hasSavedCustomRange = Boolean(preferences.customStartDate && preferences.customEndDate);
+        const savedTimeRangeAllowed = canUseTimeRange(effectiveUserTier, preferences.timeRange)
+            && (preferences.timeRange !== 'custom' || hasSavedCustomRange);
+        setTimeRange(initialState.t || (savedTimeRangeAllowed ? preferences.timeRange : '1d'));
+        const restoredStart = initialState.from || preferences.customStartDate;
+        const restoredEnd = initialState.to || preferences.customEndDate;
+        setCustomStartDate(restoredStart);
+        setCustomEndDate(restoredEnd);
+        setDebouncedCustomStartDate(restoredStart);
+        setDebouncedCustomEndDate(restoredEnd);
+        setSortMode((initialState.s as SortMode) || preferences.sortMode);
+        setMinVolume(hasFeature(effectiveUserTier, 'advancedFilters') ? preferences.minVolume : 1);
+        setCredibilityTiers(hasFeature(effectiveUserTier, 'advancedFilters') ? preferences.credibilityTiers : [1, 2, 3]);
+        setAnimatedEffects(preferences.animatedEffects);
+        setIsSidebarOpen(preferences.sidebarOpen);
+        setTheme(preferences.theme);
+        requestAnimationFrame(() => {
+            applyingPreferencesRef.current = false;
+        });
+    }, [
+        effectiveUserTier,
+        initialState.cat,
+        initialState.from,
+        initialState.s,
+        initialState.src,
+        initialState.t,
+        initialState.to,
+        preferences,
+        preferencesLoaded,
+        setCategories,
+        setCredibilityTiers,
+        setMinVolume,
+        setSources,
+        setTheme,
+        tierLoading,
+        user,
+    ]);
+
+    useEffect(() => {
+        if (!user || hydratedPreferencesForRef.current !== user.id || (resolvedTheme !== 'light' && resolvedTheme !== 'dark')) return;
+        updatePreferences({ theme: resolvedTheme });
+    }, [resolvedTheme, updatePreferences, user]);
+
     const isDarkMode = resolvedTheme === 'dark';
 
     /** Syncs local UI state when the URL state changes (e.g., via browser navigation) */
@@ -190,6 +250,10 @@ export function HomeContent() {
         setDebouncedSearch(initialState.q || '');
         setTimeRange(initialState.t || '1d');
         setSortMode((initialState.s as SortMode) || 'hot');
+        setCustomStartDate(initialState.from || '');
+        setCustomEndDate(initialState.to || '');
+        setDebouncedCustomStartDate(initialState.from || '');
+        setDebouncedCustomEndDate(initialState.to || '');
         setSelectedItemId(initialState.eventId || null);
     }
 
@@ -205,6 +269,7 @@ export function HomeContent() {
             isFirstMount.current = false;
             return;
         }
+        if (applyingPreferencesRef.current) return;
         requestAnimationFrame(() => {
             setFilterVersion(v => v + 1);
             handleSelectItem(null);
@@ -240,6 +305,7 @@ export function HomeContent() {
     const handleTimeRangeChange = useCallback((range: string) => {
         setTimeRange(range);
         updateURL({ t: range });
+        updatePreferences({ timeRange: range });
         if (range === 'custom' && (!customStartDate || !customEndDate)) {
             // Default custom range to the last 24 hours
             const now = new Date();
@@ -256,8 +322,10 @@ export function HomeContent() {
             setCustomEndDate(defaultEndDate);
             setDebouncedCustomStartDate(defaultStartDate);
             setDebouncedCustomEndDate(defaultEndDate);
+            updateURL({ from: defaultStartDate, to: defaultEndDate });
+            updatePreferences({ customStartDate: defaultStartDate, customEndDate: defaultEndDate });
         }
-    }, [customStartDate, customEndDate, updateURL]);
+    }, [customStartDate, customEndDate, updatePreferences, updateURL]);
 
     // Sync search changes to URL
     const handleSearchChange = useCallback((q: string) => {
@@ -268,7 +336,52 @@ export function HomeContent() {
     const handleSortModeChange = useCallback((mode: SortMode) => {
         setSortMode(mode);
         updateURL({ s: mode });
-    }, [setSortMode, updateURL]);
+        updatePreferences({ sortMode: mode });
+    }, [setSortMode, updatePreferences, updateURL]);
+
+    const handleSourcesChange = useCallback((nextSources: string[]) => {
+        setSources(nextSources);
+        updateURL({ src: nextSources.join(',') });
+        updatePreferences({ sources: nextSources });
+    }, [setSources, updatePreferences, updateURL]);
+
+    const handleCategoriesChange = useCallback((nextCategories: string[]) => {
+        setCategories(nextCategories);
+        updateURL({ cat: nextCategories.join(',') });
+        updatePreferences({ categories: nextCategories });
+    }, [setCategories, updatePreferences, updateURL]);
+
+    const handleMinVolumeChange = useCallback((value: number) => {
+        setMinVolume(value);
+        updatePreferences({ minVolume: value });
+    }, [setMinVolume, updatePreferences]);
+
+    const handleCredibilityTiersChange = useCallback((tiers: number[]) => {
+        setCredibilityTiers(tiers);
+        updatePreferences({ credibilityTiers: tiers });
+    }, [setCredibilityTiers, updatePreferences]);
+
+    const handleAnimatedEffectsChange = useCallback((value: boolean) => {
+        setAnimatedEffects(value);
+        updatePreferences({ animatedEffects: value });
+    }, [updatePreferences]);
+
+    const handleCustomStartDateChange = useCallback((value: string) => {
+        setCustomStartDate(value);
+        updateURL({ from: value || undefined });
+        updatePreferences({ customStartDate: value });
+    }, [updatePreferences, updateURL]);
+
+    const handleCustomEndDateChange = useCallback((value: string) => {
+        setCustomEndDate(value);
+        updateURL({ to: value || undefined });
+        updatePreferences({ customEndDate: value });
+    }, [updatePreferences, updateURL]);
+
+    const handleSidebarOpenChange = useCallback((value: boolean) => {
+        setIsSidebarOpen(value);
+        updatePreferences({ sidebarOpen: value });
+    }, [updatePreferences]);
 
     /** Global keyboard shortcuts listener (1.2) */
     useEffect(() => {
@@ -316,7 +429,7 @@ export function HomeContent() {
             // 'm': Toggle sidebar panel collapse/expand
             if (key === 'm') {
                 e.preventDefault();
-                setIsSidebarOpen(prev => !prev);
+                handleSidebarOpenChange(!isSidebarOpen);
                 return;
             }
 
@@ -337,7 +450,7 @@ export function HomeContent() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedItemId, sortMode, isGuestUser, handleSelectItem, handleSortModeChange, handleSearchChange]);
+    }, [selectedItemId, sortMode, isGuestUser, isSidebarOpen, handleSelectItem, handleSortModeChange, handleSearchChange, handleSidebarOpenChange]);
 
     /** Gate guests and free users while preserving the active selection. */
     const visibleMapNews = useMemo(() => {
@@ -352,15 +465,16 @@ export function HomeContent() {
         return filteredNews;
     }, [filteredNews, isGuestUser, selectedItemId, userTier]);
 
-    // Fetch full description when an item is selected if not already present
+    // Exact shared links may reference an event outside the current time range
+    // or viewport, so fetch the event shell even when it was not in the feed.
     useEffect(() => {
         if (selectedItemId) {
-            const item = filteredNews.find(n => matchesNewsId(n, selectedItemId));
-            if (item && item.description === undefined && fetchEventDetails) {
+            const item = news.find(n => matchesNewsId(n, selectedItemId));
+            if ((!item || item.description === undefined) && fetchEventDetails) {
                 fetchEventDetails(selectedItemId);
             }
         }
-    }, [selectedItemId, fetchEventDetails, filteredNews]);
+    }, [selectedItemId, fetchEventDetails, news]);
 
     const activeFilterCount = useMemo(() => {
         let count = 0;
@@ -385,19 +499,19 @@ export function HomeContent() {
     const filterBarSlot = (
         <FilterBar
             sources={sources}
-            onSourcesChange={setSources}
+            onSourcesChange={handleSourcesChange}
             categories={categories}
-            onCategoriesChange={setCategories}
+            onCategoriesChange={handleCategoriesChange}
             timeRange={timeRange}
             onTimeRangeChange={handleTimeRangeChange}
             customStartDate={customStartDate}
-            onCustomStartDateChange={setCustomStartDate}
+            onCustomStartDateChange={handleCustomStartDateChange}
             customEndDate={customEndDate}
-            onCustomEndDateChange={setCustomEndDate}
+            onCustomEndDateChange={handleCustomEndDateChange}
             minVolume={minVolume}
-            onMinVolumeChange={setMinVolume}
+            onMinVolumeChange={handleMinVolumeChange}
             credibilityTiers={credibilityTiers}
-            onCredibilityTiersChange={setCredibilityTiers}
+            onCredibilityTiersChange={handleCredibilityTiersChange}
             disabled={isGuestUser}
             userTier={effectiveUserTier}
         />
@@ -409,7 +523,7 @@ export function HomeContent() {
                 <div className={styles.floatingActions}>
                     <button
                         className={styles.sidebarExpandBtn}
-                        onClick={() => setIsSidebarOpen(true)}
+                        onClick={() => handleSidebarOpenChange(true)}
                         aria-label="Open sidebar"
                     >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -428,7 +542,7 @@ export function HomeContent() {
                 isLoading={isLoading}
                 onFetchDetails={fetchEventDetails}
                 isOpen={isSidebarOpen}
-                onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+                onToggleSidebar={() => handleSidebarOpenChange(!isSidebarOpen)}
                 filterBar={filterBarSlot}
                 filterCount={activeFilterCount}
                 mounted={mounted}
@@ -453,7 +567,7 @@ export function HomeContent() {
                     onSelectItem={handleSelectItem}
                     isDarkMode={isDarkMode}
                     animatedEffects={animatedEffects}
-                    onAnimatedEffectsChange={setAnimatedEffects}
+                    onAnimatedEffectsChange={handleAnimatedEffectsChange}
                     onBoundsChange={handleBoundsChange}
                     initialCenter={initialCenter}
                     initialZoom={validInitialZoom}
@@ -462,6 +576,9 @@ export function HomeContent() {
                     isSidebarOpen={isSidebarOpen}
                     userTier={effectiveUserTier}
                     tierLoading={tierLoading}
+                    preferenceOwnerId={user?.id}
+                    syncedPreferences={tierLoading ? null : preferences}
+                    onSyncedPreferencesChange={updatePreferences}
                 />
             </main>
 

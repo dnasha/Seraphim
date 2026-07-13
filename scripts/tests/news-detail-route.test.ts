@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   resolveEntitlements: vi.fn(),
+  rateLimit: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock("@/lib/core/supabase-admin", () => ({ supabaseAdmin: { from: mocks.from } }));
@@ -11,10 +12,24 @@ vi.mock('@/lib/server/entitlements', () => ({
   resolveRequestEntitlements: mocks.resolveEntitlements,
 }));
 
+vi.mock('@upstash/redis', () => ({ Redis: { fromEnv: vi.fn(() => ({})) } }));
+vi.mock('@upstash/ratelimit', () => ({
+  Ratelimit: class {
+    static slidingWindow = vi.fn(() => ({}));
+    limit = mocks.rateLimit;
+  },
+}));
+
 import { GET } from "@/app/api/news/[id]/route";
 
 function params(id: string) {
   return { params: Promise.resolve({ id }) };
+}
+
+function request(id: string, ip = '198.51.100.42') {
+  return new Request(`https://seraphim.example/api/news/${id}`, {
+    headers: { 'x-vercel-forwarded-for': ip },
+  });
 }
 
 function detailQuery(data: unknown, error: unknown = null) {
@@ -54,13 +69,14 @@ describe("GET /api/news/[id]", () => {
     mocks.from.mockReturnValue(query);
     const id = "11111111-1111-4111-8111-111111111111";
 
-    const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    const response = await GET(request(id), params(id));
 
     expect(await response.json()).toEqual(expect.objectContaining({ description: "Full story", latitude: 1, longitude: 2 }));
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(query.select).toHaveBeenCalledWith("description, sources, source, source_type, url, primary_discovered_at, published_at, latitude, longitude");
+    expect(response.headers.get('x-robots-tag')).toContain('noindex');
+    expect(query.select).toHaveBeenCalledWith("id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at");
 
-    const cachedResponse = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    const cachedResponse = await GET(request(id), params(id));
     expect(await cachedResponse.json()).toEqual(expect.objectContaining({ latitude: 1, longitude: 2 }));
     expect(mocks.from).toHaveBeenCalledTimes(1);
   });
@@ -69,7 +85,7 @@ describe("GET /api/news/[id]", () => {
     mocks.from.mockReturnValue(detailQuery(null, { message: "not found" }));
     const id = "22222222-2222-4222-8222-222222222222";
 
-    const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    const response = await GET(request(id), params(id));
     expect(response.status).toBe(404);
   });
 
@@ -92,11 +108,40 @@ describe("GET /api/news/[id]", () => {
     }));
 
     const id = '33333333-3333-4333-8333-333333333333';
-    const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    const response = await GET(request(id), params(id));
     await expect(response.json()).resolves.toMatchObject({
       timelineRestricted: true,
       totalSources: 4,
       sources: [expect.objectContaining({ name: 'Primary' }), expect.objectContaining({ name: 'Latest' })],
+      event: expect.objectContaining({ description: 'Story' }),
     });
+  });
+
+  it('rejects exact-event requests without trusted deployment identity', async () => {
+    const id = '44444444-4444-4444-8444-444444444444';
+    const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));
+    expect(response.status).toBe(429);
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('hard-limits repeated exact-ID reads at the application instance', async () => {
+    const id = '55555555-5555-4555-8555-555555555555';
+    mocks.from.mockReturnValue(detailQuery({
+      id,
+      title: 'Shared event',
+      description: 'One exact event',
+      source: 'Primary',
+      source_type: 'rss',
+      url: 'https://primary.example/shared',
+      published_at: '2026-01-01T00:00:00Z',
+      sources: [],
+      latitude: 1,
+      longitude: 2,
+    }));
+    for (let index = 0; index < 60; index++) {
+      await GET(request(id, '198.51.100.99'), params(id));
+    }
+    const blocked = await GET(request(id, '198.51.100.99'), params(id));
+    expect(blocked.status).toBe(429);
   });
 });

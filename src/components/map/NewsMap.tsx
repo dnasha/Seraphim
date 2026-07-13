@@ -32,7 +32,8 @@ import MapError from "./MapError";
 import MapLoading from "./MapLoading";
 import UpgradeButton from "./UpgradeButton";
 import styles from "./NewsMap.module.css";
-import type { UserTier } from '@/lib/entitlements';
+import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
+import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
@@ -53,6 +54,9 @@ interface NewsMapProps {
   userTier?: UserTier;
   /** True while the tier is still being resolved from DB */
   tierLoading?: boolean;
+  preferenceOwnerId?: string;
+  syncedPreferences?: SyncedPreferences | null;
+  onSyncedPreferencesChange?: (patch: Partial<SyncedPreferences>) => void;
 }
 
 /**
@@ -111,6 +115,9 @@ export default function NewsMap({
   isSidebarOpen = true,
   userTier = 'guest',
   tierLoading = false,
+  preferenceOwnerId,
+  syncedPreferences,
+  onSyncedPreferencesChange,
 }: NewsMapProps) {
   const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -149,6 +156,7 @@ export default function NewsMap({
   }, []);
 
   const [isGlobe, setIsGlobe] = useState(false);
+  const appliedPreferencesForRef = useRef<string | null>(null);
   const isGlobeRef = useRef(isGlobe);
   const currentStyleRef = useRef(currentStyle);
   const mapReadyRef = useRef(mapReady);
@@ -160,6 +168,25 @@ export default function NewsMap({
   useEffect(() => {
     currentStyleRef.current = currentStyle;
   }, [currentStyle]);
+
+  useEffect(() => {
+    if (!preferenceOwnerId) {
+      appliedPreferencesForRef.current = null;
+      return;
+    }
+    if (!preferenceOwnerId || !syncedPreferences || appliedPreferencesForRef.current === preferenceOwnerId) return;
+    appliedPreferencesForRef.current = preferenceOwnerId;
+    const allowedStyle = canUseMapStyle(userTier, syncedPreferences.mapStyle)
+      ? syncedPreferences.mapStyle
+      : (isDarkMode ? 'dark' : 'standard');
+    const allowedOverlays = Object.fromEntries(
+      Object.entries(syncedPreferences.overlays).map(([key, active]) => [key, active && canUseOverlay(userTier, key)]),
+    );
+    setCurrentStyle(allowedStyle);
+    setOverlays((current) => ({ ...current, ...allowedOverlays }));
+    setForceIndividualPins(hasFeature(userTier, 'individualPins') && syncedPreferences.forceIndividualPins);
+    setIsGlobe(hasFeature(userTier, 'globe') && syncedPreferences.globe);
+  }, [isDarkMode, preferenceOwnerId, syncedPreferences, userTier]);
 
   useEffect(() => {
     mapReadyRef.current = mapReady;
@@ -281,12 +308,28 @@ export default function NewsMap({
     };
   }, [mapReady, animatedEffects]);
 
-  // Handle style switching based on global theme state.
-  const [prevIsDarkMode, setPrevIsDarkMode] = useState(isDarkMode);
-  if (prevIsDarkMode !== isDarkMode) {
-    setPrevIsDarkMode(isDarkMode);
-    setCurrentStyle(isDarkMode ? "dark" : "standard");
-  }
+  // Keep the two theme-following base styles aligned without replacing a
+  // deliberately selected satellite/topographic/premium style.
+  const prevIsDarkModeRef = useRef(isDarkMode);
+  useEffect(() => {
+    let frame: number | null = null;
+    if (prevIsDarkModeRef.current !== isDarkMode) {
+      prevIsDarkModeRef.current = isDarkMode;
+      const storedStyle = syncedPreferences?.mapStyle;
+      const followsTheme = storedStyle
+        ? storedStyle === 'standard' || storedStyle === 'dark'
+        : currentStyle === 'standard' || currentStyle === 'dark';
+      if (!followsTheme) return;
+      const nextStyle = isDarkMode ? 'dark' : 'standard';
+      frame = requestAnimationFrame(() => {
+        setCurrentStyle(nextStyle);
+        onSyncedPreferencesChange?.({ mapStyle: nextStyle });
+      });
+    }
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [currentStyle, isDarkMode, onSyncedPreferencesChange, syncedPreferences?.mapStyle]);
 
   // Pre-process items for the map: filter valid coords, apply jitter, and identify top stories.
   const geoItems = useMemo(() => {
@@ -1071,11 +1114,16 @@ export default function NewsMap({
         <>
           <MapSettings
             mapStyle={currentStyle}
-            onStyleChange={setCurrentStyle}
+            onStyleChange={(style) => {
+              setCurrentStyle(style);
+              onSyncedPreferencesChange?.({ mapStyle: style });
+            }}
             forceIndividualPins={forceIndividualPins}
-            onForceIndividualPinsToggle={() =>
-              setForceIndividualPins((v) => !v)
-            }
+            onForceIndividualPinsToggle={() => {
+              const next = !forceIndividualPins;
+              setForceIndividualPins(next);
+              onSyncedPreferencesChange?.({ forceIndividualPins: next });
+            }}
             isOpen={settingsOpen}
             onToggleOpen={() => setSettingsOpen((o) => !o)}
             panelRef={settingsPanelRef as React.RefObject<HTMLDivElement>}
@@ -1085,11 +1133,17 @@ export default function NewsMap({
           />
           <MapActionTools
             overlays={overlays}
-            onOverlayToggle={(overlay, active) =>
-              setOverlays((prev) => ({ ...prev, [overlay]: active }))
-            }
+            onOverlayToggle={(overlay, active) => {
+              const next = { ...overlays, [overlay]: active };
+              setOverlays(next);
+              onSyncedPreferencesChange?.({ overlays: next });
+            }}
             isGlobe={isGlobe}
-            onToggleGlobe={() => setIsGlobe((v) => !v)}
+            onToggleGlobe={() => {
+              const next = !isGlobe;
+              setIsGlobe(next);
+              onSyncedPreferencesChange?.({ globe: next });
+            }}
             onResetOrientation={handleResetOrientation}
             drawToolsOpen={drawToolsOpen}
             onToggleDrawTools={() => setDrawToolsOpen((o) => !o)}

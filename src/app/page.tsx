@@ -27,7 +27,8 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(eventId)) {
         return {
-            title: "Seraphim | Invalid Event"
+            title: "Seraphim | Invalid Event",
+            robots: { index: false, follow: false, nocache: true },
         };
     }
 
@@ -46,6 +47,12 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
             return {
                 title,
                 description,
+                robots: {
+                    index: false,
+                    follow: false,
+                    nocache: true,
+                    googleBot: { index: false, follow: false, noimageindex: false },
+                },
                 openGraph: {
                     title,
                     description,

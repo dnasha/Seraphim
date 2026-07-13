@@ -43,6 +43,7 @@ function imageResponse(element: React.ReactElement) {
         height: 630,
         headers: {
             'Cache-Control': OG_CACHE_CONTROL,
+            'X-Robots-Tag': 'noindex, nofollow, noarchive',
         },
     });
 }
