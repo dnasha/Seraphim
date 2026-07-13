@@ -37,8 +37,8 @@ const spaceGrotesk = Space_Grotesk({
 
 const merriweather = Merriweather({
   subsets: ["latin"],
-  weight: ["300", "400", "700", "900"],
-  style: ["normal", "italic"],
+  weight: ["400", "700"],
+  style: ["normal"],
   variable: "--font-merriweather",
   display: "swap",
 });

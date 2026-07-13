@@ -83,6 +83,7 @@ export function useNewsData({
     const abortControllerRef = useRef<AbortController | null>(null);
     const pendingBBoxRef = useRef<BBox | null>(null);
     const lastKnownBBoxRef = useRef<BBox | null>(null);
+    const initialLoadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const needsScopeReloadRef = useRef(false);
     const pinnedEventIdRef = useRef<string | null>(pinnedEventId);
 
@@ -322,6 +323,10 @@ export function useNewsData({
      * snapping, parameter change detection, and store synchronization.
      */
     const coordinateLoad = useCallback(async (isRefresh = false, rawBBox?: BBox) => {
+        if (rawBBox && initialLoadFallbackRef.current) {
+            clearTimeout(initialLoadFallbackRef.current);
+            initialLoadFallbackRef.current = null;
+        }
         if (rawBBox) {
             lastKnownBBoxRef.current = rawBBox;
         }
@@ -519,8 +524,18 @@ export function useNewsData({
         
         if (isFirstMount.current) {
             isFirstMount.current = false;
-            const timer = setTimeout(() => coordinateLoad(), 0);
-            return () => clearTimeout(timer);
+            // Let MapLibre provide the real initial viewport first. A fallback
+            // keeps the feed usable if the map cannot initialize.
+            initialLoadFallbackRef.current = setTimeout(() => {
+                initialLoadFallbackRef.current = null;
+                coordinateLoad();
+            }, 1_200);
+            return () => {
+                if (initialLoadFallbackRef.current) {
+                    clearTimeout(initialLoadFallbackRef.current);
+                    initialLoadFallbackRef.current = null;
+                }
+            };
         }
         
         coordinateLoad();

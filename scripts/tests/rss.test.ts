@@ -8,7 +8,7 @@ vi.mock("rss-parser", () => ({
   },
 }));
 
-import { fetchRedditFeed, fetchSingleFeed } from "@/lib/api/rss";
+import { fetchAllRedditFeeds, fetchRedditFeed, fetchSingleFeed } from "@/lib/api/rss";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -62,5 +62,24 @@ describe("RSS adapters", () => {
       url: "https://www.reddit.com/r/osint",
       category: "technology",
     });
+  });
+
+  it("bounds concurrent Reddit requests to avoid runner-wide rate-limit bursts", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const fetchMock = vi.fn(async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return new Response("<feed></feed>", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    mocks.parseString.mockResolvedValue({ items: [] });
+
+    await fetchAllRedditFeeds();
+
+    expect(fetchMock).toHaveBeenCalledTimes(15);
+    expect(maxActive).toBeLessThanOrEqual(3);
   });
 });

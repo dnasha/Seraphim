@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import type { ManifestEntry } from "@serwist/build";
 import withSerwistInit from "@serwist/next";
+import { NEWS_IMAGE_HOSTS } from "./src/lib/utils/newsImages";
 
 process.env.SERWIST_SUPPRESS_TURBOPACK_WARNING = "1";
 
@@ -37,13 +38,14 @@ const nextConfig: NextConfig = {
   turbopack: {},
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: '*.bbci.co.uk' },
       { protocol: 'https', hostname: '*.gnews.io' },
-      { protocol: 'https', hostname: '*.redd.it' },
       { protocol: 'https', hostname: '*.static.com' }, // Generic placeholder for others
       { protocol: 'https', hostname: 't.me' },
       { protocol: 'https', hostname: '*.twimg.com' },
+      ...NEWS_IMAGE_HOSTS.map((hostname) => ({ protocol: 'https' as const, hostname })),
     ],
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 86_400,
   },
   devIndicators: false,
   ...(process.env.NODE_ENV === 'development' && { allowedDevOrigins: ['*'] }),

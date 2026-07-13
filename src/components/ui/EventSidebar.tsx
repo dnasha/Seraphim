@@ -476,6 +476,7 @@ export default function EventSidebar({
                       <Link
                         href="/terms?from=guest"
                         className={styles.guestLink}
+                        prefetch={false}
                       >
                         Terms of Service
                       </Link>{" "}
@@ -483,6 +484,7 @@ export default function EventSidebar({
                       <Link
                         href="/privacy?from=guest"
                         className={styles.guestLink}
+                        prefetch={false}
                       >
                         Privacy Policy
                       </Link>

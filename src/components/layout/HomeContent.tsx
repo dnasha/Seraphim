@@ -17,13 +17,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { BBox, NewsItem } from '@/lib/core/types';
 import { matchesNewsId, SortMode } from '@/lib/utils/ranking';
 import { useUserTier } from '@/hooks/useUserTier';
-import AuthModal from '@/components/auth/AuthModal';
 import UserButton from '@/components/auth/UserButton';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import styles from './Layout.module.css';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
+const AuthModal = dynamic(() => import('@/components/auth/AuthModal'), { ssr: false });
 
 function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string | null): NewsItem[] {
     if (items.length <= limit) return items;

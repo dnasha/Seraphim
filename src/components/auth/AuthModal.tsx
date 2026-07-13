@@ -283,11 +283,11 @@ export default function AuthModal() {
 
                 <div className={styles.footerLinks}>
                     By continuing, you agree to our<br />
-                    <Link href="/terms?from=auth" className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
+                    <Link href="/terms?from=auth" prefetch={false} className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
                         Terms of Service
                     </Link>{' '}
                     and{' '}
-                    <Link href="/privacy?from=auth" className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
+                    <Link href="/privacy?from=auth" prefetch={false} className={styles.footerLink} onClick={() => setShowAuthModal(false)}>
                         Privacy Policy
                     </Link>.
                 </div>

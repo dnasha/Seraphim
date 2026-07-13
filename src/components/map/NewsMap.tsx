@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { NewsItem, BBox } from "@/lib/core/types";
 import maplibregl from "maplibre-gl";
 
@@ -30,9 +31,10 @@ import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
 import MapLoading from "./MapLoading";
 import UpgradeButton from "./UpgradeButton";
-import MapDrawTools from "./MapDrawTools";
 import styles from "./NewsMap.module.css";
 import type { UserTier } from '@/lib/entitlements';
+
+const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
   items: NewsItem[];
@@ -169,7 +171,6 @@ export default function NewsMap({
   const onBoundsChangeRef = useRef(onBoundsChange);
   const onSelectItemRef = useRef(onSelectItem);
   const forceIndividualPinsRef = useRef(forceIndividualPins);
-  const animatedEffectsRef = useRef(animatedEffects);
   const overlaysRef = useRef(overlays);
 
   const boundsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -197,49 +198,59 @@ export default function NewsMap({
     forceIndividualPinsRef.current = forceIndividualPins;
   }, [forceIndividualPins]);
   useEffect(() => {
-    animatedEffectsRef.current = animatedEffects;
-  }, [animatedEffects]);
-  useEffect(() => {
     overlaysRef.current = overlays;
   }, [overlays]);
 
-  // Main animation loop for hot story pulses.
-  // Performs low-level paint property updates for high-performance visual feedback.
+  // Main animation loop for hot story pulses. Keep the decorative effect at a
+  // modest frame rate and stop it completely when disabled or backgrounded.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    const animate = (timestamp: number) => {
-      if (!animatedEffectsRef.current) {
-        if (map.getLayer("hot-story-pulse")) {
-          map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
-        }
-        pulseAnimationFrameRef.current = requestAnimationFrame(animate);
-        return;
-      }
-
-      const duration = 2000;
-      const t = (timestamp % duration) / duration;
-
-      const radius = 20 + t * 35;
-      const opacity = Math.max(0, 0.6 * (1 - t));
-      const blur = 0;
-
+    if (!animatedEffects) {
       if (map.getLayer("hot-story-pulse")) {
-        map.setPaintProperty("hot-story-pulse", "circle-radius", radius);
-        map.setPaintProperty("hot-story-pulse", "circle-opacity", opacity);
-        map.setPaintProperty("hot-story-pulse", "circle-blur", blur);
+        map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
+        map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
       }
+      return;
+    }
 
+    let lastPaintAt = 0;
+    let running = false;
+
+    const animate = (timestamp: number) => {
+      if (!running) return;
+      if (timestamp - lastPaintAt >= 50 && map.getLayer("hot-story-pulse")) {
+        lastPaintAt = timestamp;
+        const duration = 2000;
+        const t = (timestamp % duration) / duration;
+        map.setPaintProperty("hot-story-pulse", "circle-radius", 20 + t * 35);
+        map.setPaintProperty("hot-story-pulse", "circle-opacity", Math.max(0, 0.6 * (1 - t)));
+      }
       pulseAnimationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    pulseAnimationFrameRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (pulseAnimationFrameRef.current)
-        cancelAnimationFrame(pulseAnimationFrameRef.current);
+    const start = () => {
+      if (running || document.hidden) return;
+      running = true;
+      pulseAnimationFrameRef.current = requestAnimationFrame(animate);
     };
-  }, [mapReady]);
+    const stop = () => {
+      running = false;
+      if (pulseAnimationFrameRef.current != null) {
+        cancelAnimationFrame(pulseAnimationFrameRef.current);
+        pulseAnimationFrameRef.current = null;
+      }
+    };
+    const onVisibilityChange = () => document.hidden ? stop() : start();
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    start();
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stop();
+    };
+  }, [mapReady, animatedEffects]);
 
   // Handle style switching based on global theme state.
   const [prevIsDarkMode, setPrevIsDarkMode] = useState(isDarkMode);
@@ -386,8 +397,6 @@ export default function NewsMap({
         maxZoom: 18,
         attributionControl: false,
         trackResize: false,
-        // @ts-expect-error - Internal property used for high-fidelity screenshots/rendering
-        preserveDrawingBuffer: true,
         transformRequest: (url, resourceType) => {
           if (resourceType === 'Glyphs' && (url.includes('basemaps-assets/fonts/') || url.includes('tiles.openstreetmap.us/fonts/'))) {
             const match = url.match(/\/fonts\/([^/]+)\/([^/]+)$/);

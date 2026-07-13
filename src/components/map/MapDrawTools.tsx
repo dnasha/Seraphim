@@ -10,7 +10,14 @@ import {
   TerraDrawPointMode,
 } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
-import * as turf from '@turf/turf';
+import {
+  area as turfArea,
+  booleanPointInPolygon,
+  distance as turfDistance,
+  length as turfLength,
+  point as turfPoint,
+  pointToLineDistance,
+} from '@turf/turf';
 import styles from './MapDrawTools.module.css';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from '@/components/ui/FeatureGate';
@@ -519,10 +526,10 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       snapshot.forEach(feature => {
         const type = feature.geometry.type as string;
         if (type === 'Polygon' || type === 'MultiPolygon') {
-          totalArea += turf.area(feature as unknown as GeoJSON.Feature);
+          totalArea += turfArea(feature as unknown as GeoJSON.Feature);
           hasArea = true;
         } else if (type === 'LineString' || type === 'MultiLineString') {
-          totalDistance += turf.length(feature as unknown as GeoJSON.Feature, { units: 'kilometers' });
+          totalDistance += turfLength(feature as unknown as GeoJSON.Feature, { units: 'kilometers' });
           hasDistance = true;
         }
       });
@@ -757,7 +764,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       // 2. Resilient fallback using Turf geography check
       if (drawRef.current) {
         const lngLat = map.unproject([x, y]);
-        const turfPoint = turf.point([lngLat.lng, lngLat.lat]);
+        const pointAtClick = turfPoint([lngLat.lng, lngLat.lat]);
         const snapshot = drawRef.current.getSnapshot();
 
         for (const feature of snapshot) {
@@ -766,7 +773,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
           if (type === 'Polygon' || type === 'MultiPolygon') {
             try {
-              hit = turf.booleanPointInPolygon(turfPoint, feature as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>);
+              hit = booleanPointInPolygon(pointAtClick, feature as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>);
             } catch (err) {
               console.warn('Turf polygon check error:', err);
             }
@@ -775,7 +782,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
               const zoom = map.getZoom();
               const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
               const toleranceMeters = Math.max(5, ((feature.properties?.size as number) || 4) * metersPerPixel * 2.5);
-              const distance = turf.pointToLineDistance(turfPoint, feature as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
+              const distance = pointToLineDistance(pointAtClick, feature as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
               hit = distance < toleranceMeters;
             } catch (err) {
               console.warn('Turf line check error:', err);
@@ -783,7 +790,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
           } else if (type === 'Point' || type === 'MultiPoint') {
             try {
               const geom = feature.geometry as GeoJSON.Point;
-              const distance = turf.distance(turfPoint, turf.point(geom.coordinates), { units: 'meters' });
+              const distance = turfDistance(pointAtClick, turfPoint(geom.coordinates), { units: 'meters' });
               const zoom = map.getZoom();
               const metersPerPixel = 156543.03392 * Math.cos(lngLat.lat * Math.PI / 180) / Math.pow(2, zoom);
               const toleranceMeters = Math.max(10, ((feature.properties?.size as number) || 4) * 3 * metersPerPixel * 2);

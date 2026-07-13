@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import Image from "next/image";
+import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
 import { NewsItem } from '@/lib/core/types';
 import { 
     getSourceBadgeColor, 
@@ -106,7 +107,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                             src={item.imageUrl} 
                             alt="" 
                             fill
-                            unoptimized
+                            unoptimized={!canOptimizeNewsImage(item.imageUrl)}
                             priority
                             sizes="(max-width: 860px) 100vw, 500px"
                             style={{ objectFit: 'cover' }}

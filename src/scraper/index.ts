@@ -200,11 +200,11 @@ async function run(): Promise<void> {
   let upserted_count = 0;
   let merged_count = 0;
 
-  // Embedding inserts update the large HNSW index. Keep each PostgREST
-  // transaction comfortably below the normal 8-second API timeout even
-  // when the database is busy; the RPC itself has a longer, scoped timeout
-  // for exceptional index-maintenance latency.
-  const CHUNK_SIZE = 5;
+  // Use a useful bulk size on the normal path. If index maintenance or database
+  // pressure makes a batch time out, the batch is bisected before falling back
+  // to per-row writes so one slow transaction does not penalize every run.
+  const CHUNK_SIZE = 25;
+  const MIN_SPLIT_SIZE = 5;
   
   const eventChunks = [];
   for (let i = 0; i < newEvents.length; i += CHUNK_SIZE) {
@@ -221,6 +221,63 @@ async function run(): Promise<void> {
   const numChunks = Math.max(eventChunks.length, mergeChunks.length);
   let vectorTypeUnavailable = false;
 
+  const processIngestChunk = async (
+    eChunk: DbEvent[],
+    mChunk: typeof mergePayload,
+    label: string,
+  ): Promise<void> => {
+    if (vectorTypeUnavailable) {
+      const fallback = await ingestSequentially(db, eChunk, mChunk, false, true);
+      upserted_count += fallback.upserted_count;
+      merged_count += fallback.merged_count;
+      vectorTypeUnavailable = fallback.vectorTypeUnavailable;
+      return;
+    }
+
+    const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
+      p_new_events: eChunk,
+      p_merges: mChunk,
+    });
+
+    if (!ingestError) {
+      const result = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
+      upserted_count += result.upserted_count;
+      merged_count += result.merged_count;
+      return;
+    }
+
+    const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
+    if (isVectorTypeMissingError(ingestError.message)) {
+      vectorTypeUnavailable = true;
+      console.warn(`[scraper] pgvector type is unavailable in ${label}. Using sequential ingestion without vectors.`);
+      const fallback = await ingestSequentially(db, eChunk, mChunk, false, true);
+      upserted_count += fallback.upserted_count;
+      merged_count += fallback.merged_count;
+      return;
+    }
+
+    const largestChunk = Math.max(eChunk.length, mChunk.length);
+    if (isTimeout && largestChunk > MIN_SPLIT_SIZE) {
+      const eventMid = Math.ceil(eChunk.length / 2);
+      const mergeMid = Math.ceil(mChunk.length / 2);
+      console.warn(`[scraper] ${label} timed out; retrying as smaller batches.`);
+      await processIngestChunk(eChunk.slice(0, eventMid), mChunk.slice(0, mergeMid), `${label}.1`);
+      await processIngestChunk(eChunk.slice(eventMid), mChunk.slice(mergeMid), `${label}.2`);
+      return;
+    }
+
+    if (isTimeout) {
+      console.warn(`[scraper] ${label} timed out at minimum batch size. Executing sequential fallback.`);
+      const fallback = await ingestSequentially(db, eChunk, mChunk, false, vectorTypeUnavailable);
+      upserted_count += fallback.upserted_count;
+      merged_count += fallback.merged_count;
+      vectorTypeUnavailable = fallback.vectorTypeUnavailable;
+      return;
+    }
+
+    throw new Error(`Bulk ingestion failed in ${label}: ${ingestError.message}`);
+  };
+
   try {
     for (let i = 0; i < numChunks; i++) {
       const eChunk = eventChunks[i] || [];
@@ -228,45 +285,7 @@ async function run(): Promise<void> {
       
       console.log(`[scraper] Processing chunk ${i + 1}/${numChunks} (${eChunk.length} events, ${mChunk.length} merges)...`);
 
-      if (vectorTypeUnavailable) {
-        const fallback = await ingestSequentially(db, eChunk, mChunk, false, vectorTypeUnavailable);
-        upserted_count += fallback.upserted_count;
-        merged_count += fallback.merged_count;
-        vectorTypeUnavailable = fallback.vectorTypeUnavailable;
-        continue;
-      }
-
-      const { data: ingestResult, error: ingestError } = await db.rpc('bulk_ingest_events', {
-        p_new_events: eChunk,
-        p_merges: mChunk
-      });
-
-      if (ingestError) {
-        const isTimeout = ingestError.message?.includes('timeout') || ingestError.message?.includes('canceling statement');
-        
-        if (isTimeout) {
-          console.warn(`[scraper] Chunk ${i + 1} RPC timed out. Executing sequential fallback...`);
-          const fallback = await ingestSequentially(db, eChunk, mChunk, false, vectorTypeUnavailable);
-          upserted_count += fallback.upserted_count;
-          merged_count += fallback.merged_count;
-          vectorTypeUnavailable = fallback.vectorTypeUnavailable;
-        } else if (isVectorTypeMissingError(ingestError.message)) {
-          vectorTypeUnavailable = true;
-          console.warn(
-            `[scraper] pgvector type is unavailable. Falling back to sequential ingestion from chunk ${i + 1}.`,
-          );
-          const fallback = await ingestSequentially(db, eChunk, mChunk, false, vectorTypeUnavailable);
-          upserted_count += fallback.upserted_count;
-          merged_count += fallback.merged_count;
-          vectorTypeUnavailable = fallback.vectorTypeUnavailable;
-        } else {
-          throw new Error(`Bulk ingestion failed on chunk ${i + 1}: ${ingestError.message}`);
-        }
-      } else {
-        const result = (ingestResult as unknown as BulkIngestResult[])?.[0] || { upserted_count: 0, merged_count: 0 };
-        upserted_count += result.upserted_count;
-        merged_count += result.merged_count;
-      }
+      await processIngestChunk(eChunk, mChunk, `chunk ${i + 1}/${numChunks}`);
     }
   } catch (err) {
     console.error('[scraper] Ingestion error:', err instanceof Error ? err.message : String(err));

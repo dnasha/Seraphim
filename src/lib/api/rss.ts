@@ -12,6 +12,27 @@ import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sou
 import { ensureIsoDate } from '@/lib/utils/date';
 
 const DEFAULT_TIMEOUT = 15000;
+const RSS_CONCURRENCY = 16;
+const REDDIT_CONCURRENCY = 3;
+const rssDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+
+async function mapWithConcurrency<T, R>(
+    items: readonly T[],
+    concurrency: number,
+    worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+        while (true) {
+            const index = nextIndex++;
+            if (index >= items.length) return;
+            results[index] = await worker(items[index]);
+        }
+    });
+    await Promise.all(runners);
+    return results;
+}
 
 /**
  * Headers optimized for standard news feeds to minimize bot detection.
@@ -75,7 +96,7 @@ export async function fetchSingleFeed(
             headers: RSS_HEADERS,
             signal: AbortSignal.timeout(timeoutMs),
             // @ts-expect-error - dispatcher is not in standard fetch types but works in Node's undici
-            dispatcher: new Agent({ connect: { rejectUnauthorized: false } })
+            dispatcher: rssDispatcher
         });
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -157,14 +178,8 @@ export async function fetchRedditFeed(
  * Fetches all configured RSS feeds concurrently and returns them sorted by date.
  */
 export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
-    const rssResults = await Promise.allSettled(RSS_SOURCES.map(source => fetchSingleFeed(source)));
-
-    const allItems: NewsItem[] = [];
-    for (const result of rssResults) {
-        if (result.status === 'fulfilled') {
-            allItems.push(...result.value);
-        }
-    }
+    const rssResults = await mapWithConcurrency(RSS_SOURCES, RSS_CONCURRENCY, fetchSingleFeed);
+    const allItems = rssResults.flat();
 
     return allItems.sort((a, b) =>
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
@@ -175,14 +190,8 @@ export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
  * Fetches all configured Reddit feeds concurrently.
  */
 export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
-    const results = await Promise.allSettled(
-        REDDIT_SOURCES.map(source => fetchRedditFeed(source))
-    );
-    const items: NewsItem[] = [];
-    for (const result of results) {
-        if (result.status === 'fulfilled') items.push(...result.value);
-    }
-    return items;
+    const results = await mapWithConcurrency(REDDIT_SOURCES, REDDIT_CONCURRENCY, fetchRedditFeed);
+    return results.flat();
 }
 
 /**
@@ -191,16 +200,8 @@ export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
 export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
     const sources = RSS_SOURCES.filter(s => s.category === category);
 
-    const results = await Promise.allSettled(
-        sources.map(source => fetchSingleFeed(source))
-    );
-
-    const allItems: NewsItem[] = [];
-    for (const result of results) {
-        if (result.status === 'fulfilled') {
-            allItems.push(...result.value);
-        }
-    }
+    const results = await mapWithConcurrency(sources, RSS_CONCURRENCY, fetchSingleFeed);
+    const allItems = results.flat();
 
     return allItems.sort((a, b) =>
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()

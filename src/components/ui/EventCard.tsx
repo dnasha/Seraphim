@@ -12,6 +12,7 @@ import { canonicalEventCount } from "@/lib/utils/ranking";
 import styles from "./EventSidebar.module.css";
 import React from "react";
 import Image from "next/image";
+import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from './FeatureGate';
 
@@ -127,7 +128,7 @@ export default function EventCard({
                 src={item.imageUrl}
                 alt=""
                 fill
-                unoptimized
+                unoptimized={!canOptimizeNewsImage(item.imageUrl)}
                 sizes="88px"
                 style={{ objectFit: 'cover' }}
                 /** Prevents 403 Forbidden errors from sources that block external hotlinking */
@@ -225,7 +226,7 @@ export default function EventCard({
                   src={item.imageUrl}
                   alt=""
                   fill
-                  unoptimized
+                  unoptimized={!canOptimizeNewsImage(item.imageUrl)}
                   priority={isExpanded}
                   sizes="(max-width: 860px) 100vw, 400px"
                   style={{ objectFit: 'contain' }}
