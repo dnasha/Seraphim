@@ -10,11 +10,27 @@ import { Agent } from 'undici';
 import { NewsItem } from '@/lib/core/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
+import {
+    BASE_POLL_INTERVAL_MS,
+    itemLimitForTier,
+    rssPollTier,
+    selectDueSources,
+    selectRecentFeedItems,
+} from './sourcePolling';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
 const REDDIT_CONCURRENCY = 3;
 const rssDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+
+interface ParsedFeedItem {
+    title?: string;
+    contentSnippet?: string;
+    content?: string;
+    link?: string;
+    pubDate?: string;
+    isoDate?: string;
+}
 
 async function mapWithConcurrency<T, R>(
     items: readonly T[],
@@ -111,8 +127,13 @@ export async function fetchSingleFeed(
         // Map feed items to internal NewsItem format. IDs are generated using a 
         // combination of source name, index, and timestamp to ensure uniqueness 
         // during high-frequency ingestion.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (feed.items || []).slice(0, 20).map((item: any, index: number) => ({
+        const tier = rssPollTier(source);
+        const feedItems = (feed.items || []) as ParsedFeedItem[];
+        const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
+            tier,
+            limit: itemLimitForTier(tier),
+        });
+        return recentItems.map((item, index) => ({
             id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -156,8 +177,12 @@ export async function fetchRedditFeed(
         const text = await res.text();
         const feed = await parser.parseString(text);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (feed.items || []).slice(0, 10).map((item: any, index: number) => ({
+        const feedItems = (feed.items || []) as ParsedFeedItem[];
+        const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
+            limit: 5,
+            maxAgeMs: 48 * 60 * 60 * 1000,
+        });
+        return recentItems.map((item, index) => ({
             id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -177,8 +202,10 @@ export async function fetchRedditFeed(
 /**
  * Fetches all configured RSS feeds concurrently and returns them sorted by date.
  */
-export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
-    const rssResults = await mapWithConcurrency(RSS_SOURCES, RSS_CONCURRENCY, fetchSingleFeed);
+export async function fetchAllRSSFeeds(now = Date.now()): Promise<NewsItem[]> {
+    const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now);
+    console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due`);
+    const rssResults = await mapWithConcurrency(dueSources, RSS_CONCURRENCY, fetchSingleFeed);
     const allItems = rssResults.flat();
 
     return allItems.sort((a, b) =>
@@ -189,8 +216,10 @@ export async function fetchAllRSSFeeds(): Promise<NewsItem[]> {
 /**
  * Fetches all configured Reddit feeds concurrently.
  */
-export async function fetchAllRedditFeeds(): Promise<NewsItem[]> {
-    const results = await mapWithConcurrency(REDDIT_SOURCES, REDDIT_CONCURRENCY, fetchRedditFeed);
+export async function fetchAllRedditFeeds(now = Date.now()): Promise<NewsItem[]> {
+    const dueSources = Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
+    console.log(`[polling] Reddit: ${dueSources.length}/${REDDIT_SOURCES.length} sources due`);
+    const results = await mapWithConcurrency(dueSources, REDDIT_CONCURRENCY, fetchRedditFeed);
     return results.flat();
 }
 

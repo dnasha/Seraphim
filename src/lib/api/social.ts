@@ -11,10 +11,11 @@ import * as cheerio from 'cheerio';
 import { NewsItem } from '@/lib/core/types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
+import { selectDueSources, selectRecentFeedItems, socialPollTier } from './sourcePolling';
 
 const DEFAULT_TIMEOUT = 15000;
 const X_MAX_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
-const X_MAX_FUTURE_SKEW_MS = 2 * 60 * 60 * 1000;
+const X_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 const parser = new Parser({
     customFields: {
@@ -126,7 +127,11 @@ export async function scrapeTelegramChannel(
             });
         });
 
-        return posts.slice(0, 20).map((post, i) => ({
+        const recentPosts = selectRecentFeedItems(posts, (post) => post.date, {
+            limit: 10,
+            maxAgeMs: 72 * 60 * 60 * 1000,
+        });
+        return recentPosts.map((post, i) => ({
             id: `social-tg-${source.name.replace(/\s+/g, '-').toLowerCase()}-${i}-${Date.now()}`,
             title: safeSlice(post.text, 140) + (post.text.length > 140 ? '…' : ''),
             description: safeSlice(post.text, 500) + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
@@ -324,7 +329,7 @@ function normalizeXFeed(source: SocialSource, feed: XFeed, now = Date.now()): Ne
         });
     }
 
-    return items.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 20);
+    return items.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 10);
 }
 
 function bestXCandidate(candidates: Array<{ strategy: string; items: NewsItem[] }>): { strategy: string; items: NewsItem[] } | null {
@@ -368,9 +373,12 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
 /**
  * Orchestrates social media feed ingestion from all configured channels.
  */
-export async function fetchSocialFeeds(): Promise<NewsItem[]> {
-    const telegramPromises = TELEGRAM_CHANNELS.map(source => scrapeTelegramChannel(source));
-    const xPromises = X_ACCOUNTS.map(source => fetchXFeed(source));
+export async function fetchSocialFeeds(now = Date.now()): Promise<NewsItem[]> {
+    const dueTelegram = selectDueSources(TELEGRAM_CHANNELS, socialPollTier, now);
+    const dueX = selectDueSources(X_ACCOUNTS, socialPollTier, now);
+    console.log(`[polling] Social: ${dueTelegram.length}/${TELEGRAM_CHANNELS.length} Telegram and ${dueX.length}/${X_ACCOUNTS.length} X sources due`);
+    const telegramPromises = dueTelegram.map(source => scrapeTelegramChannel(source));
+    const xPromises = dueX.map(source => fetchXFeed(source));
 
     const results = await Promise.allSettled([...telegramPromises, ...xPromises]);
 

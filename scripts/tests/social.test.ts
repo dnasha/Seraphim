@@ -29,6 +29,8 @@ describe("social adapters", () => {
   });
 
   it("removes Bellum Acta's embedded gambling promotion", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(`
       <div class="tgme_widget_message" data-post="BellumActaNews/42">
         <div class="tgme_widget_message_text">A meaningful conflict report. ➖➖➖➖➖➖ 💧 Rainbet.com the #1 casino promotion</div>

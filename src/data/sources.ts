@@ -200,10 +200,7 @@ export const TELEGRAM_CHANNELS: SocialSource[] = [
 ];
 
 export const X_ACCOUNTS: SocialSource[] = [
-    { name: 'Liveuamap (X)', url: 'Liveuamap', platform: 'x', category: 'crisis', credibility_tier: 1 },
     { name: 'IDF (X)', url: 'IDF', platform: 'x', category: 'crisis', credibility_tier: 1 },
-    
-    { name: 'GeoConfirmed (X)', url: 'GeoConfirmed', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTtechnical (X)', url: 'OSINTtechnical', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'ELINT News (X)', url: 'ELINTNews', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'Rob Lee (X)', url: 'RALee85', platform: 'x', category: 'crisis', credibility_tier: 2 },

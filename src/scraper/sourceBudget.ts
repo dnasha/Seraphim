@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NewsItem } from "@/lib/core/types";
 
-const DEFAULT_PER_SOURCE_LIMIT = 60;
-const MIN_PER_SOURCE_LIMIT = 20;
+const DEFAULT_PER_SOURCE_LIMIT = 20;
+const MIN_PER_SOURCE_LIMIT = 8;
 
 export interface SourceBudgetResult {
   accepted: NewsItem[];

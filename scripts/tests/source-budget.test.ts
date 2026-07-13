@@ -16,4 +16,13 @@ describe("adaptive source novelty budget", () => {
     expect(result.accepted).toHaveLength(21);
     expect(result.cappedBySource).toEqual({ Noisy: 5 });
   });
+
+  it("uses a conservative default cap for unclassified sources", () => {
+    const result = applySourceNoveltyLimits(
+      Array.from({ length: 25 }, (_, i) => item(i, "Unknown")),
+      new Map(),
+    );
+    expect(result.accepted).toHaveLength(20);
+    expect(result.cappedBySource).toEqual({ Unknown: 5 });
+  });
 });

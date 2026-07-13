@@ -52,6 +52,8 @@ describe("RSS adapters", () => {
   });
 
   it("normalizes Reddit feeds and supplies the subreddit URL when an item has no link", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<feed></feed>", { status: 200 })));
     mocks.parseString.mockResolvedValue({ items: [{ title: "Reddit report", content: "details", isoDate: "2026-01-01T00:00:00Z" }] });
 
@@ -77,7 +79,7 @@ describe("RSS adapters", () => {
     vi.stubGlobal("fetch", fetchMock);
     mocks.parseString.mockResolvedValue({ items: [] });
 
-    await fetchAllRedditFeeds();
+    await fetchAllRedditFeeds(0);
 
     expect(fetchMock).toHaveBeenCalledTimes(15);
     expect(maxActive).toBeLessThanOrEqual(3);
