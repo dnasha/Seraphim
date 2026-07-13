@@ -161,5 +161,13 @@ export function prepareIncomingItems(items: NewsItem[]): NewsItem[] {
     }
   }
 
-  return [...byIdentity.values()];
+  const byUrl = new Map<string, NewsItem>();
+  for (const item of byIdentity.values()) {
+    const existing = byUrl.get(item.url);
+    if (!existing || (item.description?.length ?? 0) > (existing.description?.length ?? 0)) {
+      byUrl.set(item.url, item);
+    }
+  }
+
+  return [...byUrl.values()];
 }

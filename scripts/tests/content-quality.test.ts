@@ -44,6 +44,16 @@ describe("lean ingestion content normalization", () => {
     expect(result[0].url).toBe("https://example.com/story?article=7");
   });
 
+  it("deduplicates a canonical URL across different sources and titles", () => {
+    const result = prepareIncomingItems([
+      item({ id: "first", source: "Feed A", title: "Initial report from Port City", description: "Short." }),
+      item({ id: "richer", source: "Feed B", title: "Port City disruption affects shipping", description: "A richer report about the same article URL." }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("richer");
+  });
+
   it("coerces malformed XML title, URL, and description fields without crashing", () => {
     const malformed = item({
       title: { _: "Flood warning issued for Port City" } as unknown as string,

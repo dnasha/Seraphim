@@ -36,7 +36,7 @@ export async function ingestSequentially(
     if (!mErr) {
       merged_count++;
     } else {
-      console.error("[scraper] Sequential merge failed:", mErr.message);
+      throw new Error(`Sequential merge failed for ${merge.id}: ${mErr.message}`);
     }
   }
 
@@ -59,7 +59,7 @@ export async function ingestSequentially(
     if (!iErr) {
       upserted_count++;
     } else {
-      console.error("[scraper] Sequential insert failed:", iErr.message);
+      throw new Error(`Sequential insert failed for ${event.url}: ${iErr.message}`);
     }
   }
 

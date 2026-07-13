@@ -24,6 +24,7 @@ import type { DbEvent } from "@/types";
 import { hasUsableCoordinates, newsItemToDbEvent } from "./utils/transforms";
 import { filterItemsByQuality } from "./utils/quality";
 import { prepareIncomingItems } from "./utils/content";
+import { parseExistingUrlRows } from "./utils/dedup";
 import { applySourceNoveltyLimits, loadSourceNoveltyLimits } from "./sourceBudget";
 import { resolveStoryMerges } from "./merger";
 import {
@@ -117,14 +118,13 @@ async function run(): Promise<void> {
   const dedupeResults = await Promise.all(dedupePromises);
   dedupeResults.forEach((res, i) => {
     if (res.error) {
-      console.error(
-        `[scraper] Deduplication check failed for chunk ${i + 1}:`,
-        res.error.message,
+      throw new Error(
+        `Deduplication check failed for chunk ${i + 1}: ${res.error.message}`,
       );
     } else if (res.data) {
-      res.data.forEach((r: { existing_url: string }) =>
-        knownUrls.add(r.existing_url),
-      );
+      for (const existingUrl of parseExistingUrlRows(res.data)) {
+        knownUrls.add(existingUrl);
+      }
     }
   });
 
@@ -289,6 +289,7 @@ async function run(): Promise<void> {
     }
   } catch (err) {
     console.error('[scraper] Ingestion error:', err instanceof Error ? err.message : String(err));
+    throw err;
   }
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
