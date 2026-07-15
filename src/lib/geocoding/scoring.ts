@@ -107,6 +107,7 @@ export function computeScored(
             !key.includes(' ') &&
             key === titleLeadingKey &&
             finalEntry?.type !== 'landmark' &&
+            finalEntry?.type !== 'country' &&
             (source === 'title_subject' || (source === 'direct_scan' && placement === 'title'))
         ) {
             const corroborated = candidateList.some((other) => {

@@ -35,15 +35,15 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ii]n\\s+[Tt]he\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ff]rom\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Nn]ear\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Aa]round\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]cross\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Oo]ff\\s+(?:[Tt]he\\s+[Cc]oast\\s+[Oo]f\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]o\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]t\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]owards?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ww]ith\\s+(${LOC})`, 'g'),
-    new RegExp(`\\b[Oo]ver\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Oo]n\\s+(${LOC})`, 'g'),
-    new RegExp(`\\b(?:[Cc]ity|[Tt]own|[Pp]rovince|[Ss]tate|[Rr]egion|[Vv]illage|[Cc]enter|[Cc]entre)\\s+[Oo]f\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:[Cc]ity|[Tt]own|[Pp]ort|[Pp]rovince|[Ss]tate|[Rr]egion|[Vv]illage|[Cc]enter|[Cc]entre)\\s+[Oo]f\\s+(${LOC})`, 'g'),
 
     // Event-specific verbs used to identify conflict zones
     new RegExp(`\\b[Hh]its?\\s+(${LOC})`, 'g'),
@@ -106,6 +106,11 @@ export const LOCATION_PATTERNS = [
  * (e.g., "Missile hits Kyiv"), which is usually the intended map subject.
  */
 export const ACTION_TARGET_PATTERNS = [
+    new RegExp(`\\b(?:semi-final|semifinal|final|match|game)\\s+in\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:reports?|reporting|filed)\\s+from\\s+(?:the\\s+)?(${LOC})`, 'g'),
+    new RegExp(`\\b(?:left|departed)\\s+for\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:could(?:n't|\\s+not)\\s+)?leave\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:[Aa]ir\\s+defen[cs]es?|[Ss]ecurity)\\s+(?:activated|deployed|increased|tightened)\\s+around\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:strikes?|struck)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:attack|attacked|attacks)\\s+(?:on|in|against)\\s+(${LOC})`, 'g'),
     new RegExp(`\\b(?:fired|fires?|launches?|launched)\\s+(?:at|on|into|towards?)\\s+(${LOC})`, 'g'),

@@ -21,7 +21,7 @@ const SLOW_RSS_SOURCES = new Set([
 
 const FAST_X_SOURCES = new Set([
   "IDF (X)", "OSINTtechnical (X)", "ELINT News (X)",
-  "OSINTdefender (X)", "BRICSinfo (X)",
+  "OSINTdefender (X)", "BRICSinfo (X)", "Breaking911 (X)",
 ]);
 
 const TIER_DIVISOR: Record<PollTier, number> = { fast: 1, normal: 2, slow: 4 };

@@ -38,7 +38,9 @@ export function extractDemonym(text: string): string | null {
  * Resolves common country abbreviations (e.g., "U.S." -> "United States").
  */
 export function extractCountryAbbrev(text: string): string | null {
-    const tokens = text.split(/[\s\-]+/);
+    // Keep hyphenated model/product codes intact (for example, Casio GA-2100).
+    // Geographic compounds such as "US-led" are normalized by preprocessText.
+    const tokens = text.split(/\s+/);
     for (const token of tokens) {
         const cleaned = token.replace(/['\u2019]s$/i, '').replace(/[,;:!?'")\]]+$/, '').replace(/^['"(\[]+/, '');
         const lower = cleaned.toLowerCase();
@@ -78,6 +80,13 @@ export function preprocessText(text: string): string {
     text = text.replace(MEDIA_ATTRIBUTION_SUFFIX, '');
     text = text.replace(/\b(?:turning\s+point\s+usa|america's\s+pastime|the\s+atlantic)\b/gi, '');
     text = text.replace(/\b(vietnam|korean|gulf|world|civil|cold)\s+war\b/gi, '');
+    text = text.replace(/\bSt\.\s+Paul\b/gi, 'Saint Paul');
+    text = text.replace(/\bLiberal\b(?=\s+(?:party|leader)\b)/gi, '');
+    text = text.replace(/\bEl Ni(?:ñ|n)o\b(?=\s+(?:concerns?|conditions?|weather|pattern|cycle|event|phenomenon|impacts?|effects?)\b)/gi, '');
+    text = text.replace(/\bvan(?=\s+(?:de(?:n|r)?|der|het)\b)/g, '');
+    text = text.replace(/\bKnowledge Centre\b/gi, '');
+    text = text.replace(/\bStrength in Unity\b/gi, 'Strength');
+    text = text.replace(/\bLos Angeles Lakers\b/gi, 'Lakers');
     // Frequent, unambiguous Albanian variants from a feed where the Latin-script
     // names are otherwise absent from the GeoNames dictionary.
     text = text.replace(/\bSerbi(?:së|a)?\b/gi, 'Serbia');

@@ -339,6 +339,152 @@ describe('extractLocation - false positives', () => {
     ])('resolves an unambiguous venue or contextual place: %s', (title, expected) => {
         expect(extractLocation(title, '').match).toBe(expected);
     });
+
+    it('does not map a lowercase surname particle to Van, Türkiye', () => {
+        expect(extractLocation(
+            'AI explored as tool for unraveling radicalization\'s complex drivers',
+            'AI scientist Mijke van den Hurk investigated the issue.'
+        ).match).toBeNull();
+    });
+
+    it('does not map an uppercase product code to Georgia', () => {
+        expect(extractLocation('Casio GA-2100 smartwatch gets a major discount', '').match).toBeNull();
+    });
+
+    it('does not map the El Niño climate pattern to a Mexican town', () => {
+        expect(extractLocation('Districts prepare for El Niño concerns', '').match).toBeNull();
+    });
+
+    it('does not map a political Liberal reference to Liberal, Kansas', () => {
+        const result = extractLocation(
+            'Inquiry examines alleged illegal political donations',
+            'The donations to the Liberal party are under investigation in Australia.'
+        );
+        expect(result.match).toBe('Australia');
+    });
+
+    it('does not map a Knowledge Centre organization name to Centre, Haiti', () => {
+        const result = extractLocation(
+            'Report details ecological characterization of peatlands',
+            'The European Commission Knowledge Centre published the report in Europe.'
+        );
+        expect(result.match).toBe('Europe');
+    });
+
+    it('rejects a lowercase hyphenated NLP fragment', () => {
+        expect(extractLocation(
+            'Çfarë sinjalizon financimi para-anëtarësues',
+            'Instrumenti për Ndihmë Para-Anëtarësimi.'
+        ).match).toBeNull();
+    });
+
+    it('removes a sports-franchise name before selecting the story location', () => {
+        const result = extractLocation(
+            'A Portland teen thrifted a Los Angeles Lakers jacket',
+            ''
+        );
+        expect(result.match).toBe('Portland');
+    });
+});
+
+describe('extractLocation - recent production regressions', () => {
+    it('prefers a title-leading country over an incidental destination abbreviation', () => {
+        const result = extractLocation(
+            'Nepal court jails 2 former ministers over refugee scam',
+            'Forged documents enabled Nepali nationals to be resettled in the US.'
+        );
+        expect(result.match).toBe('Nepal');
+    });
+
+    it('extracts a named target port instead of the attacking country', () => {
+        const result = extractLocation('A massive US airstrike just hit the Iranian port of Chabahar.', '');
+        expect(result.match).toBe('Chabahar');
+    });
+
+    it('treats a sports venue as stronger than victory-over wording', () => {
+        const result = extractLocation(
+            'Spain into World Cup final after victory over France',
+            'Spain beat France 2-0 in their semi-final in Dallas.'
+        );
+        expect(result.match).toBe('Dallas');
+    });
+
+    it('normalizes dotted Saint Paul without selecting Paul, Cabo Verde', () => {
+        const result = extractLocation('Police investigate vandalism at a St. Paul gallery', '');
+        expect(result.match).toBe('Saint Paul');
+    });
+
+    it('resolves Nelson Mandela Bay to Gqeberha', () => {
+        const result = extractLocation('Nelson Mandela Bay faces sewage pollution penalties', '');
+        expect(result.match).toBe('Gqeberha');
+    });
+
+    it('uses the Tasmanian demonym rather than a parent-company country', () => {
+        const result = extractLocation(
+            'Tasmanian government proposes buying a brewery site',
+            'The Japanese parent company supports exploring the idea.'
+        );
+        expect(result.match).toBe('Australia');
+    });
+
+    it('keeps a title-leading city above a neighboring city in the description', () => {
+        const result = extractLocation(
+            'Minneapolis city leaders reckon with projected budget gap',
+            'Leaders in neighboring St. Paul face similar choices.'
+        );
+        expect(result.match).toBe('Minneapolis');
+    });
+
+    it('recognizes a title-leading host city', () => {
+        const result = extractLocation(
+            'London to host the Africa Advancement Forum summit',
+            'The summit will focus on Africa\'s strength in unity.'
+        );
+        expect(result.match).toBe('London');
+    });
+
+    it('prefers Bushehr when the title says defenses activated around it', () => {
+        const result = extractLocation(
+            'Air defences activated around Bushehr nuclear power plant',
+            'Explosions were also reported near Bandar Abbas.'
+        );
+        expect(result.match).toBe('Bushehr');
+    });
+
+    it('prefers a stated travel destination over the origin in a title', () => {
+        const result = extractLocation(
+            'Taiwan opposition launches first trip to mainland China',
+            'The delegation left for Shanghai on Tuesday.'
+        );
+        expect(result.match).toBe('Shanghai');
+    });
+
+    it('keeps a reported World Cup venue above competing team countries', () => {
+        const result = extractLocation(
+            'Spain shuts down France and advances to the final',
+            'The reporter filed from the Dallas stadium where the teams played.'
+        );
+        expect(result.match).toBe('Dallas');
+    });
+
+    it('does not mistake person-name components for description locations', () => {
+        expect(extractLocation(
+            'Five school board candidates removed from ballot',
+            'Chicago officials upheld challenges to Angel Velez and Cydney Wallace.'
+        ).match).toBe('Chicago');
+        expect(extractLocation(
+            'Review: Expanding a one-woman show',
+            'The cast includes Kerry Washington and Kara Young.'
+        ).match).toBeNull();
+    });
+
+    it('keeps a possessive title subject above an incidental region mention', () => {
+        const result = extractLocation(
+            'Campeche’s bees present their case for legal rights',
+            'The campaign recalls protections for whales in the Gulf of California.'
+        );
+        expect(result.match).toBe('Campeche');
+    });
 });
 
 /*

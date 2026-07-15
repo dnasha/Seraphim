@@ -140,7 +140,7 @@ export const DEMONYM_MAP: Record<string, string> = {
     'american': 'united states', 'chinese': 'china', 'russian': 'russia',
     'indian': 'india', 'japanese': 'japan', 'german': 'germany', 'deutschland': 'germany',
     'french': 'france', 'british': 'united kingdom', 'canadian': 'canada',
-    'brazilian': 'brazil', 'australian': 'australia', 'mexican': 'mexico',
+    'brazilian': 'brazil', 'australian': 'australia', 'tasmanian': 'australia', 'mexican': 'mexico',
     'italian': 'italy', 'spanish': 'spain', 'korean': 'south korea',
     'iranian': 'iran', 'iraqi': 'iraq', 'syrian': 'syria',
     'turkish': 'turkey', 'israeli': 'israel', 'palestinian': 'palestine',

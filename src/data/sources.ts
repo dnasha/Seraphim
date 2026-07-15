@@ -207,5 +207,6 @@ export const X_ACCOUNTS: SocialSource[] = [
     { name: 'Michael Kofman (X)', url: 'KofmanMichael', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'OSINTdefender (X)', url: 'sentdefender', platform: 'x', category: 'crisis', credibility_tier: 2 },
     { name: 'BRICSinfo (X)', url: 'BRICSinfo', platform: 'x', category: 'world', credibility_tier: 3 },
+    { name: 'Breaking911 (X)', url: 'Breaking911', platform: 'x', category: 'world', credibility_tier: 3 },
     
 ];

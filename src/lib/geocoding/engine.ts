@@ -126,6 +126,13 @@ export function extractLocation(title: string, description: string): { match: st
                 }
                 if (!shouldSkip) {
                     candidates.push({ name: cleaned, source: 'title_subject', placement: 'title' });
+                    const nextWord = titleWords[len]?.toLowerCase().replace(/[^a-z]/g, '');
+                    const followingWord = titleWords[len + 1]?.toLowerCase().replace(/[^a-z]/g, '');
+                    const hasGeographicSuffix = nextWord && ['city', 'county', 'province', 'state', 'region', 'district'].includes(nextWord);
+                    const isHostConstruction = nextWord === 'to' && ['host', 'hold', 'stage', 'welcome'].includes(followingWord || '');
+                    if (hasGeographicSuffix || isHostConstruction) {
+                        candidates.push({ name: cleaned, source: 'regex', placement: 'title' });
+                    }
                     break;
                 }
             }
@@ -278,7 +285,53 @@ export function extractLocation(title: string, description: string): { match: st
     scanLandmarks(title, 'title');
     scanLandmarks(description, 'description');
 
-    let bestCandidates = computeScored(candidates, titleLeadingKey);
+    // Compromise occasionally labels a hyphenated non-English preposition as a
+    // place (for example Albanian "para-"). Do not turn such fragments into pins.
+    const viableCandidates = candidates.filter(candidate =>
+        candidate.source !== 'nlp' || !/^para-$/i.test(candidate.name.trim())
+    );
+    let bestCandidates = computeScored(viableCandidates, titleLeadingKey);
+
+    // Only invoke the heavier person-name pass when the current winner came
+    // from an unstructured description scan. This catches collisions such as
+    // Angel Velez and Kara Young without weakening structured/dateline matches.
+    const leadingDescriptionCandidate = cleanCandidate(bestCandidates[0]?.name || '');
+    const escapedDescriptionCandidate = leadingDescriptionCandidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hasPersonPairContext = escapedDescriptionCandidate.length > 0 && new RegExp(
+        `(?:[A-Z][A-Za-z\\u00C0-\\u024F'’-]+\\s+${escapedDescriptionCandidate}\\b|\\b${escapedDescriptionCandidate}\\s+[A-Z][A-Za-z\\u00C0-\\u024F'’-]+)`
+    ).test(description);
+    if (
+        bestCandidates[0]?.placement === 'description' &&
+        ['direct_scan', 'regex', 'compound_scan'].includes(bestCandidates[0].source) &&
+        hasPersonPairContext
+    ) {
+        const personLocationKeys = new Set<string>();
+        for (const person of nlp(description).people().out('array') as string[]) {
+            const words = person
+                .split(/\s+/)
+                .map(word => normalizeAccents(cleanCandidate(word).toLowerCase()))
+                .filter(Boolean);
+            if (words.length < 2) continue;
+            const fullName = words.join(' ');
+            if (KNOWN_LOCATIONS[fullName] || fullName.startsWith('saint paul')) continue;
+            for (let start = 0; start < words.length; start++) {
+                for (let len = Math.min(3, words.length - start); len >= 1; len--) {
+                    const key = words.slice(start, start + len).join(' ');
+                    if (KNOWN_LOCATIONS[key]) personLocationKeys.add(key);
+                }
+            }
+        }
+        if (personLocationKeys.size > 0) {
+            const withoutPersonCollisions = viableCandidates.filter(candidate => {
+                if (candidate.placement !== 'description') return true;
+                const key = normalizeAccents(cleanCandidate(candidate.name).toLowerCase());
+                return !personLocationKeys.has(key);
+            });
+            if (withoutPersonCollisions.length !== viableCandidates.length) {
+                bestCandidates = computeScored(withoutPersonCollisions, titleLeadingKey);
+            }
+        }
+    }
 
     // Final fallback: use compromise NLP if tiered heuristics failed
     if (bestCandidates.length === 0) {
@@ -307,7 +360,9 @@ export function extractLocation(title: string, description: string): { match: st
                     candidates.push({ name: place, source: 'nlp', placement: 'title' });
                 }
             }
-            bestCandidates = computeScored(candidates, titleLeadingKey);
+            bestCandidates = computeScored(candidates.filter(candidate =>
+                candidate.source !== 'nlp' || !/^para-$/i.test(candidate.name.trim())
+            ), titleLeadingKey);
         }
 
         if (bestCandidates.length === 0) {
@@ -336,7 +391,9 @@ export function extractLocation(title: string, description: string): { match: st
                         candidates.push({ name: place, source: 'nlp', placement: 'description' });
                     }
                 }
-                bestCandidates = computeScored(candidates, titleLeadingKey);
+                bestCandidates = computeScored(candidates.filter(candidate =>
+                    candidate.source !== 'nlp' || !/^para-$/i.test(candidate.name.trim())
+                ), titleLeadingKey);
             }
         }
     }
@@ -411,11 +468,22 @@ export function extractLocation(title: string, description: string): { match: st
         ['beijing expo', 'Beijing'],
         ['iran oil waiver', 'Tehran'],
         ['serbia është si palermo', 'Serbia'],
+        ['nelson mandela bay', 'Gqeberha'],
+        ['baja california governor marina del pilar', 'Baja California'],
+        ['bushehr nuclear power plant', 'Bushehr'],
+        ['chicago board of election commissioners', 'Chicago'],
+        ["campeche's bees", 'Campeche'],
     ].find(([needle]) => fullTextLower.includes(needle))?.[1];
 
-    if (contextualMatch) {
-        finalMatch = contextualMatch;
-        if (!finalCandidates.includes(contextualMatch)) finalCandidates.unshift(contextualMatch);
+    const reportedVenueRaw = /\b(?:reports?|reporting|filed)\s+from\s+(?:the\s+)?([A-Z][A-Za-z\u00C0-\u024F]+(?:\s+[A-Z][A-Za-z\u00C0-\u024F]+){0,2})\s+(?:stadium|arena|venue)\b/.exec(title + ' ' + description)?.[1];
+    const reportedVenue = reportedVenueRaw && KNOWN_LOCATIONS[normalizeAccents(reportedVenueRaw.toLowerCase())]
+        ? reportedVenueRaw
+        : null;
+
+    const strongContextMatch = reportedVenue || contextualMatch;
+    if (strongContextMatch) {
+        finalMatch = strongContextMatch;
+        if (!finalCandidates.includes(strongContextMatch)) finalCandidates.unshift(strongContextMatch);
     }
 
     if (finalMatch) {
