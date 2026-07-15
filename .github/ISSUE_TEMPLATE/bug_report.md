@@ -1,55 +1,81 @@
 ---
-name: 🐛 Bug Report
-about: Create a detailed report to help us identify and fix bugs in Seraphim.
-title: "[BUG] "
+name: "🐛 Bug report"
+about: "Report a reproducible problem in Seraphim"
+title: "[Bug]: "
 labels: bug
-assignees: ''
-
+assignees: ""
 ---
 
-## Bug Description
+<!--
+Thank you for taking the time to report a bug.
 
-A clear and concise description of what the bug is. Include what you were doing when it occurred.
+Security issue? Stop here. Do not post vulnerability details publicly. Follow
+.github/SECURITY.md and email feedback@seraphi.me instead.
 
----
+Please search existing issues first and remove secrets, tokens, personal data,
+and unrelated publisher content from anything you attach.
+-->
 
-## Steps to Reproduce
+## Summary
 
-Provide exact steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error output or behavior: '....'
+<!-- What went wrong? Keep the first sentence short and specific. -->
 
----
+## Where did this happen?
 
-## Expected Behavior
+- [ ] Hosted app at seraphi.me
+- [ ] Local development checkout
+- [ ] Self-hosted or modified deployment
 
-A clear and concise description of what you expected to happen.
+**Commit or version:** <!-- `git rev-parse --short HEAD`, if applicable -->
 
----
+## Steps to reproduce
 
-## Context & Environment
+1.
+2.
+3.
 
-Please complete the following information about your local environment:
+**Minimal URL or input:**
 
-- **Browser & Version**: [e.g. Chrome 124, Safari 17]
-- **Operating System**: [e.g. macOS Sonoma, Windows 11, iOS 17]
-- **Device Viewport**: [e.g. Desktop 1080p, iPhone 15 Pro, iPad Air]
-- **User Role**: [e.g. Guest (unauthenticated), Authenticated Free Tier, Pro Tier, Analyst, Angel]
+<!-- Share the smallest safe example that reproduces the problem. -->
 
----
+## Expected behavior
 
-## Relevant Logs, Screenshots, or Error Messages
+<!-- What did you expect to happen? -->
 
-If applicable, add screenshots, console logs, or API response errors to help explain the problem.
+## Actual behavior
+
+<!-- What happened instead? Include frequency and whether a refresh/retry changes it. -->
+
+## Impact
+
+<!-- Who is affected, what workflow is blocked, and is data lost or displayed incorrectly? -->
+
+## Environment
+
+- **Browser and version:**
+- **Operating system/device:**
+- **Account state or tier:** <!-- Guest, Free, Pro, Analyst, Angel; do not share account details -->
+- **Viewport:** <!-- Desktop width or device, when relevant -->
+
+## Evidence
+
+<!--
+Add screenshots, a short recording, sanitized console output, or a focused test.
+Use a text block for logs. Do not include cookies, authorization headers,
+Supabase keys, Stripe data, email addresses, or private source material.
+-->
 
 ```text
-[Paste error messages or console logs here]
+Paste sanitized output here, or remove this block.
 ```
 
----
+## Additional context
 
-## Additional Information
+<!-- Recent changes, workarounds, related issues, or anything else that may help. -->
 
-Add any other context about the problem that could assist developers in tracking it down (e.g. network speeds, rate limit headers, etc.).
+## Checklist
+
+- [ ] I searched for an existing issue.
+- [ ] I can reproduce this on the current hosted app or default branch.
+- [ ] I removed credentials, personal data, and sensitive operational details.
+- [ ] This is not a vulnerability report.

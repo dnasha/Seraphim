@@ -1,109 +1,122 @@
 # Contributing to Seraphim
 
-Thank you for your interest in contributing to Seraphim! As a real-time OSINT news aggregation and mapping platform, we maintain high standards for performance, security, and code quality. This guide will help you set up your development environment and outline our contribution guidelines.
+Thank you for helping improve Seraphim. Contributions are welcome across the dashboard, ingestion pipeline, geocoding, tests, accessibility, performance, security, and documentation.
 
----
+Seraphim is both an open-source project and an operated SaaS. Contributions should improve the public codebase without assuming access to production infrastructure, private database definitions, provider accounts, customer data, or internal runbooks.
 
-## 🏗️ Technical Architecture Constraints
+## Before you start
 
-Before writing code, please familiarize yourself with the critical constraints of the codebase:
+- Search existing issues and pull requests before beginning substantial work.
+- Open an issue first for large features, schema-dependent changes, new external services, or changes that affect product tiers.
+- Keep pull requests focused. Separate unrelated refactors from behavior changes.
+- Never include credentials, customer data, private operational details, copied publisher content, or generated artifacts with unclear licensing.
+- Report vulnerabilities privately according to [the security policy](.github/SECURITY.md).
 
-1. **🔒 Server-Only Modules**: 
-   - The geocoding engine (`src/lib/geocoding/engine.ts`) and its geographic datasets (~4.7MB) are marked with `server-only` to prevent them from inflating the client-side JavaScript bundle.
-   - Do **NOT** import anything from `src/lib/geocoding/` or backend libraries directly into client React components. Client components should fetch geocoded data exclusively via Next.js API routes (`/api/news`).
-   - If a module is used in CLI/benchmark tools, set `IS_BENCHMARK="true"` or run via Bun.
+## Development setup
 
-2. **🎨 Style & Design System**:
-   - Styling is written in **Vanilla CSS** and **CSS Modules** to ensure styling isolation. Avoid adding inline styles or raw Tailwind utilities unless explicitly approved.
-   - Centralized brand colors are managed in `src/lib/colors.ts` and `src/app/globals.css`.
-   - Adhere to the tiered radius system: `--radius-sm: 4px`, `--radius-md: 8px`, `--radius-lg: 12px` (rectangular toggles, no legacy pill-shaped elements).
+### Prerequisites
 
-3. **🗺️ URL & View State Sync**:
-   - The map's viewport coordinates (`lat`, `lng`, `zoom`) and filters (`q`, `t`, `src`, `cat`, `s`) are synchronized in the URL via `useViewState` using `replaceState` to allow persistent, shareable links. Ensure any new filters are properly registered in the state hook.
+- Bun 1.3 or newer
+- Git
+- A compatible Supabase/PostgreSQL development project for data-backed flows
 
----
+### Clone and install
 
-## 🛠️ Local Development Setup
-
-### 1. Prerequisites
-- **Bun** (Primary runtime, package manager, and test runner)
-- **Supabase** (Postgres DB with PostGIS, pgvector, and pg_trgm)
-- **Upstash Redis** (Optional, for rate-limiting verification)
-
-### 2. Cloned Repository Setup
 ```bash
-# Clone the repository
 git clone https://github.com/dnasha/Seraphim.git
 cd Seraphim
-
-# Install dependencies using Bun
 bun install --frozen-lockfile
-
-# Compile the GeoNames local cache
-bun run scripts/build-geodata.mjs
 ```
 
-### 3. Database Setup
-Set up your own Supabase database by enabling the `postgis`, `vector`, and `pg_trgm` extensions, and creating the necessary event tables and RPC functions (such as spatial clustering and bulk ingestion). For details on the database structure, refer to the Database Blueprint section of the project `README.md`.
+The compiled GeoNames lookup is committed. Rebuild it only when changing the raw geographic inputs:
 
-### 4. Running the Development Server
 ```bash
-# Starts Next.js with Turbopack enabled
-bun dev
+bun run scripts/build/build-geodata.mjs
 ```
 
----
-
-## 🧪 Testing Guidelines
-
-We use **Vitest** for unit and integration testing. Any feature addition or modification must include test coverage.
+Start the application with:
 
 ```bash
-# Run the entire Vitest suite
+bun run dev
+```
+
+The public repository does not include Seraphim's production schema or deployment configuration. You can work on most UI, parsing, geocoding, and unit-tested logic locally; complete data-backed flows require your own compatible development database and policies.
+
+## Architecture guardrails
+
+### Keep server-only code on the server
+
+- `src/lib/geocoding/`, service-role database clients, ingestion modules, and secret-bearing integrations must not be imported into client components.
+- Client components should use route handlers or narrowly defined server interfaces.
+- The geocoding engine intentionally allows Bun, test, and benchmark contexts while remaining server-only in the application bundle.
+
+### Preserve shared contracts
+
+- URL state in `src/hooks/useViewState.ts` is the source of truth for map position, filters, time windows, sorting, and shared event links.
+- Product access rules belong in the shared entitlement contract. A UI gate alone is not authorization; server routes must enforce the same rule.
+- Event identity must remain stable across raw results, aggregated map results, detail lookups, and shared URLs.
+- Keep source, category, and credibility presentation centralized in `src/lib/styles/colors.ts`.
+
+### Respect data and source boundaries
+
+- Treat source material as untrusted input. Preserve sanitization, bounded parsing, URL validation, and failure isolation.
+- New sources need a clear public-interest use case, an appropriate credibility tier, stable attribution, and tests or diagnostics demonstrating useful output.
+- Avoid copying full publisher content. Seraphim should point users to the original reporting and retain only what is necessary for aggregation and analysis.
+- Do not add production endpoints, private migrations, operational thresholds, credentials, or customer-derived fixtures to the public repository.
+
+### Match the interface
+
+- Use CSS Modules and the shared design tokens in `src/app/globals.css` and related style modules.
+- Preserve keyboard access, focus states, responsive behavior, and reduced-motion support.
+- Include before/after screenshots or a short recording for visible UI changes.
+
+## AI-assisted contributions
+
+AI-assisted contributions are welcome, including code, tests, documentation, and review support, subject to all of the following:
+
+1. **Use a current state-of-the-art model.** Use a frontier-quality model with strong, current coding and reasoning performance that is appropriate for the task. Do not submit low-quality bulk output from obsolete models, lightweight autocomplete, or unverified agent runs.
+2. **Understand every change.** You are the author of the contribution. You must be able to explain the design, behavior, edge cases, and security implications without relying on the model's explanation.
+3. **Verify thoroughly.** Inspect the complete diff, run the relevant test and quality commands, exercise affected user flows, and check claims against the current repository. Generated tests do not count as verification unless you have reviewed what they actually prove.
+4. **Disclose material assistance.** In the pull request, name the model/tool and briefly describe how it was used. Minor editor completion does not need a detailed transcript; generated implementations, migrations, tests, or substantial prose do.
+5. **Protect sensitive data.** Do not send secrets, private documentation, vulnerability details, customer data, or non-public production information to a model or include them in prompts, fixtures, or transcripts.
+6. **Respect licensing and attribution.** Do not submit model output that reproduces third-party code, text, imagery, or data without compatible rights and attribution.
+
+Maintainers may ask for additional tests, a design explanation, or a human-authored revision. Unreviewed AI output, unverifiable claims, prompt-dump pull requests, and changes whose author cannot explain them may be closed.
+
+## Testing and quality
+
+Run the smallest relevant tests while iterating, then the repository checks appropriate to your change:
+
+```bash
+bun run lint
 bun run test
-
-# Run tests in watch mode
-bun run test:watch
-
-# Run coverage report
 bun run test:coverage
+bun run build
 ```
 
-### 🎯 Geocoding Accuracy Benchmarks
-To prevent regressions in location extraction and NLP scoring, we run a geocoding regression benchmark against 400 manually verified sample inputs.
-- If you modify the geocoding logic in `src/lib/geocoding/`, you **must** run the accuracy benchmark:
-  ```bash
-  bun run test:accuracy
-  ```
-- Review the output in `scripts/results/` to ensure your changes did not decrease geocoding resolution or introduce false positives.
+For geocoding or location-scoring changes, also run:
 
----
+```bash
+bun run test:accuracy
+```
 
-## 📝 Code Quality & Conventions
+Review the regression output rather than relying only on the exit code. Add focused cases for both the intended match and nearby false-positive risks.
 
-1. **Strict Typing**:
-   - We enforce strict TypeScript configurations. Avoid using `any`. Use defined interfaces or generics instead.
-   - Use correct database return mapper types found in `src/types/index.ts`.
+Additional expectations:
 
-2. **Linting & Formatting**:
-   - Always run the lint check before opening a PR:
-     ```bash
-     bun run lint
-     ```
-   - Resolve any warnings or errors before committing.
+- Add or update tests for changed behavior.
+- Keep TypeScript strict; avoid `any` unless an external boundary makes it unavoidable and the reason is documented.
+- Confirm UI changes at desktop and narrow/mobile widths.
+- Test unauthenticated and least-privileged behavior when changing auth, billing, entitlements, API routes, or user-owned data.
+- Treat warnings, flaky behavior, and silent fallback paths as findings to investigate—not noise to ignore.
 
-3. **Comments & Documentation**:
-   - Keep comments precise. If you are modifying a complex SQL function or utility, update the inline comments and document the functional usage clearly.
+## Pull request process
 
----
+1. Branch from the current default branch using a descriptive name such as `feature/source-health` or `fix/shared-event-selection`.
+2. Make focused commits with clear messages.
+3. Complete the pull request template, including risk, verification, documentation, and AI-assistance sections.
+4. Link the issue the change addresses when one exists.
+5. Ensure CI passes and respond to review with follow-up commits rather than hiding material changes in force-pushed history during active review.
+6. Be prepared to revise scope. A technically correct change may still need adjustment for product fit, public/private boundaries, maintainability, or source quality.
 
-## 🚀 Submitting a Pull Request
-
-1. **Branch Naming**:
-   - Use descriptive branch names: `feature/your-feature-name` or `bugfix/issue-description`.
-2. **Commit Messages**:
-   - Use clear, descriptive commit messages (e.g., `feat: add category filter for maritime stories`, `fix: prevent map center flickering on rapid pans`).
-3. **Open a PR**:
-   - Base your branch off of `main`.
-   - Complete the **Pull Request Template** details (related issues, checklist, testing verification, description).
-   - Ensure all CI tests, linting check, and build steps pass on your local machine before pushing.
+By contributing, you agree that your work is provided under the repository's [GNU AGPL v3.0 license](LICENSE).

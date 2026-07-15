@@ -1,51 +1,78 @@
-# Security Policy
+# Security policy
 
-We take the security of Seraphim seriously. If you believe you have found a security vulnerability, please read this policy to understand how to report it and what to expect from us.
+Seraphim processes untrusted public content, exposes internet-facing APIs, and includes authentication and paid-service boundaries. We appreciate careful security research that helps protect users, contributors, and the hosted service.
 
-## Supported Versions
+## Report vulnerabilities privately
 
-We actively support and patch security issues on the following versions:
+**Do not open a public issue, discussion, or pull request for a suspected vulnerability.** Email [`feedback@seraphi.me`](mailto:feedback@seraphi.me) with the subject `Security report: <short summary>`.
 
-| Version | Supported                |
-| ------- | ------------------------ |
-| < 1.0.x | Yes (Active Development) |
+If ordinary email is not suitable for the information you need to share, send a brief request for a more appropriate private channel before transmitting sensitive details.
 
-We recommend always running the latest version from the `main` branch to ensure you have the latest security patches and updates.
+Include as much of the following as you can:
 
-## Reporting a Vulnerability
+- A concise description of the issue and its potential impact
+- The affected URL, route, component, commit, or hosted-service flow
+- Reproduction steps or a minimal proof of concept
+- The account tier and environment used during testing
+- Whether the issue is intermittent or consistently reproducible
+- Suggested mitigations, if you have them
+- Your preferred name or handle for attribution, or a request to remain anonymous
 
-**Please do not open a public GitHub issue for security-related bugs.** Instead, report security vulnerabilities privately.
+Please remove secrets, access tokens, personal data, and unrelated third-party content from logs and screenshots. Do not send destructive payloads or collected user data as proof.
 
-### How to Report
+## Supported surface
 
-Please send an email to **`feedback@seraphi.me`** with the following information:
+Security fixes are made against the current default branch and the currently deployed hosted service. Seraphim is pre-1.0 and does not maintain security-supported historical release lines. Self-hosted forks and modified deployments are maintained by their operators, though reports about vulnerabilities inherited from this repository are welcome.
 
-1. **Description**: A detailed description of the vulnerability, including its potential impact.
-2. **Steps to Reproduce**: Detailed steps, code snippets, or raw payloads required to reproduce the issue.
-3. **Environment**: Details about the runtime environment (OS, browser, database setup) if applicable.
-4. **Attribution**: Let us know if and how you would like to be credited (e.g., your name, GitHub handle, or website).
+Reports generally in scope include:
 
-We will acknowledge receipt of your vulnerability report within **48 hours** and provide a tracking ID.
+- Authentication, session, or authorization bypasses
+- Cross-account access or exposure of private user data
+- Server-side request forgery, injection, unsafe deserialization, or remote code execution
+- Cross-site scripting or content-sanitization bypasses
+- Payment, subscription, webhook, or entitlement bypasses with a security impact
+- Credential, secret, or sensitive operational-data exposure
+- Abuse paths that materially threaten service availability or data integrity
+- Vulnerable dependencies with a demonstrable impact on Seraphim
 
-### Safe Harbor
+The following are generally not security vulnerabilities by themselves:
 
-We encourage responsible disclosure. If you act in good faith and adhere to this policy:
+- Incorrect, stale, biased, duplicated, or misleading third-party reporting
+- Geocoding, categorization, clustering, or credibility-scoring inaccuracies without a security impact
+- Missing best-practice headers without a practical exploit
+- Self-XSS, clickjacking with no sensitive action, or findings requiring control of a victim's device
+- Automated scanner output without reproduction or demonstrated impact
+- Rate-limit observations that do not create a material abuse path
+- Social engineering, physical attacks, denial-of-service stress testing, or attacks on third-party providers
+- Issues that only affect an unsupported, materially modified fork
 
-- We will not initiate legal action against you.
-- We will work with you to understand and resolve the issue quickly.
-- We will credit you for your discovery in our security release notes, unless you request anonymity.
+If you are uncertain whether a finding is in scope, report it privately and explain the concern.
 
-## Scope of Scope & Vulnerability Handling
+## Research guidelines
 
-This policy applies to:
+To keep testing safe and eligible for the safe-harbor statement below:
 
-- The core Seraphim codebase (frontend and backend APIs).
-- The database ingestion pipeline and geocoding modules.
+- Use accounts and data you own or have explicit permission to test.
+- Stop when you have demonstrated the issue; do not access additional records or establish persistence.
+- Do not degrade availability, automate high-volume traffic, spam sources, or interfere with other users.
+- Do not test payment methods that you do not own or attempt real financial fraud.
+- Do not exfiltrate, retain, alter, or publicly disclose user data.
+- Give us a reasonable opportunity to investigate and remediate before public disclosure.
+- Follow applicable law and the terms of third-party services.
 
-### Response & Disclosure Timeline
+## What to expect
 
-1. **Acknowledge**: We will confirm receipt within 48 hours.
-2. **Triage**: We will investigate the issue and assess its severity.
-3. **Patch**: We will develop and test a fix.
-4. **Deploy**: We will release the fix to production and merge it into the public repository.
-5. **Disclose**: We will publish a security advisory or release notes detailing the fix, acknowledging your contribution.
+We aim to:
+
+1. Acknowledge a complete report within three business days.
+2. Triage it and request any missing reproduction details.
+3. Keep you informed at meaningful points during investigation and remediation.
+4. Coordinate disclosure after a fix or mitigation is available when the report is valid.
+
+Response and remediation time vary with severity, reproducibility, affected dependencies, and operational risk. We may combine duplicate reports and cannot promise a reward or bounty. Attribution is offered when appropriate and requested.
+
+## Safe harbor
+
+When you make a good-faith effort to follow this policy, avoid privacy violations and service disruption, and report findings promptly, we will not pursue legal action against you for that research. If a third party initiates action related to compliant research, we will make reasonable efforts to clarify that your work followed this policy.
+
+This safe harbor does not authorize testing against third-party systems and does not waive requirements imposed by applicable law.

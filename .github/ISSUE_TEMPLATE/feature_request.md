@@ -1,40 +1,61 @@
 ---
-name: 🚀 Feature Request
-about: Suggest an idea or enhancement for Seraphim.
-title: "[FEATURE] "
+name: "✨ Feature request"
+about: "Propose a focused improvement to Seraphim"
+title: "[Feature]: "
 labels: enhancement
-assignees: ''
-
+assignees: ""
 ---
 
-## Feature Proposal
+<!--
+Search existing issues before proposing a feature. Describe the user problem
+before the implementation. Please do not include private production details,
+provider credentials, or copied publisher content.
+-->
 
-A clear and concise description of what the enhancement is and the value it adds to the platform.
+## Problem
 
----
+<!-- Who encounters the problem, what are they trying to do, and why is the current experience insufficient? -->
 
-## User Problem
+## Desired outcome
 
-Please describe the problem or friction point this feature solves. 
-*Example: "I struggle to track specific regions of interest because I have to manually pan the map back and forth each session."*
+<!-- Describe the observable result for the user. -->
 
----
+## Proposed experience
 
-## Proposed Solution / Design
+<!-- How might this work in the dashboard, ingestion pipeline, API, or contributor workflow? Mockups are welcome. -->
 
-Describe how you envision the feature working:
-- What does the UI look like?
-- How does the user interact with it?
-- Are there any specific controls, settings, or map markers involved?
+## Scope
 
----
+**Included:**
 
-## Alternatives Considered
+-
 
-Describe any alternative solutions or workarounds you have considered or currently use.
+**Not included:**
 
----
+-
 
-## Mockups or Additional Context
+## Alternatives considered
 
-If you have sketches, design mockups, references to other applications, or any other context, please include them here.
+<!-- Existing workarounds or simpler approaches you considered. -->
+
+## Product and open-source fit
+
+<!--
+Does this belong in the public codebase, the hosted SaaS, or both? Does it add
+a provider, ongoing operating cost, new stored data, or a product-tier change?
+Conceptual answers are enough; do not disclose production configuration.
+-->
+
+- **Suggested surface:** Public project / Hosted service / Both
+- **New external dependency or provider:** Yes / No
+- **Authentication, billing, or tier impact:**
+- **Privacy, safety, or source-quality considerations:**
+
+## Acceptance criteria
+
+- [ ]
+- [ ]
+
+## Additional context
+
+<!-- Links to related issues, public references, sketches, or examples. -->

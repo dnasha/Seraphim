@@ -1,259 +1,146 @@
-# 🌌 Seraphim
+# Seraphim
 
-Seraphim is a real-time Open-Source Intelligence (OSINT) news aggregator designed to provide a comprehensive, interactive dashboard for global events. The platform dynamically scrapes global headlines, parses unstructured data, extracts geographic locations via natural language processing (NLP), and plots them on an interactive, WebGL-accelerated map interface.
+**A live, map-first view of global events from public reporting and open sources.**
 
----
+[Open the hosted app](https://seraphi.me) · [Contribute](CONTRIBUTING.md) · [Report a security issue](.github/SECURITY.md)
 
-## ✨ Features
+![Seraphim global event map](public/Seraphim_OG_Dynamic.png)
 
-- **Real-Time Data Ingestion**: Concurrently monitors RSS feeds, social channels, and news APIs.
-- **NLP Geocoding Heuristics**: Automatically extracts and resolves place names to geographic coordinates without relying on expensive, third-party geocoding APIs.
-- **Semantic Event Clustering**: Employs local transformer models (`all-MiniLM-L6-v2`) to convert headlines into vector embeddings, merging duplicate or related reports into unified event markers.
-- **WebGL Map Dashboard**: Renders hundreds of thousands of events seamlessly utilizing MapLibre GL JS with custom markers, spatial filtering, and dynamic viewport querying.
-- **Credibility System**: Highlights source credibility with dynamic indicators (Diamond/Verified, Gold/Credible, Silver/Unverified).
-- **SEO & Growth Built-In**: Implements hybrid client/server rendering, programmatically optimized meta tags, and structured JSON-LD schemas to ensure visibility.
+Seraphim turns a noisy stream of headlines and public posts into a location-aware event map. It collects reports from multiple source types, extracts geographic context, groups related coverage, and makes the result explorable through an interactive dashboard.
 
----
+The project is useful for following fast-moving stories, finding regional patterns, and moving from a map-level signal to the reporting behind it. Seraphim is an aggregation and discovery tool—not a substitute for primary sources or independent verification.
 
-## 🏗️ Core Architecture & Tech Stack
+> [!NOTE]
+> Seraphim is under active, pre-1.0 development. Interfaces, data contracts, and self-hosting requirements may change.
 
-Seraphim is structured as a single TypeScript repository separated into two distinct runtimes that share the same data model:
+## What it does
+
+- **Unifies public reporting.** Ingests RSS, news API, Reddit, Telegram, and X-derived feeds through a shared normalization pipeline.
+- **Maps geographic context.** Uses a local GeoNames dataset plus NLP and scoring heuristics to resolve place references without requiring a paid geocoding request for every story.
+- **Connects related coverage.** Combines exact matching, location context, and local text embeddings to group duplicate or corroborating reports into events.
+- **Makes the world browsable.** Provides a MapLibre-powered interface with viewport loading, clustering, search, time and source filters, shareable event links, map styles, overlays, and local annotations.
+- **Protects signal quality.** Applies content-quality checks, source-aware polling, deduplication, and bounded ingestion so noisy sources do not overwhelm the feed.
+- **Supports different workflows.** Guest access offers a quick live preview; accounts add saved preferences and deeper investigation capabilities, with additional tools available in the hosted SaaS.
+
+## How the pieces fit together
+
+Seraphim is one TypeScript repository with two main runtimes and a shared event model:
 
 ```text
-RSS / Reddit / GNews / Social Feeds
-             │
-             ▼
-   Bun Ingestion Pipeline (scrapes, parses, and normalizes)
-             │
-             ▼
-   Geocoding & Semantic Matching (NLP location lookup + local MiniLM embeddings)
-             │
-             ▼
-   Supabase / PostgreSQL Database (PostGIS for mapping, pgvector for similarity checks)
-             │
-             ▼
-   Next.js App Router Web App (React 19, MapLibre GL JS dashboard, API routes)
+Public feeds and news providers
+              │
+              ▼
+     Bun ingestion worker
+  fetch → normalize → quality checks
+              │
+              ▼
+ Geocoding and story reconciliation
+ location scoring → similarity → merge
+              │
+              ▼
+   PostgreSQL-compatible data layer
+ spatial, text, and vector capabilities
+              │
+              ▼
+       Next.js application
+ APIs → filters → MapLibre dashboard
 ```
 
-- **Frontend**: Next.js 16 (App Router), React 19, MapLibre GL JS (WebGL map rendering), and Vanilla CSS Modules.
-- **Backend**: Next.js API Routes, Supabase (PostgreSQL), PostGIS (spatial queries), and `pgvector` (semantic search).
-- **Ingestion**: Bun runtime executing high-speed, concurrent scraping and processing loops.
-- **NLP & AI**: `compromise` for name/entity extraction, and `@huggingface/transformers` (`all-MiniLM-L6-v2`) for local, zero-cost text embeddings.
-- **Resilience**: Hybrid L1/L2 rate limiting via Upstash (Local L1 + Redis L2) with fail-open capability, and BBox snapping to maximize client-side caching.
+Core technologies include Next.js 16, React 19, Bun, TypeScript, MapLibre GL JS, Supabase/PostgreSQL, PostGIS, pgvector, Vitest, and local Hugging Face transformer inference.
 
----
+## Open-source scope and hosted-service boundary
 
-## 🗺️ Database & Replication Blueprint
+The application and ingestion code are open for inspection, modification, and contribution. The hosted service at [seraphi.me](https://seraphi.me) is a separately operated SaaS deployment.
 
-Since Seraphim is open-source but runs as a commercial SaaS offering, all database schema migrations, procedures, and internal documentation are kept private via `.gitignore`. 
+This repository intentionally does **not** publish production credentials, provider accounts, live database definitions, private migrations, deployment configuration, incident procedures, or operational runbooks. Those details are environment-specific and may contain security-sensitive or commercially relevant information.
 
-To replicate the database and scheduler layers supporting Seraphim, you can follow this conceptual blueprint.
+The public code still shows the important system boundaries and contracts. A compatible deployment needs:
 
-### 1. Database Schema Design (Conceptual)
+1. A PostgreSQL data layer with spatial and vector support.
+2. Event storage capable of representing source attribution, location, publication time, and related reports.
+3. An ingestion worker that normalizes sources, geocodes items, reconciles related stories, and writes results transactionally.
+4. Read APIs that enforce access rules and query events by viewport, time, and filters.
+5. A scheduler or worker platform appropriate for the desired update frequency.
+6. Your own authentication, billing, rate-limiting, observability, backup, and secret-management choices.
 
-Your database must support spatial indices (for map queries) and vector indices (for semantic similarity). In PostgreSQL, this is achieved using the **PostGIS** and **`pgvector`** extensions.
+That blueprint is enough to study or adapt the architecture, but this repository is not presented as a one-command replica of Seraphim's production environment.
 
-Here is a conceptual SQL definition for the `events` table:
+## Repository guide
 
-```sql
--- Enable required PostgreSQL extensions
-CREATE EXTENSION IF NOT EXISTS postgis;
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
--- Core events table representing geolocated and clustered news
-CREATE TABLE events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title TEXT NOT NULL,
-    description TEXT, -- Omitted in listing queries, fetched on detail requests
-    url TEXT NOT NULL UNIQUE,
-    source TEXT NOT NULL,
-    source_type TEXT NOT NULL, -- e.g., 'gnews', 'rss', 'social'
-    category TEXT,
-    image_url TEXT,
-    
-    -- Coordinates stored using PostGIS geometry format (WGS84 / SRID 4326)
-    coordinates GEOMETRY(Point, 4326),
-    latitude FLOAT8,
-    longitude FLOAT8,
-    location_name TEXT,
-    
-    -- 384-dimensional vector embedding generated by all-MiniLM-L6-v2
-    embedding vector(384),
-    
-    -- Array of merged corroborating sources (e.g., [{'title': x, 'url': y}])
-    sources JSONB DEFAULT '[]'::jsonb,
-    
-    impact_score REAL DEFAULT 0.0,
-    credibility_tier INTEGER DEFAULT 3,
-    event_count INTEGER DEFAULT 1,
-    
-    published_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Performance and spatial indexes
-CREATE INDEX idx_events_geo ON events USING GIST (coordinates);
-CREATE INDEX idx_events_vector ON events USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_events_trgm ON events USING gin (title gin_trgm_ops);
-CREATE INDEX idx_events_published ON events (published_at DESC);
+```text
+src/app/                 Next.js pages, route handlers, and metadata
+src/components/          Dashboard, map, auth, and shared UI
+src/hooks/               Data, URL-state, and preference orchestration
+src/lib/                 API adapters, geocoding, security, and shared logic
+src/scraper/             Ingestion, quality, merging, and database writes
+src/data/                Public source registry
+scripts/tests/           Unit, integration, security, and regression tests
+scripts/diagnostics/     Focused local diagnostics
+data/                    GeoNames-derived local lookup data
+.github/                 CI, contribution templates, and security policy
 ```
 
-### 2. Transactional Ingestion RPC (Conceptual)
-
-To scale scraping without race conditions or multiple database round-trips, implement a single PostgreSQL stored procedure (RPC) to bulk-upsert incoming records.
-
-The RPC should:
-1. Accept a list of new events and a list of merges.
-2. For merges, append the new source URLs to the `sources` JSONB array of the existing record, increase the `event_count`, and update `impact_score` / `published_at` if the new source has higher credibility.
-3. For new events, calculate coordinates from latitude/longitude using `ST_SetSRID(ST_Point(lng, lat), 4326)` and insert a new row.
-
-### 3. Spatial Map Clustering RPC (Conceptual)
-
-When zoomed out (low zoom levels), rendering thousands of individual markers on the client causes lag and visual clutter. Implement a database RPC (e.g., `get_clustered_events`) that handles spatial clustering:
-- Snap coordinates to a dynamic grid (e.g., $0.5$ to $10$ degrees depending on zoom level).
-- Group events in the same grid cell using `GROUP BY` or PostGIS `ST_ClusterDBScan`.
-- Aggregate the count, highest impact score, and latest published timestamp to return a single "cluster event" payload, saving up to $70\%$ in egress size.
-
----
-
-## 🚀 Running the Scraper in Production
-
-To keep the database updated in production, the ingestion pipeline runs as a scheduled worker.
-
-### Scheduled Ingestion via GitHub Actions
-
-Seraphim is configured to run via GitHub Actions. You can trigger it on a schedule or via external pings using the configuration in `.github/workflows/main.yml`.
-
-#### 1. Recurring Cron Trigger
-You can configure a native cron schedule directly in your action workflow to run at regular intervals (e.g., every 30 minutes):
-
-```yaml
-on:
-  schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
-    # Allows manual runs from the GitHub Actions dashboard
-```
-
-#### 2. External Webhook Pings (Recommended for High Accuracy)
-Because GitHub Actions cron schedules can sometimes be delayed or throttled by GitHub's scheduler queue, you can trigger runs programmatically via external cron services (e.g., [Cron-job.org](https://cron-job.org), Vercel Cron, or a private webhook pinger).
-
-To do this:
-1. Generate a GitHub Personal Access Token (PAT) with `actions:write` permissions.
-2. Configure your external cron service to make a HTTP `POST` request to the GitHub Actions API at your desired frequency:
-
-```http
-POST https://api.github.com/repos/{owner}/{repo}/actions/workflows/main.yml/dispatches
-Authorization: Bearer YOUR_GITHUB_PERSONAL_ACCESS_TOKEN
-Accept: application/vnd.github+json
-Content-Type: application/json
-
-{
-  "ref": "main"
-}
-```
-
-This pings GitHub to immediately execute the ingestion runner, ensuring low latency and consistent updates.
-
----
-
-## 💻 Setting Up the Repository Locally
-
-Follow these steps to clone and run the Seraphim codebase on your local machine.
+## Local development
 
 ### Prerequisites
 
-- **Bun**: Ensure the Bun runtime ($1.3+$) is installed.
-- **Supabase**: A Supabase database instance with PostGIS, pgvector, and pg_trgm enabled.
-- **Upstash**: (Optional) Redis instance for L2 rate limiting.
+- [Bun](https://bun.sh/) 1.3 or newer
+- A compatible Supabase/PostgreSQL development project for data-backed flows
+- Git
 
-### 1. Environment Setup
+### Install and run
 
-Create a `.env.local` file in the root directory and supply the required keys:
+```bash
+git clone https://github.com/dnasha/Seraphim.git
+cd Seraphim
+bun install --frozen-lockfile
+bun run dev
+```
+
+The app is served at [http://localhost:3000](http://localhost:3000).
+
+Create `.env.local` for the integrations you intend to exercise. The minimum browser-facing Supabase variables are:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Optional Integrations
-GNEWS_API_KEY=your-gnews-api-key
-UPSTASH_REDIS_REST_URL=your-upstash-redis-url
-UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-token
-NEXT_PUBLIC_MAPTILER_API_KEY=your-maptiler-key
 ```
 
-### 2. Install Dependencies
+Server-side ingestion and SaaS features require additional provider-specific variables. Follow the names referenced by the relevant route or worker, keep service-role and billing secrets server-only, and never commit an environment file.
 
-Install repository dependencies using Bun:
+The compiled geographic lookup is included. If you update the raw GeoNames inputs, rebuild it with:
 
 ```bash
-bun install
+bun run scripts/build/build-geodata.mjs
 ```
 
-### 3. Database Initialization
+Because the production database contract is outside the public repository, a fresh clone can run the code and test suite but data-backed application flows require your own compatible schema and policies.
 
-Since database migration files are private and gitignored, you must initialize your database schema manually before running the project:
-1. Enable `postgis`, `vector`, and `pg_trgm` extensions on your Supabase database.
-2. Recreate the events table, indexes, and custom spatial RPCs (conceptualized in the Replication Blueprint above) in the SQL Editor.
-
-### 4. Compile GeoNames Local Data
-
-To support the custom offline geocoding engine, build the local geographic lookup:
-
-1. Download the GeoNames datasets (e.g., `cities5000.txt`) and place them in the `data/` folder.
-2. Compile GeoNames data into the JSON lookup table:
-   ```bash
-   bun run scripts/build-geodata.mjs
-   ```
-
-### 5. Running the Application
-
-Start the Next.js development server:
+## Useful commands
 
 ```bash
-bun dev
+bun run dev             # Start the Next.js development server
+bun run build           # Create a production build
+bun run lint            # Run ESLint
+bun run test            # Run the Vitest suite once
+bun run test:watch      # Run Vitest in watch mode
+bun run test:coverage   # Run tests with coverage gates
+bun run test:accuracy   # Run the reviewed geocoding regression set
+bun run test-scraper    # Check ingestion dependencies and connections
+bun run test:sources    # Exercise source adapters
+DRY_RUN=true bun run scrape  # Run ingestion without database writes
 ```
 
-The application will be accessible at [http://localhost:3000](http://localhost:3000).
+Some diagnostics contact third-party services or expect a configured local environment. Review a script before running it with live credentials.
 
----
+## Contributing
 
-## 🛠️ Operations & Utility Scripts
+Bug fixes, tests, documentation, accessibility improvements, performance work, source-quality improvements, and carefully scoped features are welcome. AI-assisted contributions are also welcome when they follow the verification and disclosure requirements in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Seraphim includes CLI scripts to manage the dataset and test the system:
+For security vulnerabilities, do not open a public issue. Follow the private reporting process in [the security policy](.github/SECURITY.md).
 
-- **Ingestion Worker**:
-  ```bash
-  # Run a dry-run check (doesn't write to DB)
-  DRY_RUN=true bun run scrape
+## License
 
-  # Run live scraping and database insertion
-  bun run scrape
-  ```
-- **Diagnostics**:
-  ```bash
-  # Check scraper connections
-  bun run test-scraper
+Seraphim is licensed under the [GNU Affero General Public License v3.0](LICENSE). If you modify and operate the software over a network, review the AGPL's source-availability requirements for your deployment.
 
-  # Test source feed fetchers
-  bun run test:sources
-  ```
-- **Testing**:
-  ```bash
-  # Run unit and integration tests
-  bun run test
-
-  # Run geocoding accuracy benchmarks (tracks regressions)
-  bun run test:accuracy
-  ```
-
----
-
-## 📝 License
-
-Distributed under the terms of the project license. See `LICENSE` for details.
-Copyright © Seraphim 2026.
+Copyright © 2026 Seraphim contributors.

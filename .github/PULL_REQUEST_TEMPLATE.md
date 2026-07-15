@@ -1,53 +1,82 @@
-## Description
+## Summary
 
-Please include a comprehensive summary of the changes, the problem solved, and any relevant motivation and context. If applicable, specify which issues are resolved by this pull request.
+<!-- In 2–5 bullets, explain what changed and the outcome. -->
 
-Fixes # (issue number)
+-
 
----
+## Why
 
-## Type of Change
+<!-- What problem does this solve? Link an issue with `Closes #123` when applicable. -->
 
-Please tick the options that are relevant to this pull request:
+## Change type
 
-- [ ] **Bug Fix** (non-breaking change which fixes an issue)
-- [ ] **New Feature** (non-breaking change which adds functionality)
-- [ ] **Performance Optimization** (changes that improve memory usage, bundle size, or speed)
-- [ ] **Breaking Change** (fix or feature that would cause existing functionality to behave differently)
-- [ ] **Documentation Update** (changes to README, guides, or comments)
-- [ ] **CI/CD / Developer Experience** (adjustments to scripts, tests, actions, or lints)
+- [ ] Bug fix
+- [ ] Feature
+- [ ] Performance or reliability
+- [ ] Security hardening
+- [ ] Documentation
+- [ ] Tests or developer experience
+- [ ] Refactor with no intended behavior change
+- [ ] Breaking change
 
----
+## Verification
 
-## Technical Constraints Check
+<!-- List exact commands and focused manual flows. Include relevant results, not only "tests pass." -->
 
-- [ ] **Server-Only Isolation**: My changes do not import server-only geocoding or database logic (from `src/lib/geocoding/` or service-role clients) into client components.
-- [ ] **View State Integrity**: Viewport and filter state modifications are synced properly with the URL using `useViewState`.
-- [ ] **Design System Consistency**: Corner radius styles adhere to the `4px`/`8px`/`12px` constraints (no raw pill styles), and colors leverage the centralized design tokens.
+```text
+bun run lint
+bun run test
+```
 
----
+- [ ] I added or updated tests for changed behavior.
+- [ ] I ran `bun run test:accuracy` if geocoding, NLP, or location scoring changed.
+- [ ] I ran `bun run build` if application or build behavior changed.
+- [ ] I checked desktop and narrow/mobile layouts if UI changed.
+- [ ] I tested unauthenticated and least-privileged access if auth, billing, entitlements, APIs, or user data changed.
 
-## How Has This Been Tested?
+## Visual evidence
 
-Please describe the tests you ran to verify your changes. Provide details on how to reproduce them.
+<!-- Add before/after screenshots or a short recording for visible changes. Remove this section when not applicable. -->
 
-### Automated Test Runs
-- [ ] `bun run test` (All unit/integration tests pass)
-- [ ] `bun run test:accuracy` (Geocoding accuracy results verified, if modifying geodata/NLP engine)
-- [ ] `bun run test:coverage` (Code coverage limits checked)
+## Risk and rollout
 
-### Manual Verification
-- [ ] Built the Next.js app locally using `bun run build` (No compile/Google Fonts fetch issues)
-- [ ] Verified UI on desktop viewport (`localhost:3000`)
-- [ ] Verified UI responsiveness on mobile/narrow viewports
-- [ ] Verified keyboard navigation / focus styling behaves correctly
+<!-- What could regress? Note compatibility, performance, data, migration, provider, or rollback considerations. -->
 
----
+**Risk level:** Low / Medium / High
 
-## Contributor Checklist
+**Rollback or fallback:**
 
-- [ ] My code follows the TypeScript strict guidelines of this project (no implicit/explicit `any`).
-- [ ] I have ran `bun run lint` and resolved all styling and static analysis warnings.
-- [ ] I have self-reviewed my own code for efficiency, readability, and security.
-- [ ] I have updated corresponding documentation or inline comments for complex sections.
-- [ ] My changes generate no new warnings or console errors.
+## Security, privacy, and public boundary
+
+- [ ] No secrets, personal data, customer-derived fixtures, or private operational details are included.
+- [ ] Untrusted source content remains validated, bounded, and sanitized where applicable.
+- [ ] Client-side gates are backed by server-side authorization where applicable.
+- [ ] New data collection, retention, providers, and permissions are described above.
+- [ ] Production-only schema or infrastructure changes are coordinated separately and are not exposed here.
+
+## Documentation
+
+- [ ] Public documentation was updated, or no public documentation change is needed.
+- [ ] Comments describe why—not merely what—where the behavior is non-obvious.
+- [ ] User-facing claims match implemented and available behavior.
+
+## AI assistance
+
+<!-- See CONTRIBUTING.md. Minor editor completion can be marked "None/materially none." -->
+
+**Model/tool:**
+
+**How it was used:**
+
+**Human verification performed:**
+
+- [ ] I understand and can explain every material change in this pull request.
+- [ ] I reviewed the complete diff and independently verified AI-generated code, tests, and claims.
+- [ ] No secrets, private documentation, customer data, or vulnerability details were shared with an AI system.
+
+## Final checklist
+
+- [ ] This pull request is focused and excludes unrelated cleanup.
+- [ ] Types are strict and new `any` usage is justified.
+- [ ] CI-relevant commands pass, or failures are explained above.
+- [ ] I reviewed my own diff for correctness, accessibility, performance, and maintainability.
