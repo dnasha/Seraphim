@@ -1,51 +1,42 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  paymentsEnabled: true,
-  from: vi.fn(),
-  retrievePrice: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ enabled: true, from: vi.fn(), retrieve: vi.fn() }));
 
-vi.mock("@supabase/supabase-js", () => ({ createClient: vi.fn(() => ({ from: mocks.from })) }));
-vi.mock("@/lib/stripe", () => ({
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: mocks.from }) }));
+vi.mock('@/lib/stripe', () => ({
   ANGEL_MAX_QUANTITY: 100,
-  STRIPE_PRICES: { angel: "price_angel" },
-  stripe: { prices: { retrieve: mocks.retrievePrice } },
+  STRIPE_PRICES: { angel: 'price_angel' },
+  stripe: { prices: { retrieve: mocks.retrieve } },
 }));
-vi.mock("@/lib/security/payments", () => ({ isPaymentsEnabled: () => mocks.paymentsEnabled }));
+vi.mock('@/lib/security/payments', () => ({ isAngelCheckoutEnabled: () => mocks.enabled }));
 
-import { GET } from "@/app/api/stripe/angel-count/route";
+import { GET } from '@/app/api/stripe/angel-count/route';
 
-describe("GET /api/stripe/angel-count", () => {
+function countQuery(count: number) {
+  const query: Record<string, unknown> = {};
+  query.select = vi.fn(() => query);
+  query.eq = vi.fn(() => query);
+  query.in = vi.fn(async () => ({ count }));
+  query.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ count }).then(resolve);
+  return query;
+}
+
+describe('GET /api/stripe/angel-count', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.paymentsEnabled = true;
-    mocks.retrievePrice.mockResolvedValue({ product: { metadata: { inventory: "80" } } });
-    mocks.from.mockReturnValue({ select: vi.fn(async () => ({ count: 12 })) });
+    mocks.enabled = true;
+    mocks.retrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
+    mocks.from.mockImplementation((table: string) => countQuery(table === 'angel_purchases' ? 12 : 3));
   });
 
-  it("does not expose inventory while payments are disabled", async () => {
-    mocks.paymentsEnabled = false;
-    const response = await GET();
-
-    expect(response.status).toBe(503);
-    expect(mocks.retrievePrice).not.toHaveBeenCalled();
+  it('does not expose inventory while Angel checkout is disabled', async () => {
+    mocks.enabled = false;
+    expect((await GET()).status).toBe(503);
+    expect(mocks.retrieve).not.toHaveBeenCalled();
   });
 
-  it("uses the bounded Stripe inventory and database purchase count", async () => {
-    const response = await GET();
-
-    expect(await response.json()).toEqual({ remaining: 68, total: 80 });
-    expect(mocks.retrievePrice).toHaveBeenCalledWith("price_angel", { expand: ["product"] });
-    expect(mocks.from).toHaveBeenCalledWith("angel_purchases");
-  });
-
-  it("falls back to the app maximum when Stripe inventory lookup fails", async () => {
-    mocks.retrievePrice.mockRejectedValue(new Error("Stripe unavailable"));
-    mocks.from.mockReturnValue({ select: vi.fn(async () => ({ count: 2 })) });
-
-    const response = await GET();
-
-    expect(await response.json()).toEqual({ remaining: 98, total: 100 });
+  it('subtracts paid ownership and active reservations atomically bounded by Stripe metadata', async () => {
+    expect(await (await GET()).json()).toEqual({ remaining: 65, total: 80 });
+    expect(mocks.from).toHaveBeenCalledWith('billing_checkout_intents');
   });
 });

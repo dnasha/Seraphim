@@ -37,6 +37,8 @@ interface AuthContextType {
     setShowAuthModal: (show: boolean) => void;
     // Shared user profile/tier properties
     userTier: UserTier;
+    tierSource: 'billing' | 'override';
+    overrideExpiresAt: string | null;
     tierLoading: boolean;
     subscriptionStatus: string | null;
     billingInterval: string | null;
@@ -65,6 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
         userTier,
         setUserTier,
+        tierSource,
+        setTierSource,
+        overrideExpiresAt,
+        setOverrideExpiresAt,
         subscriptionStatus,
         setSubscriptionStatus,
         billingInterval,
@@ -213,6 +219,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                     }
                                 } else if (_event !== 'INITIAL_SESSION') {
                                     setUserTier('guest');
+                                    setTierSource('billing');
+                                    setOverrideExpiresAt(null);
                                     setSubscriptionStatus(null);
                                     setBillingInterval(null);
                                     setCurrentPeriodEnd(null);
@@ -264,7 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, isGuest, userTier]);
 
-    useStripeCheckoutPoll(supabase, user, fetchUserTier);
+    useStripeCheckoutPoll(user, fetchUserTier);
 
 
     const signOut = useCallback(async () => {
@@ -273,6 +281,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setIsGuest(false);
         setUserTier('guest');
+        setTierSource('billing');
+        setOverrideExpiresAt(null);
         setSubscriptionStatus(null);
         setBillingInterval(null);
         setCurrentPeriodEnd(null);
@@ -301,6 +311,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(GUEST_STORAGE_KEY, 'true');
         setIsGuest(true);
         setUserTier('guest');
+        setTierSource('billing');
+        setOverrideExpiresAt(null);
         setSubscriptionStatus(null);
         setBillingInterval(null);
         setCurrentPeriodEnd(null);
@@ -328,6 +340,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setShowAuthModal,
         // Shared states
         userTier: effectiveUserTier,
+        tierSource,
+        overrideExpiresAt,
         tierLoading,
         subscriptionStatus,
         billingInterval,
@@ -345,6 +359,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         continueAsGuest,
         showAuthModal,
         effectiveUserTier,
+        tierSource,
+        overrideExpiresAt,
         tierLoading,
         subscriptionStatus,
         billingInterval,

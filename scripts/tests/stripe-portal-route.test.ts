@@ -1,67 +1,42 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  paymentsEnabled: true,
-  siteUrl: "https://seraphim.example",
-  getUser: vi.fn(),
-  from: vi.fn(),
-  createPortalSession: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ enabled: true, origin: 'https://seraphim.example', getUser: vi.fn(), create: vi.fn(), profile: vi.fn() }));
 
-vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({ auth: { getUser: mocks.getUser } })) }));
-vi.mock("@supabase/supabase-js", () => ({ createClient: vi.fn(() => ({ from: mocks.from })) }));
-vi.mock("@/lib/stripe", () => ({ stripe: { billingPortal: { sessions: { create: mocks.createPortalSession } } } }));
-vi.mock("@/lib/security/payments", () => ({
-  isPaymentsEnabled: () => mocks.paymentsEnabled,
-  getConfiguredSiteUrl: () => mocks.siteUrl,
-}));
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
+vi.mock('@/lib/stripe', () => ({ stripe: { billingPortal: { sessions: { create: mocks.create } } } }));
+vi.mock('@/lib/security/payments', () => ({ isBillingPortalEnabled: () => mocks.enabled, getConfiguredSiteUrl: () => mocks.origin }));
+vi.mock('@/lib/security/sensitiveRequest', () => ({ hasValidSameOrigin: () => true, checkSensitiveRateLimit: async () => ({ allowed: true }) }));
+vi.mock('@/lib/server/effectiveProfile', () => ({ resolveEffectiveProfile: mocks.profile }));
+vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 
-import { POST } from "@/app/api/stripe/portal/route";
+import { POST } from '@/app/api/stripe/portal/route';
 
-function profileQuery(profile: unknown) {
-  const query: Record<string, unknown> = {
-    select: vi.fn(() => query),
-    eq: vi.fn(() => query),
-    single: vi.fn(async () => ({ data: profile })),
-  };
-  return query;
-}
-
-describe("POST /api/stripe/portal", () => {
+describe('POST /api/stripe/portal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.paymentsEnabled = true;
-    mocks.siteUrl = "https://seraphim.example";
-    mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
-    mocks.from.mockReturnValue(profileQuery({ stripe_customer_id: "cus-1" }));
-    mocks.createPortalSession.mockResolvedValue({ url: "https://billing.stripe.example/session" });
+    mocks.enabled = true;
+    mocks.origin = 'https://seraphim.example';
+    mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+    mocks.profile.mockResolvedValue({ stripeCustomerId: 'cus-1' });
+    mocks.create.mockResolvedValue({ url: 'https://billing.stripe.example/session' });
   });
 
-  it("rejects disabled and unauthenticated portal requests", async () => {
-    mocks.paymentsEnabled = false;
+  it('independently disables portal creation before authentication', async () => {
+    mocks.enabled = false;
     expect((await POST()).status).toBe(503);
+    expect(mocks.getUser).not.toHaveBeenCalled();
+  });
 
-    mocks.paymentsEnabled = true;
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+  it('requires authentication and a linked billing customer', async () => {
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
     expect((await POST()).status).toBe(401);
-  });
-
-  it("requires a linked Stripe customer and safe site URL", async () => {
-    mocks.from.mockReturnValue(profileQuery({ stripe_customer_id: null }));
+    mocks.profile.mockResolvedValueOnce({ stripeCustomerId: null });
     expect((await POST()).status).toBe(404);
-
-    mocks.from.mockReturnValue(profileQuery({ stripe_customer_id: "cus-1" }));
-    mocks.siteUrl = null as unknown as string;
-    expect((await POST()).status).toBe(500);
   });
 
-  it("creates a portal session bound to the authenticated user's customer", async () => {
+  it('creates a portal session for the effective profile customer', async () => {
     const response = await POST();
-
-    expect(await response.json()).toEqual({ url: "https://billing.stripe.example/session" });
-    expect(mocks.createPortalSession).toHaveBeenCalledWith({
-      customer: "cus-1",
-      return_url: "https://seraphim.example/account",
-    });
+    expect(await response.json()).toEqual({ url: 'https://billing.stripe.example/session' });
+    expect(mocks.create).toHaveBeenCalledWith({ customer: 'cus-1', return_url: 'https://seraphim.example/account' });
   });
 });

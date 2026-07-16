@@ -23,12 +23,12 @@ import {
     LuRadiation, 
     LuWind, 
     LuPlane,
-    LuShip,
     LuRocket
 } from 'react-icons/lu';
 
 interface MapActionToolsProps {
     overlays: Record<string, boolean>;
+    overlayStatuses?: Record<string, 'idle' | 'loading' | 'live' | 'degraded'>;
     onOverlayToggle: (overlay: string, active: boolean) => void;
     isGlobe: boolean;
     onToggleGlobe: () => void;
@@ -42,6 +42,7 @@ interface MapActionToolsProps {
 
 const MapActionTools: React.FC<MapActionToolsProps> = ({
     overlays,
+    overlayStatuses = {},
     onOverlayToggle,
     isGlobe,
     onToggleGlobe,
@@ -55,6 +56,13 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
     const [showBadge, setShowBadge] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const statusLabel = (key: string, fallback: string) => {
+        const status = overlayStatuses[key] ?? 'idle';
+        if (!overlays[key] || status === 'idle') return fallback;
+        if (status === 'loading') return 'Connecting…';
+        if (status === 'degraded') return 'Provider unavailable';
+        return `Live · ${fallback}`;
+    };
 
     useEffect(() => {
         /**
@@ -110,7 +118,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>USGS Earthquakes</span>
-                                <span className={styles.overlayTimeframe}>Past 24 Hours</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.usgs ?? 'idle'}`]}`}>{statusLabel('usgs', 'USGS · past 24 hours')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['usgs'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -126,7 +134,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>NOAA Weather (Radar)</span>
-                                <span className={styles.overlayTimeframe}>Real-time (Live)</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.noaa ?? 'idle'}`]}`}>{statusLabel('noaa', 'Iowa State NEXRAD')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['noaa'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -142,7 +150,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>Active Wildfires</span>
-                                <span className={styles.overlayTimeframe}>NASA Near Real-time</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.fires ?? 'idle'}`]}`}>{statusLabel('fires', 'NASA FIRMS')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['fires'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -158,27 +166,11 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>Live Flights</span>
-                                <span className={styles.overlayTimeframe}>ADS-B Transponders</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.flights ?? 'idle'}`]}`}>{statusLabel('flights', 'ADSB.lol / ADSB.fi')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['flights'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('flights', !overlays['flights'])} allowed={canUseOverlay(userTier, 'flights')} requiredTier="analyst" featureName="Live flight tracking">
-                            <div className={styles.toggleKnob} />
-                        </GatedButton>
-                    </label>
-
-                    <label className={styles.overlayToggle}>
-                        <div className={styles.toggleLeft}>
-                            <div className={`${styles.iconWrapper} ${styles.shipIcon}`}>
-                                <LuShip className={styles.toggleIcon} />
-                            </div>
-                            <div className={styles.overlayLabelInfo}>
-                                <span className={styles.overlayName}>Maritime Tracking</span>
-                                <span className={styles.overlayTimeframe}>USNI & AIS Tankers</span>
-                            </div>
-                        </div>
-                        <GatedButton className={`${styles.toggleSwitch}${overlays['ships'] ? ` ${styles.toggleSwitchOn}` : ''}`}
-                             onClick={() => onOverlayToggle('ships', !overlays['ships'])} allowed={canUseOverlay(userTier, 'ships')} requiredTier="analyst" featureName="Maritime tracking">
                             <div className={styles.toggleKnob} />
                         </GatedButton>
                     </label>
@@ -190,7 +182,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>Space Station (ISS)</span>
-                                <span className={styles.overlayTimeframe}>Real-time Orbit</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.iss ?? 'idle'}`]}`}>{statusLabel('iss', 'Where the ISS at')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['iss'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -206,7 +198,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>Air Quality (AQI)</span>
-                                <span className={styles.overlayTimeframe}>Global Real-time</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.aqi ?? 'idle'}`]}`}>{statusLabel('aqi', 'World Air Quality Index')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['aqi'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -222,7 +214,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>Safecast Radiation</span>
-                                <span className={styles.overlayTimeframe}>Citizen Science Map</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.radiation ?? 'idle'}`]}`}>{statusLabel('radiation', 'Safecast')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['radiation'] ? ` ${styles.toggleSwitchOn}` : ''}`}
@@ -238,7 +230,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                             </div>
                             <div className={styles.overlayLabelInfo}>
                                 <span className={styles.overlayName}>NASA Events (EONET)</span>
-                                <span className={styles.overlayTimeframe}>Past 30 Days</span>
+                                <span className={`${styles.overlayTimeframe} ${styles[`status_${overlayStatuses.eonet ?? 'idle'}`]}`}>{statusLabel('eonet', 'NASA EONET · 30 days')}</span>
                             </div>
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['eonet'] ? ` ${styles.toggleSwitchOn}` : ''}`}

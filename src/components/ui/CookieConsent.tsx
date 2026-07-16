@@ -7,9 +7,12 @@
 
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import {
+    getPrivacyConsent,
+    PRIVACY_CONSENT_EVENT,
+    setPrivacyConsent,
+} from '@/lib/privacyConsent';
 import styles from './CookieConsent.module.css';
-
-const COOKIE_CONSENT_KEY = 'seraphim_cookie_consent';
 
 const CookieConsent: React.FC = () => {
     const { showAuthModal } = useAuth();
@@ -29,7 +32,7 @@ const CookieConsent: React.FC = () => {
     useEffect(() => {
         if (!mounted || showAuthModal) return;
 
-        const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
+        const consent = getPrivacyConsent();
         if (consent) return;
 
         // Delayed entry for a smoother, premium feel
@@ -37,13 +40,19 @@ const CookieConsent: React.FC = () => {
         return () => clearTimeout(timer);
     }, [mounted, showAuthModal]);
 
+    useEffect(() => {
+        const open = () => setIsVisible(true);
+        window.addEventListener(`${PRIVACY_CONSENT_EVENT}:open`, open);
+        return () => window.removeEventListener(`${PRIVACY_CONSENT_EVENT}:open`, open);
+    }, []);
+
     const handleAccept = () => {
-        localStorage.setItem(COOKIE_CONSENT_KEY, 'accepted');
+        setPrivacyConsent('accepted');
         setIsVisible(false);
     };
 
     const handleDecline = () => {
-        localStorage.setItem(COOKIE_CONSENT_KEY, 'essential');
+        setPrivacyConsent('essential');
         setIsVisible(false);
     };
 

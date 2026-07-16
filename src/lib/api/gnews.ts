@@ -6,6 +6,7 @@
  */
 
 import { NewsItem } from '@/lib/core/types';
+import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
@@ -34,7 +35,9 @@ export async function fetchGNews(
     maxResults: number = 10,
     timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<NewsItem[]> {
+    const startedAt = Date.now();
     if (!GNEWS_API_KEY) {
+        recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: 'disabled', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: 0, error_code: 'missing_api_key' });
         console.warn('GNEWS_API_KEY not set, skipping gnews headlines');
         return [];
     }
@@ -52,6 +55,7 @@ export async function fetchGNews(
         });
 
         if (res.status === 403 || res.status === 429) {
+            recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: 'rate_limited', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: `http_${res.status}` });
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
             console.warn(`gnews: ${reason} (${res.status}), skipping headlines`);
             return [];
@@ -60,7 +64,7 @@ export async function fetchGNews(
 
         const data: GNewsResponse = await res.json();
 
-        return data.articles.map((article, i) => ({
+        const items = data.articles.map((article, i) => ({
             id: `gnews-${category}-${i}-${Date.now()}`,
             title: article.title,
             description: article.description || '',
@@ -71,7 +75,10 @@ export async function fetchGNews(
             publishedAt: article.publishedAt,
             imageUrl: article.image,
         }));
+        recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
+        return items;
     } catch (error) {
+        recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error) });
         console.error('gnews fetch error:', error);
         return [];
     }
@@ -85,7 +92,10 @@ export async function searchGNews(
     maxResults: number = 10,
     timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<NewsItem[]> {
+    const startedAt = Date.now();
+    const sourceName = query === HEALTH_EVENT_QUERY ? 'GNews health events' : 'GNews search';
     if (!GNEWS_API_KEY) {
+        recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: 'disabled', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: 0, error_code: 'missing_api_key' });
         console.warn('GNEWS_API_KEY not set, skipping gnews search');
         return [];
     }
@@ -103,6 +113,7 @@ export async function searchGNews(
         });
 
         if (res.status === 403 || res.status === 429) {
+            recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: 'rate_limited', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: `http_${res.status}` });
             const reason = res.status === 403 ? 'daily quota reached' : 'rate-limited';
             console.warn(`gnews: ${reason} (${res.status}), skipping search`);
             return [];
@@ -111,7 +122,7 @@ export async function searchGNews(
 
         const data: GNewsResponse = await res.json();
 
-        return data.articles.map((article, i) => ({
+        const items = data.articles.map((article, i) => ({
             id: `gnews-search-${i}-${Date.now()}`,
             title: article.title,
             description: article.description || '',
@@ -121,7 +132,10 @@ export async function searchGNews(
             publishedAt: article.publishedAt,
             imageUrl: article.image,
         }));
+        recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
+        return items;
     } catch (error) {
+        recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error) });
         console.error('gnews search error:', error);
         return [];
     }

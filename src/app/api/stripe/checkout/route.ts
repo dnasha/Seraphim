@@ -1,150 +1,223 @@
-/**
- * Stripe Checkout Session API Route
- * 
- * Creates a Stripe Checkout Session for subscription or one-time (Angel) purchases.
- * Validates the authenticated user, retrieves/creates a Stripe Customer,
- * and returns the Checkout URL for client-side redirect.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { stripe, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
 
-const supabaseAdmin = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/core/supabase-admin';
+import { stripe, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
+import {
+  getConfiguredSiteUrl,
+  isAngelCheckoutEnabled,
+  isCheckoutEnabled,
+} from '@/lib/security/payments';
+import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
+import { recordIncident, recordMetric } from '@/lib/server/operations';
 
 type PriceKey = keyof typeof STRIPE_PRICES;
+type IntentReservation = {
+  intent_id: string | null;
+  intent_status: string | null;
+  existing_session_id: string | null;
+  correlation_id: string | null;
+  expires_at: string | null;
+  result_code: string;
+};
+
+const RESPONSE_STATUS: Record<string, number> = {
+  subscription_exists: 409,
+  checkout_conflict: 409,
+  angel_already_owned: 409,
+  angel_sold_out: 410,
+};
+
+function checkoutError(code: string, status = RESPONSE_STATUS[code] ?? 409) {
+  const messages: Record<string, string> = {
+    subscription_exists: 'Manage your existing subscription from the billing portal.',
+    checkout_conflict: 'Another checkout is already in progress.',
+    angel_already_owned: 'Angel access is already active for this account.',
+    angel_sold_out: 'Angel access is currently sold out.',
+  };
+  return NextResponse.json({ code, error: messages[code] ?? 'Unable to start checkout.' }, { status });
+}
+
+async function getAngelMaxQuantity(priceId: string) {
+  try {
+    const price = await stripe.prices.retrieve(priceId, { expand: ['product'] });
+    const product = price.product as { metadata?: Record<string, string> };
+    const configured = Number.parseInt(product.metadata?.inventory ?? '', 10);
+    if (Number.isFinite(configured) && configured > 0) {
+      return Math.min(configured, ANGEL_MAX_QUANTITY);
+    }
+  } catch {
+    // The database reservation still enforces the application maximum.
+  }
+  return ANGEL_MAX_QUANTITY;
+}
 
 export async function POST(request: NextRequest) {
+  const origin = getConfiguredSiteUrl();
+  if (!origin) {
+    return NextResponse.json({ code: 'configuration_error', error: 'Checkout is unavailable.' }, { status: 503 });
+  }
+  if (!hasValidSameOrigin(request, origin)) {
+    return NextResponse.json({ code: 'invalid_origin', error: 'Request rejected.' }, { status: 403 });
+  }
+
+  let body: { priceKey?: string; returnTo?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ code: 'invalid_request', error: 'Invalid request.' }, { status: 400 });
+  }
+
+  if (!body.priceKey || !(body.priceKey in STRIPE_PRICES)) {
+    return NextResponse.json({ code: 'invalid_price', error: 'Invalid price.' }, { status: 400 });
+  }
+
+  const priceKey = body.priceKey as PriceKey;
+  const isAngel = priceKey === 'angel';
+  if ((!isAngel && !isCheckoutEnabled()) || (isAngel && !isAngelCheckoutEnabled())) {
+    return NextResponse.json({ code: 'payments_disabled', error: 'Payments are currently disabled.' }, { status: 503 });
+  }
+
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ code: 'unauthorized', error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rateLimit = await checkSensitiveRateLimit(request, user.id);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ code: 'rate_limited', error: 'Please try again shortly.' }, { status: 429 });
+  }
+
+  const priceId = STRIPE_PRICES[priceKey];
+  if (!priceId) {
+    return NextResponse.json({ code: 'configuration_error', error: 'Checkout is unavailable.' }, { status: 503 });
+  }
+
+  const returnTo = body.returnTo?.startsWith('/') && !body.returnTo.startsWith('//')
+    ? body.returnTo
+    : '/';
+  const maxAngel = isAngel ? await getAngelMaxQuantity(priceId) : ANGEL_MAX_QUANTITY;
+  const mode = isAngel ? 'payment' : 'subscription';
+
+  const { data: reservationRows, error: reservationError } = await supabaseAdmin.rpc(
+    'reserve_billing_checkout_intent',
+    {
+      p_user_id: user.id,
+      p_price_key: priceKey,
+      p_mode: mode,
+      p_max_angel: maxAngel,
+    },
+  );
+  if (reservationError || !Array.isArray(reservationRows) || !reservationRows[0]) {
+    await recordIncident({
+      dedupKey: 'billing:checkout-reservation',
+      service: 'billing',
+      type: 'checkout_reservation_failed',
+      severity: 'critical',
+    });
+    return NextResponse.json({ code: 'checkout_unavailable', error: 'Checkout is unavailable.' }, { status: 503 });
+  }
+
+  const reservation = reservationRows[0] as IntentReservation;
+  if (reservation.result_code === 'existing') {
+    if (!reservation.existing_session_id) return checkoutError('checkout_conflict');
     try {
-        if (!isPaymentsEnabled()) {
-            return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
-        }
-
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const body = await request.json() as { priceKey: string; returnTo?: string };
-        const { priceKey } = body;
-        const returnTo = body.returnTo?.startsWith('/') && !body.returnTo.startsWith('//')
-            ? body.returnTo
-            : '/';
-
-        if (!priceKey || !(priceKey in STRIPE_PRICES)) {
-            return NextResponse.json({ error: 'Invalid price key' }, { status: 400 });
-        }
-
-        const priceId = STRIPE_PRICES[priceKey as PriceKey];
-        if (!priceId) {
-            return NextResponse.json({ error: 'Price not configured' }, { status: 500 });
-        }
-
-        // Check Angel tier availability — dual enforcement (Stripe metadata + Supabase count)
-        if (priceKey === 'angel') {
-            // Read inventory limit from Stripe product metadata
-            const price = await stripe.prices.retrieve(priceId, { expand: ['product'] });
-            const product = price.product as { metadata?: Record<string, string> };
-            const stripeInventory = parseInt(product?.metadata?.inventory ?? String(ANGEL_MAX_QUANTITY), 10);
-            const maxQuantity = Math.min(stripeInventory, ANGEL_MAX_QUANTITY);
-
-            const { count } = await supabaseAdmin
-                .from('angel_purchases')
-                .select('*', { count: 'exact', head: true });
-            
-            if ((count ?? 0) >= maxQuantity) {
-                return NextResponse.json({ error: 'Angel tier is sold out' }, { status: 410 });
-            }
-        }
-
-        // Get or create Stripe customer
-        const { data: profile } = await supabaseAdmin
-            .from('user_profiles')
-            .select('stripe_customer_id')
-            .eq('id', user.id)
-            .single();
-
-        let customerId = profile?.stripe_customer_id;
-
-        if (!customerId) {
-            const customer = await stripe.customers.create({
-                email: user.email,
-                metadata: {
-                    supabase_user_id: user.id,
-                },
-            });
-            customerId = customer.id;
-
-            await supabaseAdmin
-                .from('user_profiles')
-                .update({ stripe_customer_id: customerId })
-                .eq('id', user.id);
-        }
-
-        const isAngel = priceKey === 'angel';
-        const isProMonthly = priceKey === 'pro_monthly';
-
-        const origin = getConfiguredSiteUrl();
-        if (!origin) {
-            return NextResponse.json({ error: 'Site URL is not configured' }, { status: 500 });
-        }
-
-        const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
-            customer: customerId,
-            line_items: [{ price: priceId, quantity: 1 }],
-            mode: isAngel ? 'payment' : 'subscription',
-            success_url: `${origin}${returnTo}${returnTo.includes('?') ? '&' : '?'}checkout=success`,
-            cancel_url: `${origin}${returnTo}${returnTo.includes('?') ? '&' : '?'}checkout=cancelled`,
-            metadata: {
-                supabase_user_id: user.id,
-                price_key: priceKey,
-            },
-            allow_promotion_codes: true,
-        };
-
-        // Add 7-day trial for Pro monthly only
-        if (!isAngel && isProMonthly) {
-            sessionParams.subscription_data = {
-                trial_period_days: 7,
-                metadata: {
-                    supabase_user_id: user.id,
-                    price_key: priceKey,
-                },
-            };
-        } else if (!isAngel) {
-            sessionParams.subscription_data = {
-                metadata: {
-                    supabase_user_id: user.id,
-                    price_key: priceKey,
-                },
-            };
-        }
-
-        // Angel is a one-time payment, add metadata for fulfillment
-        if (isAngel) {
-            sessionParams.payment_intent_data = {
-                metadata: {
-                    supabase_user_id: user.id,
-                    price_key: priceKey,
-                },
-            };
-        }
-
-        const session = await stripe.checkout.sessions.create(sessionParams);
-
-        return NextResponse.json({ url: session.url });
-    } catch (err) {
-        console.error('Stripe checkout error:', err);
-        return NextResponse.json(
-            { error: 'Failed to create checkout session' },
-            { status: 500 }
-        );
+      const existing = await stripe.checkout.sessions.retrieve(reservation.existing_session_id);
+      if (existing.status === 'open' && existing.url) {
+        return NextResponse.json({ url: existing.url, reused: true });
+      }
+    } catch {
+      // Fall through to a safe conflict; the expiry webhook/reconciliation closes it.
     }
+    return checkoutError('checkout_conflict');
+  }
+  if (reservation.result_code !== 'created' || !reservation.intent_id || !reservation.correlation_id) {
+    return checkoutError(reservation.result_code);
+  }
+
+  const intentId = reservation.intent_id;
+  const correlationId = reservation.correlation_id;
+
+  try {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single();
+    if (profileError) throw profileError;
+
+    let customerId = profile?.stripe_customer_id as string | null;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { supabase_user_id: user.id },
+      }, { idempotencyKey: `seraphim-customer-${user.id}` });
+      customerId = customer.id;
+      const { error: updateError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', user.id);
+      if (updateError) throw updateError;
+    }
+
+    const commonMetadata = {
+      supabase_user_id: user.id,
+      price_key: priceKey,
+      checkout_intent_id: intentId,
+      correlation_id: correlationId,
+    };
+    const separator = returnTo.includes('?') ? '&' : '?';
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode,
+      success_url: `${origin}${returnTo}${separator}checkout=success`,
+      cancel_url: `${origin}${returnTo}${separator}checkout=cancelled`,
+      metadata: commonMetadata,
+      allow_promotion_codes: true,
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      ...(isAngel
+        ? { payment_intent_data: { metadata: commonMetadata } }
+        : {
+            subscription_data: {
+              ...(priceKey === 'pro_monthly' ? { trial_period_days: 7 } : {}),
+              metadata: commonMetadata,
+            },
+          }),
+    };
+
+    const session = await stripe.checkout.sessions.create(sessionParams, {
+      idempotencyKey: `checkout-intent-${intentId}`,
+    });
+    if (!session.url) throw new Error('checkout_url_missing');
+
+    const { error: intentUpdateError } = await supabaseAdmin
+      .from('billing_checkout_intents')
+      .update({
+        status: 'open',
+        stripe_session_id: session.id,
+        expires_at: new Date(session.expires_at * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', intentId)
+      .eq('status', 'creating');
+    if (intentUpdateError) throw intentUpdateError;
+
+    await recordMetric({ kind: 'operational', service: 'billing', name: 'checkout_started' });
+    return NextResponse.json({ url: session.url });
+  } catch {
+    await supabaseAdmin
+      .from('billing_checkout_intents')
+      .update({ status: 'failed', failure_code: 'checkout_creation_failed', updated_at: new Date().toISOString() })
+      .eq('id', intentId);
+    await recordIncident({
+      dedupKey: 'billing:checkout-creation',
+      service: 'billing',
+      type: 'checkout_creation_failed',
+      severity: 'critical',
+      correlationId,
+    });
+    return NextResponse.json({ code: 'checkout_failed', error: 'Unable to start checkout.' }, { status: 503 });
+  }
 }

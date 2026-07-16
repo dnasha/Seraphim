@@ -3,6 +3,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { getEntitlements, normalizeUserTier, type TierEntitlements, type UserTier } from '@/lib/entitlements';
+import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
 
 export interface RequestEntitlements {
   tier: UserTier;
@@ -28,7 +29,6 @@ function pruneProfileTierCache(now: number) {
 
 async function resolveProfileTier(
   userId: string,
-  supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<UserTier> {
   const now = Date.now();
   pruneProfileTierCache(now);
@@ -39,12 +39,8 @@ async function resolveProfileTier(
   if (inFlight) return inFlight;
 
   const request = (async () => {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('tier')
-      .eq('id', userId)
-      .maybeSingle();
-    const tier = normalizeUserTier(profile?.tier, true);
+    const profile = await resolveEffectiveProfile(userId);
+    const tier = normalizeUserTier(profile.effectiveTier, true);
     profileTierCache.set(userId, { tier, expiresAt: Date.now() + PROFILE_TIER_TTL_MS });
     return tier;
   })();
@@ -74,6 +70,6 @@ export async function resolveRequestEntitlements(): Promise<RequestEntitlements>
     return { tier: 'guest', entitlements: getEntitlements('guest'), userId: null };
   }
 
-  const tier = await resolveProfileTier(user.id, supabase);
+  const tier = await resolveProfileTier(user.id);
   return { tier, entitlements: getEntitlements(tier), userId: user.id };
 }

@@ -1,60 +1,49 @@
-/**
- * Stripe Customer Portal API Route
- * 
- * Creates a Stripe Customer Portal session for self-service subscription management.
- * Users can upgrade, downgrade, cancel, and update payment methods.
- */
-
 import { NextResponse } from 'next/server';
+
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
+import { getConfiguredSiteUrl, isBillingPortalEnabled } from '@/lib/security/payments';
+import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
+import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
+import { recordIncident, recordMetric } from '@/lib/server/operations';
 
-const supabaseAdmin = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function POST(request: Request = new Request('http://localhost', { method: 'POST' })) {
+  const origin = getConfiguredSiteUrl();
+  if (!origin || !isBillingPortalEnabled()) {
+    return NextResponse.json({ code: 'portal_disabled', error: 'Billing management is unavailable.' }, { status: 503 });
+  }
+  if (!hasValidSameOrigin(request, origin)) {
+    return NextResponse.json({ code: 'invalid_origin', error: 'Request rejected.' }, { status: 403 });
+  }
 
-export async function POST() {
-    try {
-        if (!isPaymentsEnabled()) {
-            return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
-        }
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ code: 'unauthorized', error: 'Unauthorized' }, { status: 401 });
+  }
+  const rateLimit = await checkSensitiveRateLimit(request, user.id);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ code: 'rate_limited', error: 'Please try again shortly.' }, { status: 429 });
+  }
 
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const { data: profile } = await supabaseAdmin
-            .from('user_profiles')
-            .select('stripe_customer_id')
-            .eq('id', user.id)
-            .single();
-
-        if (!profile?.stripe_customer_id) {
-            return NextResponse.json({ error: 'No billing account found' }, { status: 404 });
-        }
-
-        const origin = getConfiguredSiteUrl();
-        if (!origin) {
-            return NextResponse.json({ error: 'Site URL is not configured' }, { status: 500 });
-        }
-
-        const session = await stripe.billingPortal.sessions.create({
-            customer: profile.stripe_customer_id,
-            return_url: `${origin}/account`,
-        });
-
-        return NextResponse.json({ url: session.url });
-    } catch (err) {
-        console.error('Stripe portal error:', err);
-        return NextResponse.json(
-            { error: 'Failed to create portal session' },
-            { status: 500 }
-        );
+  try {
+    const profile = await resolveEffectiveProfile(user.id);
+    if (!profile.stripeCustomerId) {
+      return NextResponse.json({ code: 'billing_account_missing', error: 'No billing account found.' }, { status: 404 });
     }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripeCustomerId,
+      return_url: `${origin}/account`,
+    });
+    await recordMetric({ kind: 'operational', service: 'billing', name: 'portal_opened' });
+    return NextResponse.json({ url: session.url });
+  } catch {
+    await recordIncident({
+      dedupKey: 'billing:portal-creation',
+      service: 'billing',
+      type: 'portal_creation_failed',
+      severity: 'warning',
+    });
+    return NextResponse.json({ code: 'portal_failed', error: 'Unable to open billing management.' }, { status: 503 });
+  }
 }

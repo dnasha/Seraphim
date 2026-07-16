@@ -1,90 +1,140 @@
+import { createHmac } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import Stripe from 'stripe';
+
+import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/core/supabase-admin';
+import { stripe } from '@/lib/stripe';
+import { getConfiguredSiteUrl } from '@/lib/security/payments';
+import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
+import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
+import { recordIncident, recordMetric } from '@/lib/server/operations';
+
+const REAUTH_WINDOW_MS = 10 * 60 * 1000;
+
+function hashUserId(userId: string) {
+  const key = process.env.ACCOUNT_DELETION_HASH_KEY || process.env.STRIPE_WEBHOOK_SECRET;
+  if (!key) throw new Error('deletion_hash_key_missing');
+  return createHmac('sha256', key).update(userId).digest('hex');
+}
 
 export async function POST(request: Request) {
+  const origin = getConfiguredSiteUrl();
+  if (!origin || !hasValidSameOrigin(request, origin)) {
+    return NextResponse.json({ code: 'invalid_origin', error: 'Request rejected.' }, { status: 403 });
+  }
+
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ code: 'unauthorized', error: 'Unauthorized.' }, { status: 401 });
+  }
+
+  const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0;
+  if (!lastSignIn || Date.now() - lastSignIn > REAUTH_WINDOW_MS) {
+    return NextResponse.json({
+      code: 'reauth_required',
+      error: 'Please verify your email before deleting your account.',
+    }, { status: 403 });
+  }
+
+  const rateLimit = await checkSensitiveRateLimit(request, user.id);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ code: 'rate_limited', error: 'Please try again shortly.' }, { status: 429 });
+  }
+
+  let jobId: string | null = null;
   try {
-    // CSRF Protection: Verify Origin
-    const origin = request.headers.get('origin') || request.headers.get('referer');
-    const host = request.headers.get('host');
-    
-    if (!origin || !host) {
-      return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
+    const profile = await resolveEffectiveProfile(user.id);
+    const userIdHash = hashUserId(user.id);
+    const { data: existingJob } = await supabaseAdmin
+      .from('account_deletion_jobs')
+      .select('id, status')
+      .eq('user_id', user.id)
+      .neq('status', 'completed')
+      .maybeSingle();
+
+    if (existingJob) {
+      jobId = existingJob.id;
+    } else {
+      const { data: job, error: jobError } = await supabaseAdmin
+        .from('account_deletion_jobs')
+        .insert({
+          user_id: user.id,
+          user_id_hash: userIdHash,
+          stripe_customer_id: profile.stripeCustomerId,
+          stripe_subscription_id: profile.stripeSubscriptionId,
+        })
+        .select('id')
+        .single();
+      if (jobError) throw jobError;
+      jobId = job.id;
     }
 
-    if (origin && host) {
+    if (profile.stripeCustomerId) {
       try {
-        const originUrl = new URL(origin);
-        if (originUrl.host !== host) {
-          return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
-        }
-      } catch {
-        return NextResponse.json({ error: 'CSRF validation failed.' }, { status: 403 });
-      }
-    }
-
-    const cookieStore = await cookies();
-    
-    // 1. Initialize SSR Client to verify the requesting user's session
-    const supabaseClient = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            // Not strictly necessary for a simple POST action, but good practice
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            cookieStore.delete({ name, ...options });
-          },
-        },
-      }
-    );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized request.' }, { status: 401 });
-    }
-
-    const userId = user.id;
-
-    // 2. Initialize Admin Client to perform the deletion
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceRoleKey) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing from environment variables.');
-      return NextResponse.json({ error: 'Server configuration error.' }, { status: 500 });
-    }
-
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
+        await stripe.customers.del(profile.stripeCustomerId);
+      } catch (error) {
+        if (!(error instanceof Stripe.errors.StripeInvalidRequestError && error.code === 'resource_missing')) {
+          throw error;
         }
       }
-    );
-
-    // 3. Delete the user
-    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-
-    if (deleteError) {
-      console.error('Failed to delete user:', deleteError);
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    // Success
-    return NextResponse.json({ success: true, message: 'Account deleted successfully.' }, { status: 200 });
-    
-  } catch (error: unknown) {
-    console.error('Account deletion error:', error);
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
+    const { error: stripeStateError } = await supabaseAdmin
+      .from('account_deletion_jobs')
+      .update({ status: 'stripe_deleted', updated_at: new Date().toISOString(), failure_code: null })
+      .eq('id', jobId);
+    if (stripeStateError) throw stripeStateError;
+
+    // Temporary access grants are erased and checkout operations are
+    // pseudonymized before Auth deletion. Stripe remains the financial record.
+    const { error: overrideDeleteError } = await supabaseAdmin
+      .from('user_entitlement_overrides')
+      .delete()
+      .eq('user_id', user.id);
+    if (overrideDeleteError) throw overrideDeleteError;
+
+    const { error: intentAnonymizeError } = await supabaseAdmin
+      .from('billing_checkout_intents')
+      .update({ user_id: null, user_id_hash: userIdHash })
+      .eq('user_id', user.id);
+    if (intentAnonymizeError) throw intentAnonymizeError;
+
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+    if (deleteError) throw deleteError;
+
+    await supabaseAdmin
+      .from('account_deletion_jobs')
+      .update({
+        user_id: null,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        failure_code: null,
+      })
+      .eq('id', jobId);
+
+    await recordMetric({ kind: 'operational', service: 'account', name: 'account_deleted' });
+    return NextResponse.json({ success: true, reference: jobId });
+  } catch {
+    if (jobId) {
+      await supabaseAdmin
+        .from('account_deletion_jobs')
+        .update({ status: 'failed', failure_code: 'account_deletion_failed', updated_at: new Date().toISOString() })
+        .eq('id', jobId);
+    }
+    await recordIncident({
+      dedupKey: 'account:deletion-failed',
+      service: 'account',
+      type: 'account_deletion_failed',
+      severity: 'critical',
+      correlationId: jobId,
+    });
+    return NextResponse.json({
+      code: 'deletion_failed',
+      error: 'Account deletion could not be completed. Please retry or contact support.',
+      reference: jobId,
+    }, { status: 503 });
   }
 }

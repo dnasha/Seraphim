@@ -12,6 +12,7 @@ import { NewsItem } from '@/lib/core/types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { selectDueSources, selectRecentFeedItems, socialPollTier } from './sourcePolling';
+import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 
 const DEFAULT_TIMEOUT = 15000;
 const X_MAX_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
@@ -80,6 +81,7 @@ export async function scrapeTelegramChannel(
     source: SocialSource, 
     timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<NewsItem[]> {
+    const startedAt = Date.now();
     try {
         const res = await fetch(source.url, {
             headers: {
@@ -91,6 +93,7 @@ export async function scrapeTelegramChannel(
         });
 
         if (!res.ok) {
+            recordSourceAttempt({ source_name: source.name, source_type: 'telegram', poll_tier: String(socialPollTier(source)), outcome: res.status === 429 ? 'rate_limited' : 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: `http_${res.status}` });
             console.warn(`telegram ${source.name}: HTTP ${res.status}`);
             return [];
         }
@@ -131,7 +134,7 @@ export async function scrapeTelegramChannel(
             limit: 10,
             maxAgeMs: 72 * 60 * 60 * 1000,
         });
-        return recentPosts.map((post, i) => ({
+        const items = recentPosts.map((post, i) => ({
             id: `social-tg-${source.name.replace(/\s+/g, '-').toLowerCase()}-${i}-${Date.now()}`,
             title: safeSlice(post.text, 140) + (post.text.length > 140 ? '…' : ''),
             description: safeSlice(post.text, 500) + (post.links.length > 0 ? '\n\nLinks: ' + post.links.join(', ') : ''),
@@ -142,7 +145,10 @@ export async function scrapeTelegramChannel(
             publishedAt: ensureIsoDate(post.date),
             tags: ['OSINT', 'telegram'],
         }));
+        recordSourceAttempt({ source_name: source.name, source_type: 'telegram', poll_tier: String(socialPollTier(source)), outcome: items.length ? 'healthy' : 'empty', fetched_count: posts.length, accepted_count: items.length, rejected_count: Math.max(0, posts.length - items.length), latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
+        return items;
     } catch (error) {
+        recordSourceAttempt({ source_name: source.name, source_type: 'telegram', poll_tier: String(socialPollTier(source)), outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error) });
         console.warn(`telegram scrape failed for ${source.name}:`, error instanceof Error ? error.message : error);
         return [];
     }
@@ -346,6 +352,7 @@ function bestXCandidate(candidates: Array<{ strategy: string; items: NewsItem[] 
  * excluded to prevent false/stale attribution.
  */
 export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
+    const startedAt = Date.now();
     const username = source.url;
     const [syndication, nitter] = await Promise.all([
         trySyndicationFeed(username),
@@ -356,6 +363,7 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
         { strategy: 'nitter', items: nitter ? normalizeXFeed(source, nitter) : [] },
     ]);
     if (directCandidate) {
+        recordSourceAttempt({ source_name: source.name, source_type: 'x', poll_tier: String(socialPollTier(source)), outcome: 'healthy', fetched_count: directCandidate.items.length, accepted_count: directCandidate.items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(directCandidate.items), duration_ms: Date.now() - startedAt, error_code: null });
         console.log(`[X] ${source.name}: ${directCandidate.strategy} (${directCandidate.items.length} fresh items)`);
         return directCandidate.items;
     }
@@ -363,9 +371,11 @@ export async function fetchXFeed(source: SocialSource): Promise<NewsItem[]> {
     const rssHub = await tryRSSHubFeed(username);
     const fallbackItems = rssHub ? normalizeXFeed(source, rssHub) : [];
     if (fallbackItems.length === 0) {
+        recordSourceAttempt({ source_name: source.name, source_type: 'x', poll_tier: String(socialPollTier(source)), outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: 'all_strategies_failed' });
         console.warn(`all X feed strategies failed for ${source.name} (@${username})`);
         return [];
     }
+    recordSourceAttempt({ source_name: source.name, source_type: 'x', poll_tier: String(socialPollTier(source)), outcome: 'healthy', fetched_count: fallbackItems.length, accepted_count: fallbackItems.length, rejected_count: 0, latest_usable_item_at: latestItemAt(fallbackItems), duration_ms: Date.now() - startedAt, error_code: null });
     console.log(`[X] ${source.name}: rsshub (${fallbackItems.length} fresh items)`);
     return fallbackItems;
 }

@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { stripe, STRIPE_PRICES, ANGEL_MAX_QUANTITY } from '@/lib/stripe';
-import { isPaymentsEnabled } from '@/lib/security/payments';
+import { isAngelCheckoutEnabled } from '@/lib/security/payments';
 
 const supabaseAdmin = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +20,7 @@ const supabaseAdmin = createServiceClient(
 
 export async function GET() {
     try {
-        if (!isPaymentsEnabled()) {
+        if (!isAngelCheckoutEnabled()) {
             return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
         }
 
@@ -41,14 +41,21 @@ export async function GET() {
             }
         }
 
-        const { count } = await supabaseAdmin
+        const { count, error: purchaseCountError } = await supabaseAdmin
             .from('angel_purchases')
             .select('*', { count: 'exact', head: true });
 
-        const remaining = Math.max(0, maxQuantity - (count ?? 0));
+        const { count: reservedCount, error: reservationCountError } = await supabaseAdmin
+            .from('billing_checkout_intents')
+            .select('*', { count: 'exact', head: true })
+            .eq('price_key', 'angel')
+            .in('status', ['creating', 'open', 'pending_payment']);
+        if (purchaseCountError || reservationCountError) throw new Error('inventory_count_unavailable');
+
+        const remaining = Math.max(0, maxQuantity - (count ?? 0) - (reservedCount ?? 0));
 
         return NextResponse.json({ remaining, total: maxQuantity });
     } catch {
-        return NextResponse.json({ remaining: ANGEL_MAX_QUANTITY, total: ANGEL_MAX_QUANTITY });
+        return NextResponse.json({ error: 'Angel availability is temporarily unavailable.' }, { status: 503 });
     }
 }

@@ -11,7 +11,7 @@ const ALLOWED_SOURCES = new Set(DEFAULT_SOURCE_FILTERS);
 const ALLOWED_CATEGORIES = new Set(['all', 'world', 'crisis', 'nation', 'business', 'technology', 'science', 'health']);
 const ALLOWED_TIME_RANGES = new Set(['1d', '3d', '1w', '1m', 'custom']);
 const ALLOWED_MAP_STYLES = new Set(['standard', 'dark', 'black', 'light', 'satellite', 'topographic']);
-const ALLOWED_OVERLAYS = new Set(['usgs', 'noaa', 'eonet', 'fires', 'radiation', 'aqi', 'flights', 'ships', 'iss']);
+const ALLOWED_OVERLAYS = new Set(['usgs', 'noaa', 'eonet', 'fires', 'radiation', 'aqi', 'flights', 'iss']);
 
 export interface SyncedPreferences {
   version: 1;

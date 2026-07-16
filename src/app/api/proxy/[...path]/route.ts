@@ -9,6 +9,7 @@ import {
 import { canUseOverlay } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { recordIncident, recordMetric, recoverIncident, serverDiagnostic } from '@/lib/server/operations';
 
 const redis = Redis.fromEnv();
 const proxyRatelimit = new Ratelimit({
@@ -21,6 +22,26 @@ const proxyRatelimit = new Ratelimit({
 const localLimit = new Map<string, { count: number; reset: number }>();
 let lastCleanup = Date.now();
 let lastIssGeoJson: { data: unknown; timestamp: number } | null = null;
+const overlayFailureRecordedAt = new Map<string, number>();
+
+function markOverlayFailure(service: string, errorCode: string) {
+  const now = Date.now();
+  if (now - (overlayFailureRecordedAt.get(service) ?? 0) < 5 * 60 * 1000) return;
+  overlayFailureRecordedAt.set(service, now);
+  void recordMetric({ kind: 'operational', service: 'overlays', name: `${service}.failure` });
+  void recordIncident({
+    dedupKey: `overlay:${service}`,
+    service: 'overlays',
+    type: 'provider_unavailable',
+    severity: 'warning',
+    safeContext: { provider: service, error_code: errorCode },
+  });
+}
+
+function markOverlayHealthy(service: string) {
+  if (!overlayFailureRecordedAt.delete(service)) return;
+  void recoverIncident(`overlay:${service}`);
+}
 
 const EMPTY_FEATURE_COLLECTION = {
   type: "FeatureCollection",
@@ -32,7 +53,6 @@ const PREMIUM_PROXY_SERVICES: Record<string, string> = {
   safecast: 'radiation',
   wildfires: 'fires',
   eonet: 'eonet',
-  ships: 'ships',
   iss: 'iss',
 };
 
@@ -61,8 +81,8 @@ async function checkProxyRateLimit(clientIp: string, userId?: string | null) {
   try {
     const results = await Promise.all(rateLimitKeys.map((key) => proxyRatelimit.limit(key)));
     return results.every(({ success }) => success);
-  } catch (error) {
-    console.error("[api/proxy] Rate limiter error (failing open):", error);
+  } catch {
+    serverDiagnostic('proxy_rate_limit_unavailable');
     return true;
   }
 }
@@ -133,9 +153,11 @@ export async function GET(
         }, 5000);
       }
       if (!res.ok) {
+        markOverlayFailure('flights', `http_${res.status}`);
         return NextResponse.json({ error: "Failed to fetch from all ADSB endpoints" }, { status: res.status });
       }
       const data = await res.json();
+      markOverlayHealthy('flights');
       return NextResponse.json(data, {
         headers: PRIVATE_CACHE_HEADERS,
       });
@@ -150,13 +172,16 @@ export async function GET(
         }, 5000);
         if (res.ok) {
           const data = await res.json();
+          markOverlayHealthy('flights');
           return NextResponse.json(data, {
             headers: PRIVATE_CACHE_HEADERS,
           });
         }
+        markOverlayFailure('flights', `http_${res.status}`);
         return NextResponse.json({ error: "Failed to fetch from fallback" }, { status: res.status });
-      } catch (fallbackErr) {
-        console.error("[proxy/flights] Fallback also failed:", fallbackErr);
+      } catch {
+        markOverlayFailure('flights', 'fallback_failed');
+        serverDiagnostic('overlay_flights_failed');
         return NextResponse.json({ error: "Internal error" }, { status: 500 });
       }
     }
@@ -183,8 +208,9 @@ export async function GET(
           ...PRIVATE_CACHE_HEADERS
         }
       });
-    } catch (err) {
-      console.error("[proxy/safecast] Error:", err);
+    } catch {
+      markOverlayFailure('safecast', 'request_failed');
+      serverDiagnostic('overlay_safecast_failed');
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
   }
@@ -193,6 +219,7 @@ export async function GET(
     try {
       const res = await fetchWithTimeout("https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv", {}, 8000);
       if (!res.ok) {
+        markOverlayFailure('wildfires', `http_${res.status}`);
         return NextResponse.json({ error: "Failed to fetch active fires from FIRMS" }, { status: res.status });
       }
       const text = await res.text();
@@ -232,14 +259,16 @@ export async function GET(
         type: "FeatureCollection",
         features
       };
+      markOverlayHealthy('wildfires');
       
       return NextResponse.json(geojson, {
         headers: {
           ...PRIVATE_CACHE_HEADERS
         }
       });
-    } catch (err) {
-      console.error("[proxy/wildfires] Error:", err);
+    } catch {
+      markOverlayFailure('wildfires', 'request_failed');
+      serverDiagnostic('overlay_wildfires_failed');
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
   }
@@ -248,8 +277,10 @@ export async function GET(
     try {
       const res = await fetchWithTimeout("https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods", {}, 8000);
       if (!res.ok) {
+        markOverlayFailure('eonet', `http_${res.status}`);
         return NextResponse.json({ error: "Failed to fetch active events from EONET" }, { status: res.status });
       }
+      markOverlayHealthy('eonet');
       const data = await res.json();
       if (data && Array.isArray(data.features)) {
         for (const f of data.features) {
@@ -265,116 +296,11 @@ export async function GET(
           ...PRIVATE_CACHE_HEADERS
         }
       });
-    } catch (err) {
-      console.error("[proxy/eonet] Error:", err);
+    } catch {
+      markOverlayFailure('eonet', 'request_failed');
+      serverDiagnostic('overlay_eonet_failed');
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
-  }
-
-  if (service === "ships") {
-    // GeoJSON FeatureCollection containing major naval Carrier Strike Groups (based on USNI Fleet Tracker)
-    // and crude oil tankers navigating strategic maritime choke points.
-    const geojson = {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [142.30, 33.50] },
-          properties: {
-            name: "USS George Washington (CVN-73)",
-            type: "Military (Carrier Strike Group)",
-            status: "Annual WESTPAC Patrol",
-            source: "USNI News Fleet Tracker"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [124.50, 17.20] },
-          properties: {
-            name: "USS Theodore Roosevelt (CVN-71)",
-            type: "Military (Carrier Strike Group)",
-            status: "Forward Deployed / 7th Fleet",
-            source: "USNI News Fleet Tracker"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [59.40, 23.80] },
-          properties: {
-            name: "USS Abraham Lincoln (CVN-72)",
-            type: "Military (Carrier Strike Group)",
-            status: "Enforcing Maritime Security / 5th Fleet",
-            source: "USNI News Fleet Tracker"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [-76.50, -28.40] },
-          properties: {
-            name: "USS Nimitz (CVN-68)",
-            type: "Military (Carrier Strike Group)",
-            status: "Southern Seas 2026 Cruise / SOUTHCOM",
-            source: "USNI News Fleet Tracker"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [106.80, 3.20] },
-          properties: {
-            name: "USS Boxer (LHD-4) ARG",
-            type: "Military (Amphibious Ready Group)",
-            status: "Transit / Western Pacific",
-            source: "USNI News Fleet Tracker"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [43.12, 12.82] },
-          properties: {
-            name: "MV Chios Lion (Oil Tanker)",
-            type: "Commercial (Crude Oil Tanker)",
-            status: "Transit / Bab-el-Mandeb Strait",
-            source: "Live AIS stream"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [57.32, 25.12] },
-          properties: {
-            name: "MV Sounion (Oil Tanker)",
-            type: "Commercial (Crude Oil Tanker)",
-            status: "Transit / Gulf of Oman",
-            source: "Live AIS stream"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [102.15, 1.35] },
-          properties: {
-            name: "MV Front Hakata (VLCC)",
-            type: "Commercial (Very Large Crude Carrier)",
-            status: "Transit / Malacca Strait",
-            source: "Live AIS stream"
-          }
-        },
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [32.50, 30.70] },
-          properties: {
-            name: "MV Ridgebury Mary Queen",
-            type: "Commercial (Chemical Tanker)",
-            status: "Transit / Suez Canal",
-            source: "Live AIS stream"
-          }
-        }
-      ]
-    };
-
-    return NextResponse.json(geojson, {
-      headers: {
-        ...PRIVATE_CACHE_HEADERS
-      }
-    });
   }
 
   if (service === "iss") {
@@ -386,6 +312,7 @@ export async function GET(
         }
       }, 8000);
       if (!res.ok) {
+        markOverlayFailure('iss', `http_${res.status}`);
         return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
           headers: {
             ...PRIVATE_CACHE_HEADERS
@@ -415,14 +342,16 @@ export async function GET(
         ]
       };
       lastIssGeoJson = { data: geojson, timestamp: Date.now() };
+      markOverlayHealthy('iss');
       
       return NextResponse.json(geojson, {
         headers: {
           ...PRIVATE_CACHE_HEADERS
         }
       });
-    } catch (err) {
-      console.warn("[proxy/iss] Returning cached or empty ISS data after upstream error:", err);
+    } catch {
+      markOverlayFailure('iss', 'request_failed');
+      serverDiagnostic('overlay_iss_failed');
       return NextResponse.json(lastIssGeoJson?.data ?? EMPTY_FEATURE_COLLECTION, {
         headers: {
           ...PRIVATE_CACHE_HEADERS

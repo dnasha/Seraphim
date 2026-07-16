@@ -189,10 +189,6 @@
   color: #ec4899;
   background: rgba(236, 72, 153, 0.12);
 }
-.shipIcon {
-  color: #06b6d4;
-  background: rgba(6, 182, 212, 0.12);
-}
 .issIcon {
   color: #f43f5e;
   background: rgba(244, 63, 94, 0.12);
@@ -221,6 +217,10 @@
   font-weight: 500;
   line-height: 1;
 }
+
+.status_loading { color: #d6a94a !important; }
+.status_live { color: #38b981 !important; }
+.status_degraded { color: #e56876 !important; }
 
 .toggleSwitch {
   width: 36px;

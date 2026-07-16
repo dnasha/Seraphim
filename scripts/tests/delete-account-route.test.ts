@@ -1,73 +1,80 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  cookies: vi.fn(),
   getUser: vi.fn(),
   deleteUser: vi.fn(),
-  createServerClient: vi.fn(),
-  createAdminClient: vi.fn(),
+  from: vi.fn(),
+  deleteCustomer: vi.fn(),
+  profile: vi.fn(),
 }));
 
-vi.mock("next/headers", () => ({ cookies: mocks.cookies }));
-vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
-vi.mock("@supabase/supabase-js", () => ({ createClient: mocks.createAdminClient }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
+vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, auth: { admin: { deleteUser: mocks.deleteUser } } } }));
+vi.mock('@/lib/stripe', () => ({ stripe: { customers: { del: mocks.deleteCustomer } } }));
+vi.mock('@/lib/server/effectiveProfile', () => ({ resolveEffectiveProfile: mocks.profile }));
+vi.mock('@/lib/security/payments', () => ({ getConfiguredSiteUrl: () => 'https://seraphim.example' }));
+vi.mock('@/lib/security/sensitiveRequest', () => ({
+  hasValidSameOrigin: (request: Request, origin: string) => request.headers.get('origin') === origin,
+  checkSensitiveRateLimit: async () => ({ allowed: true }),
+}));
+vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 
-import { POST } from "@/app/api/auth/delete-account/route";
+import { POST } from '@/app/api/auth/delete-account/route';
 
-function request(headers: Record<string, string>) {
-  return new Request("https://seraphim.example/api/auth/delete-account", { method: "POST", headers });
+function req(origin = 'https://seraphim.example') {
+  return new Request('https://seraphim.example/api/auth/delete-account', { method: 'POST', headers: origin ? { origin } : {} });
 }
 
-describe("POST /api/auth/delete-account", () => {
+function query(table: string) {
+  let operation = 'select';
+  const value: Record<string, unknown> = {};
+  value.select = vi.fn(() => value);
+  value.eq = vi.fn(() => value);
+  value.neq = vi.fn(() => value);
+  value.insert = vi.fn(() => { operation = 'insert'; return value; });
+  value.update = vi.fn(() => { operation = 'update'; return value; });
+  value.delete = vi.fn(() => { operation = 'delete'; return value; });
+  value.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+  value.single = vi.fn(async () => ({ data: operation === 'insert' && table === 'account_deletion_jobs' ? { id: 'job-1' } : null, error: null }));
+  value.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
+  return value;
+}
+
+describe('POST /api/auth/delete-account', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // The admin client is mocked below; use a dummy value so this unit test is
-    // independent of local .env files and GitHub Actions secrets.
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
-    mocks.cookies.mockResolvedValue({ get: vi.fn(), set: vi.fn(), delete: vi.fn() });
-    mocks.createServerClient.mockReturnValue({ auth: { getUser: mocks.getUser } });
-    mocks.createAdminClient.mockReturnValue({ auth: { admin: { deleteUser: mocks.deleteUser } } });
-    mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', last_sign_in_at: new Date().toISOString() } }, error: null });
     mocks.deleteUser.mockResolvedValue({ error: null });
+    mocks.deleteCustomer.mockResolvedValue({ deleted: true });
+    mocks.profile.mockResolvedValue({ stripeCustomerId: 'cus-1', stripeSubscriptionId: 'sub-1' });
+    mocks.from.mockImplementation(query);
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
+  it('rejects cross-origin requests before authentication', async () => {
+    expect((await POST(req('https://evil.example'))).status).toBe(403);
+    expect(mocks.getUser).not.toHaveBeenCalled();
   });
 
-  it("rejects requests without a same-origin CSRF signal before creating clients", async () => {
-    const missing = await POST(request({ host: "seraphim.example" }));
-    const crossSite = await POST(request({ host: "seraphim.example", origin: "https://evil.example" }));
-
-    expect(missing.status).toBe(403);
-    expect(crossSite.status).toBe(403);
-    expect(mocks.cookies).not.toHaveBeenCalled();
-    expect(mocks.deleteUser).not.toHaveBeenCalled();
+  it('requires authentication and recent email verification', async () => {
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
+    expect((await POST(req())).status).toBe(401);
+    mocks.getUser.mockResolvedValueOnce({ data: { user: { id: 'user-1', last_sign_in_at: '2020-01-01T00:00:00Z' } }, error: null });
+    expect((await POST(req())).status).toBe(403);
   });
 
-  it("requires an authenticated user after CSRF validation", async () => {
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
-
-    const response = await POST(request({ host: "seraphim.example", origin: "https://seraphim.example" }));
-
-    expect(response.status).toBe(401);
-    expect(mocks.deleteUser).not.toHaveBeenCalled();
-  });
-
-  it("deletes only the authenticated user with the server-side admin client", async () => {
-    const response = await POST(request({ host: "seraphim.example", origin: "https://seraphim.example" }));
-
+  it('deletes Stripe billing immediately, pseudonymizes operations, and deletes Auth', async () => {
+    const response = await POST(req());
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ success: true });
-    expect(mocks.deleteUser).toHaveBeenCalledWith("user-1");
+    expect(mocks.deleteCustomer).toHaveBeenCalledWith('cus-1');
+    expect(mocks.from).toHaveBeenCalledWith('user_entitlement_overrides');
+    expect(mocks.from).toHaveBeenCalledWith('billing_checkout_intents');
+    expect(mocks.deleteUser).toHaveBeenCalledWith('user-1');
   });
 
-  it("surfaces a controlled server error when deletion fails", async () => {
-    mocks.deleteUser.mockResolvedValue({ error: { message: "delete failed" } });
-
-    const response = await POST(request({ host: "seraphim.example", origin: "https://seraphim.example" }));
-
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toMatchObject({ error: "delete failed" });
+  it('returns a resumable reference when Auth deletion fails', async () => {
+    mocks.deleteUser.mockResolvedValue({ error: { message: 'failed' } });
+    const response = await POST(req());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'deletion_failed', reference: 'job-1' });
   });
 });

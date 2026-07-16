@@ -1,5 +1,6 @@
 import styles from '../terms/LegalPage.module.css';
 import LegalBackButton from '@/components/ui/LegalBackButton';
+import PrivacyChoicesButton from '@/components/ui/PrivacyChoicesButton';
 
 export const metadata = {
   title: 'Privacy Policy | Seraphim',
@@ -45,6 +46,7 @@ export default function PrivacyPage() {
             <p className={styles.text}>
               Seraphim uses essential cookies that are necessary for the platform to function, such as maintaining your session. We may also use optional analytics cookies to help us understand how users interact with the map, which you can control via our cookie consent banner. We respect your preferences and comply with standard consent frameworks.
             </p>
+            <PrivacyChoicesButton />
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>6. Data Security</h2>
             <p className={styles.text}>

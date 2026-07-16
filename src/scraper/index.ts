@@ -32,6 +32,11 @@ import {
   isVectorTypeMissingError,
   BulkIngestResult
 } from "./dbIngest";
+import {
+  beginSourceHealthCollection,
+  completeSourceHealthCollection,
+} from '@/lib/api/sourceHealth';
+import { recordIncident, recordMetric, recoverIncident } from '@/lib/server/operations';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 
@@ -43,6 +48,72 @@ if (!supabase) {
 }
 
 const db = supabase!;
+
+interface RunStats {
+  raw_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  deduplicated_count: number;
+  mapped_count: number;
+  merged_count: number;
+  inserted_count: number;
+}
+
+let activeRunId: string | null = null;
+let activeRunStartedAt = 0;
+let activeSourceFailures = 0;
+const activeRunStats: RunStats = {
+  raw_count: 0,
+  accepted_count: 0,
+  rejected_count: 0,
+  deduplicated_count: 0,
+  mapped_count: 0,
+  merged_count: 0,
+  inserted_count: 0,
+};
+
+async function startIngestionRun() {
+  activeRunStartedAt = Date.now();
+  const { data, error } = await db
+    .from('ingestion_runs')
+    .insert({
+      dry_run: DRY_RUN,
+      commit_sha: process.env.GITHUB_SHA?.slice(0, 64) ?? null,
+      status: 'running',
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error('Unable to create ingestion run record');
+  activeRunId = data.id;
+}
+
+async function finalizeIngestionRun(status: 'healthy' | 'degraded' | 'failed', errorCode?: string) {
+  if (!activeRunId) return;
+  const runId = activeRunId;
+  activeRunId = null;
+  const { error } = await db.from('ingestion_runs').update({
+    ...activeRunStats,
+    status,
+    error_code: errorCode ?? null,
+    error_summary: errorCode ? 'Ingestion pipeline did not complete. Review correlated source attempts and worker logs.' : null,
+    duration_ms: Date.now() - activeRunStartedAt,
+    finished_at: new Date().toISOString(),
+  }).eq('id', runId);
+  if (error) process.stderr.write('[seraphim:ingestion_run_finalize_failed]\n');
+  if (status === 'healthy') {
+    await recoverIncident('ingestion:pipeline-health');
+  } else {
+    await recordMetric({ kind: 'operational', service: 'ingestion', name: `run_${status}` });
+    await recordIncident({
+      dedupKey: 'ingestion:pipeline-health',
+      service: 'ingestion',
+      type: status === 'failed' ? 'pipeline_failed' : 'source_cohort_degraded',
+      severity: status === 'failed' ? 'critical' : 'warning',
+      correlationId: runId,
+      safeContext: { source_failures: activeSourceFailures },
+    });
+  }
+}
 
 
 
@@ -56,6 +127,8 @@ Main execution pipeline:
 */
 async function run(): Promise<void> {
   const startMs = Date.now();
+  await startIngestionRun();
+  beginSourceHealthCollection();
   console.log(
     `[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`,
   );
@@ -76,6 +149,18 @@ async function run(): Promise<void> {
     ...gnewsItems,
     ...socialItems,
   ];
+  activeRunStats.raw_count = rawItems.length;
+
+  const sourceAttempts = completeSourceHealthCollection();
+  activeSourceFailures = sourceAttempts.filter((attempt) =>
+    ['rate_limited', 'provider_error', 'parse_error', 'disabled'].includes(attempt.outcome),
+  ).length;
+  if (activeRunId && sourceAttempts.length > 0) {
+    const { error } = await db.from('ingestion_source_attempts').insert(
+      sourceAttempts.map((attempt) => ({ ...attempt, run_id: activeRunId })),
+    );
+    if (error) throw new Error('Unable to persist source health attempts');
+  }
 
   console.log(
     `[scraper] Raw items fetched: ${rawItems.length} (rss=${rssItems.length}, reddit=${redditItems.length}, gnews=${gnewsItems.length}, social=${socialItems.length})`,
@@ -85,6 +170,8 @@ async function run(): Promise<void> {
   const { accepted: qualityItems, rejectedByReason } =
     filterItemsByQuality(itemsWithUrl);
   const rejectedQualityCount = itemsWithUrl.length - qualityItems.length;
+  activeRunStats.accepted_count = qualityItems.length;
+  activeRunStats.rejected_count = rejectedQualityCount;
   if (rejectedQualityCount > 0) {
     console.log(
       `[scraper] Quality gate rejected ${rejectedQualityCount} item(s) ` +
@@ -129,6 +216,7 @@ async function run(): Promise<void> {
   });
 
   const unseenItems = qualityItems.filter((item) => !knownUrls.has(item.url));
+  activeRunStats.deduplicated_count = qualityItems.length - unseenItems.length;
   const sourceLimits = await loadSourceNoveltyLimits(db);
   const { accepted: newItems, cappedBySource } = applySourceNoveltyLimits(unseenItems, sourceLimits);
   const cappedCount = Object.values(cappedBySource).reduce((sum, count) => sum + count, 0);
@@ -139,6 +227,7 @@ async function run(): Promise<void> {
 
   if (newItems.length === 0) {
     console.log("[scraper] No new items. Exiting.");
+    await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
     return;
   }
 
@@ -146,6 +235,7 @@ async function run(): Promise<void> {
   const enrichedItems = await enrichItemsWithLocation(newItems);
 
   const geocodedCount = enrichedItems.filter(hasUsableCoordinates).length;
+  activeRunStats.mapped_count = geocodedCount;
   console.log(
     `[scraper] Geocoding complete: ${geocodedCount}/${enrichedItems.length} items mapped`,
   );
@@ -163,6 +253,7 @@ async function run(): Promise<void> {
 
   if (mappedItems.length === 0) {
     console.log("[scraper] No mapped items to ingest. Exiting.");
+    await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
     return;
   }
 
@@ -181,6 +272,8 @@ async function run(): Promise<void> {
     console.log(
       `[scraper] DRY RUN Summary: ${newEvents.length} new events, ${merges.size} merges`,
     );
+    activeRunStats.merged_count = merges.size;
+    await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
     return;
   }
 
@@ -293,12 +386,17 @@ async function run(): Promise<void> {
   }
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+  activeRunStats.inserted_count = upserted_count;
+  activeRunStats.merged_count = merged_count;
+  await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
   console.log(
     `[scraper] Finished in ${elapsed}s. Upserted: ${upserted_count}, Merged: ${merged_count}`,
   );
 }
 
-run().catch((err) => {
+run().catch(async (err) => {
+  completeSourceHealthCollection();
+  await finalizeIngestionRun('failed', 'pipeline_failure');
   console.error("[scraper] Unhandled error:", err);
   process.exit(1);
 });

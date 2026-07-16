@@ -51,28 +51,6 @@ export async function loadMapIcons(map: maplibregl.Map) {
     });
   }
 
-  // Load ship icon
-  if (!map.hasImage("ship-icon")) {
-    const svgStr = `
-      <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 17h20l-2 4H4l-2-4zm18-4v3H4v-3l4-3h8l4 3zm-6-6h2v3h-2V7zm-4 1h2v2H8V8z" fill="#06b6d4" stroke="#ffffff" stroke-width="1.5" />
-      </svg>
-    `;
-    const img = new Image(24, 24);
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
-    await new Promise((resolve) => {
-      img.onload = () => {
-        try {
-          if (!map.hasImage("ship-icon")) {
-            map.addImage("ship-icon", img);
-          }
-        } catch {}
-        resolve(true);
-      };
-      img.onerror = () => resolve(false);
-    });
-  }
-
   // Load ISS icon
   if (!map.hasImage("iss-icon")) {
     const svgStr = `

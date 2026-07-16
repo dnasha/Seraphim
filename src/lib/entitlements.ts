@@ -18,7 +18,6 @@ export type EntitlementFeature =
   | 'globe'
   | 'proOverlays'
   | 'analystOverlays'
-  | 'unmappedOnly'
   | 'individualPins';
 
 export interface TierEntitlements {
@@ -42,7 +41,6 @@ const GUEST_FEATURES: Record<EntitlementFeature, boolean> = {
   globe: false,
   proOverlays: false,
   analystOverlays: false,
-  unmappedOnly: false,
   individualPins: false,
 };
 
@@ -66,7 +64,6 @@ const ANALYST_FEATURES: Record<EntitlementFeature, boolean> = {
   ...PRO_FEATURES,
   geoJsonTransfer: true,
   analystOverlays: true,
-  unmappedOnly: true,
   individualPins: true,
 };
 
@@ -103,7 +100,7 @@ export const TIER_ENTITLEMENTS: Readonly<Record<UserTier, TierEntitlements>> = {
     eventLimit: 1000,
     allowedTimeRanges: ['1d', '3d', '1w', '1m', 'custom'],
     features: ANALYST_FEATURES,
-    overlays: ['usgs', 'noaa', 'fires', 'eonet', 'flights', 'ships', 'iss', 'aqi', 'radiation'],
+    overlays: ['usgs', 'noaa', 'fires', 'eonet', 'flights', 'iss', 'aqi', 'radiation'],
     mapStyles: ['standard', 'dark', 'black', 'light', 'satellite', 'topographic'],
     timelineSourceLimit: null,
   },
@@ -112,7 +109,7 @@ export const TIER_ENTITLEMENTS: Readonly<Record<UserTier, TierEntitlements>> = {
     eventLimit: 1000,
     allowedTimeRanges: ['1d', '3d', '1w', '1m', 'custom'],
     features: ANALYST_FEATURES,
-    overlays: ['usgs', 'noaa', 'fires', 'eonet', 'flights', 'ships', 'iss', 'aqi', 'radiation'],
+    overlays: ['usgs', 'noaa', 'fires', 'eonet', 'flights', 'iss', 'aqi', 'radiation'],
     mapStyles: ['standard', 'dark', 'black', 'light', 'satellite', 'topographic'],
     timelineSourceLimit: null,
   },

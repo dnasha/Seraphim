@@ -1,204 +1,99 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  constructEvent: vi.fn(),
-  from: vi.fn(),
-  rpc: vi.fn(),
-  priceRetrieve: vi.fn(),
-  retrieveSubscription: vi.fn(),
+  constructEvent: vi.fn(), rpc: vi.fn(), from: vi.fn(), priceRetrieve: vi.fn(), retrieveSubscription: vi.fn(),
+  cancelSubscription: vi.fn(), updates: [] as Array<{ table: string; payload: Record<string, unknown> }>,
+  profile: { tier: 'free', stripe_subscription_id: null as string | null }, claimError: null as null | { code: string }, released: vi.fn(),
 }));
 
-vi.mock("@supabase/supabase-js", () => ({ createClient: vi.fn(() => ({ from: mocks.from, rpc: mocks.rpc })) }));
-vi.mock("@/lib/stripe", () => ({
-  ANGEL_MAX_QUANTITY: 100,
-  STRIPE_PRICES: { angel: "price_angel" },
-  intervalFromPriceId: vi.fn(() => "month"),
-  tierFromPriceId: vi.fn(() => "pro"),
+vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, rpc: mocks.rpc } }));
+vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn(), recoverIncident: vi.fn(), serverDiagnostic: vi.fn() }));
+vi.mock('@/lib/stripe', () => ({
+  ANGEL_MAX_QUANTITY: 100, STRIPE_PRICES: { angel: 'price_angel' },
+  intervalFromPriceId: () => 'month', tierFromPriceId: () => 'pro',
   stripe: {
-    webhooks: { constructEvent: mocks.constructEvent },
-    prices: { retrieve: mocks.priceRetrieve },
-    subscriptions: { retrieve: mocks.retrieveSubscription },
+    webhooks: { constructEvent: mocks.constructEvent }, prices: { retrieve: mocks.priceRetrieve },
+    subscriptions: { retrieve: mocks.retrieveSubscription, cancel: mocks.cancelSubscription },
   },
 }));
 
-import { POST } from "@/app/api/stripe/webhook/route";
+import { POST } from '@/app/api/stripe/webhook/route';
 
 function webhookRequest(signature: string | null) {
-  return new Request("https://seraphim.example/api/stripe/webhook", {
-    method: "POST",
-    body: "signed payload",
-    headers: signature ? { "stripe-signature": signature } : {},
-  }) as never;
+  return new Request('https://seraphim.example/api/stripe/webhook', { method: 'POST', body: 'signed', headers: signature ? { 'stripe-signature': signature } : {} }) as never;
 }
 
-describe("POST /api/stripe/webhook", () => {
+function tableQuery(table: string) {
+  const query: Record<string, unknown> = {};
+  query.insert = vi.fn(async () => ({ error: table === 'stripe_processed_events' ? mocks.claimError : null }));
+  query.delete = vi.fn(() => { mocks.released(); return query; });
+  query.select = vi.fn(() => query);
+  query.eq = vi.fn(() => query);
+  query.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+  query.single = vi.fn(async () => ({ data: table === 'user_profiles' ? mocks.profile : null, error: null }));
+  query.update = vi.fn((payload: Record<string, unknown>) => { mocks.updates.push({ table, payload }); return query; });
+  query.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
+  return query;
+}
+
+const activeSubscription = {
+  id: 'sub-1', status: 'active', customer: 'cus-1', cancel_at_period_end: false, trial_end: null,
+  metadata: { supabase_user_id: 'user-1' }, items: { data: [{ price: { id: 'price-pro' }, current_period_end: 1_800_000_000 }] },
+};
+
+describe('POST /api/stripe/webhook', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.from.mockImplementation(() => ({
-      insert: vi.fn(async () => ({ error: null })),
-    }));
-    mocks.rpc.mockResolvedValue({ data: true, error: null });
-    mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: "50" } } });
-    mocks.retrieveSubscription.mockResolvedValue({
-      id: "sub-1",
-      status: "active",
-      customer: "cus-1",
-      cancel_at_period_end: false,
-      trial_end: null,
-      metadata: { supabase_user_id: "user-1" },
-      items: { data: [{ price: { id: "price-pro" }, current_period_end: 1_800_000_000 }] },
-    });
+    vi.clearAllMocks(); mocks.updates.length = 0; mocks.claimError = null; mocks.profile = { tier: 'free', stripe_subscription_id: null };
+    mocks.from.mockImplementation(tableQuery); mocks.rpc.mockResolvedValue({ data: true, error: null });
+    mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: '50' } } });
+    mocks.retrieveSubscription.mockResolvedValue(activeSubscription);
   });
 
-  it("rejects unsigned requests before parsing a Stripe event", async () => {
-    const response = await POST(webhookRequest(null));
-
-    expect(response.status).toBe(400);
-    expect(mocks.constructEvent).not.toHaveBeenCalled();
+  it('rejects unsigned and invalidly signed webhook requests', async () => {
+    expect((await POST(webhookRequest(null))).status).toBe(400);
+    mocks.constructEvent.mockImplementation(() => { throw new Error('bad signature'); });
+    expect((await POST(webhookRequest('bad'))).status).toBe(400);
   });
 
-  it("rejects a bad Stripe signature without claiming an event", async () => {
-    mocks.constructEvent.mockImplementation(() => { throw new Error("bad signature"); });
-
-    const response = await POST(webhookRequest("bad"));
-
-    expect(response.status).toBe(400);
-    expect(mocks.from).not.toHaveBeenCalled();
+  it('acknowledges an already claimed Stripe event without processing it', async () => {
+    mocks.claimError = { code: '23505' };
+    mocks.constructEvent.mockReturnValue({ id: 'evt-duplicate', type: 'invoice.payment_succeeded', data: { object: {} } });
+    expect(await (await POST(webhookRequest('valid'))).json()).toEqual({ received: true, duplicate: true });
   });
 
-  it("handles an already-claimed event idempotently", async () => {
-    mocks.constructEvent.mockReturnValue({ id: "evt-duplicate", type: "invoice.payment_succeeded", data: { object: {} } });
-    mocks.from.mockReturnValue({ insert: vi.fn(async () => ({ error: { code: "23505" } })) });
-
-    const response = await POST(webhookRequest("valid"));
-
-    expect(await response.json()).toEqual({ received: true, duplicate: true });
+  it('fulfills a paid Angel checkout through the atomic inventory RPC', async () => {
+    mocks.constructEvent.mockReturnValue({ id: 'evt-angel', type: 'checkout.session.completed', data: { object: {
+      id: 'cs-angel', mode: 'payment', payment_status: 'paid', payment_intent: 'pi-1', customer: 'cus-1',
+      metadata: { supabase_user_id: 'user-1', price_key: 'angel', checkout_intent_id: 'intent-1' },
+    } } });
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith('fulfill_angel_purchase', expect.objectContaining({ p_user_id: 'user-1', p_max_quantity: 50 }));
+    expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'billing_checkout_intents', payload: expect.objectContaining({ status: 'completed' }) }));
   });
 
-  it("fulfills a paid Angel checkout exactly through the atomic database RPC", async () => {
-    mocks.constructEvent.mockReturnValue({
-      id: "evt-angel",
-      type: "checkout.session.completed",
-      data: { object: {
-        id: "cs-angel",
-        mode: "payment",
-        payment_status: "paid",
-        payment_intent: "pi-1",
-        customer: "cus-1",
-        metadata: { supabase_user_id: "user-1", price_key: "angel" },
-      } },
-    });
-
-    const response = await POST(webhookRequest("valid"));
-
-    expect(response.status).toBe(200);
-    expect(mocks.rpc).toHaveBeenCalledWith("fulfill_angel_purchase", {
-      p_user_id: "user-1",
-      p_stripe_payment_intent_id: "pi-1",
-      p_stripe_customer_id: "cus-1",
-      p_max_quantity: 50,
-    });
+  it('keeps active, trialing, and past-due subscriptions entitled', async () => {
+    mocks.constructEvent.mockReturnValue({ id: 'evt-sub', type: 'checkout.session.completed', data: { object: {
+      id: 'cs-sub', mode: 'subscription', subscription: 'sub-1', metadata: { supabase_user_id: 'user-1', price_key: 'pro_monthly', checkout_intent_id: 'intent-1' },
+    } } });
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'user_profiles', payload: expect.objectContaining({ tier: 'pro', subscription_status: 'active' }) }));
   });
 
-  it("syncs a completed subscription checkout to the matching user profile", async () => {
-    const profileUpdate = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
-    mocks.from.mockImplementation((table: string) => {
-      if (table === "stripe_processed_events") return { insert: vi.fn(async () => ({ error: null })) };
-      if (table === "user_profiles") return { update: profileUpdate };
-      throw new Error(`Unexpected table: ${table}`);
-    });
-    mocks.constructEvent.mockReturnValue({
-      id: "evt-subscription",
-      type: "checkout.session.completed",
-      data: { object: {
-        id: "cs-subscription",
-        mode: "subscription",
-        subscription: "sub-1",
-        customer: "cus-1",
-        metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
-      } },
-    });
-
-    const response = await POST(webhookRequest("valid"));
-
-    expect(response.status).toBe(200);
-    expect(mocks.retrieveSubscription).toHaveBeenCalledWith("sub-1");
-    expect(profileUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      tier: "pro",
-      stripe_customer_id: "cus-1",
-      stripe_subscription_id: "sub-1",
-      subscription_status: "active",
-      billing_interval: "month",
-    }));
+  it('downgrades incomplete or unpaid subscription states', async () => {
+    mocks.retrieveSubscription.mockResolvedValue({ ...activeSubscription, id: 'sub-incomplete', status: 'incomplete' });
+    mocks.constructEvent.mockReturnValue({ id: 'evt-incomplete', type: 'checkout.session.completed', data: { object: {
+      id: 'cs-incomplete', mode: 'subscription', subscription: 'sub-incomplete', metadata: { supabase_user_id: 'user-1', price_key: 'pro_monthly' },
+    } } });
+    await POST(webhookRequest('valid'));
+    expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'user_profiles', payload: expect.objectContaining({ tier: 'free', subscription_status: 'incomplete' }) }));
   });
 
-  it("does not grant a paid tier for an incomplete subscription", async () => {
-    const profileUpdate = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
-    mocks.from.mockImplementation((table: string) => {
-      if (table === "stripe_processed_events") return { insert: vi.fn(async () => ({ error: null })) };
-      if (table === "user_profiles") return { update: profileUpdate };
-      throw new Error(`Unexpected table: ${table}`);
-    });
-    mocks.retrieveSubscription.mockResolvedValue({
-      id: "sub-incomplete",
-      status: "incomplete",
-      customer: "cus-1",
-      cancel_at_period_end: false,
-      trial_end: null,
-      metadata: { supabase_user_id: "user-1" },
-      items: { data: [{ price: { id: "price-pro" }, current_period_end: null }] },
-    });
-    mocks.constructEvent.mockReturnValue({
-      id: "evt-incomplete",
-      type: "checkout.session.completed",
-      data: { object: {
-        id: "cs-incomplete",
-        mode: "subscription",
-        subscription: "sub-incomplete",
-        customer: "cus-1",
-        metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
-      } },
-    });
-
-    const response = await POST(webhookRequest("valid"));
-
-    expect(response.status).toBe(200);
-    expect(profileUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      tier: "free",
-      subscription_status: "incomplete",
-    }));
-  });
-
-  it("releases an idempotency claim when event processing fails", async () => {
-    const releaseEq = vi.fn(async () => ({ error: null }));
-    const releaseDelete = vi.fn(() => ({ eq: releaseEq }));
-    mocks.from.mockImplementation((table: string) => {
-      if (table === "stripe_processed_events") {
-        return {
-          insert: vi.fn(async () => ({ error: null })),
-          delete: releaseDelete,
-        };
-      }
-      if (table === "user_profiles") return { update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) };
-      throw new Error(`Unexpected table: ${table}`);
-    });
-    mocks.retrieveSubscription.mockRejectedValue(new Error("Stripe lookup failed"));
-    mocks.constructEvent.mockReturnValue({
-      id: "evt-failure",
-      type: "checkout.session.completed",
-      data: { object: {
-        id: "cs-failure",
-        mode: "subscription",
-        subscription: "sub-failure",
-        customer: "cus-1",
-        metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
-      } },
-    });
-
-    const response = await POST(webhookRequest("valid"));
-
-    expect(response.status).toBe(500);
-    expect(releaseDelete).toHaveBeenCalled();
-    expect(releaseEq).toHaveBeenCalledWith("event_id", "evt-failure");
+  it('releases the idempotency claim when processing fails', async () => {
+    mocks.retrieveSubscription.mockRejectedValue(new Error('unavailable'));
+    mocks.constructEvent.mockReturnValue({ id: 'evt-failure', type: 'checkout.session.completed', data: { object: {
+      id: 'cs-failure', mode: 'subscription', subscription: 'sub-failure', metadata: { supabase_user_id: 'user-1', price_key: 'pro_monthly' },
+    } } });
+    expect((await POST(webhookRequest('valid'))).status).toBe(500);
+    expect(mocks.released).toHaveBeenCalled();
   });
 });

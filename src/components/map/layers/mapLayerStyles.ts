@@ -257,26 +257,6 @@ export const FLIGHTS_PAINT: SymbolPaint = {
   "text-halo-width": 1.5,
 };
 
-export const SHIPS_LAYOUT: SymbolLayout = {
-  visibility: "visible",
-  "icon-image": "ship-icon",
-  "icon-allow-overlap": true,
-  "icon-ignore-placement": true,
-  "text-field": ["get", "name"],
-  "text-font": ["Noto Sans Bold"],
-  "text-size": 11,
-  "text-offset": [0, 1.4],
-  "text-anchor": "top",
-  "text-allow-overlap": false,
-  "text-ignore-placement": false,
-};
-
-export const SHIPS_PAINT: SymbolPaint = {
-  "text-color": "#ffffff",
-  "text-halo-color": "#090d16",
-  "text-halo-width": 2.0,
-};
-
 export const ISS_LAYOUT: SymbolLayout = {
   visibility: "visible",
   "icon-image": "iss-icon",

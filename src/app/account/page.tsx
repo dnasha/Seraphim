@@ -9,6 +9,7 @@ import { useUserTier } from '@/hooks/useUserTier';
 import TierBadge from '@/components/ui/TierBadge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './AccountPage.module.css';
+import { trackOptionalMetric } from '@/lib/privacyConsent';
 
 const ProviderIcon = ({ provider }: { provider: string }) => {
   switch (provider) {
@@ -44,12 +45,13 @@ const ProviderIcon = ({ provider }: { provider: string }) => {
 };
 
 export default function AccountPage() {
+  useEffect(() => { void trackOptionalMetric('account_view'); }, []);
   const { user, isLoading, supabase, signOut } = useAuth();
   const router = useRouter();
 
   const [emailMsg, setEmailMsg] = useState<{ type: 'error' | 'success', text: string } | null>(null);
   const [passMsg, setPassMsg] = useState<{ type: 'error' | 'success', text: string } | null>(null);
-  const [deleteMsg, setDeleteMsg] = useState<{ type: 'error', text: string } | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState<{ type: 'error' | 'success', text: string } | null>(null);
 
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -59,6 +61,7 @@ export default function AccountPage() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isVerifyingDeletion, setIsVerifyingDeletion] = useState(false);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -148,6 +151,34 @@ export default function AccountPage() {
     } catch (err: unknown) {
       setDeleteMsg({ type: 'error', text: err instanceof Error ? err.message : 'An unknown error occurred.' });
       setIsDeleting(false);
+    }
+  };
+
+  const sendDeletionVerification = async () => {
+    if (!user?.email) {
+      setDeleteMsg({ type: 'error', text: 'This account does not have a verified email address.' });
+      return;
+    }
+    setIsVerifyingDeletion(true);
+    setDeleteMsg(null);
+    try {
+      const next = encodeURIComponent('/account?reauth=delete');
+      const { error } = await supabase.auth.signInWithOtp({
+        email: user.email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${next}`,
+        },
+      });
+      if (error) throw error;
+      setDeleteMsg({
+        type: 'success',
+        text: 'Verification link sent. Return here from that link to complete deletion within 10 minutes.',
+      });
+    } catch {
+      setDeleteMsg({ type: 'error', text: 'Unable to send the verification link. Please try again.' });
+    } finally {
+      setIsVerifyingDeletion(false);
     }
   };
 
@@ -431,10 +462,18 @@ export default function AccountPage() {
               Danger Zone
             </h2>
             <p className={styles.dangerText}>
-              Permanently delete your account and all associated data. This action is irreversible!
+              Permanently delete your account and application data. Active billing is canceled immediately without an automatic refund; legally required financial records remain with Stripe.
             </p>
           </div>
           <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={sendDeletionVerification}
+              disabled={isVerifyingDeletion || isDeleting}
+            >
+              {isVerifyingDeletion ? <span className={styles.spinner} /> : 'Verify by Email'}
+            </button>
             <div className={styles.field}>
               <label className={styles.label}>Type &quot;FAREWELL&quot; to confirm</label>
               <input 

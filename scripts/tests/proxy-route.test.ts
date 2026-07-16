@@ -83,14 +83,9 @@ describe("GET /api/proxy/[...path]", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns the static ship feed with private cache headers", async () => {
+  it("does not expose the retired static ship feed", async () => {
     const response = await call(["ships"]);
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(body).toMatchObject({ type: "FeatureCollection" });
-    expect(body.features.length).toBeGreaterThan(0);
+    expect(response.status).toBe(404);
   });
 
   it("rejects malformed Safecast tile paths", async () => {

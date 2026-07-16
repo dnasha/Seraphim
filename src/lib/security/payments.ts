@@ -1,7 +1,19 @@
 type EnvLike = Record<string, string | undefined>;
 
 export function isPaymentsEnabled(env: EnvLike = process.env) {
-  return env.PAYMENTS_ENABLED === "true";
+  return isCheckoutEnabled(env);
+}
+
+export function isCheckoutEnabled(env: EnvLike = process.env) {
+  return (env.CHECKOUT_ENABLED ?? env.PAYMENTS_ENABLED) === 'true';
+}
+
+export function isAngelCheckoutEnabled(env: EnvLike = process.env) {
+  return (env.ANGEL_CHECKOUT_ENABLED ?? env.CHECKOUT_ENABLED ?? env.PAYMENTS_ENABLED) === 'true';
+}
+
+export function isBillingPortalEnabled(env: EnvLike = process.env) {
+  return (env.BILLING_PORTAL_ENABLED ?? env.PAYMENTS_ENABLED) === 'true';
 }
 
 export function getConfiguredSiteUrl(env: EnvLike = process.env) {

@@ -17,6 +17,7 @@ import {
     selectDueSources,
     selectRecentFeedItems,
 } from './sourcePolling';
+import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
@@ -107,6 +108,7 @@ export async function fetchSingleFeed(
     source: RSSSource, 
     timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<NewsItem[]> {
+    const startedAt = Date.now();
     try {
         const res = await fetch(source.url, {
             headers: RSS_HEADERS,
@@ -133,7 +135,7 @@ export async function fetchSingleFeed(
             tier,
             limit: itemLimitForTier(tier),
         });
-        return recentItems.map((item, index) => ({
+        const items = recentItems.map((item, index) => ({
             id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -144,7 +146,20 @@ export async function fetchSingleFeed(
             publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
+        recordSourceAttempt({
+            source_name: source.name, source_type: 'rss', poll_tier: String(tier),
+            outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
+            accepted_count: items.length, rejected_count: Math.max(0, feedItems.length - items.length),
+            latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null,
+        });
+        return items;
     } catch (error) {
+        const errorCode = safeSourceErrorCode(error);
+        recordSourceAttempt({
+            source_name: source.name, source_type: 'rss', poll_tier: String(rssPollTier(source)),
+            outcome: errorCode === 'parse' ? 'parse_error' : 'provider_error', fetched_count: 0,
+            accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: errorCode,
+        });
         if (error instanceof Error && error.message.includes('timeout')) {
             console.warn(`[RSS] Feed timeout for ${source.name} (${timeoutMs}ms)`);
         } else {
@@ -162,6 +177,7 @@ export async function fetchRedditFeed(
     source: RedditSource, 
     timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<NewsItem[]> {
+    const startedAt = Date.now();
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
         const res = await fetch(url, {
@@ -182,7 +198,7 @@ export async function fetchRedditFeed(
             limit: 5,
             maxAgeMs: 48 * 60 * 60 * 1000,
         });
-        return recentItems.map((item, index) => ({
+        const items = recentItems.map((item, index) => ({
             id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
             title: item.title || 'No title',
             description: item.contentSnippet || item.content || '',
@@ -193,7 +209,19 @@ export async function fetchRedditFeed(
             publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
             imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
         }));
+        recordSourceAttempt({
+            source_name: source.name, source_type: 'reddit', poll_tier: null,
+            outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
+            accepted_count: items.length, rejected_count: Math.max(0, feedItems.length - items.length),
+            latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null,
+        });
+        return items;
     } catch (error) {
+        recordSourceAttempt({
+            source_name: source.name, source_type: 'reddit', poll_tier: null,
+            outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+            duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error),
+        });
         console.error(`reddit fetch failed for ${source.name}:`, error instanceof Error ? error.message : error);
         return [];
     }

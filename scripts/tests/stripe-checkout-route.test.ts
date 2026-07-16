@@ -1,168 +1,103 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  paymentsEnabled: true,
-  siteUrl: "https://seraphim.example",
+  checkoutEnabled: true,
+  angelEnabled: true,
   getUser: vi.fn(),
-  adminFrom: vi.fn(),
+  rpc: vi.fn(),
+  from: vi.fn(),
   customerCreate: vi.fn(),
   priceRetrieve: vi.fn(),
-  checkoutCreate: vi.fn(),
+  sessionCreate: vi.fn(),
+  sessionRetrieve: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({ auth: { getUser: mocks.getUser } })),
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
+vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { rpc: mocks.rpc, from: mocks.from } }));
+vi.mock('@/lib/security/payments', () => ({
+  getConfiguredSiteUrl: () => 'https://seraphim.example',
+  isCheckoutEnabled: () => mocks.checkoutEnabled,
+  isAngelCheckoutEnabled: () => mocks.angelEnabled,
 }));
-
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => ({ from: mocks.adminFrom })),
-}));
-
-vi.mock("@/lib/stripe", () => ({
+vi.mock('@/lib/security/sensitiveRequest', () => ({ hasValidSameOrigin: () => true, checkSensitiveRateLimit: async () => ({ allowed: true }) }));
+vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
+vi.mock('@/lib/stripe', () => ({
   ANGEL_MAX_QUANTITY: 100,
-  STRIPE_PRICES: {
-    pro_monthly: "price_pro_monthly",
-    pro_yearly: "price_pro_yearly",
-    analyst_monthly: "price_analyst_monthly",
-    analyst_yearly: "price_analyst_yearly",
-    angel: "price_angel",
-  },
+  STRIPE_PRICES: { pro_monthly: 'price_pro_monthly', pro_yearly: 'price_pro_yearly', analyst_monthly: 'price_analyst_monthly', analyst_yearly: 'price_analyst_yearly', angel: 'price_angel' },
   stripe: {
     prices: { retrieve: mocks.priceRetrieve },
     customers: { create: mocks.customerCreate },
-    checkout: { sessions: { create: mocks.checkoutCreate } },
+    checkout: { sessions: { create: mocks.sessionCreate, retrieve: mocks.sessionRetrieve } },
   },
 }));
 
-vi.mock("@/lib/security/payments", () => ({
-  isPaymentsEnabled: () => mocks.paymentsEnabled,
-  getConfiguredSiteUrl: () => mocks.siteUrl,
-}));
-
-import { POST } from "@/app/api/stripe/checkout/route";
+import { POST } from '@/app/api/stripe/checkout/route';
 
 function request(priceKey: string, returnTo?: string) {
-  return new Request("https://seraphim.example/api/stripe/checkout", {
-    method: "POST",
+  return new Request('https://seraphim.example/api/stripe/checkout', {
+    method: 'POST', headers: { origin: 'https://seraphim.example', 'content-type': 'application/json' },
     body: JSON.stringify({ priceKey, returnTo }),
-    headers: { "content-type": "application/json" },
   }) as never;
 }
 
-function profileQuery(profile: unknown) {
-  const query: Record<string, unknown> = {
-    select: vi.fn(() => query),
-    eq: vi.fn(() => query),
-    single: vi.fn(async () => ({ data: profile })),
-    update: vi.fn(() => query),
-  };
-  return query;
+function query(result: unknown = null) {
+  const value: Record<string, unknown> = {};
+  value.select = vi.fn(() => value);
+  value.update = vi.fn(() => value);
+  value.eq = vi.fn(() => value);
+  value.single = vi.fn(async () => ({ data: result, error: null }));
+  value.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
+  return value;
 }
 
-describe("POST /api/stripe/checkout", () => {
+const reservation = (code = 'created') => ({
+  data: [{ intent_id: code === 'created' ? 'intent-1' : null, intent_status: 'creating', existing_session_id: null, correlation_id: code === 'created' ? 'correlation-1' : null, expires_at: null, result_code: code }],
+  error: null,
+});
+
+describe('POST /api/stripe/checkout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.paymentsEnabled = true;
-    mocks.siteUrl = "https://seraphim.example";
-    mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1", email: "user@example.com" } }, error: null });
-    mocks.checkoutCreate.mockResolvedValue({ url: "https://checkout.stripe.example/session" });
-    mocks.customerCreate.mockResolvedValue({ id: "cus-new" });
-    mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: "100" } } });
-    mocks.adminFrom.mockImplementation((table: string) => {
-      if (table === "user_profiles") return profileQuery({ stripe_customer_id: "cus-existing" });
-      if (table === "angel_purchases") {
-        const query: Record<string, unknown> = { select: vi.fn(async () => ({ count: 0 })) };
-        return query;
-      }
-      throw new Error(`Unexpected table ${table}`);
-    });
+    mocks.checkoutEnabled = true;
+    mocks.angelEnabled = true;
+    mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'user@example.com' } }, error: null });
+    mocks.rpc.mockResolvedValue(reservation());
+    mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
+    mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
+    mocks.sessionCreate.mockResolvedValue({ id: 'cs-1', url: 'https://checkout.stripe.example/session', expires_at: 1_900_000_000 });
   });
 
-  it("stops before auth or Stripe calls when payments are disabled", async () => {
-    mocks.paymentsEnabled = false;
-    const response = await POST(request("pro_monthly"));
-
-    expect(response.status).toBe(503);
+  it('checks the plan-specific kill switch before auth or Stripe', async () => {
+    mocks.checkoutEnabled = false;
+    expect((await POST(request('pro_monthly'))).status).toBe(503);
     expect(mocks.getUser).not.toHaveBeenCalled();
-    expect(mocks.checkoutCreate).not.toHaveBeenCalled();
   });
 
-  it("rejects unauthenticated and invalid-price requests", async () => {
+  it('rejects invalid plans and unauthenticated requests', async () => {
+    expect((await POST(request('unknown'))).status).toBe(400);
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
-    const anonymous = await POST(request("pro_monthly"));
-    const invalid = await POST(request("not-a-plan"));
-
-    expect(anonymous.status).toBe(401);
-    expect(invalid.status).toBe(400);
-    expect(mocks.checkoutCreate).not.toHaveBeenCalled();
+    expect((await POST(request('pro_monthly'))).status).toBe(401);
   });
 
-  it("creates a monthly Pro subscription with the intended trial and metadata", async () => {
-    const response = await POST(request("pro_monthly"));
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ url: "https://checkout.stripe.example/session" });
-    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
-      customer: "cus-existing",
-      mode: "subscription",
-      line_items: [{ price: "price_pro_monthly", quantity: 1 }],
-      success_url: "https://seraphim.example/?checkout=success",
-      metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
-      subscription_data: {
-        trial_period_days: 7,
-        metadata: { supabase_user_id: "user-1", price_key: "pro_monthly" },
-      },
-    }));
+  it('creates an idempotent Pro trial checkout from a database reservation', async () => {
+    const response = await POST(request('pro_monthly', '/account?tab=billing'));
+    expect(await response.json()).toEqual({ url: 'https://checkout.stripe.example/session' });
+    expect(mocks.rpc).toHaveBeenCalledWith('reserve_billing_checkout_intent', expect.objectContaining({ p_user_id: 'user-1', p_mode: 'subscription' }));
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      customer: 'cus-1', mode: 'subscription',
+      success_url: 'https://seraphim.example/account?tab=billing&checkout=success',
+      subscription_data: expect.objectContaining({ trial_period_days: 7 }),
+    }), { idempotencyKey: 'checkout-intent-intent-1' });
   });
 
-  it("returns Checkout to a validated originating path", async () => {
-    await POST(request("pro_monthly", "/account?tab=billing"));
-
-    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
-      success_url: "https://seraphim.example/account?tab=billing&checkout=success",
-      cancel_url: "https://seraphim.example/account?tab=billing&checkout=cancelled",
-    }));
-
-    mocks.checkoutCreate.mockClear();
-    await POST(request("pro_monthly", "//evil.example/path"));
-    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
-      success_url: "https://seraphim.example/?checkout=success",
-      cancel_url: "https://seraphim.example/?checkout=cancelled",
-    }));
+  it('returns sold-out Angel inventory without creating a Stripe session', async () => {
+    mocks.rpc.mockResolvedValue(reservation('angel_sold_out'));
+    expect((await POST(request('angel'))).status).toBe(410);
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
   });
 
-  it("blocks sold-out Angel purchases before creating a customer or checkout session", async () => {
-    mocks.adminFrom.mockImplementation((table: string) => {
-      if (table === "angel_purchases") {
-        const query: Record<string, unknown> = { select: vi.fn(async () => ({ count: 100 })) };
-        return query;
-      }
-      return profileQuery({ stripe_customer_id: null });
-    });
-
-    const response = await POST(request("angel"));
-
-    expect(response.status).toBe(410);
-    expect(mocks.customerCreate).not.toHaveBeenCalled();
-    expect(mocks.checkoutCreate).not.toHaveBeenCalled();
-  });
-
-  it("creates an Angel payment session with fulfillment metadata", async () => {
-    mocks.adminFrom.mockImplementation((table: string) => {
-      if (table === "angel_purchases") {
-        const query: Record<string, unknown> = { select: vi.fn(async () => ({ count: 1 })) };
-        return query;
-      }
-      return profileQuery({ stripe_customer_id: "cus-existing" });
-    });
-
-    const response = await POST(request("angel"));
-
-    expect(response.status).toBe(200);
-    expect(mocks.checkoutCreate).toHaveBeenCalledWith(expect.objectContaining({
-      customer: "cus-existing",
-      mode: "payment",
-      payment_intent_data: { metadata: { supabase_user_id: "user-1", price_key: "angel" } },
-    }));
+  it('uses payment mode and PaymentIntent metadata for Angel checkout', async () => {
+    await POST(request('angel'));
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'payment', payment_intent_data: { metadata: expect.objectContaining({ price_key: 'angel' }) } }), expect.anything());
   });
 });

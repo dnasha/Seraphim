@@ -143,9 +143,9 @@ export default function NewsMap({
     radiation: false,
     aqi: false,
     flights: false,
-    ships: false,
     iss: false,
   });
+  const [overlayStatuses, setOverlayStatuses] = useState<Record<string, 'idle' | 'loading' | 'live' | 'degraded'>>({});
 
   // Initialize popup container element once to prevent hydration mismatches and redundant DOM operations.
   const popupContainer = useMemo(() => {
@@ -546,6 +546,11 @@ export default function NewsMap({
     map.on("error", (e) => {
       const errorMsg =
         e.error?.message || (typeof e.error === "string" ? e.error : "");
+      const sourceId = (e as unknown as { sourceId?: string }).sourceId;
+      if (sourceId?.startsWith('overlay-')) {
+        const key = sourceId.slice('overlay-'.length);
+        setOverlayStatuses((current) => ({ ...current, [key]: 'degraded' }));
+      }
 
       if (isRecoverableMapResourceError(errorMsg)) {
         devDebug("Non-critical map resource error suppressed:", errorMsg);
@@ -558,6 +563,12 @@ export default function NewsMap({
       } else {
         devDebug("MapLibre runtime error suppressed:", e.error);
       }
+    });
+
+    map.on('sourcedata', (event) => {
+      if (!event.isSourceLoaded || !event.sourceId?.startsWith('overlay-')) return;
+      const key = event.sourceId.slice('overlay-'.length);
+      setOverlayStatuses((current) => ({ ...current, [key]: 'live' }));
     });
 
     map.addControl(
@@ -924,7 +935,6 @@ export default function NewsMap({
       ["radiation", "overlay-radiation-raster"],
       ["aqi", "overlay-aqi-raster"],
       ["flights", "overlay-flights-point"],
-      ["ships", "overlay-ships-point"],
       ["iss", "overlay-iss-point"],
     ];
 
@@ -1017,7 +1027,9 @@ export default function NewsMap({
         if (source) {
           source.setData(geojson);
         }
+        setOverlayStatuses((current) => ({ ...current, flights: 'live' }));
       } catch (err) {
+        setOverlayStatuses((current) => ({ ...current, flights: 'degraded' }));
         devWarn("Failed to fetch live flight data:", err);
       }
     };
@@ -1058,7 +1070,9 @@ export default function NewsMap({
         if (source) {
           source.setData(geojson);
         }
+        setOverlayStatuses((current) => ({ ...current, iss: 'live' }));
       } catch (err) {
+        setOverlayStatuses((current) => ({ ...current, iss: 'degraded' }));
         devWarn("Failed to fetch live ISS position:", err);
       }
     };
@@ -1133,9 +1147,11 @@ export default function NewsMap({
           />
           <MapActionTools
             overlays={overlays}
+            overlayStatuses={overlayStatuses}
             onOverlayToggle={(overlay, active) => {
               const next = { ...overlays, [overlay]: active };
               setOverlays(next);
+              setOverlayStatuses((current) => ({ ...current, [overlay]: active ? 'loading' : 'idle' }));
               onSyncedPreferencesChange?.({ overlays: next });
             }}
             isGlobe={isGlobe}

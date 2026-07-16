@@ -13,6 +13,8 @@ import type { UserTier } from '@/components/ui/TierBadge';
 
 interface UserTierState {
     tier: UserTier;
+    tierSource: 'billing' | 'override';
+    overrideExpiresAt: string | null;
     isLoading: boolean;
     subscriptionStatus: string | null;
     billingInterval: string | null;
@@ -25,6 +27,8 @@ interface UserTierState {
 export function useUserTier(): UserTierState {
     const {
         userTier,
+        tierSource,
+        overrideExpiresAt,
         tierLoading,
         subscriptionStatus,
         billingInterval,
@@ -36,6 +40,8 @@ export function useUserTier(): UserTierState {
 
     return {
         tier: userTier,
+        tierSource,
+        overrideExpiresAt,
         isLoading: tierLoading,
         subscriptionStatus,
         billingInterval,

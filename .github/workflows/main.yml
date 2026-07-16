@@ -4,9 +4,8 @@ permissions:
   contents: read
 
 on:
-  #schedule:
-    # Run every 30 minutes
-    #- cron: '*/30 * * * *'
+  # Scheduling is owned by the organization-level dispatcher, which invokes
+  # this workflow through the GitHub API every 15 minutes.
   workflow_dispatch:
     # Allow manual trigger from the GitHub Actions UI
 
@@ -15,6 +14,9 @@ jobs:
     name: Ingest OSINT Events
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: seraphim-ingestion
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
@@ -25,6 +27,8 @@ jobs:
       - name: Set up Bun
         id: setup-bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
 
       - name: Cache Bun dependencies
         uses: actions/cache@v5

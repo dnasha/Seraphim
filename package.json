@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "scrape": "bun run src/scraper/index.ts",
     "test-scraper": "bun run scripts/diagnostics/test-scraper.ts",
     "test:sources": "bun run scripts/diagnostics/test-fetchers.ts",

@@ -3,7 +3,6 @@ export const PROXY_CACHE_HEADERS = {
   safecast: "public, max-age=3600, stale-while-revalidate=600",
   wildfires: "public, max-age=1800, stale-while-revalidate=300",
   eonet: "public, max-age=3600, stale-while-revalidate=600",
-  ships: "public, max-age=3600, stale-while-revalidate=600",
 } as const;
 
 const toInteger = (value: string | undefined) => {

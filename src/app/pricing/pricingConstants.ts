@@ -84,7 +84,7 @@ export const TIERS: TierConfig[] = [
             'Everything in Pro',
             'All retained history and custom time windows',
             'GeoJSON annotation import and export',
-            'Flight, maritime, ISS, AQI, and radiation layers',
+            'Flight, ISS, AQI, and radiation layers',
             'Analyst inspection modes',
             'Monthly or yearly billing',
         ],

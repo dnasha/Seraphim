@@ -12,11 +12,9 @@ import {
   Space_Grotesk,
   Merriweather,
 } from "next/font/google";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Analytics } from "@vercel/analytics/next";
-
 import { Providers } from "@/components/layout/Providers";
 import CookieConsent from "@/components/ui/CookieConsent";
+import ConsentAwareAnalytics from "@/components/ui/ConsentAwareAnalytics";
 
 import "./globals.css";
 
@@ -108,9 +106,8 @@ export default function RootLayout({
         <Providers>
           {children}
           <CookieConsent />
+          <ConsentAwareAnalytics />
         </Providers>
-        <SpeedInsights />
-        <Analytics />
       </body>
     </html>
   );

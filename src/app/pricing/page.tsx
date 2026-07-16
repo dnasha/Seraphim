@@ -16,6 +16,7 @@ import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
 import { FaqSection } from './FaqSection';
+import { trackOptionalMetric } from '@/lib/privacyConsent';
 
 function PricingPageContent() {
     const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
@@ -51,6 +52,7 @@ function PricingPageContent() {
     }, []);
 
     const handleCheckout = useCallback(async (priceKey: string) => {
+        void trackOptionalMetric('checkout_click');
         if (!user || isGuest) {
             // Redirect to home which will show auth modal
             router.push('/?auth=signup');

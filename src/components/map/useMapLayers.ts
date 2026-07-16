@@ -25,8 +25,6 @@ import {
   FIRES_PAINT,
   FLIGHTS_LAYOUT,
   FLIGHTS_PAINT,
-  SHIPS_LAYOUT,
-  SHIPS_PAINT,
   ISS_LAYOUT,
   ISS_PAINT,
 } from "./layers/mapLayerStyles";
@@ -367,27 +365,7 @@ export function useMapLayers({
         );
       }
 
-      // 5. Maritime Tracking (Military CSGs & Tankers)
-      if (overlaysRef.current["ships"] && !map.getSource("overlay-ships")) {
-        map.addSource("overlay-ships", {
-          type: "geojson",
-          data: "/api/proxy/ships"
-        });
-      }
-      if (overlaysRef.current["ships"] && !map.getLayer("overlay-ships-point")) {
-        map.addLayer(
-          {
-            id: "overlay-ships-point",
-            type: "symbol",
-            source: "overlay-ships",
-            layout: SHIPS_LAYOUT,
-            paint: SHIPS_PAINT
-          },
-          "clusters-circle",
-        );
-      }
-
-      // 6. Space Station Tracking (ISS)
+      // 5. Space Station Tracking (ISS)
       if (overlaysRef.current["iss"] && !map.getSource("overlay-iss")) {
         map.addSource("overlay-iss", {
           type: "geojson",
