@@ -10,7 +10,7 @@ vi.mock('@/lib/stripe', () => ({
 }));
 vi.mock('@/lib/security/payments', () => ({ isAngelCheckoutEnabled: () => mocks.enabled }));
 
-import { GET } from '@/app/api/stripe/angel-count/route';
+import { clearAngelMetadataCacheForTests, GET } from '@/app/api/stripe/angel-count/route';
 
 function countQuery(count: number) {
   const query: Record<string, unknown> = {};
@@ -24,6 +24,7 @@ function countQuery(count: number) {
 describe('GET /api/stripe/angel-count', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAngelMetadataCacheForTests();
     mocks.enabled = true;
     mocks.retrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
     mocks.from.mockImplementation((table: string) => countQuery(table === 'angel_purchases' ? 12 : 3));
@@ -36,7 +37,21 @@ describe('GET /api/stripe/angel-count', () => {
   });
 
   it('subtracts paid ownership and active reservations atomically bounded by Stripe metadata', async () => {
-    expect(await (await GET()).json()).toEqual({ remaining: 65, total: 80 });
-    expect(mocks.from).toHaveBeenCalledWith('billing_checkout_intents');
+    const [first, second] = await Promise.all([GET(), GET()]);
+
+    expect(await first.json()).toEqual({ remaining: 65, total: 80 });
+    expect(await second.json()).toEqual({ remaining: 65, total: 80 });
+    expect(first.headers.get('cache-control')).toBe('public, s-maxage=30, stale-while-revalidate=60');
+    expect(mocks.retrieve).toHaveBeenCalledOnce();
+    expect(mocks.from).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses the safe application maximum when Stripe metadata is unavailable', async () => {
+    mocks.retrieve.mockRejectedValue(new Error('stripe unavailable'));
+
+    const response = await GET();
+
+    await expect(response.json()).resolves.toEqual({ remaining: 85, total: 100 });
+    expect(response.status).toBe(200);
   });
 });

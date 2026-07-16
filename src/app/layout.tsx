@@ -15,6 +15,13 @@ import {
 import { Providers } from "@/components/layout/Providers";
 import CookieConsent from "@/components/ui/CookieConsent";
 import ConsentAwareAnalytics from "@/components/ui/ConsentAwareAnalytics";
+import {
+  getSiteOrigin,
+  HOME_DESCRIPTION,
+  HOME_TITLE,
+  SHARED_SOCIAL_IMAGE,
+  SITE_NAME,
+} from "@/lib/siteConfig";
 
 import "./globals.css";
 
@@ -53,17 +60,12 @@ export const viewport: Viewport = {
 
 // Global metadata for SEO, social sharing, and PWA capabilities
 export const metadata: Metadata = {
-  metadataBase: new URL("https://seraphi.me"),
-  title: "Seraphim",
-  description: "Real-time OSINT aggregator and mapper for global intelligence.",
-  keywords: [
-    "OSINT",
-    "news",
-    "aggregator",
-    "intelligence",
-    "world news",
-    "map",
-  ],
+  metadataBase: new URL(getSiteOrigin()),
+  title: {
+    default: HOME_TITLE,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: HOME_DESCRIPTION,
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -77,17 +79,26 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "Seraphim",
-    description: "Real-time OSINT aggregator and mapper for global intelligence.",
-    url: "https://seraphi.me",
-    siteName: "Seraphim",
+    title: `${SITE_NAME}: Know the world as it happens`,
+    description: HOME_DESCRIPTION,
+    url: getSiteOrigin(),
+    siteName: SITE_NAME,
     locale: "en_US",
     type: "website",
+    images: [SHARED_SOCIAL_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Seraphim",
-    description: "Real-time OSINT aggregator and mapper for global intelligence.",
+    title: `${SITE_NAME}: Know the world as it happens`,
+    description: HOME_DESCRIPTION,
+    images: [SHARED_SOCIAL_IMAGE.url],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    "max-image-preview": "large",
+    "max-snippet": -1,
+    "max-video-preview": -1,
   },
 };
 

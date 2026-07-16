@@ -17,6 +17,14 @@ export async function proxy(request: NextRequest) {
         request,
     });
 
+    // API route handlers own their authentication and authorization. Running
+    // the session proxy for those requests would validate the same Supabase
+    // session once here and again in the handler (for example, every map pan
+    // through /api/news). Keep cookie refreshes on page/RSC navigation only.
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+        return supabaseResponse;
+    }
+
     // Performance Optimization: Skip session checks if request contains no Supabase cookies.
     // Guests avoid ~1.5s database and authentication network roundtrips on cold start.
     const hasAuthCookie = request.cookies.getAll().some(cookie => cookie.name.startsWith('sb-'));
@@ -93,10 +101,11 @@ export const config = {
     matcher: [
         /*
          * Match all request paths except:
+         * - API routes (handlers perform their own auth/authorization)
          * - _next/static (static files)
          * - _next/image (image optimization)
          * - favicon.ico, manifest.json, and static assets
          */
-        '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+        '/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
     ],
 };

@@ -32,6 +32,18 @@ describe("auth session proxy", () => {
     expect(mocks.getUser).toHaveBeenCalledOnce();
   });
 
+  it("leaves API authentication to route handlers", async () => {
+    const request = new NextRequest("https://seraphim.example/api/news?zoom=4", {
+      headers: { cookie: "sb-project-auth-token=old" },
+    });
+
+    const response = await proxy(request);
+
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+    expect(mocks.getUser).not.toHaveBeenCalled();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("returns the refreshed response after Supabase sets session cookies", async () => {
     mocks.createServerClient.mockImplementation((_url: string, _key: string, options: { cookies: { setAll: (cookies: Array<{ name: string; value: string; options: Record<string, unknown> }>) => void } }) => {
       options.cookies.setAll([{ name: "sb-project-auth-token", value: "fresh", options: { path: "/" } }]);

@@ -21,6 +21,7 @@ import { useSyncedPreferences, sanitizeSyncedPreferences } from '@/hooks/useSync
 import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
 import UserButton from '@/components/auth/UserButton';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
+import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
@@ -303,6 +304,11 @@ export function HomeContent() {
 
     // Handles changes to the time range filter, including custom date initialization
     const handleTimeRangeChange = useCallback((range: string) => {
+        if (range !== '1d') {
+            void trackOptionalMetric('activation', {
+                milestone: range === 'custom' ? 'custom_window' : 'historical_monitoring',
+            });
+        }
         setTimeRange(range);
         updateURL({ t: range });
         updatePreferences({ timeRange: range });

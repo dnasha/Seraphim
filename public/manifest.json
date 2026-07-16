@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Seraphim",
   "short_name": "Seraphim",
-  "description": "Real-time OSINT aggregator and mapper - know the world!",
+  "description": "Know the world as it happens with a live global news map and OSINT intelligence dashboard.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1117",

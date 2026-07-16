@@ -28,15 +28,23 @@ export function hasValidSameOrigin(request: Request, expectedOrigin: string) {
 }
 
 export async function checkSensitiveRateLimit(request: Request, userId: string) {
-  if (!limiter) return { allowed: true as const };
+  if (!limiter) {
+    return process.env.NODE_ENV === 'test'
+      ? { allowed: true as const, retryAfterSeconds: 0 }
+      : { allowed: false as const, retryAfterSeconds: 60 };
+  }
   const ip = getTrustedClientIp(request.headers);
-  if (!ip) return { allowed: false as const };
+  if (!ip) return { allowed: false as const, retryAfterSeconds: 60 };
   try {
     const results = await Promise.all(
       getRateLimitKeys(ip, userId).map((key) => limiter.limit(key)),
     );
-    return { allowed: results.every((result) => result.success) };
+    const denied = results.filter((result) => !result.success);
+    const retryAfterSeconds = denied.length === 0
+      ? 0
+      : Math.max(1, ...denied.map((result) => Math.ceil((result.reset - Date.now()) / 1_000)));
+    return { allowed: denied.length === 0, retryAfterSeconds };
   } catch {
-    return { allowed: false as const };
+    return { allowed: false as const, retryAfterSeconds: 60 };
   }
 }

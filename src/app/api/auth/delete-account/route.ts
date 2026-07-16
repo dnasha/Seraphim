@@ -40,7 +40,10 @@ export async function POST(request: Request) {
 
   const rateLimit = await checkSensitiveRateLimit(request, user.id);
   if (!rateLimit.allowed) {
-    return NextResponse.json({ code: 'rate_limited', error: 'Please try again shortly.' }, { status: 429 });
+    return NextResponse.json(
+      { code: 'rate_limited', error: 'Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+    );
   }
 
   let jobId: string | null = null;

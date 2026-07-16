@@ -63,7 +63,7 @@ export function GatedButton({
             <div className={styles.promptActions}>
               <button onClick={() => setOpen(false)} className={styles.dismiss}>Not now</button>
               <Link
-                href={`/pricing?feature=${encodeURIComponent(featureName)}&returnTo=${encodeURIComponent(pathname || '/')}`}
+                href={`/pricing?feature=${encodeURIComponent(featureName)}&tier=${encodeURIComponent(requiredTier)}&returnTo=${encodeURIComponent(pathname || '/')}`}
                 className={styles.upgradeLink}
               >View plans</Link>
             </div>

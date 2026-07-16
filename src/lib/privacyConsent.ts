@@ -17,13 +17,21 @@ export function openPrivacyChoices() {
   window.dispatchEvent(new Event(`${PRIVACY_CONSENT_EVENT}:open`));
 }
 
-export async function trackOptionalMetric(name: 'account_view' | 'checkout_click' | 'map_interaction') {
+export type OptionalMetricName = 'account_view' | 'pricing_view' | 'checkout_click' | 'activation' | 'map_interaction';
+export interface OptionalMetricDimensions {
+  plan?: 'pro' | 'analyst' | 'angel';
+  interval?: 'month' | 'year' | 'lifetime';
+  source?: 'direct' | 'pricing' | 'feature_gate';
+  milestone?: 'historical_monitoring' | 'custom_window';
+}
+
+export async function trackOptionalMetric(name: OptionalMetricName, dimensions: OptionalMetricDimensions = {}) {
   if (getPrivacyConsent() !== 'accepted') return;
   await fetch('/api/telemetry', {
     method: 'POST',
     credentials: 'same-origin',
     keepalive: true,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...dimensions }),
   }).catch(() => undefined);
 }

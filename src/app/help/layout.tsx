@@ -1,9 +1,10 @@
-import type { Metadata } from 'next';
+import { createPageMetadata } from '@/lib/siteConfig';
 
-export const metadata: Metadata = {
-  title: 'Help & Info | Seraphim',
+export const metadata = createPageMetadata({
+  title: 'Help & Info',
   description: 'Learn more about Seraphim, get support, and find our community links.',
-};
+  path: '/help',
+});
 
 export default function HelpLayout({
   children,

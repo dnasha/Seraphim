@@ -27,6 +27,7 @@ const RESPONSE_STATUS: Record<string, number> = {
   angel_already_owned: 409,
   angel_sold_out: 410,
 };
+const SUBSCRIPTION_TRIAL_DAYS = 14;
 
 function checkoutError(code: string, status = RESPONSE_STATUS[code] ?? 409) {
   const messages: Record<string, string> = {
@@ -86,7 +87,10 @@ export async function POST(request: NextRequest) {
 
   const rateLimit = await checkSensitiveRateLimit(request, user.id);
   if (!rateLimit.allowed) {
-    return NextResponse.json({ code: 'rate_limited', error: 'Please try again shortly.' }, { status: 429 });
+    return NextResponse.json(
+      { code: 'rate_limited', error: 'Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+    );
   }
 
   const priceId = STRIPE_PRICES[priceKey];
@@ -168,6 +172,7 @@ export async function POST(request: NextRequest) {
       correlation_id: correlationId,
     };
     const automaticTaxEnabled = process.env.STRIPE_AUTOMATIC_TAX_ENABLED === 'true';
+    const promotionCodesEnabled = process.env.STRIPE_PROMOTION_CODES_ENABLED === 'true';
     const separator = returnTo.includes('?') ? '&' : '?';
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       customer: customerId,
@@ -176,8 +181,8 @@ export async function POST(request: NextRequest) {
       success_url: `${origin}${returnTo}${separator}checkout=success`,
       cancel_url: `${origin}${returnTo}${separator}checkout=cancelled`,
       metadata: commonMetadata,
-      allow_promotion_codes: true,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      ...(promotionCodesEnabled ? { allow_promotion_codes: true } : {}),
       ...(automaticTaxEnabled
         ? {
             automatic_tax: { enabled: true },
@@ -189,7 +194,7 @@ export async function POST(request: NextRequest) {
         ? { payment_intent_data: { metadata: commonMetadata } }
         : {
             subscription_data: {
-              ...(priceKey === 'pro_monthly' ? { trial_period_days: 7 } : {}),
+              trial_period_days: SUBSCRIPTION_TRIAL_DAYS,
               metadata: commonMetadata,
             },
           }),
@@ -213,6 +218,7 @@ export async function POST(request: NextRequest) {
     if (intentUpdateError) throw intentUpdateError;
 
     await recordMetric({ kind: 'operational', service: 'billing', name: 'checkout_started' });
+    await recordMetric({ kind: 'conversion', service: 'billing', name: `checkout_started.${priceKey}` });
     return NextResponse.json({ url: session.url });
   } catch {
     await supabaseAdmin

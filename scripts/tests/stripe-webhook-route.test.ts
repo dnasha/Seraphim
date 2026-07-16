@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, rpc: mocks.rpc } }));
 vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn(), recoverIncident: vi.fn(), serverDiagnostic: vi.fn() }));
 vi.mock('@/lib/stripe', () => ({
-  ANGEL_MAX_QUANTITY: 100, STRIPE_PRICES: { angel: 'price_angel' },
+  ANGEL_MAX_QUANTITY: 100,
+  STRIPE_PRICES: {
+    pro_monthly: 'price_pro_monthly', pro_yearly: 'price_pro_yearly',
+    analyst_monthly: 'price_analyst_monthly', analyst_yearly: 'price_analyst_yearly', angel: 'price_angel',
+  },
   intervalFromPriceId: () => 'month', tierFromPriceId: () => 'pro',
   stripe: {
     webhooks: { constructEvent: mocks.constructEvent }, prices: { retrieve: mocks.priceRetrieve },

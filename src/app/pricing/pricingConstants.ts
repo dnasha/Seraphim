@@ -10,7 +10,6 @@ export interface TierConfig {
     popular: boolean;
     trialDays: number;
     features: string[];
-    excluded: string[];
     cta: string;
     priceKeyMonthly: string;
     priceKeyYearly: string;
@@ -29,13 +28,10 @@ export const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            '100 events per request, refreshed in real time',
-            '24-hour feed with search, source, and category filters',
-            'Standard and Dark maps plus earthquake overlay',
-            'Draw, measure, and local text annotations',
-        ],
-        excluded: [
-            'Historical monitoring and full source timelines',
+            'Live global map with up to 100 events',
+            'Search the current 24-hour signal by source and category',
+            'Standard and Dark maps with earthquake monitoring',
+            'Draw, measure, and add local map notes',
         ],
         cta: 'Included',
         priceKeyMonthly: '',
@@ -51,21 +47,15 @@ export const TIERS: TierConfig[] = [
         lifetimePrice: 0,
         badge: 'Most Popular',
         popular: true,
-        trialDays: 7,
+        trialDays: 14,
         features: [
-            'Full feed: up to 1,000 events per request',
-            '3-day, 1-week, and 1-month history',
-            'Full source timelines and advanced filters',
-            'All map styles, 3D globe, weather, fire, and NASA overlays',
-            'Everything in Free',
-            '7 day trial on monthly billing',
-            'Monthly or yearly billing',
-            'Pro tier badge in app',
+            'Monitor up to 1,000 events across one month',
+            'Reconstruct stories with complete source timelines',
+            'Filter by coverage volume and source credibility',
+            'Use every map style, 3D globe, weather, fire, and NASA overlays',
+            'Includes every Free capability',
         ],
-        excluded: [
-            'Lifetime billing',
-        ],
-        cta: 'Start 7 Day Trial',
+        cta: 'Start 14-Day Trial',
         priceKeyMonthly: 'pro_monthly',
         priceKeyYearly: 'pro_yearly',
     },
@@ -79,19 +69,15 @@ export const TIERS: TierConfig[] = [
         lifetimePrice: 0,
         badge: 'Power User',
         popular: false,
-        trialDays: 0,
+        trialDays: 14,
         features: [
-            'Everything in Pro',
-            'All retained history and custom time windows',
-            'GeoJSON annotation import and export',
-            'Flight, ISS, AQI, and radiation layers',
-            'Analyst inspection modes',
-            'Monthly or yearly billing',
+            'Search all retained history with custom time windows',
+            'Import and export GeoJSON investigation data',
+            'Track flights, ISS, air quality, and radiation',
+            'Use Analyst inspection modes and individual pins',
+            'Includes every Pro capability',
         ],
-        excluded: [
-            'Lifetime billing',
-        ],
-        cta: 'Upgrade to Analyst',
+        cta: 'Start 14-Day Trial',
         priceKeyMonthly: 'analyst_monthly',
         priceKeyYearly: 'analyst_yearly',
     },
@@ -102,17 +88,16 @@ export const TIERS: TierConfig[] = [
         monthlyPrice: 0,
         yearlyPrice: 0,
         isLifetime: true,
-        lifetimePrice: 299,
+        lifetimePrice: 399,
         badge: 'Limited 100',
         popular: false,
         trialDays: 0,
         features: [
-            'Everything in Analyst',
+            'Every current Analyst capability',
             'Lifetime access with one payment',
             'Angel Founder badge and manual Discord role',
             'Limited to 100 total memberships',
         ],
-        excluded: [],
         cta: 'Get Lifetime Access',
         priceKeyMonthly: 'angel',
         priceKeyYearly: 'angel',
@@ -138,7 +123,7 @@ export const COMPARISON_SECTIONS = [
     ]},
     { label: 'Ownership', rows: [
         { feature: 'Billing', free: 'Free', pro: 'Subscription', analyst: 'Subscription', angel: 'One-time' },
-        { feature: 'Trial', free: '—', pro: '7 days monthly', analyst: '—', angel: '—' },
+        { feature: 'Trial', free: '—', pro: '14 days', analyst: '14 days', angel: '—' },
         { feature: 'Lifetime / Founder role', free: '—', pro: '—', analyst: '—', angel: '✓' },
     ]},
 ];

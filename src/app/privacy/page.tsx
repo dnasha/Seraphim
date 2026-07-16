@@ -1,11 +1,13 @@
 import styles from '../terms/LegalPage.module.css';
 import LegalBackButton from '@/components/ui/LegalBackButton';
 import PrivacyChoicesButton from '@/components/ui/PrivacyChoicesButton';
+import { createPageMetadata } from '@/lib/siteConfig';
 
-export const metadata = {
-  title: 'Privacy Policy | Seraphim',
+export const metadata = createPageMetadata({
+  title: 'Privacy Policy',
   description: 'Privacy Policy for Seraphim.',
-};
+  path: '/privacy',
+});
 
 export default function PrivacyPage() {
   return (
