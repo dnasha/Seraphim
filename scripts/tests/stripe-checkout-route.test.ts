@@ -65,6 +65,7 @@ describe('POST /api/stripe/checkout', () => {
     mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
     mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
     mocks.sessionCreate.mockResolvedValue({ id: 'cs-1', url: 'https://checkout.stripe.example/session', expires_at: 1_900_000_000 });
+    process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'false';
   });
 
   it('checks the plan-specific kill switch before auth or Stripe', async () => {
@@ -99,5 +100,15 @@ describe('POST /api/stripe/checkout', () => {
   it('uses payment mode and PaymentIntent metadata for Angel checkout', async () => {
     await POST(request('angel'));
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'payment', payment_intent_data: { metadata: expect.objectContaining({ price_key: 'angel' }) } }), expect.anything());
+  });
+
+  it('enables Stripe Tax only when explicitly configured', async () => {
+    process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'true';
+    await POST(request('pro_yearly'));
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      automatic_tax: { enabled: true },
+      billing_address_collection: 'required',
+      customer_update: { address: 'auto' },
+    }), expect.anything());
   });
 });

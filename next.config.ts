@@ -18,6 +18,25 @@ const excludeVolatileNextAssets = (entries: SizedManifestEntry[]) => ({
   warnings: [],
 });
 
+const cspReportOnly = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.maptiler.com https://challenges.cloudflare.com https://vitals.vercel-insights.com",
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
+  "frame-src https://challenges.cloudflare.com https://js.stripe.com https://hooks.stripe.com",
+  "manifest-src 'self'",
+  "media-src 'self' blob: https:",
+  "report-uri /api/csp-report",
+].join('; ');
+
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
@@ -62,6 +81,7 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Content-Security-Policy-Report-Only', value: cspReportOnly },
         ],
       },
     ];
