@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
       checkout_intent_id: intentId,
       correlation_id: correlationId,
     };
+    const automaticTaxEnabled = process.env.STRIPE_AUTOMATIC_TAX_ENABLED === 'true';
     const separator = returnTo.includes('?') ? '&' : '?';
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       customer: customerId,
@@ -177,6 +178,13 @@ export async function POST(request: NextRequest) {
       metadata: commonMetadata,
       allow_promotion_codes: true,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      ...(automaticTaxEnabled
+        ? {
+            automatic_tax: { enabled: true },
+            billing_address_collection: 'required' as const,
+            customer_update: { address: 'auto' as const },
+          }
+        : {}),
       ...(isAngel
         ? { payment_intent_data: { metadata: commonMetadata } }
         : {

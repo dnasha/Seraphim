@@ -5,6 +5,7 @@ import { canFulfillAngelCheckout, getConfiguredSiteUrl, isPaymentsEnabled } from
 import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
 import { fetchPublicImage, isPublicIpAddress, validatePublicImageUrl } from '@/lib/security/ogImage';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { parseCspReport } from '@/lib/security/cspReport';
 
 describe('news API param validation', () => {
   it('clamps numeric limits and accepts valid bbox searches', () => {
@@ -153,5 +154,35 @@ describe('proxy and OG guards', () => {
 
     expect(result?.arrayBuffer.byteLength).toBeGreaterThan(0);
     expect(fetchHop).toHaveBeenCalledWith(expect.any(URL), '198.51.100.77', 1500);
+  });
+});
+
+describe('CSP report privacy', () => {
+  it('retains only directive and origins', () => {
+    expect(parseCspReport({
+      'csp-report': {
+        'effective-directive': 'script-src-elem',
+        'blocked-uri': 'https://unexpected.example/script.js?token=secret',
+        'source-file': 'https://seraphi.me/account?email=user@example.com',
+        'script-sample': 'sensitive inline content',
+      },
+    })).toEqual({
+      effectiveDirective: 'script-src-elem',
+      blockedOrigin: 'https://unexpected.example',
+      sourceOrigin: 'https://seraphi.me',
+    });
+  });
+
+  it('normalizes malformed report fields', () => {
+    expect(parseCspReport({
+      effectiveDirective: 'not valid!',
+      blockedURL: 'data:text/html,private',
+      sourceFile: 'inline',
+    })).toEqual({
+      effectiveDirective: 'unknown',
+      blockedOrigin: 'data:',
+      sourceOrigin: 'inline',
+    });
+    expect(parseCspReport(null)).toBeNull();
   });
 });
