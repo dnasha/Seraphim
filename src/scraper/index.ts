@@ -36,7 +36,7 @@ import {
   beginSourceHealthCollection,
   completeSourceHealthCollection,
 } from '@/lib/api/sourceHealth';
-import { recordIncident, recordMetric, recoverIncident } from '@/lib/server/operations';
+import { createOperationsRecorder } from '@/lib/operationsCore';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 
@@ -48,6 +48,7 @@ if (!supabase) {
 }
 
 const db = supabase!;
+const { recordIncident, recordMetric, recoverIncident } = createOperationsRecorder(db);
 
 interface RunStats {
   raw_count: number;
