@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { absoluteSiteUrl } from "@/lib/siteConfig";
 
 /**
  * Generates the robots.txt file for the Seraphim application.
@@ -8,8 +9,6 @@ import type { MetadataRoute } from "next";
  * @returns {MetadataRoute.Robots} The robots configuration object.
  */
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://seraphi.me";
-
   return {
     rules: {
       userAgent: "*",
@@ -26,6 +25,6 @@ export default function robots(): MetadataRoute.Robots {
         "/account/",
       ],
     },
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: absoluteSiteUrl("/sitemap.xml"),
   };
 }

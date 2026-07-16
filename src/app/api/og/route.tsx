@@ -1,8 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from 'next/og';
 import { supabaseAdmin } from '@/lib/core/supabase-admin';
-import { getConfiguredSiteUrl } from '@/lib/security/payments';
 import { fetchPublicImage, safeReadImageResponse } from '@/lib/security/ogImage';
+import { getSiteOrigin } from '@/lib/siteConfig';
 
 export const runtime = 'nodejs';
 
@@ -11,8 +11,6 @@ const EVENT_IMAGE_CACHE_TTL_MS = 60 * 60 * 1000;
 const IMAGE_CACHE_MAX_ENTRIES = 32;
 const OG_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800';
 const BASE64_CHUNK_SIZE = 0x8000;
-const DEFAULT_SITE_ORIGIN = 'https://seraphi.me';
-
 const imageDataUrlCache = new Map<string, { dataUrl: string; expiresAt: number }>();
 
 function pruneImageDataUrlCache(now = Date.now()) {
@@ -117,7 +115,7 @@ export async function GET(request: Request) {
             .eq('id', eventId)
             .single();
 
-        const origin = getConfiguredSiteUrl() || DEFAULT_SITE_ORIGIN;
+        const origin = getSiteOrigin();
         const fallbackUrl = `${origin}/Seraphim_OG_Dynamic.png`;
         const halfBrandUrl = `${origin}/Seraphim_OG_Dynamic_Half.png`;
 

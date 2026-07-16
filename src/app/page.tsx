@@ -10,24 +10,39 @@ import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { supabase } from '@/lib/core/supabase';
 import { HomeContent } from '@/components/layout/HomeContent';
+import {
+    absoluteSiteUrl,
+    buildWebsiteJsonLd,
+    serializeJsonLd,
+} from '@/lib/siteConfig';
 
 interface PageProps {
-    searchParams: Promise<{ eventId?: string }>;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
+
+const EVENT_NOINDEX_ROBOTS = {
+    index: false,
+    follow: true,
+    nocache: true,
+    googleBot: { index: false, follow: true, noimageindex: false },
+} as const;
 
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
     const params = await searchParams;
-    const eventId = params.eventId;
+    const rawEventId = params.eventId;
+    const eventId = Array.isArray(rawEventId) ? rawEventId[0] : rawEventId;
 
     if (!eventId) {
-        return {};
+        return {
+            alternates: { canonical: absoluteSiteUrl('/') },
+        };
     }
 
     // Validate UUID format to prevent malformed queries
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(eventId)) {
         return {
-            title: "Seraphim | Invalid Event",
+            title: "Invalid Event",
             robots: { index: false, follow: false, nocache: true },
         };
     }
@@ -42,21 +57,17 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
         if (event) {
             const title = `${event.title} | Seraphim OSINT`;
             const description = event.description || "Real-time OSINT event details and mapping on Seraphim.";
-            const ogImageUrl = `/api/og?eventId=${eventId}`;
+            const eventUrl = absoluteSiteUrl(`/?eventId=${encodeURIComponent(eventId)}`);
+            const ogImageUrl = absoluteSiteUrl(`/api/og?eventId=${encodeURIComponent(eventId)}`);
 
             return {
-                title,
+                title: { absolute: title },
                 description,
-                robots: {
-                    index: false,
-                    follow: false,
-                    nocache: true,
-                    googleBot: { index: false, follow: false, noimageindex: false },
-                },
+                robots: EVENT_NOINDEX_ROBOTS,
                 openGraph: {
                     title,
                     description,
-                    url: `/?eventId=${eventId}`,
+                    url: eventUrl,
                     images: [
                         {
                             url: ogImageUrl,
@@ -77,15 +88,30 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
         }
     } catch (err) {
         console.error('Error generating dynamic metadata:', err);
+        return {
+            title: "Event Unavailable",
+            robots: EVENT_NOINDEX_ROBOTS,
+        };
     }
 
-    return {};
+    return {
+        title: "Event Unavailable",
+        robots: EVENT_NOINDEX_ROBOTS,
+    };
 }
 
 export default function Home() {
+    const websiteJsonLd = serializeJsonLd(buildWebsiteJsonLd());
+
     return (
-        <Suspense fallback={null}>
-            <HomeContent />
-        </Suspense>
+        <>
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: websiteJsonLd }}
+            />
+            <Suspense fallback={null}>
+                <HomeContent />
+            </Suspense>
+        </>
     );
 }

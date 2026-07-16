@@ -1,10 +1,12 @@
 import styles from './LegalPage.module.css';
 import LegalBackButton from '@/components/ui/LegalBackButton';
+import { createPageMetadata } from '@/lib/siteConfig';
 
-export const metadata = {
-  title: 'Terms of Service | Seraphim',
+export const metadata = createPageMetadata({
+  title: 'Terms of Service',
   description: 'Terms of Service for Seraphim.',
-};
+  path: '/terms',
+});
 
 export default function TermsPage() {
   return (
