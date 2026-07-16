@@ -17,6 +17,7 @@ vi.mock("@upstash/ratelimit", () => ({
 }));
 
 import { GET } from "@/app/api/proxy/[...path]/route";
+import { clearOverlayCacheForTests } from '@/lib/server/overlayCache';
 
 function call(path: string[], query = "", headers: HeadersInit = {}) {
   return GET(new Request(`https://seraphim.example/api/proxy/${path.join("/")}${query}`, {
@@ -29,6 +30,7 @@ function call(path: string[], query = "", headers: HeadersInit = {}) {
 describe("GET /api/proxy/[...path]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearOverlayCacheForTests();
     mocks.resolveEntitlements.mockResolvedValue({ tier: "analyst", entitlements: {} });
   });
 
@@ -61,7 +63,8 @@ describe("GET /api/proxy/[...path]", () => {
 
   it('enforces network and authenticated-subject buckets for premium traffic', async () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: {}, userId: 'user-456' });
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Response(JSON.stringify({ ac: [] }))));
+    const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({ ac: [] })));
+    vi.stubGlobal('fetch', fetchMock);
 
     for (let index = 0; index < 8; index++) {
       await call(['flights'], '?lat=10&lng=20', { 'x-vercel-forwarded-for': '198.51.100.243' });
@@ -69,6 +72,7 @@ describe("GET /api/proxy/[...path]", () => {
 
     expect(mocks.rateLimit).toHaveBeenCalledWith('net:198.51.100.243');
     expect(mocks.rateLimit).toHaveBeenCalledWith('user:user-456');
+    expect(fetchMock).toHaveBeenCalledOnce();
     vi.unstubAllGlobals();
   });
 

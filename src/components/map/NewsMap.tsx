@@ -26,6 +26,7 @@ import {
 import { applyClientJitter } from "./utils";
 import { useMapLayers } from "./useMapLayers";
 import { useMapCamera } from "./useMapCamera";
+import { startVisiblePolling } from "./overlayPolling";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import MapError from "./MapError";
@@ -977,14 +978,14 @@ export default function NewsMap({
 
     const map = mapRef.current;
     
-    const fetchFlights = async () => {
+    const fetchFlights = async (signal: AbortSignal) => {
       try {
         const center = map.getCenter();
         const lat = center.lat.toFixed(4);
         const lng = center.lng.toFixed(4);
         
         // Fetch flights within 150 NM of current map center (proxied to bypass CORS)
-        const res = await fetch(`/api/proxy/flights?lat=${lat}&lng=${lng}`);
+        const res = await fetch(`/api/proxy/flights?lat=${lat}&lng=${lng}`, { signal });
         if (!res.ok) throw new Error("ADSB API error");
         
         const data = await res.json();
@@ -1029,18 +1030,13 @@ export default function NewsMap({
         }
         setOverlayStatuses((current) => ({ ...current, flights: 'live' }));
       } catch (err) {
+        if (signal.aborted) return;
         setOverlayStatuses((current) => ({ ...current, flights: 'degraded' }));
         devWarn("Failed to fetch live flight data:", err);
       }
     };
 
-    // Initial fetch
-    fetchFlights();
-
-    // Set up polling every 10 seconds
-    const interval = setInterval(fetchFlights, 10000);
-
-    return () => clearInterval(interval);
+    return startVisiblePolling({ poll: fetchFlights, intervalMs: 10000 });
   }, [overlays.flights, mapReady]);
 
   // Poll and update the real-time ISS location
@@ -1060,9 +1056,9 @@ export default function NewsMap({
 
     const map = mapRef.current;
 
-    const fetchISS = async () => {
+    const fetchISS = async (signal: AbortSignal) => {
       try {
-        const res = await fetch("/api/proxy/iss");
+        const res = await fetch("/api/proxy/iss", { signal });
         if (!res.ok) throw new Error("ISS API error");
         const geojson = await res.json();
         
@@ -1072,18 +1068,13 @@ export default function NewsMap({
         }
         setOverlayStatuses((current) => ({ ...current, iss: 'live' }));
       } catch (err) {
+        if (signal.aborted) return;
         setOverlayStatuses((current) => ({ ...current, iss: 'degraded' }));
         devWarn("Failed to fetch live ISS position:", err);
       }
     };
 
-    // Initial fetch
-    fetchISS();
-
-    // Set up polling every 8 seconds
-    const interval = setInterval(fetchISS, 8000);
-
-    return () => clearInterval(interval);
+    return startVisiblePolling({ poll: fetchISS, intervalMs: 8000 });
   }, [overlays.iss, mapReady]);
 
   // Handle runtime toggling of 3D Globe and atmospheric fog.
