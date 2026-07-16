@@ -30,7 +30,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
   }
   if (!acceptMetric(request)) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
   }
 
   const body = await request.json().catch(() => null) as {

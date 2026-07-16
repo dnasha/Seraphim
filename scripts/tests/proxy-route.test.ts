@@ -76,6 +76,19 @@ describe("GET /api/proxy/[...path]", () => {
     vi.unstubAllGlobals();
   });
 
+  it('enforces the local hard ceiling when Redis is unavailable', async () => {
+    mocks.rateLimit.mockRejectedValue(new Error('redis unavailable'));
+    const headers = { 'x-vercel-forwarded-for': '198.51.100.246' };
+
+    for (let index = 0; index < 45; index++) {
+      expect((await call(['ships'], '', headers)).status).toBe(404);
+    }
+    const denied = await call(['ships'], '', headers);
+
+    expect(denied.status).toBe(429);
+    expect(denied.headers.get('retry-after')).toBeTruthy();
+  });
+
   it("validates flight coordinates before calling the ADS-B providers", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

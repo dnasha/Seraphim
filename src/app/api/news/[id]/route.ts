@@ -128,13 +128,19 @@ export async function GET(
     const access = await resolveRequestEntitlements();
     const clientIp = getTrustedClientIp(request.headers);
     if (!clientIp) {
-        return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: PRIVATE_HEADERS });
+        return NextResponse.json(
+            { error: 'Too many requests' },
+            { status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': '60' } },
+        );
     }
     const now = Date.now();
     pruneCaches(now);
     const allowed = await allowExactEventRequest(getRateLimitKeys(clientIp, access.userId), now);
     if (!allowed) {
-        return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: PRIVATE_HEADERS });
+        return NextResponse.json(
+            { error: 'Too many requests' },
+            { status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': '60' } },
+        );
     }
 
     const cached = detailCache.get(id);

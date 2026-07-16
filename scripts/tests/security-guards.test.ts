@@ -6,6 +6,9 @@ import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuar
 import { fetchPublicImage, isPublicIpAddress, validatePublicImageUrl } from '@/lib/security/ogImage';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
 import { parseCspReport } from '@/lib/security/cspReport';
+import { buildCspReportOnly, CSP_ENFORCED_BASELINE } from '@/lib/security/csp';
+import { createLocalFixedWindowLimiter } from '@/lib/security/localRateLimit';
+import { createSingleFlight } from '@/lib/server/singleFlight';
 
 describe('news API param validation', () => {
   it('clamps numeric limits and accepts valid bbox searches', () => {
@@ -184,5 +187,39 @@ describe('CSP report privacy', () => {
       sourceOrigin: 'inline',
     });
     expect(parseCspReport(null)).toBeNull();
+  });
+});
+
+describe('backend hardening primitives', () => {
+  it('enforces every local rate-limit key and expires bounded windows', () => {
+    const limiter = createLocalFixedWindowLimiter({ limit: 2, windowMs: 1_000, maxEntries: 2 });
+    expect(limiter.check(['net:1', 'user:1'], 1).success).toBe(true);
+    expect(limiter.check(['net:2', 'user:1'], 2).success).toBe(true);
+    const denied = limiter.check(['net:3', 'user:1'], 3);
+    expect(denied).toMatchObject({ success: false, retryAfterSeconds: 1 });
+    limiter.check(['net:4'], 2_000);
+    expect(limiter.size()).toBeLessThanOrEqual(2);
+  });
+
+  it('coalesces identical work and clears rejected promises', async () => {
+    const singleFlight = createSingleFlight(2);
+    const load = vi.fn(async () => 42);
+    await expect(Promise.all([
+      singleFlight.run('same', load),
+      singleFlight.run('same', load),
+    ])).resolves.toEqual([42, 42]);
+    expect(load).toHaveBeenCalledOnce();
+
+    await expect(singleFlight.run('failed', async () => { throw new Error('failed'); })).rejects.toThrow('failed');
+    await expect(singleFlight.run('failed', async () => 7)).resolves.toBe(7);
+    expect(singleFlight.size()).toBe(0);
+  });
+
+  it('enforces structural CSP while reporting the complete production policy', () => {
+    expect(CSP_ENFORCED_BASELINE).toContain("object-src 'none'");
+    expect(CSP_ENFORCED_BASELINE).not.toContain('script-src');
+    expect(buildCspReportOnly('production')).toContain("script-src 'self' 'unsafe-inline'");
+    expect(buildCspReportOnly('production')).not.toContain("'unsafe-eval'");
+    expect(buildCspReportOnly('development')).toContain("'unsafe-eval'");
   });
 });

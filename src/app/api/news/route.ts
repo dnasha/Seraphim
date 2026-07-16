@@ -14,41 +14,35 @@ import { NewsItem, NewsResponse } from "@/lib/core/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
 import { sortNewsItems } from "@/lib/utils/ranking";
 import { validateNewsSearchParams, NEWS_DEFAULT_LIMIT } from "@/lib/security/newsParams";
-import { canUseTimeRange } from '@/lib/entitlements';
+import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { createLocalFixedWindowLimiter, createThrottledDiagnostic } from '@/lib/security/localRateLimit';
+import { createSingleFlight } from '@/lib/server/singleFlight';
 
 /**
  * Global L2 rate limiter using Upstash Redis for cross-instance state.
  */
-const redis = Redis.fromEnv();
-const ratelimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(120, "1 m"),
-  analytics: true,
-  prefix: "@upstash/ratelimit/seraphim",
-});
+const distributedRateLimitConfigured = process.env.NODE_ENV === 'test' || Boolean(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+);
+const ratelimit = distributedRateLimitConfigured
+  ? new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(120, "1 m"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/seraphim",
+    })
+  : null;
 
 /**
  * Local L1 rate limiter (Memory) to minimize network overhead for high-frequency 
  * clients. Short-circuits requests before hitting the L2 Redis limiter.
  */
-const localL1Limit = new Map<string, { count: number; reset: number }>();
-let lastL1Cleanup = Date.now();
-const L1_CLEANUP_INTERVAL = 60000;
-
-/**
- * Purges expired entries from the L1 rate limit map to prevent memory leaks.
- */
-function performL1Cleanup() {
-  const now = Date.now();
-  if (now - lastL1Cleanup < L1_CLEANUP_INTERVAL) return;
-
-  for (const [ip, data] of localL1Limit.entries()) {
-    if (now > data.reset) localL1Limit.delete(ip);
-  }
-  lastL1Cleanup = now;
-}
+const localRateLimit = createLocalFixedWindowLimiter({ limit: 30, windowMs: 10_000 });
+const reportRateLimitUnavailable = createThrottledDiagnostic(() => {
+  console.error('[api/news] Distributed rate limiter unavailable; local hard ceiling remains active.');
+});
 
 /**
  * Server-side cache for news aggregates.
@@ -56,6 +50,7 @@ function performL1Cleanup() {
  */
 const sourceCache = new Map<string, { data: NewsItem[]; isCapped: boolean; timestamp: number }>();
 const SOURCE_CACHE_MAX_ENTRIES = 250;
+const sourceSingleFlight = createSingleFlight(SOURCE_CACHE_MAX_ENTRIES);
 
 const refreshThrottle = new Map<string, number>();
 const REFRESH_COOLDOWN = 60000;
@@ -89,7 +84,10 @@ export async function GET(request: Request) {
 
   const clientIp = getTrustedClientIp(request.headers);
   if (!clientIp) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': '10' } },
+    );
   }
 
   let forceRefresh = validated.params.forceRefresh;
@@ -114,6 +112,16 @@ export async function GET(request: Request) {
 
   const access = await resolveRequestEntitlements();
   const rateLimitKeys = getRateLimitKeys(clientIp, access.userId);
+  if (searchQuery && !hasFeature(access.tier, 'search')) {
+    return NextResponse.json(
+      {
+        error: 'Search requires a free account',
+        code: 'feature_required',
+        requiredTier: 'free',
+      },
+      { status: 403 },
+    );
+  }
   if (!canUseTimeRange(access.tier, timeRange)) {
     return NextResponse.json(
       {
@@ -153,7 +161,7 @@ export async function GET(request: Request) {
 
   const ignoreBBox = scopeMode === 'global' || isGlobalBBox;
 
-  let effectiveLimit = Math.min(requestedLimit, access.entitlements.eventLimit);
+  let zoomLimit = Number.POSITIVE_INFINITY;
 
   /**
    * Dynamic Capping Logic
@@ -163,20 +171,27 @@ export async function GET(request: Request) {
    */
   if (zoom !== null && !searchQuery) {
     if (zoom >= 6.5) {
-      effectiveLimit = Math.min(requestedLimit, 250);
+      zoomLimit = 250;
     } else if (zoom >= 4) {
-      effectiveLimit = Math.min(requestedLimit, 500);
+      zoomLimit = 500;
     }
   }
 
-  // Extend limits for broad historical queries
+  let requestedQueryLimit = requestedLimit;
+  // Broad historical queries may use the full tier allowance only when the
+  // client did not explicitly choose a smaller limit.
   if (normalizedSince && !hasRequestedLimit) {
     const sinceTime = new Date(normalizedSince).getTime();
     const untilTime = untilStr ? new Date(untilStr).getTime() : now;
     if (untilTime - sinceTime > 24 * 60 * 60 * 1000 + 5000) {
-      effectiveLimit = Math.max(effectiveLimit, 1000);
+      requestedQueryLimit = 1000;
     }
   }
+  const effectiveLimit = Math.min(
+    requestedQueryLimit,
+    access.entitlements.eventLimit,
+    zoomLimit,
+  );
 
   /**
    * Clustering Strategy
@@ -194,7 +209,7 @@ export async function GET(request: Request) {
   const cacheKey =
     hasBBox || ignoreBBox
       ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${isClusteredQuery ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
-      : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`;
+      : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`;
   const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
 
@@ -208,35 +223,35 @@ export async function GET(request: Request) {
   }
 
   try {
-    performL1Cleanup();
-
-    const l1Key = rateLimitKeys[0];
-    const l1 = localL1Limit.get(l1Key);
-    if (!l1 || now > l1.reset) {
-      localL1Limit.set(l1Key, { count: 1, reset: now + 10000 });
-    } else {
-      l1.count++;
-      if (l1.count > 15 || l1.count % 5 === 0) {
+    const localResult = localRateLimit.check(rateLimitKeys, now);
+    if (!localResult.success) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(localResult.retryAfterSeconds) } },
+      );
+    }
+    const checkDistributed = localResult.counts.some((count) => count > 15 || count % 5 === 0);
+    if (checkDistributed) {
+      if (!ratelimit) {
+        reportRateLimitUnavailable(now);
+      } else {
         try {
           const results = await Promise.all(rateLimitKeys.map((key) => ratelimit.limit(key)));
-          if (results.some(({ success }) => !success)) {
+          const denied = results.filter(({ success }) => !success);
+          if (denied.length > 0) {
+            const retryAfter = Math.max(1, ...denied.map((result) => Math.ceil((result.reset - now) / 1_000)));
             return NextResponse.json(
               { error: "Too many requests" },
-              { status: 429 },
+              { status: 429, headers: { 'Retry-After': String(retryAfter) } },
             );
           }
-        } catch (ratelimitError) {
-          // Fail-open on rate limiter failure to maintain service availability
-          console.error(
-            "[api/news] Rate limiter error (failing open):",
-            ratelimitError,
-          );
+        } catch {
+          reportRateLimitUnavailable(now);
         }
       }
     }
 
-    let allItems: NewsItem[];
-    let queryCapped = false;
+    let result: { data: NewsItem[]; isCapped: boolean };
     const cached = sourceCache.get(cacheKey);
 
     if (
@@ -245,44 +260,37 @@ export async function GET(request: Request) {
       cached &&
       now - cached.timestamp < cacheTtlMs
     ) {
-      allItems = cached.data;
-      queryCapped = cached.isCapped;
+      result = { data: cached.data, isCapped: cached.isCapped };
     } else {
-      let rows, error;
+      result = await sourceSingleFlight.run(cacheKey, async () => {
+        let rows: unknown[] | null = null;
+        let error: { message?: string } | null = null;
+        let normMinLng: number | null = null;
+        let normMaxLng: number | null = null;
 
-      let normMinLng: number | null = null;
-      let normMaxLng: number | null = null;
+        if (!ignoreBBox && hasBBox) {
+          normMinLng = minLng! - EPSILON;
+          normMaxLng = maxLng! + EPSILON;
+        }
 
-      if (!ignoreBBox && hasBBox) {
-        normMinLng = minLng! - EPSILON;
-        normMaxLng = maxLng! + EPSILON;
-      }
-
-      // The clustering function builds a spatial predicate dynamically and
-      // requires a complete viewport. Global/no-bbox requests use the bounded
-      // raw query path instead of passing null coordinates into the RPC.
-      if (isClusteredQuery) {
-        // Execute server-side clustering via optimized PostgreSQL RPC
-        const rpcParams: Record<string, unknown> = {
-          p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
-          p_min_lat: ignoreBBox ? null : minLat! - EPSILON,
-          p_max_lat: ignoreBBox ? null : maxLat! + EPSILON,
-          p_min_lng: ignoreBBox ? null : normMinLng,
-          p_max_lng: ignoreBBox ? null : normMaxLng,
-          p_sort_mode: sort,
-          p_limit: effectiveLimit,
-        };
-        if (normalizedSince) rpcParams.p_since = normalizedSince;
-        if (untilStr) rpcParams.p_until = untilStr;
-        if (searchQuery) rpcParams.p_search_query = searchQuery;
-
-        const res = await supabaseAdmin.rpc("get_clustered_events", rpcParams);
-        rows = res.data;
-        error = res.error;
-      } else {
-        // Standard SQL query for raw event retrieval
-        if (searchQuery) {
-          const res = await supabaseAdmin.rpc("search_events", {
+        if (isClusteredQuery) {
+          const rpcParams: Record<string, unknown> = {
+            p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
+            p_min_lat: ignoreBBox ? null : minLat! - EPSILON,
+            p_max_lat: ignoreBBox ? null : maxLat! + EPSILON,
+            p_min_lng: ignoreBBox ? null : normMinLng,
+            p_max_lng: ignoreBBox ? null : normMaxLng,
+            p_sort_mode: sort,
+            p_limit: effectiveLimit,
+          };
+          if (normalizedSince) rpcParams.p_since = normalizedSince;
+          if (untilStr) rpcParams.p_until = untilStr;
+          if (searchQuery) rpcParams.p_search_query = searchQuery;
+          const response = await supabaseAdmin.rpc("get_clustered_events", rpcParams);
+          rows = response.data;
+          error = response.error;
+        } else if (searchQuery) {
+          const response = await supabaseAdmin.rpc("search_events", {
             p_search_query: searchQuery,
             p_min_lat: hasBBox ? minLat! - EPSILON : null,
             p_max_lat: hasBBox ? maxLat! + EPSILON : null,
@@ -294,152 +302,74 @@ export async function GET(request: Request) {
             p_limit: effectiveLimit,
             p_unmapped_only: false,
           });
-          rows = res.data;
-          error = res.error;
+          rows = response.data;
+          error = response.error;
         } else {
           let query = supabaseAdmin.from("events").select(LIST_SELECT);
-
-          if (sort === "hot") {
-            query = query
-              .order("impact_score", { ascending: false, nullsFirst: false })
-              .order("event_count", { ascending: false, nullsFirst: false })
-              .order("published_at", { ascending: false });
-          } else {
-            query = query.order("published_at", { ascending: false });
-          }
-
+          query = sort === "hot"
+            ? query
+                .order("impact_score", { ascending: false, nullsFirst: false })
+                .order("event_count", { ascending: false, nullsFirst: false })
+                .order("published_at", { ascending: false })
+            : query.order("published_at", { ascending: false });
           query = query.limit(effectiveLimit);
-
           if (normalizedSince) query = query.gte("published_at", normalizedSince);
           if (untilStr) query = query.lte("published_at", untilStr);
-
           if (hasBBox) {
             const latMin = minLat! - EPSILON;
             const latMax = maxLat! + EPSILON;
             const lngMin = minLng! - EPSILON;
             const lngMax = maxLng! + EPSILON;
-
             query = query.gte("latitude", latMin).lte("latitude", latMax);
-
-            /**
-             * International Date Line Handling
-             * Wraps longitude queries if the bounding box crosses the +/-180 limit.
-             */
-            if (lngMin <= lngMax) {
-              query = query.gte("longitude", lngMin).lte("longitude", lngMax);
-            } else {
-              query = query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
-            }
+            query = lngMin <= lngMax
+              ? query.gte("longitude", lngMin).lte("longitude", lngMax)
+              : query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
           }
-
-          const res = await query;
-          rows = res.data;
-          error = res.error;
+          const response = await query;
+          rows = response.data;
+          error = response.error;
         }
-      }
 
-      if (error) {
-        console.error("[api/news] Supabase query failed:", error.message);
-        /**
-         * Fail-Open Stability
-         * If the database times out due to high load, serve a stale cache 
-         * or empty result set rather than crashing the UI.
-         */
-        if (
-          error.message?.includes("statement timeout") ||
-          error.message?.includes("canceling statement")
-        ) {
+        if (error) {
+          console.error("[api/news] Supabase query failed:", error.message);
+          const timedOut = error.message?.includes("statement timeout") ||
+            error.message?.includes("canceling statement");
+          if (!timedOut) throw new Error('news_query_failed');
           const stale = sourceCache.get(cacheKey);
-          if (stale && stale.data.length > 0) {
-            console.warn(
-              "[api/news] Serving stale cache for fail-open stability.",
-            );
-            return NextResponse.json(
-              {
-                items: stale.data,
-                lastUpdated: new Date(stale.timestamp).toISOString(),
-                meta: {
-                  sort,
-                  view: viewMode,
-                  scope: scopeMode,
-                  clustered: isClusteredQuery,
-                  zoomBucket: zoom !== null ? Math.floor(zoom) : null,
-                  isCapped: stale.isCapped,
-                },
-                sources: { gnews: true, rss: true, social: true },
-              },
-              {
-                headers: {
-                  "Cache-Control": "private, no-store",
-                },
-              },
-            );
+          if (stale?.data.length) {
+            console.warn("[api/news] Serving stale cache for fail-open stability.");
+            return { data: stale.data, isCapped: stale.isCapped };
           }
-
-          return NextResponse.json({
-            items: [],
-            lastUpdated: new Date().toISOString(),
-            meta: {
-              sort,
-              view: viewMode,
-              scope: scopeMode,
-              clustered: isClusteredQuery,
-              zoomBucket: zoom !== null ? Math.floor(zoom) : null,
-            },
-            sources: { gnews: true, rss: true, social: true },
-          });
-        } else {
-          return NextResponse.json(
-            { error: "Failed to fetch news" },
-            { status: 500 },
-          );
+          return { data: [], isCapped: false };
         }
-      }
 
-      const safeRows = rows || [];
-      const totalRawCount = isClusteredQuery
-        ? (safeRows as DbEvent[]).reduce((acc, r) => acc + (Number(r.story_count) || 1), 0)
-        : safeRows.length;
+        const safeRows = (rows || []) as DbEvent[];
+        const totalRawCount = isClusteredQuery
+          ? safeRows.reduce((count, row) => count + (Number(row.story_count) || 1), 0)
+          : safeRows.length;
+        const isCapped = totalRawCount >= effectiveLimit - 5;
+        let data = safeRows.map((row) => {
+          const item = dbEventToNewsItem(row);
+          if (isClusteredQuery && item.clusterId && (item.storyCount ?? 1) > 1) {
+            const zLabel = zoom !== null ? Math.floor(zoom) : "global";
+            item.originalId = item.id;
+            item.id = `cluster-z${zLabel}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.storyCount}`;
+          }
+          return item;
+        });
+        if (!isClusteredQuery) data = sortNewsItems(data, sort).slice(0, effectiveLimit);
 
-      if (totalRawCount >= effectiveLimit - 5) {
-        queryCapped = true;
-      }
-
-      allItems = (safeRows as DbEvent[]).map((row) => {
-        const item = dbEventToNewsItem(row);
-        /**
-         * Stable Cluster IDs
-         * Aggregated clusters use a coordinate-based ID to prevent marker 
-         * flickering during zoom transitions while preserving the UUID of 
-         * the primary event for detail fetching.
-         */
-        if (
-          isClusteredQuery &&
-          item.clusterId &&
-          (item.storyCount ?? 1) > 1
-        ) {
-          const zLabel = zoom !== null ? Math.floor(zoom) : "global";
-          item.originalId = item.id;
-          item.id = `cluster-z${zLabel}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.storyCount}`;
+        const loaded = { data, isCapped };
+        if (canUseCache) {
+          sourceCache.set(cacheKey, { ...loaded, timestamp: Date.now() });
+          pruneSourceCache();
         }
-        return item;
+        return loaded;
       });
-
-      if (!isClusteredQuery) {
-        allItems = sortNewsItems(allItems, sort);
-        if (effectiveLimit < allItems.length) {
-          allItems = allItems.slice(0, effectiveLimit);
-        }
-      }
-
-      if (canUseCache) {
-        sourceCache.set(cacheKey, { data: allItems, isCapped: queryCapped, timestamp: now });
-        pruneSourceCache();
-      }
     }
 
     const response: NewsResponse = {
-      items: allItems,
+      items: result.data,
       lastUpdated: new Date().toISOString(),
       meta: {
         sort,
@@ -447,7 +377,7 @@ export async function GET(request: Request) {
         scope: scopeMode,
         clustered: isClusteredQuery,
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
-        isCapped: queryCapped,
+        isCapped: result.isCapped,
         appliedLimit: effectiveLimit,
       },
       sources: {

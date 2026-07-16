@@ -9,21 +9,28 @@ import {
 import { canUseOverlay } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { createLocalFixedWindowLimiter, createThrottledDiagnostic } from '@/lib/security/localRateLimit';
 import { recordIncident, recordMetric, recoverIncident, serverDiagnostic } from '@/lib/server/operations';
 import { getCachedOverlayData, type OverlayCacheStore } from '@/lib/server/overlayCache';
 import { createOverlayHealthRecorder, type OverlayHealthStore } from '@/lib/server/overlayHealth';
 
 const redis = Redis.fromEnv();
 const overlayStore = redis as unknown as OverlayCacheStore & OverlayHealthStore;
-const proxyRatelimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(180, "1 m"),
-  analytics: true,
-  prefix: "@upstash/ratelimit/seraphim-proxy",
+const distributedRateLimitConfigured = process.env.NODE_ENV === 'test' || Boolean(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+);
+const proxyRatelimit = distributedRateLimitConfigured
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(180, "1 m"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/seraphim-proxy",
+    })
+  : null;
+const localRateLimit = createLocalFixedWindowLimiter({ limit: 45, windowMs: 10_000 });
+const reportRateLimitUnavailable = createThrottledDiagnostic(() => {
+  serverDiagnostic('proxy_rate_limit_unavailable');
 });
-
-const localLimit = new Map<string, { count: number; reset: number }>();
-let lastCleanup = Date.now();
 const overlayHealth = createOverlayHealthRecorder({
   store: overlayStore,
   recordFailure: async (service, errorCode) => {
@@ -69,30 +76,28 @@ const PRIVATE_CACHE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
 async function checkProxyRateLimit(clientIp: string, userId?: string | null) {
   const now = Date.now();
-  if (now - lastCleanup > 60000) {
-    for (const [ip, entry] of localLimit.entries()) {
-      if (now > entry.reset) localLimit.delete(ip);
-    }
-    lastCleanup = now;
-  }
-
   const rateLimitKeys = getRateLimitKeys(clientIp, userId);
-  const localKey = rateLimitKeys[0];
-  const current = localLimit.get(localKey);
-  if (!current || now > current.reset) {
-    localLimit.set(localKey, { count: 1, reset: now + 10000 });
-    return true;
+  const localResult = localRateLimit.check(rateLimitKeys, now);
+  if (!localResult.success) return { allowed: false, retryAfterSeconds: localResult.retryAfterSeconds };
+  const checkDistributed = localResult.counts.some((count) => count > 20 || count % 8 === 0);
+  if (!checkDistributed) return { allowed: true, retryAfterSeconds: 0 };
+  if (!proxyRatelimit) {
+    reportRateLimitUnavailable(now);
+    return { allowed: true, retryAfterSeconds: 0 };
   }
-
-  current.count++;
-  if (current.count <= 20 && current.count % 8 !== 0) return true;
 
   try {
     const results = await Promise.all(rateLimitKeys.map((key) => proxyRatelimit.limit(key)));
-    return results.every(({ success }) => success);
+    const denied = results.filter(({ success }) => !success);
+    return denied.length === 0
+      ? { allowed: true, retryAfterSeconds: 0 }
+      : {
+          allowed: false,
+          retryAfterSeconds: Math.max(1, ...denied.map((result) => Math.ceil((result.reset - now) / 1_000))),
+        };
   } catch {
-    serverDiagnostic('proxy_rate_limit_unavailable');
-    return true;
+    reportRateLimitUnavailable(now);
+    return { allowed: true, retryAfterSeconds: 0 };
   }
 }
 
@@ -111,7 +116,10 @@ export async function GET(
 
   const clientIp = getTrustedClientIp(request.headers);
   if (!clientIp) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { 'Retry-After': '10' } },
+    );
   }
 
   const requiredOverlay = PREMIUM_PROXY_SERVICES[service];
@@ -131,8 +139,12 @@ export async function GET(
     }
   }
 
-  if (!(await checkProxyRateLimit(clientIp, userId))) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  const rateLimit = await checkProxyRateLimit(clientIp, userId);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+    );
   }
 
   if (service === "flights") {

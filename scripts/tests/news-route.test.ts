@@ -125,6 +125,63 @@ describe("GET /api/news", () => {
     expect(body.meta).toMatchObject({ clustered: false, scope: "viewport", sort: "hot" });
   });
 
+  it('rejects guest search before cache or database work', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'guest', entitlements: { eventLimit: 10 } });
+
+    const response = await GET(request('zoom=8&query=city&limit=10'));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ code: 'feature_required', requiredTier: 'free' });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('keeps guest, zoom, and force_raw limits monotonic', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'guest', entitlements: { eventLimit: 10 } });
+    const query = rawQuery([]);
+    mocks.from.mockReturnValue(query);
+
+    const response = await GET(request('zoom=8&limit=999&force_raw=true'));
+
+    expect(query.limit).toHaveBeenCalledWith(10);
+    await expect(response.json()).resolves.toMatchObject({ meta: { appliedLimit: 10 } });
+  });
+
+  it('does not let broad history undo the high-zoom cap', async () => {
+    const query = rawQuery([]);
+    mocks.from.mockReturnValue(query);
+
+    const response = await GET(request('zoom=8&time_range=1w'));
+
+    expect(query.limit).toHaveBeenCalledWith(250);
+    await expect(response.json()).resolves.toMatchObject({ meta: { appliedLimit: 250 } });
+  });
+
+  it('coalesces concurrent identical cache misses', async () => {
+    mocks.rpc.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { data: [eventRow], error: null };
+    });
+    const queryString = 'zoom=8&query=singleflight-city&limit=12';
+
+    const [first, second] = await Promise.all([GET(request(queryString)), GET(request(queryString))]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+  });
+
+  it('removes a failed in-flight query so a retry can run', async () => {
+    mocks.rpc
+      .mockRejectedValueOnce(new Error('transient failure'))
+      .mockResolvedValueOnce({ data: [eventRow], error: null });
+    const queryString = 'zoom=8&query=singleflight-retry&limit=12';
+
+    expect((await GET(request(queryString))).status).toBe(500);
+    expect((await GET(request(queryString))).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+  });
+
   it("uses direct event reads at high zoom and caches equivalent requests", async () => {
     const query = rawQuery();
     mocks.from.mockReturnValue(query);
@@ -205,6 +262,20 @@ describe("GET /api/news", () => {
 
     expect(mocks.rateLimit).toHaveBeenCalledWith(`net:${clientIp}`);
     expect(mocks.rateLimit).toHaveBeenCalledWith('user:user-123');
+  });
+
+  it('enforces the local hard ceiling when Redis is unavailable', async () => {
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.rateLimit.mockRejectedValue(new Error('redis unavailable'));
+    const clientIp = '198.51.100.245';
+
+    for (let index = 0; index < 30; index++) {
+      expect((await GET(request('zoom=2', { 'x-vercel-forwarded-for': clientIp }))).status).toBe(200);
+    }
+    const denied = await GET(request('zoom=2', { 'x-vercel-forwarded-for': clientIp }));
+
+    expect(denied.status).toBe(429);
+    expect(denied.headers.get('retry-after')).toBeTruthy();
   });
 
   it('enforces the Free cap and rejects unavailable history before querying data', async () => {
