@@ -1,7 +1,7 @@
 /**
  * Pricing Page
  *
- * Four-tier pricing page with monthly and yearly billing options,
+ * Three subscription tiers plus a separate Angel founder offer,
  * Stripe Checkout integration, feature comparison, and FAQ content.
  */
 
@@ -16,7 +16,20 @@ import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
 import { FaqSection } from './FaqSection';
-import { trackOptionalMetric } from '@/lib/privacyConsent';
+import { trackOptionalMetric, type OptionalMetricDimensions } from '@/lib/privacyConsent';
+
+const SUBSCRIPTION_TIERS = TIERS.filter((tier) => tier.key !== 'angel');
+const ANGEL_TIER = TIERS.find((tier) => tier.key === 'angel');
+
+function checkoutMetricDimensions(priceKey: string): OptionalMetricDimensions {
+    if (priceKey === 'angel') return { plan: 'angel' as const, interval: 'lifetime' as const };
+    const [plan, interval] = priceKey.split('_');
+    if ((plan !== 'pro' && plan !== 'analyst') || (interval !== 'monthly' && interval !== 'yearly')) return {};
+    return {
+        plan: plan as 'pro' | 'analyst',
+        interval: interval === 'monthly' ? 'month' as const : 'year' as const,
+    };
+}
 
 function PricingPageContent() {
     const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
@@ -24,15 +37,27 @@ function PricingPageContent() {
     const [angelRemaining, setAngelRemaining] = useState<number | null>(null);
     const [angelTotal, setAngelTotal] = useState<number>(100);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [comparisonTier, setComparisonTier] = useState<'free' | 'pro' | 'analyst' | 'angel'>('pro');
     const { user, isGuest } = useAuth();
     const { tier: currentTier } = useUserTier();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const requestedFeature = searchParams.get('feature')?.trim().slice(0, 80) || null;
+    const requestedTierParam = searchParams.get('tier');
+    const recommendedTier = requestedTierParam === 'pro' || requestedTierParam === 'analyst'
+        ? requestedTierParam
+        : null;
+    const [comparisonTier, setComparisonTier] = useState<'free' | 'pro' | 'analyst' | 'angel'>(recommendedTier ?? 'pro');
     const requestedReturnTo = searchParams.get('returnTo');
     const returnTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
         ? requestedReturnTo
         : '/';
+
+    useEffect(() => {
+        void trackOptionalMetric('pricing_view', {
+            source: requestedFeature ? 'feature_gate' : 'direct',
+            plan: recommendedTier ?? undefined,
+        });
+    }, [recommendedTier, requestedFeature]);
 
     // Fetch angel remaining count
     useEffect(() => {
@@ -52,10 +77,13 @@ function PricingPageContent() {
     }, []);
 
     const handleCheckout = useCallback(async (priceKey: string) => {
-        void trackOptionalMetric('checkout_click');
+        void trackOptionalMetric('checkout_click', {
+            ...checkoutMetricDimensions(priceKey),
+            source: requestedFeature ? 'feature_gate' : 'pricing',
+        });
         if (!user || isGuest) {
             // Redirect to home which will show auth modal
-            router.push('/?auth=signup');
+            router.push('/?auth=true');
             return;
         }
 
@@ -82,7 +110,7 @@ function PricingPageContent() {
         } finally {
             setLoadingTier(null);
         }
-    }, [user, isGuest, router, returnTo]);
+    }, [user, isGuest, router, returnTo, requestedFeature]);
 
     return (
         <div className={styles.container}>
@@ -140,6 +168,13 @@ function PricingPageContent() {
                     <span className={styles.guestPreviewEyebrow}>Try before signing up</span>
                     <p><strong>Guest mode</strong> lets anyone explore the live map and its top 10 events from the last 24 hours. Create a Free account for 100 events, filtering, and local annotations.</p>
                 </section>
+
+                {requestedFeature && recommendedTier && (
+                    <section className={styles.contextualUpgrade} aria-live="polite">
+                        <span>Unlock {requestedFeature}</span>
+                        <strong>{recommendedTier === 'pro' ? 'Pro' : 'Analyst'} includes this capability and a 14-day free trial.</strong>
+                    </section>
+                )}
 
                 {/* Error Toast */}
                 {errorMsg && (
@@ -200,7 +235,7 @@ function PricingPageContent() {
 
                 {/* Pricing Cards */}
                 <div className={styles.cardsGrid}>
-                    {TIERS.map((tier) => (
+                    {SUBSCRIPTION_TIERS.map((tier) => (
                         <PricingCard
                             key={tier.key}
                             tier={tier}
@@ -209,10 +244,32 @@ function PricingPageContent() {
                             loadingTier={loadingTier}
                             angelRemaining={angelRemaining}
                             angelTotal={angelTotal}
+                            isRecommended={tier.key === recommendedTier}
                             handleCheckout={handleCheckout}
                         />
                     ))}
                 </div>
+
+                {ANGEL_TIER && (
+                    <section className={styles.angelOfferSection}>
+                        <div className={styles.angelOfferCopy}>
+                            <span className={styles.guestPreviewEyebrow}>Founder offer</span>
+                            <h2>Back Seraphim for the long term</h2>
+                            <p>One payment unlocks the complete Analyst experience for the lifetime of the service. Limited to 100 founding memberships.</p>
+                        </div>
+                        <div className={styles.angelOfferCard}>
+                            <PricingCard
+                                tier={ANGEL_TIER}
+                                isYearly={isYearly}
+                                currentTier={currentTier}
+                                loadingTier={loadingTier}
+                                angelRemaining={angelRemaining}
+                                angelTotal={angelTotal}
+                                handleCheckout={handleCheckout}
+                            />
+                        </div>
+                    </section>
+                )}
 
                 {/* Feature Comparison Table */}
                 <section className={styles.comparisonSection}>
@@ -277,7 +334,7 @@ function PricingPageContent() {
                 <FaqSection />
 
                 <footer className={styles.footer}>
-                    <p>Payments are secured by <strong>Stripe</strong>, PCI Level 1 certified, with 256 bit SSL encryption.</p>
+                    <p>Secure checkout powered by <strong>Stripe</strong>. Seraphim never stores your card details.</p>
                 </footer>
             </div>
         </div>

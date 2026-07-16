@@ -66,6 +66,7 @@ describe('POST /api/stripe/checkout', () => {
     mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
     mocks.sessionCreate.mockResolvedValue({ id: 'cs-1', url: 'https://checkout.stripe.example/session', expires_at: 1_900_000_000 });
     process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'false';
+    delete process.env.STRIPE_PROMOTION_CODES_ENABLED;
   });
 
   it('checks the plan-specific kill switch before auth or Stripe', async () => {
@@ -87,9 +88,19 @@ describe('POST /api/stripe/checkout', () => {
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
       customer: 'cus-1', mode: 'subscription',
       success_url: 'https://seraphim.example/account?tab=billing&checkout=success',
-      subscription_data: expect.objectContaining({ trial_period_days: 7 }),
+      subscription_data: expect.objectContaining({ trial_period_days: 14 }),
     }), { idempotencyKey: 'checkout-intent-intent-1' });
   });
+
+  it.each(['pro_monthly', 'pro_yearly', 'analyst_monthly', 'analyst_yearly'])(
+    'applies the 14-day trial to %s',
+    async (priceKey) => {
+      await POST(request(priceKey));
+      expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      }), expect.anything());
+    },
+  );
 
   it('returns sold-out Angel inventory without creating a Stripe session', async () => {
     mocks.rpc.mockResolvedValue(reservation('angel_sold_out'));
@@ -110,5 +121,25 @@ describe('POST /api/stripe/checkout', () => {
       billing_address_collection: 'required',
       customer_update: { address: 'auto' },
     }), expect.anything());
+  });
+
+  it('keeps promotion codes off by default and enables them only by configuration', async () => {
+    await POST(request('pro_monthly'));
+    expect(mocks.sessionCreate).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ allow_promotion_codes: true }),
+      expect.anything(),
+    );
+
+    vi.clearAllMocks();
+    mocks.rpc.mockResolvedValue(reservation());
+    mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
+    mocks.sessionCreate.mockResolvedValue({ id: 'cs-2', url: 'https://checkout.stripe.example/session-2', expires_at: 1_900_000_000 });
+    process.env.STRIPE_PROMOTION_CODES_ENABLED = 'true';
+
+    await POST(request('pro_monthly'));
+    expect(mocks.sessionCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ allow_promotion_codes: true }),
+      expect.anything(),
+    );
   });
 });

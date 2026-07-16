@@ -183,7 +183,7 @@
 /* ═══════════════ Cards Grid ═══════════════ */
 .cardsGrid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px;
     margin-bottom: 60px;
 }
@@ -215,6 +215,11 @@
 .cardAngel {
     border-color: #10b981;
     background: linear-gradient(180deg, var(--surface) 0%, rgba(16, 185, 129, 0.04) 100%);
+}
+
+.cardRecommended {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.22), 0 10px 36px rgba(99, 102, 241, 0.16);
 }
 
 /* Card Badges */
@@ -318,6 +323,14 @@
     padding: 2px 8px;
     border-radius: 8px;
     margin-left: 8px;
+}
+
+.annualBilling {
+    width: 100%;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
 }
 
 /* Scarcity & Trial Badges */
@@ -474,6 +487,51 @@
 
 .guestPreview p { margin: 6px 0 0; }
 .guestPreviewEyebrow { color: var(--accent); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+
+.contextualUpgrade {
+    max-width: 760px;
+    margin: -12px auto 28px;
+    padding: 14px 18px;
+    border: 1px solid rgba(99, 102, 241, 0.32);
+    border-radius: var(--radius-md);
+    background: rgba(99, 102, 241, 0.08);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.contextualUpgrade span { font-weight: 800; color: var(--accent); }
+
+.angelOfferSection {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+    align-items: center;
+    gap: 32px;
+    margin: 0 0 60px;
+    padding: 32px;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.07), var(--surface));
+}
+
+.angelOfferCopy h2 {
+    margin: 8px 0 10px;
+    font-family: var(--font-logo);
+    font-size: 1.75rem;
+    letter-spacing: -0.02em;
+}
+
+.angelOfferCopy p {
+    max-width: 580px;
+    color: var(--text-muted);
+    line-height: 1.65;
+}
+
+.angelOfferCard { min-width: 0; }
 
 .comparisonTitle {
     font-family: var(--font-logo);
@@ -642,7 +700,11 @@
 /* ═══════════════ Responsive ═══════════════ */
 @media (max-width: 1024px) {
     .cardsGrid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .angelOfferSection {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -664,6 +726,23 @@
 
     .faqGrid {
         grid-template-columns: 1fr;
+    }
+
+    .contextualUpgrade {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .angelOfferSection {
+        grid-template-columns: 1fr;
+        padding: 24px;
+    }
+
+    .angelOfferCard {
+        max-width: 400px;
+        width: 100%;
+        margin: 0 auto;
     }
 
     .tableWrapper { display: none; }

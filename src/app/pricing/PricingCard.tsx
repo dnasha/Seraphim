@@ -9,6 +9,7 @@ interface PricingCardProps {
     loadingTier: string | null;
     angelRemaining: number | null;
     angelTotal: number;
+    isRecommended?: boolean;
     handleCheckout: (priceKey: string) => Promise<void>;
 }
 
@@ -30,6 +31,7 @@ export function PricingCard({
     loadingTier,
     angelRemaining,
     angelTotal,
+    isRecommended = false,
     handleCheckout,
 }: PricingCardProps) {
     const price = tier.isLifetime
@@ -48,24 +50,27 @@ export function PricingCard({
     const isFreeTier = tier.key === 'free';
     const isCurrentPlan = tier.key === currentTier;
     const isLoading = loadingTier === priceKey;
+    const annualMonthlyEquivalent = isYearly && tier.yearlyPrice > 0
+        ? tier.yearlyPrice / 12
+        : null;
     const ctaText = isCurrentPlan
         ? 'Current Plan'
         : isFreeTier && currentTier === 'guest'
             ? 'Sign Up Free'
-            : tier.key === 'pro' && isYearly ? 'Get Pro Yearly' : tier.cta;
+            : tier.cta;
     const isDisabled = isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0) || (isFreeTier && currentTier !== 'guest');
 
     return (
         <div
-            className={`${styles.card} ${tier.popular ? styles.cardPopular : ''} ${tier.key === 'angel' ? styles.cardAngel : ''} ${isCurrentPlan ? styles.cardCurrent : ''}`}
+            className={`${styles.card} ${tier.popular ? styles.cardPopular : ''} ${tier.key === 'angel' ? styles.cardAngel : ''} ${isRecommended ? styles.cardRecommended : ''} ${isCurrentPlan ? styles.cardCurrent : ''}`}
         >
             {isCurrentPlan ? (
                 <div className={`${styles.cardBadge} ${styles.cardBadgeCurrent}`}>
                     Current Plan
                 </div>
-            ) : tier.badge && (
-                <div className={`${styles.cardBadge} ${tier.popular ? styles.cardBadgePopular : ''} ${tier.key === 'angel' ? styles.cardBadgeAngel : ''}`}>
-                    {tier.badge}
+            ) : (isRecommended || tier.badge) && (
+                <div className={`${styles.cardBadge} ${(tier.popular || isRecommended) ? styles.cardBadgePopular : ''} ${tier.key === 'angel' ? styles.cardBadgeAngel : ''}`}>
+                    {isRecommended ? 'Recommended for you' : tier.badge}
                 </div>
             )}
 
@@ -87,17 +92,24 @@ export function PricingCard({
                     </>
                 ) : (
                     <>
-                        {isYearly && tier.monthlyPrice > 0 && (
+                        {!isYearly && (
                             <span className={styles.priceOriginal}>
-                                ${(tier.monthlyPrice * 12).toFixed(2)}/yr
+                                Pay monthly, cancel anytime
                             </span>
                         )}
-                        <span className={styles.priceAmount}>{formatPrice(price)}</span>
+                        <span className={styles.priceAmount}>
+                            {formatPrice(annualMonthlyEquivalent ?? price)}
+                        </span>
                         <span className={styles.pricePeriod}>
-                            /{isYearly ? 'year' : 'month'}
+                            /month
                         </span>
                         {isYearly && savings && savings > 0 && (
                             <span className={styles.priceSavings}>Save {savings}%</span>
+                        )}
+                        {isYearly && (
+                            <span className={styles.annualBilling}>
+                                Billed ${tier.yearlyPrice.toFixed(2)} annually
+                            </span>
                         )}
                     </>
                 )}
@@ -115,9 +127,9 @@ export function PricingCard({
                 </div>
             )}
 
-            {tier.trialDays > 0 && !isYearly && (
+            {tier.trialDays > 0 && (
                 <div className={styles.trialBadge}>
-                    {tier.trialDays} day free trial. Cancel anytime.
+                    {tier.trialDays}-day free trial. No charge today.
                 </div>
             )}
 
@@ -126,15 +138,6 @@ export function PricingCard({
                     <li key={f} className={styles.featureItem}>
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        {f}
-                    </li>
-                ))}
-                {tier.excluded.map((f) => (
-                    <li key={f} className={`${styles.featureItem} ${styles.featureExcluded}`}>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                         {f}
                     </li>

@@ -8,7 +8,7 @@ export function FaqSection() {
             <div className={styles.faqGrid}>
                 <div className={styles.faqItem}>
                     <h3>How does the free trial work?</h3>
-                    <p>The Pro monthly plan includes a 7 day trial. You are charged only after the trial ends, and you can cancel before then.</p>
+                    <p>Every Pro and Analyst subscription includes a 14-day trial on monthly or annual billing. A payment method is required, but you are charged only after the trial ends and can cancel beforehand.</p>
                 </div>
                 <div className={styles.faqItem}>
                     <h3>What is the core difference between Free and paid?</h3>
@@ -16,7 +16,7 @@ export function FaqSection() {
                 </div>
                 <div className={styles.faqItem}>
                     <h3>Can I switch plans?</h3>
-                    <p>Yes. You can upgrade, downgrade, or cancel from your account settings. Changes apply on your next billing cycle.</p>
+                    <p>Yes. You can upgrade, downgrade, or cancel from your account settings. Stripe shows the effective date and any prorated amount before you confirm a plan change.</p>
                 </div>
                 <div className={styles.faqItem}>
                     <h3>What happens when I cancel?</h3>

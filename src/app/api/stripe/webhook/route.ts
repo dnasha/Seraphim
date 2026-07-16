@@ -56,8 +56,10 @@ export async function POST(request: NextRequest) {
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
       case 'invoice.payment_succeeded':
+        await handleInvoiceSubscription(event.data.object as Stripe.Invoice, 'succeeded');
+        break;
       case 'invoice.payment_failed':
-        await handleInvoiceSubscription(event.data.object as Stripe.Invoice);
+        await handleInvoiceSubscription(event.data.object as Stripe.Invoice, 'failed');
         break;
       default:
         break;
@@ -132,7 +134,7 @@ async function transitionCheckoutIntent(
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.supabase_user_id;
   const priceKey = session.metadata?.price_key;
-  if (!userId || !priceKey) throw new Error('checkout_metadata_missing');
+  if (!userId || !priceKey || !(priceKey in STRIPE_PRICES)) throw new Error('checkout_metadata_missing');
 
   if (session.mode === 'payment' && priceKey === 'angel') {
     if (!canFulfillAngelCheckout({
@@ -185,6 +187,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     await transitionCheckoutIntent(session, 'completed');
     await recordMetric({ kind: 'operational', service: 'billing', name: 'angel_checkout_completed' });
+    await recordMetric({ kind: 'conversion', service: 'billing', name: 'purchase_completed.angel.lifetime' });
     return;
   }
 
@@ -196,6 +199,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     await syncSubscription(userId, subscription);
     await transitionCheckoutIntent(session, 'completed');
     await recordMetric({ kind: 'operational', service: 'billing', name: 'subscription_checkout_completed' });
+    await recordMetric({ kind: 'conversion', service: 'billing', name: `checkout_completed.${priceKey}` });
+    if (subscription.status === 'trialing') {
+      await recordMetric({ kind: 'conversion', service: 'billing', name: `trial_started.${priceKey}` });
+    }
   }
 }
 
@@ -223,13 +230,29 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   await downgradeSubscription(userId);
 }
 
-async function handleInvoiceSubscription(invoice: Stripe.Invoice) {
+async function handleInvoiceSubscription(invoice: Stripe.Invoice, outcome: 'succeeded' | 'failed') {
   const reference = invoice.parent?.subscription_details?.subscription;
   if (!reference) return;
   const subscriptionId = typeof reference === 'string' ? reference : reference.id;
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   const userId = await resolveSubscriptionUserId(subscription);
-  if (userId) await syncSubscription(userId, subscription);
+  if (!userId) return;
+  await syncSubscription(userId, subscription);
+
+  const priceId = subscription.items.data[0]?.price?.id ?? '';
+  const tier = tierFromPriceId(priceId);
+  if (tier === 'free') return;
+  const interval = intervalFromPriceId(priceId);
+  if (outcome === 'succeeded' && invoice.amount_paid > 0) {
+    await recordMetric({
+      kind: 'conversion',
+      service: 'billing',
+      name: `invoice_paid.${tier}.${interval}`,
+      value: invoice.amount_paid,
+    });
+  } else if (outcome === 'failed') {
+    await recordMetric({ kind: 'conversion', service: 'billing', name: `invoice_failed.${tier}.${interval}` });
+  }
 }
 
 async function resolveSubscriptionUserId(subscription: Stripe.Subscription) {
