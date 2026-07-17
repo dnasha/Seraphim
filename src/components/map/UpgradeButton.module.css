@@ -29,9 +29,9 @@
     user-select: none;
 }
 
-/* Shift right when sidebar is collapsed to clear the expand button */
+/* Clear both collapsed controls: the sidebar toggle and floating profile button. */
 .upgradeBtnShifted {
-    left: calc(max(var(--space-sm), env(safe-area-inset-left)) + 50px);
+    left: calc(max(var(--space-sm), env(safe-area-inset-left)) + 100px);
 }
 
 @keyframes upgradeGlow {
@@ -80,6 +80,6 @@
     }
 
     .upgradeBtnShifted {
-        left: calc(var(--space-sm) + 52px);
+        left: calc(var(--space-sm) + 104px);
     }
 }

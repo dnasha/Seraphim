@@ -221,5 +221,10 @@ describe('backend hardening primitives', () => {
     expect(buildCspReportOnly('production')).toContain("script-src 'self' 'unsafe-inline'");
     expect(buildCspReportOnly('production')).not.toContain("'unsafe-eval'");
     expect(buildCspReportOnly('development')).toContain("'unsafe-eval'");
+    expect(buildCspReportOnly('production')).toContain('https://va.vercel-scripts.com');
+    expect(buildCspReportOnly('production')).toContain('https://protomaps.github.io');
+    expect(buildCspReportOnly('production')).toContain('https://tiles.seraphi.me');
+    expect(buildCspReportOnly('production')).toContain('report-uri /api/csp-report');
+    expect(buildCspReportOnly('development')).not.toContain('report-uri /api/csp-report');
   });
 });

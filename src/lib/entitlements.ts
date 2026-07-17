@@ -5,6 +5,7 @@
  */
 
 export type UserTier = 'guest' | 'free' | 'pro' | 'analyst' | 'angel';
+export type RequiredAccessTier = Exclude<UserTier, 'guest' | 'free'> | 'free';
 export type TimeRangeKey = '1d' | '3d' | '1w' | '1m' | 'custom';
 
 export type EntitlementFeature =
@@ -144,4 +145,13 @@ export function canUseMapStyle(tier: UserTier, style: string): boolean {
 export function requiredTierForFeature(feature: EntitlementFeature): UserTier {
   const tiers: UserTier[] = ['free', 'pro', 'analyst'];
   return tiers.find((tier) => TIER_ENTITLEMENTS[tier].features[feature]) ?? 'analyst';
+}
+
+export function getAccessRequirementTooltip(
+  featureName: string,
+  requiredTier: RequiredAccessTier,
+): string {
+  if (requiredTier === 'free') return `${featureName} requires a free account`;
+  const tierLabel = requiredTier[0].toUpperCase() + requiredTier.slice(1);
+  return `${featureName} requires the ${tierLabel} plan`;
 }

@@ -148,10 +148,10 @@ export default function PWAInstallPrompt() {
             </div>
           </div>
           <div className={styles.pwaActions}>
-            <button className={styles.dismissBtn} onClick={handleDismiss} aria-label="Dismiss install prompt">
+            <button className={styles.dismissBtn} onClick={handleDismiss} aria-label="Dismiss install prompt" title="Dismiss the install prompt for now">
               Later
             </button>
-            <button className={styles.installBtn} onClick={handleInstallClick}>
+            <button className={styles.installBtn} onClick={handleInstallClick} title="Install Seraphim as an app on this device">
               Install Now
             </button>
           </div>
@@ -160,7 +160,7 @@ export default function PWAInstallPrompt() {
         <div className={styles.iosInstructionsCard}>
           <div className={styles.iosHeader}>
             <h3>Install Seraphim on iOS</h3>
-            <button className={styles.iosCloseBtn} onClick={handleDismiss} aria-label="Close instructions">
+            <button className={styles.iosCloseBtn} onClick={handleDismiss} aria-label="Close instructions" title="Close the iOS installation instructions">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
@@ -190,7 +190,7 @@ export default function PWAInstallPrompt() {
             </li>
           </ol>
           <div className={styles.iosFooter}>
-            <button className={styles.iosDoneBtn} onClick={handleDismiss}>
+            <button className={styles.iosDoneBtn} onClick={handleDismiss} title="Close the iOS installation instructions">
               Got It
             </button>
           </div>

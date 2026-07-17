@@ -141,7 +141,7 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                      */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
-                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode">
+                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode" title={forceIndividualPins ? 'Group nearby events into clusters' : 'Show every event as an individual pin'}>
                             <span className={styles.settingsToggleLabel}>Force individual pins</span>
                             <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
@@ -158,12 +158,12 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                      */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Visuals</div>
-                        <div className={styles.settingsToggle} onClick={() => onAnimatedEffectsChange(!animatedEffects)} style={{ cursor: 'pointer' }}>
+                        <button className={styles.settingsToggle} onClick={() => onAnimatedEffectsChange(!animatedEffects)} title={`${animatedEffects ? 'Disable' : 'Enable'} animated map and story effects`}>
                             <span className={styles.settingsToggleLabel}>Animated effects</span>
                             <div className={`${styles.toggleSwitch}${animatedEffects ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
-                        </div>
+                        </button>
                     </div>
                 </div>
             )}

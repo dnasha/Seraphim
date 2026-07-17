@@ -1,29 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
 import { parseCspReport } from '@/lib/security/cspReport';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
-import { recordIncident, recordMetric } from '@/lib/server/operations';
+import { createLocalFixedWindowLimiter, createThrottledDiagnostic } from '@/lib/security/localRateLimit';
+import { recordIncident, recordMetric, serverDiagnostic } from '@/lib/server/operations';
 
 export const runtime = 'nodejs';
 
 const MAX_REPORT_BYTES = 16_384;
-const localBuckets = new Map<string, { count: number; resetAt: number }>();
+const CLIENT_REPORTS_PER_MINUTE = 12;
+const FINGERPRINT_SAMPLES_PER_WINDOW = 3;
+const FINGERPRINT_SAMPLE_WINDOW_MINUTES = 10;
+const GLOBAL_REPORTS_PER_MINUTE = 60;
 
-function acceptReport(request: NextRequest) {
-  const key = getTrustedClientIp(request.headers) ?? (process.env.NODE_ENV === 'development' ? 'local' : null);
-  if (!key) return false;
+const distributedRateLimitConfigured = process.env.NODE_ENV === 'test' || Boolean(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+);
+const redis = distributedRateLimitConfigured ? Redis.fromEnv() : null;
+const clientRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(CLIENT_REPORTS_PER_MINUTE, '1 m'),
+      analytics: false,
+      prefix: '@upstash/ratelimit/seraphim-csp-client',
+    })
+  : null;
+const fingerprintSampleLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(
+        FINGERPRINT_SAMPLES_PER_WINDOW,
+        `${FINGERPRINT_SAMPLE_WINDOW_MINUTES} m`,
+      ),
+      analytics: false,
+      prefix: '@upstash/ratelimit/seraphim-csp-fingerprint',
+    })
+  : null;
+const globalReportLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(GLOBAL_REPORTS_PER_MINUTE, '1 m'),
+      analytics: false,
+      prefix: '@upstash/ratelimit/seraphim-csp-global',
+    })
+  : null;
+
+// These bounded per-instance gates keep malformed or repetitive traffic away
+// from Redis and remain as a hard fallback if the distributed limiter fails.
+const localClientLimit = createLocalFixedWindowLimiter({
+  limit: CLIENT_REPORTS_PER_MINUTE,
+  windowMs: 60_000,
+  maxEntries: 5_000,
+});
+const localFingerprintSampleLimit = createLocalFixedWindowLimiter({
+  limit: 1,
+  windowMs: FINGERPRINT_SAMPLE_WINDOW_MINUTES * 60_000,
+  maxEntries: 2_000,
+});
+const localGlobalReportLimit = createLocalFixedWindowLimiter({
+  limit: GLOBAL_REPORTS_PER_MINUTE,
+  windowMs: 60_000,
+  maxEntries: 1,
+});
+const reportDistributedLimitUnavailable = createThrottledDiagnostic(() => {
+  serverDiagnostic('csp_rate_limit_unavailable');
+});
+
+async function acceptReport(clientIp: string, fingerprint: string) {
   const now = Date.now();
-  const bucket = localBuckets.get(key);
-  if (!bucket || now >= bucket.resetAt) {
-    localBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+  if (!localClientLimit.check([clientIp], now).success) return false;
+  if (!localFingerprintSampleLimit.check([fingerprint], now).success) return false;
+  if (!localGlobalReportLimit.check(['all'], now).success) return false;
+
+  if (!clientRateLimit || !fingerprintSampleLimit || !globalReportLimit) {
+    reportDistributedLimitUnavailable(now);
     return true;
   }
-  bucket.count += 1;
-  return bucket.count <= 30;
+
+  try {
+    const results = await Promise.all([
+      clientRateLimit.limit(clientIp),
+      fingerprintSampleLimit.limit(fingerprint),
+      globalReportLimit.limit('all'),
+    ]);
+    return results.every(({ success }) => success);
+  } catch {
+    // Preserve a small amount of observability during a Redis outage. The
+    // bounded local gates above still cap writes from this server instance.
+    reportDistributedLimitUnavailable(now);
+    return true;
+  }
 }
 
 export async function POST(request: NextRequest) {
-  if (!acceptReport(request)) return new NextResponse(null, { status: 204 });
+  // Development policies intentionally omit report-uri. Also refuse manual or
+  // stale-page reports so local testing can never write CSP noise to Supabase.
+  if (process.env.NODE_ENV === 'development') {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const clientIp = getTrustedClientIp(request.headers);
+  if (!clientIp) return new NextResponse(null, { status: 204 });
+
+  const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (contentType !== 'application/csp-report') {
+    return new NextResponse(null, { status: 204 });
+  }
 
   const contentLength = Number.parseInt(request.headers.get('content-length') ?? '0', 10);
   if (Number.isFinite(contentLength) && contentLength > MAX_REPORT_BYTES) {
@@ -43,6 +127,11 @@ export async function POST(request: NextRequest) {
   const report = parseCspReport(parsedBody);
   if (!report) return new NextResponse(null, { status: 204 });
 
+  const fingerprint = `${report.effectiveDirective}:${report.blockedOrigin}`;
+  if (!await acceptReport(clientIp, fingerprint)) {
+    return new NextResponse(null, { status: 204 });
+  }
+
   await Promise.all([
     recordMetric({
       kind: 'operational',
@@ -58,6 +147,9 @@ export async function POST(request: NextRequest) {
         effectiveDirective: report.effectiveDirective,
         blockedOrigin: report.blockedOrigin,
         sourceOrigin: report.sourceOrigin,
+        sampled: true,
+        sampleLimit: FINGERPRINT_SAMPLES_PER_WINDOW,
+        sampleWindowMinutes: FINGERPRINT_SAMPLE_WINDOW_MINUTES,
       },
     }),
   ]);

@@ -29,6 +29,7 @@ export const MAP_STYLES: Record<
     isPmtiles?: boolean;
     theme?: string;
     isMapTiler?: boolean;
+    showsMapTilerLogo?: boolean;
     requiresEntitlement?: boolean;
   }
 > = {
@@ -68,12 +69,14 @@ export const MAP_STYLES: Record<
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Satellite",
+    showsMapTilerLogo: true,
     requiresEntitlement: true,
   },
   topographic: {
     url: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     attribution: '<a href="https://www.maptiler.com/copyright/">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Terrain",
+    showsMapTilerLogo: true,
     requiresEntitlement: true,
   },
 };

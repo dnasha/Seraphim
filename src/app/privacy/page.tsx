@@ -77,7 +77,7 @@ export default function PrivacyPage() {
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>11. Contact Information</h2>
             <p className={styles.text}>
-              If you have any questions, concerns, or requests regarding this Privacy Policy or your data, please contact us at <a href="mailto:legal@seraphi.me" className={styles.link}>legal@seraphi.me</a>.
+              If you have any questions, concerns, or requests regarding this Privacy Policy or your data, please contact us at <a href="mailto:legal@seraphi.me" className={styles.link} title="Email the Seraphim privacy contact">legal@seraphi.me</a>.
             </p>
           </section>
         </main>

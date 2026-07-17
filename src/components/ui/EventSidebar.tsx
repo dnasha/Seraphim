@@ -245,7 +245,7 @@ export default function EventSidebar({
 
       <div className={styles.eventSidebarHeader}>
         <div className={styles.eventSidebarLogo}>
-          <Link href="/" className={styles.logoLink}>
+          <Link href="/" className={styles.logoLink} title="Return to the live intelligence map">
             <svg
               className={styles.sidebarLogoImg}
               width="200"
@@ -281,6 +281,7 @@ export default function EventSidebar({
               className={`${styles.sidebarToggleBtn} ${styles.sidebarCollapseBtn}`}
               onClick={onToggleSidebar}
               aria-label="Collapse sidebar"
+              title="Collapse the story sidebar"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -295,6 +296,7 @@ export default function EventSidebar({
               className={`${styles.sidebarToggleBtn} ${styles.mobileCloseBtn}`}
               onClick={onToggleSidebar}
               aria-label="Close sidebar"
+              title="Close the story sidebar"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -328,6 +330,7 @@ export default function EventSidebar({
             onChange={(e) => onSearchChange(e.target.value)}
             className={styles.statsSearchInput}
             disabled={disabled}
+            title={disabled ? 'Story search requires a free account' : 'Search stories by keyword'}
           />
         </div>
       </div>
@@ -341,6 +344,7 @@ export default function EventSidebar({
             aria-pressed={sortMode === "new"}
             aria-label="Sort by new"
             aria-disabled={disabled}
+            title={disabled ? 'Story sorting requires a free account' : 'Sort stories by newest first'}
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
               <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
@@ -353,6 +357,7 @@ export default function EventSidebar({
             aria-pressed={sortMode === "hot"}
             aria-label="Sort by hot"
             aria-disabled={disabled}
+            title={disabled ? 'Story sorting requires a free account' : 'Sort stories by activity and impact'}
           >
             <svg
               viewBox="0 0 46.11 46.11"
@@ -377,6 +382,9 @@ export default function EventSidebar({
           aria-pressed={isFiltersExpanded}
           aria-label="Toggle filters"
           aria-disabled={disabled}
+          title={disabled
+            ? 'Story filters require a free account'
+            : isFiltersExpanded ? 'Hide story filters' : 'Show story filters'}
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
             <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
@@ -468,6 +476,7 @@ export default function EventSidebar({
                     <button
                       className={styles.guestCtaButton}
                       onClick={() => setShowAuthModal(true)}
+                      title="Sign in or create a free account to unlock filters and more events"
                     >
                       SIGN IN TO UNLOCK
                     </button>
@@ -477,6 +486,7 @@ export default function EventSidebar({
                         href="/terms?from=guest"
                         className={styles.guestLink}
                         prefetch={false}
+                        title="Read the Terms of Service"
                       >
                         Terms of Service
                       </Link>{" "}
@@ -485,6 +495,7 @@ export default function EventSidebar({
                         href="/privacy?from=guest"
                         className={styles.guestLink}
                         prefetch={false}
+                        title="Read the Privacy Policy"
                       >
                         Privacy Policy
                       </Link>

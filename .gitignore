@@ -50,7 +50,8 @@ GEMINI.md
 supabase/
 copilot-instructions.md
 
-docs/
+/docs/
+docs/*
 
 skills-lock.json
 .agents

@@ -16,7 +16,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MapPopup from "./MapPopup";
 
-import { getMapLibreStyle } from "./MapConstants";
+import { getMapLibreStyle, MAP_STYLES } from "./MapConstants";
 import {
   canonicalEventCount,
   canonicalNewsId,
@@ -29,9 +29,8 @@ import { useMapCamera } from "./useMapCamera";
 import { startVisiblePolling } from "./overlayPolling";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
-import MapError from "./MapError";
-import MapLoading from "./MapLoading";
 import UpgradeButton from "./UpgradeButton";
+import StateNotice from "@/components/ui/StateNotice";
 import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
@@ -125,9 +124,11 @@ export default function NewsMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pulseAnimationFrameRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
   const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
+  const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -168,6 +169,9 @@ export default function NewsMap({
 
   useEffect(() => {
     currentStyleRef.current = currentStyle;
+    if (mapTilerLogoRef.current) {
+      mapTilerLogoRef.current.hidden = !MAP_STYLES[currentStyle]?.showsMapTilerLogo;
+    }
   }, [currentStyle]);
 
   useEffect(() => {
@@ -427,6 +431,7 @@ export default function NewsMap({
     }
 
     recoveryAttemptsRef.current.push(now);
+    setIsChangingStyle(false);
     setMapError(null);
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
@@ -528,7 +533,10 @@ export default function NewsMap({
 
       if (map.isStyleLoaded()) {
         addSourcesAndLayers(map)
-          .then(() => setMapReady(true))
+          .then(() => {
+            setIsChangingStyle(false);
+            setMapReady(true);
+          })
           .catch(() => scheduleMapRecovery("post-restore layer rebuild"));
       }
     });
@@ -587,6 +595,33 @@ export default function NewsMap({
       new maplibregl.AttributionControl({ compact: false }),
       "bottom-right",
     );
+    const mapTilerLogo = document.createElement("a");
+    mapTilerLogo.className = `maplibregl-ctrl ${styles.mapTilerLogoControl}`;
+    mapTilerLogo.href = "https://www.maptiler.com";
+    mapTilerLogo.target = "_blank";
+    mapTilerLogo.rel = "noopener noreferrer";
+    mapTilerLogo.title = "MapTiler";
+    mapTilerLogo.setAttribute("aria-label", "MapTiler");
+    mapTilerLogo.hidden = !MAP_STYLES[currentStyleRef.current]?.showsMapTilerLogo;
+
+    const mapTilerLogoImage = document.createElement("img");
+    mapTilerLogoImage.src = "https://api.maptiler.com/resources/logo.svg";
+    mapTilerLogoImage.alt = "MapTiler";
+    mapTilerLogo.appendChild(mapTilerLogoImage);
+
+    const mapTilerLogoControl = {
+      onAdd: () => {
+        mapTilerLogoRef.current = mapTilerLogo;
+        return mapTilerLogo;
+      },
+      onRemove: () => {
+        mapTilerLogo.remove();
+        if (mapTilerLogoRef.current === mapTilerLogo) {
+          mapTilerLogoRef.current = null;
+        }
+      },
+    };
+    map.addControl(mapTilerLogoControl, "bottom-right");
 
     popupRef.current = new maplibregl.Popup({
       closeButton: true,
@@ -707,6 +742,7 @@ export default function NewsMap({
             }
           });
         }
+        setIsChangingStyle(false);
         setMapReady(true);
       });
     });
@@ -752,6 +788,7 @@ export default function NewsMap({
   }, [retryCount]);
 
   const handleRetry = useCallback(() => {
+    setIsChangingStyle(false);
     setMapError(null);
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
@@ -1107,8 +1144,27 @@ export default function NewsMap({
 
   return (
     <div className={styles.mapWrapper}>
-      {!mapReady && !mapError && <MapLoading />}
-      {mapError && <MapError onRetry={handleRetry} error={mapError} />}
+      {!mapReady && !mapError && (
+        <StateNotice
+          placement="overlay"
+          variant="loading"
+          title={isChangingStyle ? "Updating map" : "Loading map"}
+          message={isChangingStyle
+            ? "Applying the selected map style and restoring your layers."
+            : "Preparing the map and latest layers."}
+        />
+      )}
+      {mapError && (
+        <StateNotice
+          placement="overlay"
+          variant="error"
+          title="Map unavailable"
+          message={mapError}
+          actionLabel="Retry"
+          actionTitle="Retry loading the map"
+          onAction={handleRetry}
+        />
+      )}
 
       {/* Upgrade CTA for non-paying users */}
       {!tierLoading && userTier === 'free' && (
@@ -1120,6 +1176,7 @@ export default function NewsMap({
           <MapSettings
             mapStyle={currentStyle}
             onStyleChange={(style) => {
+              setIsChangingStyle(true);
               setCurrentStyle(style);
               onSyncedPreferencesChange?.({ mapStyle: style });
             }}

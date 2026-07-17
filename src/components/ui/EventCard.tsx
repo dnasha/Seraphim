@@ -14,7 +14,7 @@ import React from "react";
 import Image from "next/image";
 import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
-import { GatedButton } from './FeatureGate';
+import TimelineGateCta from './TimelineGateCta';
 
 interface EventCardProps {
   item: NewsItem;
@@ -75,6 +75,10 @@ export default function EventCard({
     );
   const visibleSources = sortedSources;
   const timelineLocked = sourceCount > 1 && !hasFeature(userTier, 'fullTimeline');
+  const hiddenSourceCount = item.timelineRestricted
+    ? Math.max(0, (item.totalSources ?? sourceCount) - visibleSources.length)
+    : 0;
+  const showTimelineGap = hiddenSourceCount > 0 && visibleSources.length > 1;
 
   return (
     /** Gutter padding for Virtuoso virtualization items */
@@ -108,6 +112,7 @@ export default function EventCard({
         }
         role="button"
         tabIndex={0}
+        title={isExpanded ? 'Collapse story details' : 'Expand story details'}
         aria-expanded={isExpanded}
         aria-pressed={isSelected}
         onKeyDown={(e) => {
@@ -267,6 +272,7 @@ export default function EventCard({
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                title="Open the original source in a new tab"
               >
                 View source →
               </a>
@@ -284,7 +290,14 @@ export default function EventCard({
               <span className={styles.storyTimelineTitle}>
                 Story Timeline
               </span>
-              {sourceCount > 1 && (
+              <div className={styles.storyTimelineActions}>
+                {timelineLocked && (
+                  <TimelineGateCta
+                    userTier={userTier}
+                    className={styles.timelineUpgradeBtn}
+                    guestClassName={styles.timelineGuestCta}
+                  />
+                )}
                 <span
                   className={styles.sourceCountBadge}
                   title={`${sourceCount} sources reporting on this`}
@@ -294,17 +307,7 @@ export default function EventCard({
                   </svg>
                   {sourceCount}
                 </span>
-              )}
-              {timelineLocked && (
-                <GatedButton
-                  className={styles.timelineUpgradeBtn}
-                  allowed={false}
-                  requiredTier="pro"
-                  featureName="Full story timeline"
-                >
-                  Unlock full timeline
-                </GatedButton>
-              )}
+              </div>
             </div>
             <div className={styles.timelineList}>
               {item.sources == null ? (
@@ -325,33 +328,47 @@ export default function EventCard({
                     /* ignore */
                   }
                   return (
-                    <div
-                      key={`${src.url}-${i}`}
-                      className={styles.timelineEntry}
-                    >
-                      {srcTimeAgo && (
-                        <span className={styles.timelineEntryTime}>
-                          {srcTimeAgo}
+                    <React.Fragment key={`${src.url}-${i}`}>
+                      <div className={styles.timelineEntry}>
+                        {srcTimeAgo && (
+                          <span className={styles.timelineEntryTime}>
+                            {srcTimeAgo}
+                          </span>
+                        )}
+                        <span
+                          className={styles.timelineEntrySource}
+                          style={{
+                            background: srcStyle.bg,
+                            color: srcStyle.color,
+                          }}
+                        >
+                          {src.name}
                         </span>
+                        <a
+                          className={styles.timelineEntryLink}
+                          href={src.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Open ${src.name} in a new tab`}
+                        >
+                          {new URL(src.url).hostname}
+                        </a>
+                      </div>
+                      {showTimelineGap && i === 0 && (
+                        <div
+                          className={styles.timelineGap}
+                          role="note"
+                          aria-label={`Showing the latest and first sources, with ${hiddenSourceCount} ${hiddenSourceCount === 1 ? 'source' : 'sources'} hidden between them.`}
+                        >
+                          <span className={styles.timelineGapLine} />
+                          <span className={styles.timelineGapCopy}>
+                            <strong>{hiddenSourceCount} {hiddenSourceCount === 1 ? 'source' : 'sources'} hidden</strong>
+                            <small>Latest above · first source below</small>
+                          </span>
+                          <span className={styles.timelineGapLine} />
+                        </div>
                       )}
-                      <span
-                        className={styles.timelineEntrySource}
-                        style={{
-                          background: srcStyle.bg,
-                          color: srcStyle.color,
-                        }}
-                      >
-                        {src.name}
-                      </span>
-                      <a
-                        className={styles.timelineEntryLink}
-                        href={src.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {new URL(src.url).hostname}
-                      </a>
-                    </div>
+                    </React.Fragment>
                   );
                 })
               )}

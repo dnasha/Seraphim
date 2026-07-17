@@ -289,7 +289,10 @@ export default function FilterBar({
                                         className={`${styles.categoryToggle} ${isActive ? styles.categoryToggleActive : ''}`}
                                         onClick={() => !disabled && toggleCategory(cat.value)}
                                         aria-pressed={isActive}
-                                        disabled={disabled}
+                                        aria-disabled={disabled}
+                                        title={disabled
+                                            ? 'Category filters require a free account'
+                                            : `${isActive ? 'Remove' : 'Apply'} the ${cat.label.toLowerCase()} category filter`}
                                         style={{
                                             '--btn-color': color,
                                             borderColor: isActive ? color : undefined,
@@ -325,8 +328,11 @@ export default function FilterBar({
                                         onClick={() => handleTimeToggleClick(option.value)}
                                         aria-pressed={timeRange === option.value}
                                         allowed={!disabled && canUseTimeRange(userTier, option.value)}
-                                        requiredTier={option.value === 'custom' ? 'analyst' : 'pro'}
+                                        requiredTier={option.value === '1d' ? 'free' : option.value === 'custom' ? 'analyst' : 'pro'}
                                         featureName={option.value === 'custom' ? 'Custom date windows' : `${option.label} history`}
+                                        title={option.value === 'custom'
+                                            ? 'Choose an exact start and end date'
+                                            : `Show stories from the past ${option.label.toLowerCase()}`}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {option.value === 'custom' && (
@@ -352,6 +358,7 @@ export default function FilterBar({
                                     className={styles.closePickerBtn} 
                                     onClick={() => setIsPickerOpen(false)}
                                     aria-label="Close picker"
+                                    title="Close the custom date picker"
                                 >
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                         <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
@@ -371,6 +378,7 @@ export default function FilterBar({
                                                         min="2026-04-11T00:00"
                                                         max={customEndDate || nowStr}
                                                         onChange={(e) => onCustomStartDateChange?.(e.target.value)}
+                                                        title="Set the beginning of the custom date range"
                                                     />
                                                 </div>
                                                 <div className={styles.dateInputGroup}>
@@ -382,6 +390,7 @@ export default function FilterBar({
                                                         min={customStartDate || "2026-04-11T00:00"}
                                                         max={nowStr}
                                                         onChange={(e) => onCustomEndDateChange?.(e.target.value)}
+                                                        title="Set the end of the custom date range"
                                                     />
                                                 </div>
                                                 <div className={styles.pickerFooter}>
@@ -391,6 +400,7 @@ export default function FilterBar({
                                                             e.preventDefault();
                                                             resetTo24h();
                                                         }}
+                                                        title="Reset the custom range to the past 24 hours"
                                                     >
                                                         Reset
                                                     </button>
@@ -415,7 +425,10 @@ export default function FilterBar({
                                         className={`${styles.sourceToggle} ${isActive ? styles.sourceToggleActive : ''}`}
                                         onClick={() => !disabled && toggleSource(option.value)}
                                         aria-pressed={isActive}
-                                        disabled={disabled}
+                                        aria-disabled={disabled}
+                                        title={disabled
+                                            ? 'Source filters require a free account'
+                                            : `${isActive ? 'Hide' : 'Show'} stories from ${option.label}`}
                                         style={{
                                             '--btn-color': option.bg,
                                             backgroundColor: isActive ? option.bg : undefined,
@@ -450,6 +463,9 @@ export default function FilterBar({
                                         allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
                                         requiredTier="pro"
                                         featureName="Story-volume filtering"
+                                        title={opt.value === 1
+                                            ? 'Show stories regardless of source count'
+                                            : `Show stories reported by at least ${opt.value} sources`}
                                         style={{ '--btn-color': 'var(--accent)' } as React.CSSProperties}
                                     >
                                         {renderVolumeIcon(isActive, isActive ? '#ffffff' : 'var(--text-secondary)')}
@@ -473,6 +489,11 @@ export default function FilterBar({
                                         const val = rawVal === '' ? 1 : Math.max(1, parseInt(rawVal) || 1);
                                         onMinVolumeChange(val);
                                     }}
+                                    title={disabled
+                                        ? 'Story-volume filtering requires a free account and the Pro plan'
+                                        : !hasFeature(userTier, 'advancedFilters')
+                                            ? 'Custom story-volume filtering requires the Pro plan'
+                                            : 'Set a custom minimum number of reporting sources'}
                                 />
                             </div>
                         </div>
@@ -494,6 +515,7 @@ export default function FilterBar({
                                         allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
                                         requiredTier="pro"
                                         featureName="Credibility filtering"
+                                        title={`${isActive ? 'Exclude' : 'Include'} ${opt.label.toLowerCase()} sources`}
                                         style={{
                                             '--btn-color': opt.color,
                                             backgroundColor: isActive ? opt.color : undefined,

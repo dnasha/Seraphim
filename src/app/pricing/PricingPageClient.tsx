@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import StateNotice from '@/components/ui/StateNotice';
 import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
@@ -118,7 +119,7 @@ export function PricingPageClient({
                 {/* Header */}
                 <header className={styles.header}>
                     <div className={styles.headerLeft}>
-                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back">
+                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back" title="Return to the previous page">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="19" y1="12" x2="5" y2="12"></line>
                                 <polyline points="12 19 5 12 12 5"></polyline>
@@ -178,43 +179,14 @@ export function PricingPageClient({
 
                 {/* Error Toast */}
                 {errorMsg && (
-                    <div
-                        style={{
-                            position: 'fixed',
-                            bottom: '24px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            background: '#ef4444',
-                            color: '#fff',
-                            padding: '12px 24px',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '0.875rem',
-                            fontWeight: 600,
-                            zIndex: 1000,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            boxShadow: '0 8px 32px rgba(239, 68, 68, 0.35)',
-                            animation: 'fadeIn 0.2s ease-out',
-                        }}
-                    >
-                        {errorMsg}
-                        <button
-                            onClick={() => setErrorMsg(null)}
-                            style={{
-                                background: 'rgba(255,255,255,0.2)',
-                                border: 'none',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                borderRadius: '4px',
-                                padding: '2px 8px',
-                                fontSize: '0.8125rem',
-                                fontWeight: 700,
-                            }}
-                        >
-                            ✕
-                        </button>
-                    </div>
+                    <StateNotice
+                        placement="floating"
+                        variant="error"
+                        title="Checkout unavailable"
+                        message={errorMsg}
+                        onDismiss={() => setErrorMsg(null)}
+                        dismissLabel="Dismiss checkout error"
+                    />
                 )}
 
                 {/* Billing Toggle */}
@@ -224,6 +196,7 @@ export function PricingPageClient({
                         className={`${styles.toggleTrack} ${isYearly ? styles.toggleTrackActive : ''}`}
                         onClick={() => setIsYearly(!isYearly)}
                         aria-label="Toggle billing period"
+                        title={`Switch to ${isYearly ? 'monthly' : 'yearly'} billing`}
                     >
                         <div className={styles.toggleThumb} />
                     </button>
@@ -282,6 +255,7 @@ export function PricingPageClient({
                                 aria-selected={comparisonTier === tier}
                                 className={comparisonTier === tier ? styles.comparisonMobilePickerActive : ''}
                                 onClick={() => setComparisonTier(tier)}
+                                title={`Compare ${tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)} plan features`}
                             >
                                 {tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)}
                             </button>

@@ -1143,39 +1143,39 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Draw</div>
                   <div className={styles.grid}>
-                    <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => setActiveMode('select')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => setActiveMode('select')} title="Select and edit an existing drawing">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
                       Select
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => setActiveMode('polygon')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => setActiveMode('polygon')} title="Draw a polygon and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 14l5-9 9 3 4 10-10 3-8-7z"/></svg>
                       Area
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => setActiveMode('linestring')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => setActiveMode('linestring')} title="Draw a line and measure its distance">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21L21 3"/></svg>
                       Ruler
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => setActiveMode('rectangle')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => setActiveMode('rectangle')} title="Draw a rectangle and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
                       Rect
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => setActiveMode('circle')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => setActiveMode('circle')} title="Draw a circle and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
                       Circle
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => setActiveMode('point')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => setActiveMode('point')} title="Place a point marker on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                       Pin
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => setActiveMode('freehand-linestring')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => setActiveMode('freehand-linestring')} title="Draw a freehand line on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.58 7.58"/></svg>
                       Sketch
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => setActiveMode('text')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => setActiveMode('text')} title="Place a text annotation on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
                       Text
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'eraser' ? styles.active : ''}`} onClick={() => setActiveMode('eraser')}>
+                    <button className={`${styles.toolBtn} ${activeMode === 'eraser' ? styles.active : ''}`} onClick={() => setActiveMode('eraser')} title="Remove a drawing from the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
                         <path d="M22 21H7" />
@@ -1196,6 +1196,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         className={`${styles.colorBtn} ${activeColor.toLowerCase() === c.toLowerCase() ? styles.active : ''}`}
                         style={{ backgroundColor: c }}
                         onClick={() => setActiveColor(c)}
+                        title={`Use ${c} as the draw color`}
+                        aria-label={`Use ${c} as the draw color`}
                       />
                     ))}
                     <label
@@ -1209,6 +1211,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         value={activeColor}
                         onChange={handleCustomColorChange}
                         aria-label="Pick custom draw color"
+                        title="Pick a custom draw color"
                       />
                       <span className={styles.colorPickerGlyph}>+</span>
                     </label>
@@ -1251,7 +1254,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                     <button
                       className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
                       onClick={() => setActiveFill(!activeFill)}
-                      title="Toggle Fill"
+                      title={`${activeFill ? 'Disable' : 'Enable'} shape fill`}
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill={activeFill ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -1276,15 +1279,15 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
                 {/* Section 5: Actions */}
                 <div className={styles.actions}>
-                  <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear}>
+                  <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear} title="Remove all drawings and annotations from the map">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                     Clear
                   </button>
-                  <GatedButton className={styles.actionBtn} onClick={handleImport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON import">
+                  <GatedButton className={styles.actionBtn} onClick={handleImport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON import" title="Import drawings from a GeoJSON file">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     Import
                   </GatedButton>
-                  <GatedButton className={styles.actionBtn} onClick={handleExport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON export">
+                  <GatedButton className={styles.actionBtn} onClick={handleExport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON export" title="Export map drawings as a GeoJSON file">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                     Export
                   </GatedButton>

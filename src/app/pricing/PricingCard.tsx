@@ -148,6 +148,15 @@ export function PricingCard({
                 className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${(isFreeTier && currentTier !== 'guest') || isCurrentPlan ? styles.ctaBtnFree : ''}`}
                 disabled={isDisabled}
                 onClick={() => handleCheckout(priceKey)}
+                title={isCurrentPlan
+                    ? `${tier.name} is your current plan`
+                    : isLoading
+                        ? `Starting ${tier.name} checkout`
+                        : tier.key === 'angel' && angelRemaining === 0
+                            ? 'Angel founder memberships are sold out'
+                            : isFreeTier && currentTier !== 'guest'
+                                ? 'Your account already includes the Free plan'
+                                : `${ctaText}: ${tier.name} plan`}
             >
                 {isLoading ? (
                     <span className={styles.spinner} />

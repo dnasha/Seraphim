@@ -116,6 +116,7 @@ export default function UserButton({ variant = 'sidebar' }: UserButtonProps) {
                     <div className={styles.dropdownDivider} />
                     <button
                         className={styles.dropdownItem}
+                        title="Open account and subscription settings"
                         onMouseDown={() => {
                             setMenuOpen(false);
                             router.push('/account');
@@ -128,6 +129,7 @@ export default function UserButton({ variant = 'sidebar' }: UserButtonProps) {
                     </button>
                     <button
                         className={styles.dropdownItem}
+                        title="Sign out of Seraphim"
                         onMouseDown={async () => {
                             setMenuOpen(false);
                             await signOut();
