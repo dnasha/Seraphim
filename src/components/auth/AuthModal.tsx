@@ -19,6 +19,12 @@ import { useAuth } from '@/hooks/useAuth';
 import styles from './AuthModal.module.css';
 
 type AuthTab = 'login' | 'signup' | 'reset';
+type BackdropPress = {
+    clientX: number;
+    clientY: number;
+};
+
+const MAX_BACKDROP_CLICK_MOVEMENT = 4;
 
 export default function AuthModal() {
     const { showAuthModal, setShowAuthModal, supabase, continueAsGuest } = useAuth();
@@ -31,6 +37,30 @@ export default function AuthModal() {
     const [loading, setLoading] = useState(false);
     const [captchaToken, setCaptchaToken] = useState<string | null>(null);
     const turnstileRef = useRef<TurnstileInstance>(null);
+    const backdropPressRef = useRef<BackdropPress | null>(null);
+
+    const handleBackdropPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        const startedOnBackdrop = event.target === event.currentTarget;
+        if (!startedOnBackdrop || event.button !== 0) {
+            backdropPressRef.current = null;
+            return;
+        }
+
+        backdropPressRef.current = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
+    }, []);
+
+    const handleBackdropPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        const press = backdropPressRef.current;
+        backdropPressRef.current = null;
+
+        if (!press || event.target !== event.currentTarget) return;
+
+        const movement = Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY);
+        if (movement <= MAX_BACKDROP_CLICK_MOVEMENT) setShowAuthModal(false);
+    }, [setShowAuthModal]);
 
     const handleEmailAuth = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -94,8 +124,19 @@ export default function AuthModal() {
     if (!showAuthModal) return null;
 
     return (
-        <div className={styles.overlay} onClick={() => setShowAuthModal(false)}>
-            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div
+            className={styles.overlay}
+            role="presentation"
+            onPointerDown={handleBackdropPointerDown}
+            onPointerUp={handleBackdropPointerUp}
+            onPointerCancel={() => { backdropPressRef.current = null; }}
+        >
+            <div
+                className={styles.modal}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Sign in or create an account"
+            >
                 {/* Logo — matches sidebar header: inline icon + title */}
                 <div className={styles.logoSection}>
                     <div className={styles.logoInline}>
