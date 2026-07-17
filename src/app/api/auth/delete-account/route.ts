@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if (!lastSignIn || Date.now() - lastSignIn > REAUTH_WINDOW_MS) {
     return NextResponse.json({
       code: 'reauth_required',
-      error: 'Please verify your email before deleting your account.',
+      error: 'Your session is too old for account deletion. Re-authenticate by email and try again within 10 minutes.',
     }, { status: 403 });
   }
 

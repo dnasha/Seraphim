@@ -62,6 +62,7 @@ export default function AccountPage() {
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isVerifyingDeletion, setIsVerifyingDeletion] = useState(false);
+  const [requiresDeletionReauth, setRequiresDeletionReauth] = useState(false);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -143,13 +144,23 @@ export default function AccountPage() {
     try {
       const res = await fetch('/api/auth/delete-account', { method: 'POST' });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { code?: string; error?: string };
+        if (data.code === 'reauth_required') {
+          setRequiresDeletionReauth(true);
+          setDeleteMsg({
+            type: 'error',
+            text: 'Your session is too old for this sensitive action. Re-authenticate by email, then submit the deletion again within 10 minutes.',
+          });
+          return;
+        }
         throw new Error(data.error || 'Failed to delete account.');
       }
+      setRequiresDeletionReauth(false);
       await signOut();
       router.push('/');
     } catch (err: unknown) {
       setDeleteMsg({ type: 'error', text: err instanceof Error ? err.message : 'An unknown error occurred.' });
+    } finally {
       setIsDeleting(false);
     }
   };
@@ -173,7 +184,7 @@ export default function AccountPage() {
       if (error) throw error;
       setDeleteMsg({
         type: 'success',
-        text: 'Verification link sent. Return here from that link to complete deletion within 10 minutes.',
+        text: 'Reauthentication link sent. Open it in this browser, then submit the deletion again within 10 minutes.',
       });
     } catch {
       setDeleteMsg({ type: 'error', text: 'Unable to send the verification link. Please try again.' });
@@ -480,15 +491,22 @@ export default function AccountPage() {
             </p>
           </div>
           <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
-            <button
-              type="button"
-              className={styles.button}
-              onClick={sendDeletionVerification}
-              disabled={isVerifyingDeletion || isDeleting}
-              title={isVerifyingDeletion ? 'Sending a verification email' : 'Send an email to verify this account deletion request'}
-            >
-              {isVerifyingDeletion ? <span className={styles.spinner} /> : 'Verify by Email'}
-            </button>
+            {requiresDeletionReauth && (
+              <div>
+                <p className={styles.dangerText}>
+                  For your security, confirm that you still control this account before deleting it. We will email you a one-time sign-in link.
+                </p>
+                <button
+                  type="button"
+                  className={styles.button}
+                  onClick={sendDeletionVerification}
+                  disabled={isVerifyingDeletion || isDeleting}
+                  title={isVerifyingDeletion ? 'Sending a reauthentication email' : 'Email me a one-time link to authorize account deletion'}
+                >
+                  {isVerifyingDeletion ? <span className={styles.spinner} /> : 'Re-authenticate by Email'}
+                </button>
+              </div>
+            )}
             <div className={styles.field}>
               <label className={styles.label}>Type &quot;FAREWELL&quot; to confirm</label>
               <input 
