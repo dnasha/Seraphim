@@ -139,6 +139,7 @@ export function TextMarker({
           className={styles.textMarker}
           defaultValue={annotation.text}
           placeholder="Type here..."
+          title="Edit the text annotation"
           autoFocus
           rows={1}
           style={activeMode === 'eraser' ? { cursor: 'crosshair' } : undefined}
@@ -181,7 +182,7 @@ export function TextMarker({
         }}
         onKeyUp={(e) => e.stopPropagation()}
       />
-        <button className={styles.textMarkerDelete} onClick={(e) => { e.stopPropagation(); onRemove(); }}>
+            <button className={styles.textMarkerDelete} onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Delete this text annotation" aria-label="Delete this text annotation">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>

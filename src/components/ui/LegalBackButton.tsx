@@ -36,7 +36,7 @@ function LegalBackButtonContent() {
   };
 
   return (
-    <a href="#" onClick={handleBack} className={styles.backBtn}>
+    <a href="#" onClick={handleBack} className={styles.backBtn} title={`${getLabel()} page`}>
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <line x1="19" y1="12" x2="5" y2="12"></line>
         <polyline points="12 19 5 12 12 5"></polyline>
@@ -49,7 +49,7 @@ function LegalBackButtonContent() {
 export default function LegalBackButton() {
   return (
     <Suspense fallback={
-      <a href="#" className={styles.backBtn}>
+      <a href="#" className={styles.backBtn} title="Return to the previous page">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>

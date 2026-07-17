@@ -4,12 +4,14 @@ import React, { useId, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import styles from './FeatureGate.module.css';
-import type { UserTier } from '@/lib/entitlements';
+import { getAccessRequirementTooltip, type RequiredAccessTier } from '@/lib/entitlements';
 
-interface GatedButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface GatedButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'title'> {
   allowed: boolean;
-  requiredTier: Exclude<UserTier, 'guest' | 'free'> | 'free';
+  requiredTier: RequiredAccessTier;
   featureName: string;
+  /** Describes the action when available; locked controls replace it with the access requirement. */
+  title: string;
 }
 
 /**
@@ -40,7 +42,7 @@ export function GatedButton({
         {...buttonProps}
         className={`${className} ${styles.lockedControl}`}
         onClick={() => setOpen(true)}
-        title={`${featureName} requires ${requiredTier === 'free' ? 'a free account' : requiredTier[0].toUpperCase() + requiredTier.slice(1)}`}
+        title={getAccessRequirementTooltip(featureName, requiredTier)}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={dialogId}
@@ -61,10 +63,11 @@ export function GatedButton({
             <h2>{featureName} is a {requiredTier === 'free' ? 'Free' : requiredTier[0].toUpperCase() + requiredTier.slice(1)} feature</h2>
             <p>Upgrade to unlock this monitoring capability without losing your current view.</p>
             <div className={styles.promptActions}>
-              <button onClick={() => setOpen(false)} className={styles.dismiss}>Not now</button>
+              <button onClick={() => setOpen(false)} className={styles.dismiss} title="Close the upgrade prompt">Not now</button>
               <Link
                 href={`/pricing?feature=${encodeURIComponent(featureName)}&tier=${encodeURIComponent(requiredTier)}&returnTo=${encodeURIComponent(pathname || '/')}`}
                 className={styles.upgradeLink}
+                title={`View plans that include ${featureName}`}
               >View plans</Link>
             </div>
           </section>

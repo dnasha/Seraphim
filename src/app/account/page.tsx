@@ -192,7 +192,7 @@ export default function AccountPage() {
         
         <header className={styles.header}>
           <div className={styles.headerLeft}>
-            <button onClick={() => router.back()} className={styles.backBtn} aria-label="Go back">
+            <button onClick={() => router.back()} className={styles.backBtn} aria-label="Go back" title="Return to the previous page">
               <LuArrowLeft size={24} />
             </button>
           </div>
@@ -316,6 +316,7 @@ export default function AccountPage() {
                 className={styles.button}
                 onClick={() => router.push('/pricing?returnTo=%2Faccount')}
                 style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}
+                title="View paid plans and upgrade your account"
               >
                 Upgrade Plan
               </button>
@@ -324,6 +325,7 @@ export default function AccountPage() {
                 <button
                   className={styles.button}
                   disabled={isManagingBilling}
+                  title={isManagingBilling ? 'Opening the billing portal' : 'Manage payment methods, invoices, and subscription billing'}
                   onClick={async () => {
                     setIsManagingBilling(true);
                     try {
@@ -346,6 +348,7 @@ export default function AccountPage() {
                 <button
                   className={`${styles.button} ${styles.buttonSecondary}`}
                   onClick={() => router.push('/pricing?returnTo=%2Faccount')}
+                  title="Compare plans and upgrade your subscription"
                 >
                   Upgrade Plan
                 </button>
@@ -354,6 +357,7 @@ export default function AccountPage() {
               <button
                 className={styles.button}
                 disabled={isManagingBilling}
+                title={isManagingBilling ? 'Opening the billing portal' : 'Manage payment methods and billing history'}
                 onClick={async () => {
                   setIsManagingBilling(true);
                   try {
@@ -398,10 +402,11 @@ export default function AccountPage() {
                   required 
                   placeholder="Enter new email"
                   disabled={isUpdatingEmail}
+                  title="Enter the new email address for this account"
                 />
               </div>
               {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`}>{emailMsg.text}</div>}
-              <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail}>
+              <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail} title={isUpdatingEmail ? 'Updating your email address' : !newEmail ? 'Enter a new email address first' : 'Send confirmation links to update your email'}>
                 {isUpdatingEmail ? <span className={styles.spinner} /> : 'Update Email'}
               </button>
             </form>
@@ -429,6 +434,7 @@ export default function AccountPage() {
                 minLength={6}
                 placeholder="Enter new password"
                 disabled={isUpdatingPass}
+                title="Enter a new password with at least 6 characters"
               />
             </div>
             <div className={styles.field}>
@@ -442,6 +448,7 @@ export default function AccountPage() {
                 minLength={6}
                 placeholder="Confirm new password"
                 disabled={isUpdatingPass}
+                title="Enter the same new password again"
               />
             </div>
             {passMsg && <div className={`${styles.message} ${styles[passMsg.type]}`}>{passMsg.text}</div>}
@@ -449,6 +456,13 @@ export default function AccountPage() {
               type="submit" 
               className={styles.button} 
               disabled={isUpdatingPass || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+              title={isUpdatingPass
+                ? 'Updating your password'
+                : !newPassword || !confirmPassword
+                  ? 'Complete both password fields first'
+                  : newPassword !== confirmPassword
+                    ? 'The passwords must match'
+                    : 'Save the new account password'}
             >
               {isUpdatingPass ? <span className={styles.spinner} /> : 'Update Password'}
             </button>
@@ -471,6 +485,7 @@ export default function AccountPage() {
               className={styles.button}
               onClick={sendDeletionVerification}
               disabled={isVerifyingDeletion || isDeleting}
+              title={isVerifyingDeletion ? 'Sending a verification email' : 'Send an email to verify this account deletion request'}
             >
               {isVerifyingDeletion ? <span className={styles.spinner} /> : 'Verify by Email'}
             </button>
@@ -485,10 +500,11 @@ export default function AccountPage() {
                 placeholder="FAREWELL"
                 pattern="FAREWELL"
                 disabled={isDeleting}
+                title="Type FAREWELL exactly to confirm permanent account deletion"
               />
             </div>
             {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`}>{deleteMsg.text}</div>}
-            <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>
+            <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'} title={isDeleting ? 'Deleting your account' : deleteConfirm !== 'FAREWELL' ? 'Type FAREWELL exactly to enable account deletion' : 'Permanently delete your account and application data'}>
               {isDeleting ? <span className={styles.spinner} /> : 'Delete Account'}
             </button>
           </form>
@@ -496,8 +512,8 @@ export default function AccountPage() {
 
         <footer className={styles.footer}>
           <div className={styles.footerLinks}>
-            <Link href="/terms?from=account" className={styles.link}>Terms of Service</Link>
-            <Link href="/privacy?from=account" className={styles.link}>Privacy Policy</Link>
+            <Link href="/terms?from=account" className={styles.link} title="Read the Terms of Service">Terms of Service</Link>
+            <Link href="/privacy?from=account" className={styles.link} title="Read the Privacy Policy">Privacy Policy</Link>
           </div>
           <p>&copy; {new Date().getFullYear()} Seraphim. All rights reserved.</p>
         </footer>

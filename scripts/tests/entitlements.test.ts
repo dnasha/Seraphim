@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canUseMapStyle, canUseOverlay, canUseTimeRange, getEntitlements, hasFeature, normalizeUserTier } from '@/lib/entitlements';
+import { canUseMapStyle, canUseOverlay, canUseTimeRange, getAccessRequirementTooltip, getEntitlements, hasFeature, normalizeUserTier } from '@/lib/entitlements';
 
 describe('tier entitlements', () => {
   it('keeps Angel exactly equivalent to Analyst access', () => {
@@ -33,5 +33,17 @@ describe('tier entitlements', () => {
   it('normalizes unknown persisted tiers safely', () => {
     expect(normalizeUserTier('invalid', false)).toBe('guest');
     expect(normalizeUserTier('invalid', true)).toBe('free');
+  });
+
+  it('describes free-account and paid-plan access requirements precisely', () => {
+    expect(getAccessRequirementTooltip('Earthquake overlay', 'free')).toBe(
+      'Earthquake overlay requires a free account',
+    );
+    expect(getAccessRequirementTooltip('Weather radar overlay', 'pro')).toBe(
+      'Weather radar overlay requires the Pro plan',
+    );
+    expect(getAccessRequirementTooltip('GeoJSON export', 'analyst')).toBe(
+      'GeoJSON export requires the Analyst plan',
+    );
   });
 });

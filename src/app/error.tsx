@@ -20,6 +20,7 @@ export default function Error({
       <p style={{ color: 'red', margin: '1rem 0' }}>{error.message}</p>
       <button
         onClick={() => reset()}
+        title="Retry rendering this page"
         style={{ padding: '0.5rem 1rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
       >
         Try again

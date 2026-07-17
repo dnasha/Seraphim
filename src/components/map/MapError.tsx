@@ -29,7 +29,7 @@ export default function MapError({ onRetry, error }: MapErrorProps) {
                 <p className={styles.errorMessage}>
                     {error || "We're having trouble loading the interactive map. This could be due to a connectivity issue or a service interruption."}
                 </p>
-                <button className={styles.retryButton} onClick={onRetry}>
+            <button className={styles.retryButton} onClick={onRetry} title="Retry loading the map">
                     Retry Loading Map
                 </button>
             </div>

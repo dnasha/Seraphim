@@ -108,6 +108,7 @@ export default function EventCard({
         }
         role="button"
         tabIndex={0}
+        title={isExpanded ? 'Collapse story details' : 'Expand story details'}
         aria-expanded={isExpanded}
         aria-pressed={isSelected}
         onKeyDown={(e) => {
@@ -267,6 +268,7 @@ export default function EventCard({
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                title="Open the original source in a new tab"
               >
                 View source →
               </a>
@@ -301,6 +303,7 @@ export default function EventCard({
                   allowed={false}
                   requiredTier="pro"
                   featureName="Full story timeline"
+                  title="Show every source in this story timeline"
                 >
                   Unlock full timeline
                 </GatedButton>
@@ -348,6 +351,7 @@ export default function EventCard({
                         href={src.url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        title={`Open ${src.name} in a new tab`}
                       >
                         {new URL(src.url).hostname}
                       </a>

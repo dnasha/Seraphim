@@ -45,7 +45,7 @@ export default function TermsPage() {
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>5. Subscription and Payments</h2>
             <p className={styles.text}>
-              Seraphim offers premium tiers with expanded access limits. Payment processing is securely handled by Stripe. By subscribing, you authorize us to charge your selected payment method for the recurring subscription fees. Subscriptions automatically renew unless canceled prior to the renewal date. All payments are non-refundable except as required by applicable law. Any billing issues or payment inquiries may be directed to <a href="mailto:support@seraphi.me" className={styles.link}>support@seraphi.me</a>.
+              Seraphim offers premium tiers with expanded access limits. Payment processing is securely handled by Stripe. By subscribing, you authorize us to charge your selected payment method for the recurring subscription fees. Subscriptions automatically renew unless canceled prior to the renewal date. All payments are non-refundable except as required by applicable law. Any billing issues or payment inquiries may be directed to <a href="mailto:support@seraphi.me" className={styles.link} title="Email Seraphim support about billing">support@seraphi.me</a>.
             </p>
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>6. Fair Use Policy</h2>
@@ -55,7 +55,7 @@ export default function TermsPage() {
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>7. Intellectual Property and Content</h2>
             <p className={styles.text}>
-              The news headlines and excerpts displayed on Seraphim remain the intellectual property of their respective original publishers. We aggregate this data strictly under the principles of Fair Use under United States copyright law for informational, analytical, and research purposes. If you believe that any content aggregated on our platform infringes upon your copyright and falls outside the scope of Fair Use, please direct all Digital Millennium Copyright Act (DMCA) notices and legal inquiries to <a href="mailto:legal@seraphi.me" className={styles.link}>legal@seraphi.me</a>.
+              The news headlines and excerpts displayed on Seraphim remain the intellectual property of their respective original publishers. We aggregate this data strictly under the principles of Fair Use under United States copyright law for informational, analytical, and research purposes. If you believe that any content aggregated on our platform infringes upon your copyright and falls outside the scope of Fair Use, please direct all Digital Millennium Copyright Act (DMCA) notices and legal inquiries to <a href="mailto:legal@seraphi.me" className={styles.link} title="Email the Seraphim legal contact">legal@seraphi.me</a>.
             </p>
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>8. Disclaimers</h2>
@@ -85,7 +85,7 @@ export default function TermsPage() {
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>13. Contact Information</h2>
             <p className={styles.text}>
-              If you have any questions, concerns, or legal inquiries regarding these Terms of Service, please contact us at <a href="mailto:legal@seraphi.me" className={styles.link}>legal@seraphi.me</a>.
+              If you have any questions, concerns, or legal inquiries regarding these Terms of Service, please contact us at <a href="mailto:legal@seraphi.me" className={styles.link} title="Email the Seraphim legal contact">legal@seraphi.me</a>.
             </p>
           </section>
         </main>

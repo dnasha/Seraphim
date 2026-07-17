@@ -118,7 +118,7 @@ export function PricingPageClient({
                 {/* Header */}
                 <header className={styles.header}>
                     <div className={styles.headerLeft}>
-                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back">
+                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back" title="Return to the previous page">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="19" y1="12" x2="5" y2="12"></line>
                                 <polyline points="12 19 5 12 12 5"></polyline>
@@ -201,6 +201,8 @@ export function PricingPageClient({
                         {errorMsg}
                         <button
                             onClick={() => setErrorMsg(null)}
+                            title="Dismiss this checkout error"
+                            aria-label="Dismiss checkout error"
                             style={{
                                 background: 'rgba(255,255,255,0.2)',
                                 border: 'none',
@@ -224,6 +226,7 @@ export function PricingPageClient({
                         className={`${styles.toggleTrack} ${isYearly ? styles.toggleTrackActive : ''}`}
                         onClick={() => setIsYearly(!isYearly)}
                         aria-label="Toggle billing period"
+                        title={`Switch to ${isYearly ? 'monthly' : 'yearly'} billing`}
                     >
                         <div className={styles.toggleThumb} />
                     </button>
@@ -282,6 +285,7 @@ export function PricingPageClient({
                                 aria-selected={comparisonTier === tier}
                                 className={comparisonTier === tier ? styles.comparisonMobilePickerActive : ''}
                                 onClick={() => setComparisonTier(tier)}
+                                title={`Compare ${tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)} plan features`}
                             >
                                 {tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)}
                             </button>

@@ -16,8 +16,11 @@ along with the custom date picker interface.
 /* Disabled overlay for guest users */
 .filterBarDisabled {
   opacity: 0.4;
-  pointer-events: none;
   user-select: none;
+}
+
+.filterBarDisabled [aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 .scrollableFilters {
@@ -175,6 +178,11 @@ along with the custom date picker interface.
 .timeToggleActive {
   background: var(--accent);
   border-color: var(--accent);
+  color: #ffffff;
+}
+
+/* Keep the selected volume text legible when the same control is also plan-gated. */
+.timeToggle.timeToggleActive {
   color: #ffffff;
 }
 

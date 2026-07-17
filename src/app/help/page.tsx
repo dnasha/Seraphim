@@ -21,6 +21,7 @@ export default function HelpPage() {
               onClick={() => router.push("/")}
               className={styles.backBtn}
               aria-label="Go back"
+              title="Return to the live intelligence map"
             >
               <LuArrowLeft size={24} />
             </button>
@@ -86,6 +87,7 @@ export default function HelpPage() {
               target="_blank"
               rel="noopener noreferrer"
               className={styles.kofiButton}
+              title="Support Seraphim development on Ko-fi"
             >
               <LuCoffee size={20} />
               Support on Ko-fi
@@ -107,6 +109,7 @@ export default function HelpPage() {
               target="_blank"
               rel="noopener noreferrer"
               className={styles.link}
+              title="Open the Seraphim source repository on GitHub"
             >
               github.com/dnasha/Seraphim
             </a>
@@ -127,7 +130,7 @@ export default function HelpPage() {
                 <strong style={{ color: "var(--text-primary)" }}>
                   Support:
                 </strong>{" "}
-                <a href="mailto:support@seraphi.me" className={styles.link}>
+                <a href="mailto:support@seraphi.me" className={styles.link} title="Email Seraphim support">
                   support@seraphi.me
                 </a>
               </li>
@@ -135,13 +138,13 @@ export default function HelpPage() {
                 <strong style={{ color: "var(--text-primary)" }}>
                   Feedback:
                 </strong>{" "}
-                <a href="mailto:feedback@seraphi.me" className={styles.link}>
+                <a href="mailto:feedback@seraphi.me" className={styles.link} title="Email product feedback to Seraphim">
                   feedback@seraphi.me
                 </a>
               </li>
               <li>
                 <strong style={{ color: "var(--text-primary)" }}>Legal:</strong>{" "}
-                <a href="mailto:legal@seraphi.me" className={styles.link}>
+                <a href="mailto:legal@seraphi.me" className={styles.link} title="Email the Seraphim legal contact">
                   legal@seraphi.me
                 </a>
               </li>
@@ -187,10 +190,10 @@ export default function HelpPage() {
 
         <footer className={styles.footer}>
           <div className={styles.footerLinks}>
-            <Link href="/terms?from=help" className={styles.link}>
+            <Link href="/terms?from=help" className={styles.link} title="Read the Terms of Service">
               Terms of Service
             </Link>
-            <Link href="/privacy?from=help" className={styles.link}>
+            <Link href="/privacy?from=help" className={styles.link} title="Read the Privacy Policy">
               Privacy Policy
             </Link>
           </div>

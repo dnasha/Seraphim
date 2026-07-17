@@ -531,6 +531,7 @@ export function HomeContent() {
                         className={styles.sidebarExpandBtn}
                         onClick={() => handleSidebarOpenChange(true)}
                         aria-label="Open sidebar"
+                        title="Open the story sidebar"
                     >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                             <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
@@ -604,7 +605,7 @@ export function HomeContent() {
                         </svg>
                         <p>{error}</p>
                     </div>
-                    <button onClick={() => fetchNews(true)}>Retry Connection</button>
+                    <button onClick={() => fetchNews(true)} title="Retry loading the latest stories">Retry Connection</button>
                 </div>
             )}
         </div>

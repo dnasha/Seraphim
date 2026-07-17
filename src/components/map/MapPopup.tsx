@@ -129,7 +129,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                 )}
                 <div className="news-popup-actions">
                     {sourceCount <= 1 && (
-                        <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer">
+                        <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer" title="Open the original source in a new tab">
                             View source →
                         </a>
                     )}
@@ -152,6 +152,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                                     allowed={false}
                                     requiredTier="pro"
                                     featureName="Full story timeline"
+                                    title="Show every source in this story timeline"
                                 >
                                     Unlock full timeline
                                 </GatedButton>
@@ -170,7 +171,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                                         <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
                                             {src.name}
                                         </span>
-                                        <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer">
+                                        <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
                                             {new URL(src.url).hostname}
                                         </a>
                                     </div>
@@ -185,7 +186,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
             <button 
                 className="news-popup-share-btn-absolute" 
                 onClick={handleShare}
-                title="Copy shareable deep link"
+                title={copied ? 'Shareable link copied' : 'Copy a shareable link to this event'}
             >
                 <LuShare2 size={13} />
                 {copied ? 'Link Copied!' : 'Share Event'}
