@@ -8,7 +8,7 @@
 
 import { Suspense } from 'react';
 import { Metadata } from 'next';
-import { supabase } from '@/lib/core/supabase';
+import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { HomeContent } from '@/components/layout/HomeContent';
 import {
     absoluteSiteUrl,
@@ -48,11 +48,19 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
     }
 
     try {
-        const { data: event } = await supabase
+        const { data: event, error } = await supabaseAdmin
             .from('events')
             .select('title, description')
             .eq('id', eventId)
-            .single();
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error generating dynamic metadata:', error);
+            return {
+                title: "Event Unavailable",
+                robots: EVENT_NOINDEX_ROBOTS,
+            };
+        }
 
         if (event) {
             const title = `${event.title} | Seraphim OSINT`;
