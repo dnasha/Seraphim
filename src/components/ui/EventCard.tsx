@@ -14,7 +14,7 @@ import React from "react";
 import Image from "next/image";
 import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
-import { GatedButton } from './FeatureGate';
+import TimelineGateCta from './TimelineGateCta';
 
 interface EventCardProps {
   item: NewsItem;
@@ -292,15 +292,11 @@ export default function EventCard({
               </span>
               <div className={styles.storyTimelineActions}>
                 {timelineLocked && (
-                  <GatedButton
+                  <TimelineGateCta
+                    userTier={userTier}
                     className={styles.timelineUpgradeBtn}
-                    allowed={false}
-                    requiredTier="pro"
-                    featureName="Full story timeline"
-                    title="Show every source in this story timeline"
-                  >
-                    Unlock full timeline
-                  </GatedButton>
+                    guestClassName={styles.timelineGuestCta}
+                  />
                 )}
                 <span
                   className={styles.sourceCountBadge}

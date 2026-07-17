@@ -20,7 +20,7 @@ import {
 import { canonicalEventCount, canonicalNewsId } from '@/lib/utils/ranking';
 import { LuShare2 } from 'react-icons/lu';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
-import { GatedButton } from '@/components/ui/FeatureGate';
+import TimelineGateCta from '@/components/ui/TimelineGateCta';
 
 interface MapPopupProps {
     item: NewsItem;
@@ -148,15 +148,11 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                         <span>Story Timeline</span>
                         <div className="news-popup-sources-actions">
                             {timelineLocked && (
-                                <GatedButton
+                                <TimelineGateCta
+                                    userTier={userTier}
                                     className="timeline-popup-upgrade-btn"
-                                    allowed={false}
-                                    requiredTier="pro"
-                                    featureName="Full story timeline"
-                                    title="Show every source in this story timeline"
-                                >
-                                    Unlock full timeline
-                                </GatedButton>
+                                    guestClassName="timeline-popup-guest-btn"
+                                />
                             )}
                             <span className="news-popup-source-count" title={`${sourceCount} sources reporting on this`}>
                                 <svg viewBox="0 0 24 24" fill="currentColor">

@@ -650,6 +650,13 @@
   line-height: 1;
 }
 
+.mapWrapper :global(.timeline-popup-guest-btn) {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
 .mapWrapper :global(.news-popup-timeline-preview) {
   margin: 8px 0 0;
   color: var(--text-secondary);
