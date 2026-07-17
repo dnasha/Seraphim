@@ -16,7 +16,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MapPopup from "./MapPopup";
 
-import { getMapLibreStyle } from "./MapConstants";
+import { getMapLibreStyle, MAP_STYLES } from "./MapConstants";
 import {
   canonicalEventCount,
   canonicalNewsId,
@@ -125,6 +125,7 @@ export default function NewsMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pulseAnimationFrameRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
   const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
@@ -168,6 +169,9 @@ export default function NewsMap({
 
   useEffect(() => {
     currentStyleRef.current = currentStyle;
+    if (mapTilerLogoRef.current) {
+      mapTilerLogoRef.current.hidden = !MAP_STYLES[currentStyle]?.showsMapTilerLogo;
+    }
   }, [currentStyle]);
 
   useEffect(() => {
@@ -587,6 +591,33 @@ export default function NewsMap({
       new maplibregl.AttributionControl({ compact: false }),
       "bottom-right",
     );
+    const mapTilerLogo = document.createElement("a");
+    mapTilerLogo.className = `maplibregl-ctrl ${styles.mapTilerLogoControl}`;
+    mapTilerLogo.href = "https://www.maptiler.com";
+    mapTilerLogo.target = "_blank";
+    mapTilerLogo.rel = "noopener noreferrer";
+    mapTilerLogo.title = "MapTiler";
+    mapTilerLogo.setAttribute("aria-label", "MapTiler");
+    mapTilerLogo.hidden = !MAP_STYLES[currentStyleRef.current]?.showsMapTilerLogo;
+
+    const mapTilerLogoImage = document.createElement("img");
+    mapTilerLogoImage.src = "https://api.maptiler.com/resources/logo.svg";
+    mapTilerLogoImage.alt = "MapTiler";
+    mapTilerLogo.appendChild(mapTilerLogoImage);
+
+    const mapTilerLogoControl = {
+      onAdd: () => {
+        mapTilerLogoRef.current = mapTilerLogo;
+        return mapTilerLogo;
+      },
+      onRemove: () => {
+        mapTilerLogo.remove();
+        if (mapTilerLogoRef.current === mapTilerLogo) {
+          mapTilerLogoRef.current = null;
+        }
+      },
+    };
+    map.addControl(mapTilerLogoControl, "bottom-right");
 
     popupRef.current = new maplibregl.Popup({
       closeButton: true,

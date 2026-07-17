@@ -30,6 +30,16 @@
 }
 
 /* Discrete attribution control in the bottom right */
+.mapWrapper :global(.maplibregl-ctrl-bottom-right) {
+  display: flex;
+  align-items: center;
+}
+
+.mapWrapper :global(.maplibregl-ctrl-bottom-right > .maplibregl-ctrl) {
+  float: none;
+  clear: none;
+}
+
 .mapWrapper :global(.maplibregl-ctrl-attrib) {
   background: transparent !important;
   border: none !important;
@@ -46,6 +56,32 @@
      1px  1px 0 var(--surface);
   transition: opacity 0.2s ease;
   pointer-events: auto !important;
+}
+
+.mapTilerLogoControl {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 8px !important;
+  padding: 2px 0;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.mapTilerLogoControl[hidden] {
+  display: none !important;
+}
+
+.mapTilerLogoControl img {
+  display: block;
+  width: auto;
+  height: 12px;
+  filter: drop-shadow(0 0 1px var(--surface));
+}
+
+@media (hover: hover) {
+  .mapTilerLogoControl:hover {
+    opacity: 1;
+  }
 }
 
 @media (hover: hover) {
