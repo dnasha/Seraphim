@@ -1,0 +1,216 @@
+.viewport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 900;
+    padding: var(--space-xl);
+    background: hsla(var(--surface-alt-h), var(--surface-alt-s), var(--surface-alt-l), 0.72);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+.floating {
+    position: fixed;
+    left: 50%;
+    bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px));
+    z-index: 9999;
+    width: min(440px, calc(100vw - 32px));
+    transform: translateX(-50%);
+}
+
+.page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: var(--space-xl);
+    background: var(--surface-alt);
+}
+
+.notice {
+    --notice-color: var(--accent);
+
+    position: relative;
+    pointer-events: auto;
+    width: min(440px, 100%);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: 14px 14px 14px 16px;
+    color: var(--text-primary);
+    background: hsla(var(--surface-h), var(--surface-s), var(--surface-l), 0.97);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.16);
+    animation: notice-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.error {
+    --notice-color: var(--red);
+}
+
+.info {
+    --notice-color: var(--accent);
+}
+
+.loading {
+    --notice-color: var(--accent);
+}
+
+.icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: grid;
+    place-items: center;
+    color: var(--notice-color);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+.spinner {
+    width: 17px;
+    height: 17px;
+    border: 2px solid var(--border);
+    border-top-color: var(--notice-color);
+    border-radius: 50%;
+    animation: notice-spin 700ms linear infinite;
+}
+
+.copy {
+    min-width: 0;
+    flex: 1;
+}
+
+.title,
+.message {
+    margin: 0;
+}
+
+.title {
+    color: var(--text-primary);
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    line-height: 1.35;
+}
+
+.message {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-normal);
+    line-height: 1.45;
+}
+
+.action,
+.dismiss {
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    background: var(--surface-alt);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.action {
+    min-height: 34px;
+    padding: 7px 11px;
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    white-space: nowrap;
+}
+
+.dismiss {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-color: transparent;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    background: transparent;
+}
+
+.dismiss svg {
+    width: 17px;
+    height: 17px;
+}
+
+@media (hover: hover) {
+    .action:hover,
+    .dismiss:hover {
+        color: var(--text-primary);
+        background: var(--surface-hover);
+        border-color: var(--border);
+    }
+}
+
+.action:active,
+.dismiss:active {
+    transform: translateY(1px);
+}
+
+.action:focus-visible,
+.dismiss:focus-visible {
+    outline: 2px solid var(--notice-color);
+    outline-offset: 2px;
+}
+
+@keyframes notice-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes notice-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 520px) {
+    .notice {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .action {
+        width: 100%;
+        margin-left: 46px;
+    }
+
+    .dismiss {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+
+    .notice:has(.dismiss) .copy {
+        padding-right: 26px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notice {
+        animation: none;
+    }
+
+    .spinner {
+        animation-duration: 1.4s;
+    }
+}

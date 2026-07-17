@@ -21,6 +21,7 @@ import { useSyncedPreferences, sanitizeSyncedPreferences } from '@/hooks/useSync
 import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
 import UserButton from '@/components/auth/UserButton';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
+import StateNotice from '@/components/ui/StateNotice';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
 
@@ -596,17 +597,15 @@ export function HomeContent() {
             <PWAInstallPrompt />
 
             {error && (
-                <div className={styles.errorOverlay}>
-                    <div className={styles.errorOverlayContent}>
-                        <svg className={styles.errorIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                        <p>{error}</p>
-                    </div>
-                    <button onClick={() => fetchNews(true)} title="Retry loading the latest stories">Retry Connection</button>
-                </div>
+                <StateNotice
+                    placement="floating"
+                    variant="error"
+                    title="Couldn’t refresh stories"
+                    message={error}
+                    actionLabel="Retry"
+                    actionTitle="Retry loading the latest stories"
+                    onAction={() => fetchNews(true)}
+                />
             )}
         </div>
     );

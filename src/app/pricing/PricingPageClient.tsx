@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import StateNotice from '@/components/ui/StateNotice';
 import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
@@ -178,45 +179,14 @@ export function PricingPageClient({
 
                 {/* Error Toast */}
                 {errorMsg && (
-                    <div
-                        style={{
-                            position: 'fixed',
-                            bottom: '24px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            background: '#ef4444',
-                            color: '#fff',
-                            padding: '12px 24px',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '0.875rem',
-                            fontWeight: 600,
-                            zIndex: 1000,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            boxShadow: '0 8px 32px rgba(239, 68, 68, 0.35)',
-                            animation: 'fadeIn 0.2s ease-out',
-                        }}
-                    >
-                        {errorMsg}
-                        <button
-                            onClick={() => setErrorMsg(null)}
-                            title="Dismiss this checkout error"
-                            aria-label="Dismiss checkout error"
-                            style={{
-                                background: 'rgba(255,255,255,0.2)',
-                                border: 'none',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                borderRadius: '4px',
-                                padding: '2px 8px',
-                                fontSize: '0.8125rem',
-                                fontWeight: 700,
-                            }}
-                        >
-                            ✕
-                        </button>
-                    </div>
+                    <StateNotice
+                        placement="floating"
+                        variant="error"
+                        title="Checkout unavailable"
+                        message={errorMsg}
+                        onDismiss={() => setErrorMsg(null)}
+                        dismissLabel="Dismiss checkout error"
+                    />
                 )}
 
                 {/* Billing Toggle */}

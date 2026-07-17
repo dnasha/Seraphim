@@ -205,35 +205,6 @@ body {
 }
 
 
-/* Inline Error Banner (rendered in page.tsx) */
-.error-banner {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid var(--red);
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--red);
-  font-size: 0.8125rem;
-  border-radius: 3px;
-  margin: 0 16px 8px;
-}
-
-.error-icon {
-  font-size: 1rem;
-}
-
-.error-banner button {
-  margin-left: auto;
-  background: var(--red);
-  border: none;
-  padding: 4px 10px;
-  color: #fff;
-  cursor: pointer;
-  border-radius: 2px;
-  font-size: 0.75rem;
-}
-
 /* Shared News Popup Links - managed via NewsMap.module.css :global() */
 
 
