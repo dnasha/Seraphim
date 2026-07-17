@@ -192,6 +192,17 @@ Includes card expansion details and responsive mobile layouts.
   border-color: var(--text-muted);
 }
 
+.statsSearchInput:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+.statsSearchInput:disabled:hover {
+  border-color: var(--border);
+}
+
 .statsSearchInput:focus {
   outline: none;
   border-color: var(--accent);

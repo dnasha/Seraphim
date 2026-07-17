@@ -325,12 +325,15 @@ export default function EventSidebar({
           <input
             id="sidebar-search-input"
             type="text"
-            placeholder={`Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`}
+            placeholder={disabled
+              ? "Sign in to search"
+              : `Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className={styles.statsSearchInput}
             disabled={disabled}
-            title={disabled ? 'Story search requires a free account' : 'Search stories by keyword'}
+            aria-label={disabled ? "Sign in to search" : "Search stories by keyword"}
+            title={disabled ? "Sign in to search stories" : "Search stories by keyword"}
           />
         </div>
       </div>
