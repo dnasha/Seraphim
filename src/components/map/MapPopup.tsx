@@ -31,6 +31,13 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
     const credStyle = getCredibilityStyle(item.credibilityTier);
     const sourceCount = canonicalEventCount(item);
     const timelineLocked = sourceCount > 1 && !hasFeature(userTier, 'fullTimeline');
+    const visibleSources = item.sources
+        ? [...item.sources].sort((a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime())
+        : [];
+    const hiddenSourceCount = item.timelineRestricted
+        ? Math.max(0, (item.totalSources ?? sourceCount) - visibleSources.length)
+        : 0;
+    const showTimelineGap = hiddenSourceCount > 0 && visibleSources.length > 1;
 
     /**
      * Source sorting:
@@ -139,13 +146,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                 <div className="news-popup-sources-section">
                     <div className="news-popup-sources-header">
                         <span>Story Timeline</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className="news-popup-source-count" title={`${sourceCount} sources reporting on this`}>
-                                <svg viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
-                                </svg>
-                                {sourceCount}
-                            </span>
+                        <div className="news-popup-sources-actions">
                             {timelineLocked && (
                                 <GatedButton
                                     className="timeline-popup-upgrade-btn"
@@ -157,23 +158,43 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                                     Unlock full timeline
                                 </GatedButton>
                             )}
+                            <span className="news-popup-source-count" title={`${sourceCount} sources reporting on this`}>
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
+                                </svg>
+                                {sourceCount}
+                            </span>
                         </div>
                     </div>
                     <div className="news-popup-sources-list">
-                        {[...item.sources]
-                            .sort((a, b) => new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime())
-                            .map((src, i) => {
+                        {visibleSources.map((src, i) => {
                                 const srcColor = getSourceBadgeColor(src.name);
                                 const srcTime = formatTimeAgo(src.discoveredAt);
                                 return (
-                                    <div key={i} className="news-popup-source-entry">
-                                        {srcTime && <span className="news-popup-source-time">{srcTime}</span>}
-                                        <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
-                                            {src.name}
-                                        </span>
-                                        <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
-                                            {new URL(src.url).hostname}
-                                        </a>
+                                    <div key={`${src.url}-${i}`}>
+                                        <div className="news-popup-source-entry">
+                                            {srcTime && <span className="news-popup-source-time">{srcTime}</span>}
+                                            <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
+                                                {src.name}
+                                            </span>
+                                            <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
+                                                {new URL(src.url).hostname}
+                                            </a>
+                                        </div>
+                                        {showTimelineGap && i === 0 && (
+                                            <div
+                                                className="news-popup-timeline-gap"
+                                                role="note"
+                                                aria-label={`Showing the latest and first sources, with ${hiddenSourceCount} ${hiddenSourceCount === 1 ? 'source' : 'sources'} hidden between them.`}
+                                            >
+                                                <span className="news-popup-timeline-gap-line" />
+                                                <span className="news-popup-timeline-gap-copy">
+                                                    <strong>{hiddenSourceCount} {hiddenSourceCount === 1 ? 'source' : 'sources'} hidden</strong>
+                                                    <small>Latest above · first source below</small>
+                                                </span>
+                                                <span className="news-popup-timeline-gap-line" />
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
