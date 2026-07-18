@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { validateNewsSearchParams } from '@/lib/security/newsParams';
 import { safeRelativeRedirect } from '@/lib/security/redirects';
-import { canFulfillAngelCheckout, getConfiguredSiteUrl, isPaymentsEnabled } from '@/lib/security/payments';
+import {
+  canFulfillAngelCheckout,
+  getConfiguredSiteUrl,
+  isAngelCheckoutEnabled,
+  isBillingPortalEnabled,
+  isCheckoutEnabled,
+  isPaymentsEnabled,
+} from '@/lib/security/payments';
 import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
 import { fetchPublicImage, isPublicIpAddress, validatePublicImageUrl } from '@/lib/security/ogImage';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
@@ -58,6 +65,15 @@ describe('payment guards', () => {
     expect(isPaymentsEnabled({ PAYMENTS_ENABLED: 'true' })).toBe(true);
     expect(isPaymentsEnabled({ PAYMENTS_ENABLED: 'false' })).toBe(false);
     expect(isPaymentsEnabled({})).toBe(false);
+  });
+
+  it('keeps checkout, Angel, and Portal kill switches independently fail-closed', () => {
+    expect(isCheckoutEnabled({ PAYMENTS_ENABLED: 'true', CHECKOUT_ENABLED: 'false' })).toBe(false);
+    expect(isAngelCheckoutEnabled({ PAYMENTS_ENABLED: 'true', CHECKOUT_ENABLED: 'true', ANGEL_CHECKOUT_ENABLED: 'false' })).toBe(false);
+    expect(isBillingPortalEnabled({ PAYMENTS_ENABLED: 'true', BILLING_PORTAL_ENABLED: 'false' })).toBe(false);
+    expect(isCheckoutEnabled({})).toBe(false);
+    expect(isAngelCheckoutEnabled({})).toBe(false);
+    expect(isBillingPortalEnabled({})).toBe(false);
   });
 
   it('requires configured https site URL except localhost', () => {

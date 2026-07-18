@@ -75,6 +75,13 @@ describe('POST /api/stripe/checkout', () => {
     expect(mocks.getUser).not.toHaveBeenCalled();
   });
 
+  it('checks the Angel kill switch independently before auth or Stripe', async () => {
+    mocks.angelEnabled = false;
+    expect((await POST(request('angel'))).status).toBe(503);
+    expect(mocks.getUser).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid plans and unauthenticated requests', async () => {
     expect((await POST(request('unknown'))).status).toBe(400);
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });

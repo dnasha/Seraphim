@@ -104,6 +104,12 @@ export async function POST(request: Request) {
       .eq('user_id', user.id);
     if (intentAnonymizeError) throw intentAnonymizeError;
 
+    const { error: angelAnonymizeError } = await supabaseAdmin
+      .from('angel_purchases')
+      .update({ user_id: null, user_id_hash: userIdHash })
+      .eq('user_id', user.id);
+    if (angelAnonymizeError) throw angelAnonymizeError;
+
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
     if (deleteError) throw deleteError;
 

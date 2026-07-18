@@ -325,7 +325,10 @@ async function syncSubscription(userId: string, subscription: Stripe.Subscriptio
       stripe_subscription_id: isEntitled ? subscription.id : null,
       subscription_status: subscription.status,
       billing_interval: isEntitled ? interval : 'month',
-      cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+      // Billing Portal can schedule cancellation by setting `cancel_at` to the
+      // period end while leaving `cancel_at_period_end` false. Treat either
+      // representation as a scheduled cancellation for the account UI.
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end || subscription.cancel_at),
       trial_ends_at: subscription.trial_end
         ? new Date(subscription.trial_end * 1000).toISOString()
         : null,

@@ -55,3 +55,4 @@ docs/*
 
 skills-lock.json
 .agents
+*.log
