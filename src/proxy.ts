@@ -11,8 +11,13 @@
 
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { createMaintenanceResponse, isMaintenanceMode, MAINTENANCE_LOGO_PATH } from '@/lib/maintenance';
 
 export async function proxy(request: NextRequest) {
+    if (await isMaintenanceMode() && request.nextUrl.pathname !== MAINTENANCE_LOGO_PATH) {
+        return createMaintenanceResponse(request);
+    }
+
     let supabaseResponse = NextResponse.next({
         request,
     });
@@ -21,7 +26,11 @@ export async function proxy(request: NextRequest) {
     // the session proxy for those requests would validate the same Supabase
     // session once here and again in the handler (for example, every map pan
     // through /api/news). Keep cookie refreshes on page/RSC navigation only.
-    if (request.nextUrl.pathname.startsWith('/api/')) {
+    const pathname = request.nextUrl.pathname;
+    const isRouteHandler = pathname === '/api' || pathname.startsWith('/api/');
+    const isStaticAsset = pathname.startsWith('/_next/') || /\/[^/]+\.[^/]+$/.test(pathname);
+
+    if (isRouteHandler || isStaticAsset) {
         return supabaseResponse;
     }
 
@@ -98,14 +107,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-    matcher: [
-        /*
-         * Match all request paths except:
-         * - API routes (handlers perform their own auth/authorization)
-         * - _next/static (static files)
-         * - _next/image (image optimization)
-         * - favicon.ico, manifest.json, and static assets
-         */
-        '/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
-    ],
+    // Every inbound route must see the kill switch, including APIs, auth
+    // callbacks, service-worker traffic, and static/public assets.
+    matcher: '/:path*',
 };
