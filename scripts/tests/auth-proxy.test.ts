@@ -1,17 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ createServerClient: vi.fn(), getUser: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  createServerClient: vi.fn(),
+  getEdgeConfig: vi.fn(),
+  getUser: vi.fn(),
+}));
 
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
+vi.mock("@vercel/edge-config", () => ({ get: mocks.getEdgeConfig }));
 
 import { proxy } from "@/proxy";
 
 describe("auth session proxy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("EDGE_CONFIG", "https://edge-config.vercel.com/ecfg_test?token=test");
     mocks.createServerClient.mockReturnValue({ auth: { getUser: mocks.getUser } });
+    mocks.getEdgeConfig.mockResolvedValue(false);
     mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("skips Supabase work for guests without auth cookies", async () => {
@@ -42,6 +53,56 @@ describe("auth session proxy", () => {
     expect(mocks.createServerClient).not.toHaveBeenCalled();
     expect(mocks.getUser).not.toHaveBeenCalled();
     expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it.each([
+    ["page navigation", "GET", "https://seraphim.example/"],
+    ["API read", "GET", "https://seraphim.example/api/news?zoom=4"],
+    ["webhook mutation", "POST", "https://seraphim.example/api/stripe/webhook"],
+    ["Next.js asset", "GET", "https://seraphim.example/_next/static/chunks/app.js"],
+    ["service worker", "GET", "https://seraphim.example/sw.js"],
+  ])("blocks %s while maintenance mode is on", async (_name, method, url) => {
+    mocks.getEdgeConfig.mockResolvedValue(true);
+
+    const response = await proxy(new NextRequest(url, { method }));
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-maintenance-mode")).toBe("true");
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(body).toContain("We’ll be right back.");
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+  });
+
+  it("allows only the maintenance logo asset through while maintenance mode is on", async () => {
+    mocks.getEdgeConfig.mockResolvedValue(true);
+
+    const response = await proxy(
+      new NextRequest("https://seraphim.example/seraphim_logo.svg"),
+    );
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("x-maintenance-mode")).toBeNull();
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+  });
+
+  it("fails closed if a configured Edge Config cannot be read", async () => {
+    mocks.getEdgeConfig.mockRejectedValue(new Error("unavailable"));
+
+    const response = await proxy(new NextRequest("https://seraphim.example/account"));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-maintenance-mode")).toBe("true");
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+  });
+
+  it("stays off in local development when Edge Config is not connected", async () => {
+    vi.stubEnv("EDGE_CONFIG", "");
+
+    const response = await proxy(new NextRequest("https://seraphim.example/"));
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(mocks.getEdgeConfig).not.toHaveBeenCalled();
   });
 
   it("returns the refreshed response after Supabase sets session cookies", async () => {

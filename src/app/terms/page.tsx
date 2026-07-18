@@ -45,7 +45,7 @@ export default function TermsPage() {
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>5. Subscription and Payments</h2>
             <p className={styles.text}>
-              Seraphim offers premium tiers with expanded access limits. Payment processing is securely handled by Stripe. By subscribing, you authorize us to charge your selected payment method for the recurring subscription fees. Subscriptions automatically renew unless canceled prior to the renewal date. All payments are non-refundable except as required by applicable law. Any billing issues or payment inquiries may be directed to <a href="mailto:support@seraphi.me" className={styles.link} title="Email Seraphim support about billing">support@seraphi.me</a>.
+              Seraphim offers premium tiers with expanded access limits. Payment processing is securely handled by Stripe. By subscribing, you authorize us to charge your selected payment method for the recurring subscription fees. Subscriptions automatically renew unless canceled prior to the renewal date. Seraphim may also offer one-time lifetime access, including the Angel tier; lifetime access lasts for the lifetime of the hosted service, is non-transferable, and does not automatically renew. All payments are non-refundable except as required by applicable law. Any billing issues or payment inquiries may be directed to <a href="mailto:support@seraphi.me" className={styles.link} title="Email Seraphim support about billing">support@seraphi.me</a>.
             </p>
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>6. Fair Use Policy</h2>

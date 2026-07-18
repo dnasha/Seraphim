@@ -41,7 +41,7 @@ function tableQuery(table: string) {
 }
 
 const activeSubscription = {
-  id: 'sub-1', status: 'active', customer: 'cus-1', cancel_at_period_end: false, trial_end: null,
+  id: 'sub-1', status: 'active', customer: 'cus-1', cancel_at: null, cancel_at_period_end: false, trial_end: null,
   metadata: { supabase_user_id: 'user-1' }, items: { data: [{ price: { id: 'price-pro' }, current_period_end: 1_800_000_000 }] },
 };
 
@@ -81,6 +81,25 @@ describe('POST /api/stripe/webhook', () => {
     } } });
     expect((await POST(webhookRequest('valid'))).status).toBe(200);
     expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'user_profiles', payload: expect.objectContaining({ tier: 'pro', subscription_status: 'active' }) }));
+  });
+
+  it('recognizes Billing Portal cancellations represented by cancel_at', async () => {
+    mocks.retrieveSubscription.mockResolvedValue({
+      ...activeSubscription,
+      cancel_at: 1_800_000_000,
+      cancel_at_period_end: false,
+    });
+    mocks.constructEvent.mockReturnValue({
+      id: 'evt-portal-cancel',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub-1' } },
+    });
+
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.updates).toContainEqual(expect.objectContaining({
+      table: 'user_profiles',
+      payload: expect.objectContaining({ cancel_at_period_end: true }),
+    }));
   });
 
   it('downgrades incomplete or unpaid subscription states', async () => {

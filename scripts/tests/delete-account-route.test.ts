@@ -68,6 +68,7 @@ describe('POST /api/auth/delete-account', () => {
     expect(mocks.deleteCustomer).toHaveBeenCalledWith('cus-1');
     expect(mocks.from).toHaveBeenCalledWith('user_entitlement_overrides');
     expect(mocks.from).toHaveBeenCalledWith('billing_checkout_intents');
+    expect(mocks.from).toHaveBeenCalledWith('angel_purchases');
     expect(mocks.deleteUser).toHaveBeenCalledWith('user-1');
   });
 

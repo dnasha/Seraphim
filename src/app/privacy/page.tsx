@@ -31,7 +31,7 @@ export default function PrivacyPage() {
             
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>2. Information We Collect</h2>
             <p className={styles.text}>
-              We collect information that you provide directly to us when you create an account, such as your email address and authentication credentials (securely managed via Supabase). If you subscribe to a premium tier, our payment processor (Stripe) collects necessary billing information. We do not store full credit card numbers on our servers. Additionally, we automatically collect basic usage data, such as IP addresses and device identifiers, to ensure the platform functions correctly and securely.
+              We collect information that you provide directly to us when you create an account, such as your email address and authentication credentials (securely managed via Supabase). If you subscribe to or purchase premium access, our payment processor (Stripe) collects necessary billing information. We do not store full credit card numbers on our servers. Additionally, we automatically collect basic usage data, such as IP addresses and device identifiers, to ensure the platform functions correctly and securely.
             </p>
 
             <h2 className={styles.sectionTitle} style={{ marginTop: '32px' }}>3. How We Use Your Information</h2>
