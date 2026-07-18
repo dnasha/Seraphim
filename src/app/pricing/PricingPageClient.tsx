@@ -228,7 +228,10 @@ export function PricingPageClient({
                         <div className={styles.angelOfferCopy}>
                             <span className={styles.guestPreviewEyebrow}>Founder offer</span>
                             <h2>Back Seraphim for the long term</h2>
-                            <p>One payment unlocks the complete Analyst experience for the lifetime of the service. Limited to 100 founding memberships.</p>
+                            <p>
+                                One payment unlocks the complete Analyst experience for the lifetime of the service. Limited to 100 founding memberships.{' '}
+                                <a href="/terms" title="Read Angel refund and lifetime terms">Refund and lifetime terms</a> apply.
+                            </p>
                         </div>
                         <div className={styles.angelOfferCard}>
                             <PricingCard

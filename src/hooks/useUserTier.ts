@@ -10,6 +10,7 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import type { UserTier } from '@/components/ui/TierBadge';
+import type { AngelStatus } from '@/components/auth/auth/profileCache';
 
 interface UserTierState {
     tier: UserTier;
@@ -21,6 +22,7 @@ interface UserTierState {
     currentPeriodEnd: string | null;
     trialEndsAt: string | null;
     cancelAtPeriodEnd: boolean;
+    angelStatus: AngelStatus | null;
     refetch: () => Promise<void>;
 }
 
@@ -35,6 +37,7 @@ export function useUserTier(): UserTierState {
         currentPeriodEnd,
         trialEndsAt,
         cancelAtPeriodEnd,
+        angelStatus,
         refetchTier,
     } = useAuth();
 
@@ -48,6 +51,7 @@ export function useUserTier(): UserTierState {
         currentPeriodEnd,
         trialEndsAt,
         cancelAtPeriodEnd,
+        angelStatus,
         refetch: refetchTier,
     };
 }

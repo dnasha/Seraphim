@@ -25,6 +25,7 @@ const RESPONSE_STATUS: Record<string, number> = {
   subscription_exists: 409,
   checkout_conflict: 409,
   angel_already_owned: 409,
+  angel_payment_review: 409,
   angel_sold_out: 410,
 };
 const SUBSCRIPTION_TRIAL_DAYS = 14;
@@ -34,6 +35,7 @@ function checkoutError(code: string, status = RESPONSE_STATUS[code] ?? 409) {
     subscription_exists: 'Manage your existing subscription from the billing portal.',
     checkout_conflict: 'Another checkout is already in progress.',
     angel_already_owned: 'Angel access is already active for this account.',
+    angel_payment_review: 'Billing is unavailable while the Angel payment is under review.',
     angel_sold_out: 'Angel access is currently sold out.',
   };
   return NextResponse.json({ code, error: messages[code] ?? 'Unable to start checkout.' }, { status });
@@ -77,6 +79,18 @@ export async function POST(request: NextRequest) {
   const isAngel = priceKey === 'angel';
   if ((!isAngel && !isCheckoutEnabled()) || (isAngel && !isAngelCheckoutEnabled())) {
     return NextResponse.json({ code: 'payments_disabled', error: 'Payments are currently disabled.' }, { status: 503 });
+  }
+
+  const managedPaymentsEnabled = process.env.STRIPE_MANAGED_PAYMENTS_ENABLED === 'true';
+  const automaticTaxEnabled = process.env.STRIPE_AUTOMATIC_TAX_ENABLED === 'true';
+  if (managedPaymentsEnabled && automaticTaxEnabled) {
+    await recordIncident({
+      dedupKey: 'billing:managed-payments-tax-conflict',
+      service: 'billing',
+      type: 'managed_payments_tax_configuration_conflict',
+      severity: 'critical',
+    });
+    return NextResponse.json({ code: 'configuration_error', error: 'Checkout is unavailable.' }, { status: 503 });
   }
 
   const supabase = await createClient();
@@ -171,7 +185,6 @@ export async function POST(request: NextRequest) {
       checkout_intent_id: intentId,
       correlation_id: correlationId,
     };
-    const automaticTaxEnabled = process.env.STRIPE_AUTOMATIC_TAX_ENABLED === 'true';
     const promotionCodesEnabled = process.env.STRIPE_PROMOTION_CODES_ENABLED === 'true';
     const separator = returnTo.includes('?') ? '&' : '?';
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
@@ -182,8 +195,10 @@ export async function POST(request: NextRequest) {
       cancel_url: `${origin}${returnTo}${separator}checkout=cancelled`,
       metadata: commonMetadata,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      consent_collection: { terms_of_service: 'required' },
       ...(promotionCodesEnabled ? { allow_promotion_codes: true } : {}),
-      ...(automaticTaxEnabled
+      ...(managedPaymentsEnabled ? { managed_payments: { enabled: true } } : {}),
+      ...(!managedPaymentsEnabled && automaticTaxEnabled
         ? {
             automatic_tax: { enabled: true },
             billing_address_collection: 'required' as const,

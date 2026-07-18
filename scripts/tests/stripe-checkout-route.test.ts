@@ -65,6 +65,7 @@ describe('POST /api/stripe/checkout', () => {
     mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
     mocks.priceRetrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
     mocks.sessionCreate.mockResolvedValue({ id: 'cs-1', url: 'https://checkout.stripe.example/session', expires_at: 1_900_000_000 });
+    process.env.STRIPE_MANAGED_PAYMENTS_ENABLED = 'false';
     process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'false';
     delete process.env.STRIPE_PROMOTION_CODES_ENABLED;
   });
@@ -95,6 +96,7 @@ describe('POST /api/stripe/checkout', () => {
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
       customer: 'cus-1', mode: 'subscription',
       success_url: 'https://seraphim.example/account?tab=billing&checkout=success',
+      consent_collection: { terms_of_service: 'required' },
       subscription_data: expect.objectContaining({ trial_period_days: 14 }),
     }), { idempotencyKey: 'checkout-intent-intent-1' });
   });
@@ -120,6 +122,18 @@ describe('POST /api/stripe/checkout', () => {
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'payment', payment_intent_data: { metadata: expect.objectContaining({ price_key: 'angel' }) } }), expect.anything());
   });
 
+  it('blocks every paid Checkout while an Angel dispute is pending', async () => {
+    mocks.rpc.mockResolvedValue(reservation('angel_payment_review'));
+    const response = await POST(request('pro_monthly'));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      code: 'angel_payment_review',
+      error: 'Billing is unavailable while the Angel payment is under review.',
+    });
+    expect(mocks.customerCreate).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
+  });
+
   it('enables Stripe Tax only when explicitly configured', async () => {
     process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'true';
     await POST(request('pro_yearly'));
@@ -128,6 +142,45 @@ describe('POST /api/stripe/checkout', () => {
       billing_address_collection: 'required',
       customer_update: { address: 'auto' },
     }), expect.anything());
+  });
+
+  it('keeps Managed Payments off by default and enables it explicitly without ordinary tax fields', async () => {
+    await POST(request('pro_monthly'));
+    expect(mocks.sessionCreate).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ managed_payments: expect.anything() }),
+      expect.anything(),
+    );
+
+    vi.clearAllMocks();
+    mocks.rpc.mockResolvedValue(reservation());
+    mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
+    mocks.sessionCreate.mockResolvedValue({ id: 'cs-managed', url: 'https://checkout.stripe.example/managed', expires_at: 1_900_000_000 });
+    process.env.STRIPE_MANAGED_PAYMENTS_ENABLED = 'true';
+
+    await POST(request('analyst_monthly'));
+    expect(mocks.sessionCreate).toHaveBeenLastCalledWith(expect.objectContaining({
+      managed_payments: { enabled: true },
+      consent_collection: { terms_of_service: 'required' },
+      subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+    }), expect.anything());
+    const params = mocks.sessionCreate.mock.calls.at(-1)?.[0];
+    expect(params).not.toHaveProperty('automatic_tax');
+    expect(params).not.toHaveProperty('billing_address_collection');
+    expect(params).not.toHaveProperty('customer_update');
+  });
+
+  it('fails closed before auth, reservations, or Stripe when Managed Payments conflicts with automatic tax', async () => {
+    process.env.STRIPE_MANAGED_PAYMENTS_ENABLED = 'true';
+    process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'true';
+
+    const response = await POST(request('pro_yearly'));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ code: 'configuration_error', error: 'Checkout is unavailable.' });
+    expect(mocks.getUser).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.customerCreate).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
   });
 
   it('keeps promotion codes off by default and enables them only by configuration', async () => {

@@ -61,6 +61,22 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_failed':
         await handleInvoiceSubscription(event.data.object as Stripe.Invoice, 'failed');
         break;
+      case 'refund.created':
+      case 'refund.updated':
+        await handleRefund(event.data.object as Stripe.Refund, event.created);
+        break;
+      case 'refund.failed':
+        await handleFailedRefund(event.data.object as Stripe.Refund);
+        break;
+      case 'charge.refunded':
+        await handleRefundedCharge(event.data.object as Stripe.Charge, event.created);
+        break;
+      case 'charge.dispute.created':
+        await handleDisputeOpened(event.data.object as Stripe.Dispute, event.created);
+        break;
+      case 'charge.dispute.closed':
+        await handleDisputeClosed(event.data.object as Stripe.Dispute, event.created);
+        break;
       default:
         break;
     }
@@ -203,6 +219,119 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     if (subscription.status === 'trialing') {
       await recordMetric({ kind: 'conversion', service: 'billing', name: `trial_started.${priceKey}` });
     }
+  }
+}
+
+type AngelTransition = 'refund_succeeded' | 'dispute_opened' | 'dispute_won' | 'dispute_lost';
+type AngelTransitionResult = {
+  result_code: 'transitioned' | 'deferred' | 'not_found' | 'already_applied' | 'terminal' | 'stale_dispute';
+  affected_user_id: string | null;
+  previous_status: 'active' | 'dispute_pending' | 'revoked' | null;
+  current_status: 'active' | 'dispute_pending' | 'revoked' | null;
+};
+
+function getPaymentIntentId(reference: string | Stripe.PaymentIntent | null) {
+  if (!reference) return null;
+  return typeof reference === 'string' ? reference : reference.id;
+}
+
+async function applyAngelTransition(
+  paymentIntentId: string | null,
+  transition: AngelTransition,
+  stripeObjectId: string,
+  stripeEventCreated: number,
+) {
+  if (!paymentIntentId) return null;
+  const eventTimeSeconds = Number.isFinite(stripeEventCreated)
+    ? stripeEventCreated
+    : Math.floor(Date.now() / 1000);
+  const { data, error } = await supabaseAdmin.rpc('transition_angel_purchase', {
+    p_stripe_payment_intent_id: paymentIntentId,
+    p_transition: transition,
+    p_stripe_object_id: stripeObjectId,
+    p_stripe_event_at: new Date(eventTimeSeconds * 1000).toISOString(),
+  });
+  if (error) throw error;
+  const result = Array.isArray(data) ? data[0] as AngelTransitionResult | undefined : null;
+  if (!result || result.result_code === 'not_found' || result.result_code === 'deferred' || result.result_code === 'already_applied') return result ?? null;
+
+  if (result.result_code === 'stale_dispute') {
+    await recordIncident({
+      dedupKey: `billing:angel-stale-dispute:${stripeObjectId}`,
+      service: 'billing',
+      type: 'angel_stale_dispute_event',
+      severity: 'warning',
+      correlationId: stripeObjectId,
+      safeContext: { paymentIntentId, stripeObjectId, transition },
+    });
+    return result;
+  }
+
+  if (result.result_code === 'terminal' && transition === 'dispute_won') {
+    await recordIncident({
+      dedupKey: `billing:angel-terminal-reversal:${stripeObjectId}`,
+      service: 'billing',
+      type: 'angel_terminal_reversal_requires_review',
+      severity: 'critical',
+      correlationId: stripeObjectId,
+      safeContext: { paymentIntentId, stripeObjectId, transition },
+    });
+    return result;
+  }
+
+  if (result.result_code !== 'transitioned') return result;
+
+  const roleIncidentKey = `billing:angel-role:${paymentIntentId}`;
+  if (transition === 'dispute_won') {
+    await recoverIncident(roleIncidentKey);
+  } else {
+    await recordIncident({
+      dedupKey: roleIncidentKey,
+      service: 'billing',
+      type: 'angel_founder_role_requires_review',
+      severity: transition === 'dispute_opened' ? 'warning' : 'critical',
+      correlationId: stripeObjectId,
+      safeContext: { paymentIntentId, stripeObjectId, transition },
+    });
+  }
+  await recordMetric({ kind: 'operational', service: 'billing', name: `angel_${transition}` });
+  return result;
+}
+
+async function handleRefund(refund: Stripe.Refund, stripeEventCreated: number) {
+  if (refund.status !== 'succeeded' || refund.amount <= 0) return;
+  await applyAngelTransition(getPaymentIntentId(refund.payment_intent), 'refund_succeeded', refund.id, stripeEventCreated);
+}
+
+async function handleFailedRefund(refund: Stripe.Refund) {
+  const paymentIntentId = getPaymentIntentId(refund.payment_intent);
+  if (!paymentIntentId) return;
+  const { data, error } = await supabaseAdmin
+    .from('angel_purchases')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+  if (error || !data) return;
+  await recordMetric({ kind: 'operational', service: 'billing', name: 'angel_refund_failed' });
+}
+
+async function handleRefundedCharge(charge: Stripe.Charge, stripeEventCreated: number) {
+  if (charge.amount_refunded <= 0) return;
+  const succeededRefund = charge.refunds?.data.find((refund) => refund.status === 'succeeded' && refund.amount > 0);
+  await applyAngelTransition(getPaymentIntentId(charge.payment_intent), 'refund_succeeded', succeededRefund?.id ?? charge.id, stripeEventCreated);
+}
+
+async function handleDisputeOpened(dispute: Stripe.Dispute, stripeEventCreated: number) {
+  await applyAngelTransition(getPaymentIntentId(dispute.payment_intent), 'dispute_opened', dispute.id, stripeEventCreated);
+}
+
+async function handleDisputeClosed(dispute: Stripe.Dispute, stripeEventCreated: number) {
+  if (dispute.status === 'lost') {
+    await applyAngelTransition(getPaymentIntentId(dispute.payment_intent), 'dispute_lost', dispute.id, stripeEventCreated);
+    return;
+  }
+  if (dispute.status === 'won' || dispute.status === 'warning_closed' || dispute.status === 'prevented') {
+    await applyAngelTransition(getPaymentIntentId(dispute.payment_intent), 'dispute_won', dispute.id, stripeEventCreated);
   }
 }
 
