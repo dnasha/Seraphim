@@ -10,6 +10,7 @@ import {
 } from '@/lib/security/payments';
 import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
 import { recordIncident, recordMetric } from '@/lib/server/operations';
+import { retireCheckoutReservation } from '@/lib/server/checkoutReservations';
 
 type PriceKey = keyof typeof STRIPE_PRICES;
 type IntentReservation = {
@@ -53,6 +54,47 @@ async function getAngelMaxQuantity(priceId: string) {
     // The database reservation still enforces the application maximum.
   }
   return ANGEL_MAX_QUANTITY;
+}
+
+async function reserveCheckoutIntent(input: {
+  userId: string;
+  priceKey: PriceKey;
+  mode: 'payment' | 'subscription';
+  maxAngel: number;
+}) {
+  const { data, error } = await supabaseAdmin.rpc(
+    'reserve_billing_checkout_intent',
+    {
+      p_user_id: input.userId,
+      p_price_key: input.priceKey,
+      p_mode: input.mode,
+      p_max_angel: input.maxAngel,
+    },
+  );
+  if (error || !Array.isArray(data) || !data[0]) return null;
+  return data[0] as IntentReservation;
+}
+
+async function retireOtherTierReservations(userId: string, priceKey: PriceKey) {
+  const { data, error } = await supabaseAdmin
+    .from('billing_checkout_intents')
+    .select('id, status, stripe_session_id')
+    .eq('user_id', userId)
+    .neq('price_key', priceKey)
+    .in('status', ['creating', 'open', 'pending_payment']);
+  if (error) return false;
+
+  const reservations = Array.isArray(data) ? data : [];
+  for (const reservation of reservations) {
+    if (reservation.status !== 'open') return false;
+    const retired = await retireCheckoutReservation({
+      intent_id: reservation.id,
+      intent_status: reservation.status,
+      existing_session_id: reservation.stripe_session_id,
+    }, userId, { expireOpenSession: true });
+    if (!retired) return false;
+  }
+  return true;
 }
 
 export async function POST(request: NextRequest) {
@@ -112,22 +154,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ code: 'configuration_error', error: 'Checkout is unavailable.' }, { status: 503 });
   }
 
+  if (!await retireOtherTierReservations(user.id, priceKey)) {
+    return checkoutError('checkout_conflict');
+  }
+
   const returnTo = body.returnTo?.startsWith('/') && !body.returnTo.startsWith('//')
     ? body.returnTo
     : '/';
   const maxAngel = isAngel ? await getAngelMaxQuantity(priceId) : ANGEL_MAX_QUANTITY;
   const mode = isAngel ? 'payment' : 'subscription';
 
-  const { data: reservationRows, error: reservationError } = await supabaseAdmin.rpc(
-    'reserve_billing_checkout_intent',
-    {
-      p_user_id: user.id,
-      p_price_key: priceKey,
-      p_mode: mode,
-      p_max_angel: maxAngel,
-    },
-  );
-  if (reservationError || !Array.isArray(reservationRows) || !reservationRows[0]) {
+  let reservation = await reserveCheckoutIntent({
+    userId: user.id,
+    priceKey,
+    mode,
+    maxAngel,
+  });
+  if (!reservation) {
     await recordIncident({
       dedupKey: 'billing:checkout-reservation',
       service: 'billing',
@@ -137,19 +180,57 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ code: 'checkout_unavailable', error: 'Checkout is unavailable.' }, { status: 503 });
   }
 
-  const reservation = reservationRows[0] as IntentReservation;
-  if (reservation.result_code === 'existing') {
-    if (!reservation.existing_session_id) return checkoutError('checkout_conflict');
-    try {
-      const existing = await stripe.checkout.sessions.retrieve(reservation.existing_session_id);
-      if (existing.status === 'open' && existing.url) {
-        return NextResponse.json({ url: existing.url, reused: true });
+  // Stripe's cancel URL only redirects the customer; it leaves the Session open.
+  // A different selection therefore expires that abandoned Session before retrying
+  // the database reservation. Retry once to preserve the unique active-intent guard.
+  for (let attempt = 0; attempt < 2 && reservation.result_code !== 'created'; attempt += 1) {
+    if (reservation.result_code === 'existing') {
+      if (!reservation.existing_session_id) return checkoutError('checkout_conflict');
+      try {
+        const existing = await stripe.checkout.sessions.retrieve(reservation.existing_session_id);
+        if (existing.status === 'open' && existing.url) {
+          return NextResponse.json({ url: existing.url, intentId: reservation.intent_id, reused: true });
+        }
+      } catch {
+        return checkoutError('checkout_conflict');
       }
-    } catch {
-      // Fall through to a safe conflict; the expiry webhook/reconciliation closes it.
+
+      if (attempt > 0 || !await retireCheckoutReservation(
+        reservation,
+        user.id,
+        { expireOpenSession: false },
+      )) {
+        return checkoutError('checkout_conflict');
+      }
+    } else if (reservation.result_code === 'checkout_conflict') {
+      if (attempt > 0 || !await retireCheckoutReservation(
+        reservation,
+        user.id,
+        { expireOpenSession: true },
+      )) {
+        return checkoutError('checkout_conflict');
+      }
+    } else {
+      return checkoutError(reservation.result_code);
     }
-    return checkoutError('checkout_conflict');
+
+    reservation = await reserveCheckoutIntent({
+      userId: user.id,
+      priceKey,
+      mode,
+      maxAngel,
+    });
+    if (!reservation) {
+      await recordIncident({
+        dedupKey: 'billing:checkout-reservation',
+        service: 'billing',
+        type: 'checkout_reservation_failed',
+        severity: 'critical',
+      });
+      return NextResponse.json({ code: 'checkout_unavailable', error: 'Checkout is unavailable.' }, { status: 503 });
+    }
   }
+
   if (reservation.result_code !== 'created' || !reservation.intent_id || !reservation.correlation_id) {
     return checkoutError(reservation.result_code);
   }
@@ -192,7 +273,11 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       mode,
       success_url: `${origin}${returnTo}${separator}checkout=success`,
-      cancel_url: `${origin}${returnTo}${separator}checkout=cancelled`,
+      cancel_url: `${origin}/pricing?${new URLSearchParams({
+        returnTo,
+        checkout: 'cancelled',
+        checkoutIntent: intentId,
+      }).toString()}`,
       metadata: commonMetadata,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       consent_collection: { terms_of_service: 'required' },
@@ -234,7 +319,7 @@ export async function POST(request: NextRequest) {
 
     await recordMetric({ kind: 'operational', service: 'billing', name: 'checkout_started' });
     await recordMetric({ kind: 'conversion', service: 'billing', name: `checkout_started.${priceKey}` });
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: session.url, intentId });
   } catch {
     await supabaseAdmin
       .from('billing_checkout_intents')

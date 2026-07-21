@@ -32,16 +32,28 @@ function checkoutMetricDimensions(priceKey: string): OptionalMetricDimensions {
     };
 }
 
+async function requestAngelAvailability() {
+    try {
+        const res = await fetch('/api/stripe/angel-count');
+        if (!res.ok) return null;
+        return await res.json() as { remaining: number; total: number };
+    } catch {
+        return null;
+    }
+}
+
 export interface PricingPageClientProps {
     returnTo: string;
     requestedFeature: string | null;
     recommendedTier: 'pro' | 'analyst' | null;
+    cancelledCheckoutIntent: string | null;
 }
 
 export function PricingPageClient({
     returnTo,
     requestedFeature,
     recommendedTier,
+    cancelledCheckoutIntent,
 }: PricingPageClientProps) {
     const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
     const [loadingTier, setLoadingTier] = useState<string | null>(null);
@@ -60,22 +72,44 @@ export function PricingPageClient({
         });
     }, [recommendedTier, requestedFeature]);
 
-    // Fetch angel remaining count
     useEffect(() => {
-        async function fetchAngelCount() {
+        let active = true;
+        void requestAngelAvailability().then((data) => {
+            if (active && data) {
+                setAngelRemaining(data.remaining);
+                setAngelTotal(data.total);
+            }
+        });
+        return () => { active = false; };
+    }, []);
+
+    // Release the specific Session when Stripe's cancel link or browser Back
+    // returns the customer to pricing, then refresh the reserved Angel count.
+    useEffect(() => {
+        if (!user || isGuest) return;
+        const storedIntent = window.sessionStorage.getItem('seraphim.activeCheckoutIntent');
+        const intentId = cancelledCheckoutIntent ?? storedIntent;
+        if (!intentId) return;
+
+        window.sessionStorage.removeItem('seraphim.activeCheckoutIntent');
+        let active = true;
+        void (async () => {
             try {
-                const res = await fetch('/api/stripe/angel-count');
-                if (res.ok) {
-                    const data = await res.json() as { remaining: number; total: number };
+                await fetch('/api/stripe/checkout/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ intentId }),
+                });
+            } finally {
+                const data = await requestAngelAvailability();
+                if (active && data) {
                     setAngelRemaining(data.remaining);
                     setAngelTotal(data.total);
                 }
-            } catch {
-                // Non-critical, default to showing nothing
             }
-        }
-        fetchAngelCount();
-    }, []);
+        })();
+        return () => { active = false; };
+    }, [cancelledCheckoutIntent, isGuest, user]);
 
     const handleCheckout = useCallback(async (priceKey: string) => {
         void trackOptionalMetric('checkout_click', {
@@ -99,9 +133,12 @@ export function PricingPageClient({
                 body: JSON.stringify({ priceKey, returnTo }),
             });
 
-            const data = await res.json() as { url?: string; error?: string };
+            const data = await res.json() as { url?: string; intentId?: string; error?: string };
 
             if (data.url) {
+                if (data.intentId) {
+                    window.sessionStorage.setItem('seraphim.activeCheckoutIntent', data.intentId);
+                }
                 window.location.href = data.url;
             } else {
                 setErrorMsg(data.error || 'Failed to start checkout');

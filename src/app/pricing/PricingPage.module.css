@@ -293,10 +293,9 @@
     gap: 4px;
 }
 
-.priceOriginal {
+.billingNote {
     font-size: 0.875rem;
     color: var(--text-muted);
-    text-decoration: line-through;
     width: 100%;
     margin-bottom: 2px;
 }
