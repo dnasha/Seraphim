@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   checkoutEnabled: true,
   angelEnabled: true,
+  sameOrigin: true,
+  rateLimit: { allowed: true, retryAfterSeconds: 0 },
   getUser: vi.fn(),
   rpc: vi.fn(),
   from: vi.fn(),
@@ -20,7 +22,10 @@ vi.mock('@/lib/security/payments', () => ({
   isCheckoutEnabled: () => mocks.checkoutEnabled,
   isAngelCheckoutEnabled: () => mocks.angelEnabled,
 }));
-vi.mock('@/lib/security/sensitiveRequest', () => ({ hasValidSameOrigin: () => true, checkSensitiveRateLimit: async () => ({ allowed: true }) }));
+vi.mock('@/lib/security/sensitiveRequest', () => ({
+  hasValidSameOrigin: () => mocks.sameOrigin,
+  checkSensitiveRateLimit: async () => mocks.rateLimit,
+}));
 vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 vi.mock('@/lib/stripe', () => ({
   ANGEL_MAX_QUANTITY: 100,
@@ -69,6 +74,8 @@ describe('POST /api/stripe/checkout', () => {
     vi.clearAllMocks();
     mocks.checkoutEnabled = true;
     mocks.angelEnabled = true;
+    mocks.sameOrigin = true;
+    mocks.rateLimit = { allowed: true, retryAfterSeconds: 0 };
     mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'user@example.com' } }, error: null });
     mocks.rpc.mockResolvedValue(reservation());
     mocks.from.mockImplementation((table: string) => query(table === 'user_profiles' ? { stripe_customer_id: 'cus-1' } : null));
@@ -84,6 +91,29 @@ describe('POST /api/stripe/checkout', () => {
     mocks.checkoutEnabled = false;
     expect((await POST(request('pro_monthly'))).status).toBe(503);
     expect(mocks.getUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects cross-origin checkout requests before auth or Stripe', async () => {
+    mocks.sameOrigin = false;
+
+    const response = await POST(request('pro_monthly'));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ code: 'invalid_origin', error: 'Request rejected.' });
+    expect(mocks.getUser).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the sensitive-action limiter is unavailable', async () => {
+    mocks.rateLimit = { allowed: false, retryAfterSeconds: 60 };
+
+    const response = await POST(request('pro_monthly'));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
   });
 
   it('checks the Angel kill switch independently before auth or Stripe', async () => {
@@ -217,6 +247,19 @@ describe('POST /api/stripe/checkout', () => {
   it('uses payment mode and PaymentIntent metadata for Angel checkout', async () => {
     await POST(request('angel'));
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ mode: 'payment', payment_intent_data: { metadata: expect.objectContaining({ price_key: 'angel' }) } }), expect.anything());
+  });
+
+  it('uses purchase-history wording when Angel cannot be repurchased', async () => {
+    mocks.rpc.mockResolvedValue(reservation('angel_already_owned'));
+
+    const response = await POST(request('angel'));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      code: 'angel_already_owned',
+      error: 'Angel access has already been purchased for this account.',
+    });
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
   });
 
   it('enables Managed Payments for Angel as well as subscription Checkout', async () => {

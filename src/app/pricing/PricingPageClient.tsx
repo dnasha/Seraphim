@@ -73,6 +73,14 @@ export function PricingPageClient({
     }, [recommendedTier, requestedFeature]);
 
     useEffect(() => {
+        // A returning Checkout cancellation refreshes availability after the
+        // Session has been expired. Avoid racing that refresh with the normal
+        // mount request and issuing the same inventory query twice.
+        if (
+            cancelledCheckoutIntent
+            || window.sessionStorage.getItem('seraphim.activeCheckoutIntent')
+        ) return;
+
         let active = true;
         void requestAngelAvailability().then((data) => {
             if (active && data) {
@@ -81,7 +89,7 @@ export function PricingPageClient({
             }
         });
         return () => { active = false; };
-    }, []);
+    }, [cancelledCheckoutIntent]);
 
     // Release the specific Session when Stripe's cancel link or browser Back
     // returns the customer to pricing, then refresh the reserved Angel count.

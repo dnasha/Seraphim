@@ -35,7 +35,7 @@ function checkoutError(code: string, status = RESPONSE_STATUS[code] ?? 409) {
   const messages: Record<string, string> = {
     subscription_exists: 'Manage your existing subscription from the billing portal.',
     checkout_conflict: 'Another checkout is already in progress.',
-    angel_already_owned: 'Angel access is already active for this account.',
+    angel_already_owned: 'Angel access has already been purchased for this account.',
     angel_payment_review: 'Billing is unavailable while the Angel payment is under review.',
     angel_sold_out: 'Angel access is currently sold out.',
   };
