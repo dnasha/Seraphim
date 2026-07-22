@@ -1,0 +1,99 @@
+.header {
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
+  align-items: center;
+  padding: 20px 0;
+  margin-bottom: 40px;
+  border-bottom: 1px solid var(--border);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.brandLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  color: var(--text-primary);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.logo {
+  width: auto;
+  height: 3.4rem;
+  flex-shrink: 0;
+}
+
+.logoFill {
+  fill: currentColor;
+}
+
+.logoStroke {
+  fill: none;
+  stroke: currentColor;
+}
+
+.brandName {
+  margin-left: 14px;
+  overflow: hidden;
+  font-family: var(--font-logo);
+  font-size: 2.05rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 44px;
+}
+
+.backLink:focus-visible,
+.brandLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .backLink:hover {
+    background: var(--surface-hover);
+    transform: scale(1.05);
+  }
+
+  .brandLink:hover .logo {
+    transform: scale(1.03);
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 16px 0;
+    margin-bottom: 24px;
+  }
+
+  .logo {
+    height: 2.5rem;
+  }
+
+  .brandName {
+    margin-left: 10px;
+    font-size: 1.25rem;
+  }
+}

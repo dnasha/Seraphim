@@ -268,11 +268,15 @@ export async function POST(request: NextRequest) {
     };
     const promotionCodesEnabled = process.env.STRIPE_PROMOTION_CODES_ENABLED === 'true';
     const separator = returnTo.includes('?') ? '&' : '?';
+    const checkoutPlan = isAngel ? 'angel' : priceKey.startsWith('analyst_') ? 'analyst' : 'pro';
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       mode,
-      success_url: `${origin}${returnTo}${separator}checkout=success`,
+      success_url: `${origin}${returnTo}${separator}${new URLSearchParams({
+        checkout: 'success',
+        checkoutPlan,
+      }).toString()}`,
       cancel_url: `${origin}/pricing?${new URLSearchParams({
         returnTo,
         checkout: 'cancelled',

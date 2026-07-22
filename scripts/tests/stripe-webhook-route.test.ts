@@ -84,6 +84,25 @@ describe('POST /api/stripe/webhook', () => {
     expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'billing_checkout_intents', payload: expect.objectContaining({ status: 'completed' }) }));
   });
 
+  it('keeps lifetime Angel state after canceling a replaced subscription', async () => {
+    mocks.profile = { tier: 'free', stripe_subscription_id: 'sub-replaced' };
+    mocks.constructEvent.mockReturnValue({ id: 'evt-angel-upgrade', type: 'checkout.session.completed', data: { object: {
+      id: 'cs-angel-upgrade', mode: 'payment', payment_status: 'paid', payment_intent: 'pi-upgrade', customer: 'cus-1',
+      metadata: { supabase_user_id: 'user-1', price_key: 'angel', checkout_intent_id: 'intent-upgrade' },
+    } } });
+
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.cancelSubscription).toHaveBeenCalledWith('sub-replaced');
+    expect(mocks.updates).toContainEqual(expect.objectContaining({
+      table: 'user_profiles',
+      payload: expect.objectContaining({
+        stripe_subscription_id: null,
+        subscription_status: 'active',
+        billing_interval: 'lifetime',
+      }),
+    }));
+  });
+
   it('keeps active, trialing, and past-due subscriptions entitled', async () => {
     mocks.constructEvent.mockReturnValue({ id: 'evt-sub', type: 'checkout.session.completed', data: { object: {
       id: 'cs-sub', mode: 'subscription', subscription: 'sub-1', metadata: { supabase_user_id: 'user-1', price_key: 'pro_monthly', checkout_intent_id: 'intent-1' },

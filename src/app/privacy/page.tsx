@@ -1,5 +1,5 @@
 import styles from '../terms/LegalPage.module.css';
-import LegalBackButton from '@/components/ui/LegalBackButton';
+import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import PrivacyChoicesButton from '@/components/ui/PrivacyChoicesButton';
 import { createPageMetadata } from '@/lib/siteConfig';
 
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.container}>
-        <LegalBackButton />
+        <PublicPageHeader />
 
         <header className={styles.header}>
           <h1 className={styles.title}>Privacy Policy</h1>

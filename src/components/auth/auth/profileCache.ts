@@ -36,6 +36,7 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
     const [angelStatus, setAngelStatus] = useState<AngelStatus | null>(null);
     const [tierLoading, setTierLoading] = useState(true);
     const lastFetchedRef = useRef<Record<string, number>>({});
+    const loadedUserIdRef = useRef<string | null>(null);
     const userRef = useRef<User | null>(user);
 
     useEffect(() => { userRef.current = user; }, [user]);
@@ -55,21 +56,23 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
     const fetchUserTier = useCallback(async (userId: string | undefined, force = false, sessionPassed?: Session | null) => {
         if (!userId) {
             resetProfile();
+            loadedUserIdRef.current = null;
             setTierLoading(false);
-            return;
+            return undefined;
         }
 
         const now = Date.now();
-        if (!force && now - (lastFetchedRef.current[userId] || 0) < 30000) return;
+        if (!force && now - (lastFetchedRef.current[userId] || 0) < 30000) return undefined;
         lastFetchedRef.current[userId] = now;
-        setTierLoading(true);
+        const isInitialLoad = loadedUserIdRef.current !== userId;
+        if (isInitialLoad) setTierLoading(true);
 
         try {
             let session = sessionPassed;
             if (session === undefined) session = (await supabase.auth.getSession()).data.session;
             if (!session || session.user.id !== userId) {
                 resetProfile();
-                return;
+                return undefined;
             }
 
             const controller = new AbortController();
@@ -85,11 +88,12 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
                 clearTimeout(timeout);
             }
 
-            if (!userRef.current || userRef.current.id !== userId) return;
+            if (!userRef.current || userRef.current.id !== userId) return undefined;
             if (!response.ok) throw new Error(`profile_${response.status}`);
 
             const data = await response.json() as AccountProfileResponse;
             const normalizedTier = normalizeUserTier(data.effectiveTier, true);
+            loadedUserIdRef.current = userId;
             setUserTier(normalizedTier);
             setTierSource(data.tierSource === 'override' ? 'override' : 'billing');
             setOverrideExpiresAt(data.overrideExpiresAt ?? null);
@@ -109,10 +113,12 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
             } catch {
                 // Storage is an optional rendering optimization, never an entitlement source.
             }
+            return normalizedTier;
         } catch {
             setUserTier(previous => previous !== 'guest' ? previous : 'free');
+            return undefined;
         } finally {
-            setTierLoading(false);
+            if (isInitialLoad) setTierLoading(false);
         }
     }, [resetProfile, supabase]);
 

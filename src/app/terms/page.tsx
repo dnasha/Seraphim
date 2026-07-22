@@ -1,5 +1,5 @@
 import styles from './LegalPage.module.css';
-import LegalBackButton from '@/components/ui/LegalBackButton';
+import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import { createPageMetadata } from '@/lib/siteConfig';
 
 const EFFECTIVE_DATE = 'July 17, 2026';
@@ -15,7 +15,7 @@ export default function TermsPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.container}>
-        <LegalBackButton />
+        <PublicPageHeader />
 
         <header className={styles.header}>
           <h1 className={styles.title}>Terms of Service</h1>
