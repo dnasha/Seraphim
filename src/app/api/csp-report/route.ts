@@ -95,9 +95,12 @@ async function acceptReport(clientIp: string, fingerprint: string) {
 }
 
 export async function POST(request: NextRequest) {
-  // Development policies intentionally omit report-uri. Also refuse manual or
-  // stale-page reports so local testing can never write CSP noise to Supabase.
-  if (process.env.NODE_ENV === 'development') {
+  // Reporting is opt-in. The header is omitted while disabled, and this guard
+  // also prevents stale tabs or manual requests from reaching Redis/Supabase.
+  if (
+    process.env.NODE_ENV === 'development'
+    || process.env.CSP_REPORTING_ENABLED !== 'true'
+  ) {
     return new NextResponse(null, { status: 204 });
   }
 

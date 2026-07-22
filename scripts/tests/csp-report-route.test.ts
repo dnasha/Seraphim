@@ -34,6 +34,7 @@ import { POST } from '@/app/api/csp-report/route';
 describe('POST /api/csp-report', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('CSP_REPORTING_ENABLED', 'true');
     mocks.rateLimit.mockResolvedValue({ success: true, reset: Date.now() + 60_000 });
   });
 
@@ -135,6 +136,30 @@ describe('POST /api/csp-report', () => {
       method: 'POST',
       headers: { 'content-type': 'application/csp-report' },
       body: JSON.stringify({ 'csp-report': { 'effective-directive': 'script-src' } }),
+    }) as never);
+
+    expect(response.status).toBe(204);
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.recordMetric).not.toHaveBeenCalled();
+    expect(mocks.recordIncident).not.toHaveBeenCalled();
+  });
+
+  it('drops stale or manual reports before external work when reporting is disabled', async () => {
+    vi.stubEnv('CSP_REPORTING_ENABLED', 'false');
+
+    const response = await POST(new Request('https://seraphim.example/api/csp-report', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/csp-report',
+        'x-vercel-forwarded-for': '198.51.100.33',
+      },
+      body: JSON.stringify({
+        'csp-report': {
+          'effective-directive': 'connect-src',
+          'blocked-uri': 'https://stale.example/resource',
+          'source-file': 'https://seraphim.example/',
+        },
+      }),
     }) as never);
 
     expect(response.status).toBe(204);
