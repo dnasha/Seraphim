@@ -13,7 +13,7 @@ vi.mock("@/lib/utils/vectorize", async (importOriginal) => {
 
 import { resolveStoryMerges } from "@/scraper/merger";
 
-const incoming = (): DbEvent => ({
+const incoming = (overrides: Partial<DbEvent> = {}): DbEvent => ({
   title: "Port facility struck in Example City",
   description: "Officials reported damage at the port after an overnight strike.",
   url: "https://incoming.example/report",
@@ -27,6 +27,8 @@ const incoming = (): DbEvent => ({
   credibility_tier: 2,
   event_count: 1,
   sources: [],
+  image_url: "https://incoming.example/new.jpg",
+  ...overrides,
 });
 
 describe("indexed scraper candidate matching", () => {
@@ -53,6 +55,7 @@ describe("indexed scraper candidate matching", () => {
           source: "Existing",
           source_type: "rss",
           url: "https://existing.example/report",
+          image_url: "https://existing.example/old.jpg",
           published_at: "2026-07-12T11:00:00.000Z",
         }],
         error: null,
@@ -80,8 +83,43 @@ describe("indexed scraper candidate matching", () => {
       p_queries: [expect.objectContaining({ query_index: 0 })],
     }));
     expect(detailQuery.in).toHaveBeenCalledWith("id", ["11111111-1111-4111-8111-111111111111"]);
+    expect(detailQuery.select).toHaveBeenCalledWith(expect.stringContaining("image_url"));
     expect(from).toHaveBeenCalledTimes(2);
     expect(result.newEvents).toHaveLength(0);
     expect(result.merges.has("11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(result.merges.get("11111111-1111-4111-8111-111111111111")).toMatchObject({
+      image_url: "https://incoming.example/new.jpg",
+    });
+  });
+
+  it("carries an image promotion through an exact-title merge within the same run", async () => {
+    const titleQuery = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const from = vi.fn().mockReturnValueOnce(titleQuery);
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const first = incoming({
+      url: "https://first.example/report",
+      image_url: "https://first.example/old.jpg",
+      published_at: "2026-07-12T11:00:00.000Z",
+    });
+    const second = incoming({
+      url: "https://second.example/report",
+      image_url: "https://second.example/new.jpg",
+      published_at: "2026-07-12T12:00:00.000Z",
+    });
+
+    const result = await resolveStoryMerges([first, second], { from, rpc } as never);
+
+    expect(result.merges.size).toBe(0);
+    expect(result.newEvents).toHaveLength(1);
+    expect(result.newEvents[0]).toMatchObject({
+      url: "https://second.example/report",
+      image_url: "https://second.example/new.jpg",
+      event_count: 2,
+    });
   });
 });

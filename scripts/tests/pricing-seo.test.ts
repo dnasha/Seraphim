@@ -23,8 +23,24 @@ describe('pricing search parameters', () => {
       returnTo: '/account',
       recommendedTier: 'analyst',
       requestedFeature: 'x'.repeat(80),
+      cancelledCheckoutIntent: null,
     });
 
     expect(parsePricingSearchParams({ tier: 'angel' }).recommendedTier).toBeNull();
+  });
+
+  it('accepts only UUID checkout intents on an explicit cancellation return', () => {
+    expect(parsePricingSearchParams({
+      checkout: 'cancelled',
+      checkoutIntent: '123e4567-e89b-42d3-a456-426614174000',
+    }).cancelledCheckoutIntent).toBe('123e4567-e89b-42d3-a456-426614174000');
+    expect(parsePricingSearchParams({
+      checkout: 'success',
+      checkoutIntent: '123e4567-e89b-42d3-a456-426614174000',
+    }).cancelledCheckoutIntent).toBeNull();
+    expect(parsePricingSearchParams({
+      checkout: 'cancelled',
+      checkoutIntent: 'not-an-intent',
+    }).cancelledCheckoutIntent).toBeNull();
   });
 });

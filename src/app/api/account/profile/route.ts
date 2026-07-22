@@ -22,6 +22,7 @@ export async function GET() {
       currentPeriodEnd: profile.currentPeriodEnd,
       trialEndsAt: profile.trialEndsAt,
       cancelAtPeriodEnd: profile.cancelAtPeriodEnd,
+      angelStatus: profile.angelStatus,
     }, {
       headers: { 'Cache-Control': 'private, no-store' },
     });

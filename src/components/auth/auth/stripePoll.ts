@@ -10,6 +10,10 @@ export function useStripeCheckoutPoll(
         const params = new URLSearchParams(window.location.search);
         if (params.get('checkout') !== 'success') return;
 
+        // Checkout completed, so a later visit to pricing must not treat this
+        // Session as abandoned and call the cancellation endpoint.
+        window.sessionStorage.removeItem('seraphim.activeCheckoutIntent');
+
         let attempts = 0;
         let timer: ReturnType<typeof setTimeout> | undefined;
         let cancelled = false;

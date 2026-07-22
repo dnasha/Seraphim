@@ -14,6 +14,7 @@ import React, { createContext, useEffect, useState, useMemo, useCallback, useRef
 import { createClient } from '@/lib/supabase/client';
 import type { User, Session, SupabaseClient, AuthError } from '@supabase/supabase-js';
 import type { UserTier } from '@/components/ui/TierBadge';
+import type { AngelStatus } from './auth/profileCache';
 import { useUserProfile, normalizeUserTier } from './auth/profileCache';
 import { useStripeCheckoutPoll } from './auth/stripePoll';
 
@@ -45,6 +46,7 @@ interface AuthContextType {
     currentPeriodEnd: string | null;
     trialEndsAt: string | null;
     cancelAtPeriodEnd: boolean;
+    angelStatus: AngelStatus | null;
     refetchTier: () => Promise<void>;
 }
 
@@ -81,6 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setTrialEndsAt,
         cancelAtPeriodEnd,
         setCancelAtPeriodEnd,
+        angelStatus,
+        setAngelStatus,
         tierLoading,
         setTierLoading,
         fetchUserTier,
@@ -226,6 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                     setCurrentPeriodEnd(null);
                                     setTrialEndsAt(null);
                                     setCancelAtPeriodEnd(false);
+                                    setAngelStatus(null);
                                     setTierLoading(false);
 
                                     // Clear cache
@@ -288,6 +293,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentPeriodEnd(null);
         setTrialEndsAt(null);
         setCancelAtPeriodEnd(false);
+        setAngelStatus(null);
         setTierLoading(false);
         localStorage.removeItem(GUEST_STORAGE_KEY);
         localStorage.removeItem('seraphim-map-draw-tools-v1');
@@ -318,6 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentPeriodEnd(null);
         setTrialEndsAt(null);
         setCancelAtPeriodEnd(false);
+        setAngelStatus(null);
         setTierLoading(false);
         setShowAuthModal(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,6 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         currentPeriodEnd,
         trialEndsAt,
         cancelAtPeriodEnd,
+        angelStatus,
         refetchTier,
     }), [
         user,
@@ -367,6 +375,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         currentPeriodEnd,
         trialEndsAt,
         cancelAtPeriodEnd,
+        angelStatus,
         refetchTier,
     ]);
 

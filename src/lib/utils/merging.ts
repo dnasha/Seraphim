@@ -97,6 +97,7 @@ export function calculateMergedStory(
     source: string;
     source_type: DbEvent["source_type"];
     url: string;
+    image_url?: string;
     credibility_tier: number;
     published_at: string; // The Master timestamp
     sources: DbEventSource[];
@@ -139,6 +140,9 @@ export function calculateMergedStory(
 
   const incomingTime = new Date(incomingEvent.published_at).getTime();
   const latestPublishedAt = incomingTime > latestClusterTime ? incomingEvent.published_at : existingStory.published_at;
+  const incomingImageUrl = typeof incomingEvent.image_url === "string"
+    ? incomingEvent.image_url.trim()
+    : "";
 
   const incomingSource: DbEventSource = {
     name: incomingEvent.source,
@@ -187,6 +191,7 @@ export function calculateMergedStory(
       url: incomingEvent.url,
       credibility_tier: incomingTier, 
       primary_discovered_at: incomingEvent.primary_discovered_at ?? incomingEvent.published_at,
+      ...(incomingImageUrl ? { image_url: incomingImageUrl } : {}),
     } : {}),
     ...(updateDescription ? {
       description: incomingEvent.description,

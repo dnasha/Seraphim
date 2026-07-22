@@ -93,7 +93,7 @@ export function PricingCard({
                 ) : (
                     <>
                         {!isYearly && (
-                            <span className={styles.priceOriginal}>
+                            <span className={styles.billingNote}>
                                 Pay monthly, cancel anytime
                             </span>
                         )}

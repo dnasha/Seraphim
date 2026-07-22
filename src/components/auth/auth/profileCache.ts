@@ -3,6 +3,7 @@ import type { User, Session, SupabaseClient } from '@supabase/supabase-js';
 import type { UserTier } from '@/components/ui/TierBadge';
 
 export type TierSource = 'billing' | 'override';
+export type AngelStatus = 'active' | 'dispute_pending' | 'revoked';
 
 interface AccountProfileResponse {
     effectiveTier: string | null;
@@ -13,6 +14,7 @@ interface AccountProfileResponse {
     currentPeriodEnd: string | null;
     trialEndsAt: string | null;
     cancelAtPeriodEnd: boolean;
+    angelStatus: AngelStatus | null;
 }
 
 export const normalizeUserTier = (tier: string | null | undefined, hasUser: boolean): UserTier => {
@@ -31,6 +33,7 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
     const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null);
     const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
     const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
+    const [angelStatus, setAngelStatus] = useState<AngelStatus | null>(null);
     const [tierLoading, setTierLoading] = useState(true);
     const lastFetchedRef = useRef<Record<string, number>>({});
     const userRef = useRef<User | null>(user);
@@ -46,6 +49,7 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
         setCurrentPeriodEnd(null);
         setTrialEndsAt(null);
         setCancelAtPeriodEnd(false);
+        setAngelStatus(null);
     }, []);
 
     const fetchUserTier = useCallback(async (userId: string | undefined, force = false, sessionPassed?: Session | null) => {
@@ -94,6 +98,11 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
             setCurrentPeriodEnd(data.currentPeriodEnd ?? null);
             setTrialEndsAt(data.trialEndsAt ?? null);
             setCancelAtPeriodEnd(data.cancelAtPeriodEnd ?? false);
+            setAngelStatus(
+                data.angelStatus === 'active' || data.angelStatus === 'dispute_pending' || data.angelStatus === 'revoked'
+                    ? data.angelStatus
+                    : null,
+            );
 
             try {
                 localStorage.setItem('seraphim_cached_tier', normalizedTier);
@@ -131,6 +140,7 @@ export function useUserProfile(supabase: SupabaseClient, user: User | null) {
         currentPeriodEnd, setCurrentPeriodEnd,
         trialEndsAt, setTrialEndsAt,
         cancelAtPeriodEnd, setCancelAtPeriodEnd,
+        angelStatus, setAngelStatus,
         tierLoading, setTierLoading,
         fetchUserTier, refetchTier, resetProfile,
     };

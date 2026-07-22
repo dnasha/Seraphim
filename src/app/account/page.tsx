@@ -77,7 +77,7 @@ export default function AccountPage() {
     }
   };
 
-  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd } = useUserTier();
+  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd, angelStatus } = useUserTier();
 
   // Redirect if not logged in
   useEffect(() => {
@@ -307,6 +307,16 @@ export default function AccountPage() {
               {userTier === 'angel' && (
                 <p className={styles.helperText} style={{ margin: 0 }}>
                   Angel Founder Discord role: join the community, then email support@seraphi.me from this account email for manual role fulfillment.
+                </p>
+              )}
+              {angelStatus === 'dispute_pending' && (
+                <p className={styles.helperText} style={{ margin: 0, color: '#f59e0b' }}>
+                  Angel access is suspended while the payment is under review. Contact <a href="mailto:support@seraphi.me" title="Email Seraphim support">support@seraphi.me</a> for help.
+                </p>
+              )}
+              {angelStatus === 'revoked' && (
+                <p className={styles.helperText} style={{ margin: 0, color: '#ef4444' }}>
+                  Angel access ended after a refund or payment dispute. Contact <a href="mailto:support@seraphi.me" title="Email Seraphim support">support@seraphi.me</a> with questions.
                 </p>
               )}
               {trialEndsAt && subscriptionStatus === 'trialing' && (

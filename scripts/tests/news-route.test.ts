@@ -45,10 +45,13 @@ const eventRow = {
   event_count: 3,
 };
 
+let requestIpSequence = 0;
+
 function request(query: string, headers: HeadersInit = {}) {
+  requestIpSequence = (requestIpSequence % 199) + 1;
   return new Request(`https://seraphim.example/api/news?${query}`, {
     headers: {
-      'x-vercel-forwarded-for': `198.51.100.${Math.floor(Math.random() * 250) + 1}`,
+      'x-vercel-forwarded-for': `198.51.100.${requestIpSequence}`,
       ...headers,
     },
   });

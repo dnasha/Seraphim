@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import styles from './PricingPage.module.css';
 
 export function FaqSection() {
@@ -24,7 +25,7 @@ export function FaqSection() {
                 </div>
                 <div className={styles.faqItem}>
                     <h3>Is the Angel tier really lifetime?</h3>
-                    <p>Yes. Angel includes all Analyst capabilities forever with one payment. Angel Founders can join the Discord community role through manual fulfillment after purchase.</p>
+                    <p>Angel lasts for the operational lifetime of the hosted service. Refunds and payment disputes can end or suspend access; see the <Link href="/terms" title="Read the Terms of Service">Terms</Link>.</p>
                 </div>
                 <div className={styles.faqItem}>
                     <h3>Where do I manage billing?</h3>
@@ -32,7 +33,7 @@ export function FaqSection() {
                 </div>
                 <div className={styles.faqItem}>
                     <h3>What payment methods are accepted?</h3>
-                    <p>Stripe supports major credit cards, debit cards, and supported local payment methods.</p>
+                    <p>Checkout shows the payment methods currently available through Stripe and Link for your transaction.</p>
                 </div>
                 <div className={styles.faqItem}>
                     <h3>Is my payment information secure?</h3>

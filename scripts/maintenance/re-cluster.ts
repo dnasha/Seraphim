@@ -65,7 +65,7 @@ async function reClusterHistoricalData() {
         */
         const { data: events, error: fetchError } = await db
             .from('events')
-            .select('id, title, url, source, source_type, embedding, latitude, longitude, location_name, sources, published_at, description, credibility_tier')
+            .select('id, title, url, source, source_type, embedding, latitude, longitude, location_name, sources, published_at, description, image_url, credibility_tier')
             .lt('published_at', lastDate)
             .order('published_at', { ascending: false })
             .limit(500);
@@ -104,6 +104,7 @@ async function reClusterHistoricalData() {
                 description: string | null;
                 source: string;
                 url: string;
+                image_url: string | null;
                 credibility_tier: number;
                 published_at: string;
             };
@@ -154,7 +155,7 @@ async function reClusterHistoricalData() {
             if (missingIds.size > 0) {
                 const { data: missingData } = await db
                     .from('events')
-                    .select('id, title, url, source, source_type, latitude, longitude, location_name, description, credibility_tier, published_at, embedding, sources')
+                    .select('id, title, url, source, source_type, latitude, longitude, location_name, description, image_url, credibility_tier, published_at, embedding, sources')
                     .in('id', Array.from(missingIds));
                 
                 if (missingData) {
@@ -242,6 +243,7 @@ async function reClusterHistoricalData() {
                             description: event.description,
                             source: event.source,
                             url: event.url,
+                            image_url: event.image_url,
                             credibility_tier: event.credibility_tier,
                             published_at: event.published_at
                         }

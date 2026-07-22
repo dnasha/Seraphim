@@ -31,6 +31,42 @@ import {
     mergeNewsItem,
 } from './news/newsStore';
 
+type NewsRequestScope = {
+    bbox: BBox | null;
+    sortMode?: string;
+    query?: string;
+    timeRange?: string;
+    since?: string | null;
+    until?: string | null;
+    limit?: number;
+};
+
+function isSameRequestScope(current: NewsRequestScope, previous: NewsRequestScope | null) {
+    if (!previous) return false;
+
+    const currentBBox = current.bbox;
+    const previousBBox = previous.bbox;
+    const sameBBox = (!currentBBox && !previousBBox) || Boolean(
+        currentBBox && previousBBox &&
+        currentBBox.minLat === previousBBox.minLat &&
+        currentBBox.maxLat === previousBBox.maxLat &&
+        currentBBox.minLng === previousBBox.minLng &&
+        currentBBox.maxLng === previousBBox.maxLng &&
+        currentBBox.zoom === previousBBox.zoom &&
+        Boolean(currentBBox.forceRaw) === Boolean(previousBBox.forceRaw)
+    );
+    const sameCustomWindow = current.timeRange !== 'custom' || (
+        current.since === previous.since && current.until === previous.until
+    );
+
+    return sameBBox &&
+        sameCustomWindow &&
+        current.sortMode === previous.sortMode &&
+        current.query === previous.query &&
+        current.timeRange === previous.timeRange &&
+        current.limit === previous.limit;
+}
+
 export function useNewsData({
     timeRange,
     searchQuery,
@@ -60,15 +96,8 @@ export function useNewsData({
     const [appliedLimit, setAppliedLimit] = useState<number | undefined>(undefined);
 
     const newsRef = useRef<NewsItem[]>([]);
-    const lastFetchParamsRef = useRef<{
-        bbox: BBox | null;
-        sortMode?: string;
-        query?: string;
-        timeRange?: string;
-        since?: string | null;
-        until?: string | null;
-        limit?: number;
-    } | null>(null);
+    const lastFetchParamsRef = useRef<NewsRequestScope | null>(null);
+    const activeRequestParamsRef = useRef<NewsRequestScope | null>(null);
     const isFirstMount = useRef(true);
 
     const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
@@ -99,6 +128,7 @@ export function useNewsData({
 
         const knownBBox = pendingBBoxRef.current ?? lastKnownBBoxRef.current ?? lastFetchParamsRef.current?.bbox ?? null;
         lastFetchParamsRef.current = null;
+        activeRequestParamsRef.current = null;
         pendingBBoxRef.current = knownBBox;
         needsScopeReloadRef.current = true;
         entitiesRef.current.clear();
@@ -369,24 +399,21 @@ export function useNewsData({
             return;
         }
 
-        const isSameBBox = (!bbox && !prev?.bbox) || (
-            bbox && prev?.bbox &&
-            bbox.minLat === prev.bbox.minLat &&
-            bbox.maxLat === prev.bbox.maxLat &&
-            bbox.minLng === prev.bbox.minLng &&
-            bbox.maxLng === prev.bbox.maxLng &&
-            bbox.zoom === prev.bbox.zoom
-        );
+        const requestScope: NewsRequestScope = {
+            bbox,
+            sortMode: sortMode || undefined,
+            query: searchQuery || undefined,
+            timeRange,
+            since,
+            until,
+            limit,
+        };
 
-        if (!isRefresh && prev && isSameBBox &&
-            !needsScopeReload &&
-            sortMode === prev.sortMode &&
-            searchQuery === prev.query &&
-            timeRange === prev.timeRange &&
-            since === prev.since &&
-            until === prev.until &&
-            limit === prev.limit) {
-            log('[useNewsData] Returning early because all parameters match previous fetch params');
+        if (!isRefresh && (
+            (!needsScopeReload && isSameRequestScope(requestScope, prev)) ||
+            isSameRequestScope(requestScope, activeRequestParamsRef.current)
+        )) {
+            log('[useNewsData] Returning early because the effective request scope is unchanged');
             return;
         }
 
@@ -430,7 +457,14 @@ export function useNewsData({
         pruneResponseCache(now);
         const cached = responseCache.get(requestKey);
         const requestVersion = ++requestVersionRef.current;
+        activeRequestParamsRef.current = requestScope;
         log(`[useNewsData] coordinateLoad started. Version: ${requestVersion}, isRefresh: ${isRefresh}, limit: ${limit}`);
+
+        if (abortControllerRef.current) {
+            log(`[useNewsData] Aborting superseded request before version ${requestVersion}`);
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
 
         /**
          * Cache Hit Optimization: If fresh data exists for this specific snapped 
@@ -447,22 +481,10 @@ export function useNewsData({
             setAppliedLimit(cached.appliedLimit);
             setIsLoading(false);
             setLastUpdated(new Date(cached.timestamp).toISOString());
-            lastFetchParamsRef.current = {
-                bbox,
-                sortMode,
-                query: searchQuery,
-                timeRange,
-                since,
-                until,
-                limit
-            };
+            lastFetchParamsRef.current = requestScope;
             needsScopeReloadRef.current = false;
+            activeRequestParamsRef.current = null;
             return;
-        }
-
-        if (abortControllerRef.current) {
-            log(`[useNewsData] Aborting previous controller in version ${requestVersion}`);
-            abortControllerRef.current.abort();
         }
 
         const abortController = new AbortController();
@@ -490,15 +512,7 @@ export function useNewsData({
             setIsCapped(resultCapped);
             setAppliedLimit(fetchLimit);
             setLastUpdated(new Date().toISOString());
-            lastFetchParamsRef.current = {
-                bbox,
-                sortMode,
-                query: searchQuery,
-                timeRange,
-                since,
-                until,
-                limit
-            };
+            lastFetchParamsRef.current = requestScope;
             needsScopeReloadRef.current = false;
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
@@ -506,6 +520,8 @@ export function useNewsData({
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
             if (requestVersion === requestVersionRef.current) {
+                activeRequestParamsRef.current = null;
+                abortControllerRef.current = null;
                 setIsLoading(false);
             }
         }
@@ -641,7 +657,7 @@ export function useNewsData({
     }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
 
     const onBoundsChange = useCallback((bbox: BBox) => {
-        coordinateLoad(false, bbox);
+        return coordinateLoad(false, bbox);
     }, [coordinateLoad]);
 
     // Smart scraper-aligned polling to fetch updates at scrape intervals (every 15/30 mins) + 2 min buffer

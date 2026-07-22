@@ -67,7 +67,8 @@ export async function GET() {
 
         const { count, error: purchaseCountError } = await supabaseAdmin
             .from('angel_purchases')
-            .select('*', { count: 'exact', head: true });
+            .select('*', { count: 'exact', head: true })
+            .in('status', ['active', 'dispute_pending']);
 
         const { count: reservedCount, error: reservationCountError } = await supabaseAdmin
             .from('billing_checkout_intents')

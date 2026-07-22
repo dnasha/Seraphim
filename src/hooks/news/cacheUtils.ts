@@ -23,7 +23,11 @@ export function pruneResponseCache(now = Date.now()) {
 export function computeSince(timeRange: string, customStartDate?: string): string | null {
     if (timeRange === 'custom') return customStartDate ? new Date(customStartDate).toISOString() : null;
     const ms: Record<string, number> = { '1d': 86400000, '3d': 259200000, '1w': 604800000, '1m': 2592000000 };
-    return ms[timeRange] ? new Date(Date.now() - ms[timeRange]).toISOString() : null;
+    // Align rolling ranges with the response-cache window. Millisecond-unique
+    // timestamps otherwise defeat request coalescing for semantically identical
+    // viewport events (for example, a map style reload).
+    const cacheWindowStart = Math.floor(Date.now() / LOCAL_RESPONSE_TTL_MS) * LOCAL_RESPONSE_TTL_MS;
+    return ms[timeRange] ? new Date(cacheWindowStart - ms[timeRange]).toISOString() : null;
 }
 
 export function computeUntil(timeRange: string, customEndDate?: string): string | null {

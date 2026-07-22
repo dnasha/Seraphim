@@ -160,4 +160,77 @@ describe("calculateMergedStory", () => {
     }));
     expect(result.event_count).toBe(3);
   });
+
+  it("updates the image when an incoming source becomes primary and supplies one", () => {
+    const existing = {
+      id: "event-1",
+      title: "Initial report",
+      description: "Initial details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      image_url: "https://example.com/old.jpg",
+      credibility_tier: 2,
+      published_at: at(0),
+      sources: [source()],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      image_url: "https://example.com/new.jpg",
+      published_at: at(2),
+    }));
+
+    expect(result).toMatchObject({
+      title: "Incoming update",
+      url: "https://example.com/incoming",
+      image_url: "https://example.com/new.jpg",
+    });
+  });
+
+  it("retains the stored image when the promoted primary has no image", () => {
+    const existing = {
+      id: "event-1",
+      title: "Initial report",
+      description: "Initial details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      image_url: "https://example.com/old.jpg",
+      credibility_tier: 2,
+      published_at: at(0),
+      sources: [source()],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      image_url: "   ",
+      published_at: at(2),
+    }));
+
+    expect(result.title).toBe("Incoming update");
+    expect(result).not.toHaveProperty("image_url");
+  });
+
+  it("does not update the image when the incoming source is only corroborating", () => {
+    const existing = {
+      id: "event-1",
+      title: "Current report",
+      description: "Current details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      image_url: "https://example.com/current.jpg",
+      credibility_tier: 1,
+      published_at: at(4),
+      sources: [source({ discovered_at: at(4) })],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      image_url: "https://example.com/corroborating.jpg",
+      credibility_tier: 3,
+      published_at: at(2),
+    }));
+
+    expect(result).not.toHaveProperty("title");
+    expect(result).not.toHaveProperty("image_url");
+  });
 });
