@@ -138,7 +138,7 @@ describe('POST /api/stripe/checkout', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('reserve_billing_checkout_intent', expect.objectContaining({ p_user_id: 'user-1', p_mode: 'subscription' }));
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
       customer: 'cus-1', mode: 'subscription',
-      success_url: 'https://seraphim.example/account?tab=billing&checkout=success',
+      success_url: 'https://seraphim.example/account?tab=billing&checkout=success&checkoutPlan=pro',
       consent_collection: { terms_of_service: 'required' },
       subscription_data: expect.objectContaining({ trial_period_days: 14 }),
     }), { idempotencyKey: 'checkout-intent-intent-1' });

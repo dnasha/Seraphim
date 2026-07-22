@@ -11,7 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import StateNotice from '@/components/ui/StateNotice';
 import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
@@ -161,46 +161,7 @@ export function PricingPageClient({
     return (
         <div className={styles.container}>
             <div className={styles.content}>
-                {/* Header */}
-                <header className={styles.header}>
-                    <div className={styles.headerLeft}>
-                        <button onClick={() => router.push(returnTo)} className={styles.backBtn} aria-label="Go back" title="Return to the previous page">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="19" y1="12" x2="5" y2="12"></line>
-                                <polyline points="12 19 5 12 12 5"></polyline>
-                            </svg>
-                        </button>
-                    </div>
-                    <div className={styles.headerCenter}>
-                        <svg
-                            width="200"
-                            height="200"
-                            viewBox="0 0 200 200"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            style={{ height: '2.5rem', width: 'auto' }}
-                        >
-                            <path
-                                className={styles.logoFill}
-                                d="M100 110.528L125 83.5281H75L100 110.528Z"
-                            />
-                            <path
-                                className={styles.logoStroke}
-                                d="M99.2662 19.3206C99.662 18.8931 100.338 18.8931 100.734 19.3206L149.734 72.2406C149.905 72.4254 150 72.6681 150 72.92V126.136C150 126.388 149.905 126.631 149.734 126.816L100.734 179.736C100.338 180.163 99.662 180.163 99.2662 179.736L50.2662 126.816C50.0951 126.631 50 126.388 50 126.136V72.92C50 72.6681 50.0951 72.4254 50.2662 72.2406L99.2662 19.3206Z"
-                                strokeWidth="12"
-                            />
-                            <path
-                                className={styles.logoStroke}
-                                d="M100 110.528L125 83.5281H75L100 110.528Z"
-                                strokeWidth="12"
-                            />
-                        </svg>
-                        <h1 className={styles.logoTitle}>Seraphim</h1>
-                    </div>
-                    <div className={styles.headerRight}>
-                        <ThemeToggle />
-                    </div>
-                </header>
+                <PublicPageHeader backHref={returnTo} backTitle="Return to the previous page" />
 
                 {/* Hero */}
                 <section className={styles.hero}>

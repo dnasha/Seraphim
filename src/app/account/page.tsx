@@ -10,6 +10,7 @@ import TierBadge from '@/components/ui/TierBadge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './AccountPage.module.css';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
+import { getSubscriptionStatusLabel } from './billingPresentation';
 
 const ProviderIcon = ({ provider }: { provider: string }) => {
   switch (provider) {
@@ -196,6 +197,7 @@ export default function AccountPage() {
   const avatarUrl = user.user_metadata?.avatar_url;
   const displayName = user.user_metadata?.full_name || user.user_metadata?.name;
   const provider = user.app_metadata?.provider || 'email';
+  const subscriptionStatusLabel = getSubscriptionStatusLabel(userTier, subscriptionStatus);
 
   return (
     <div className={styles.container}>
@@ -288,9 +290,9 @@ export default function AccountPage() {
             <div className={styles.profileInfo} style={{ gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <TierBadge tier={userTier} size="md" />
-                {subscriptionStatus && subscriptionStatus !== 'inactive' && (
+                {subscriptionStatusLabel && (
                   <span className={styles.label} style={{ textTransform: 'capitalize', fontSize: '0.8125rem' }}>
-                    {subscriptionStatus === 'trialing' ? 'Trial Active' : subscriptionStatus}
+                    {subscriptionStatusLabel}
                   </span>
                 )}
               </div>

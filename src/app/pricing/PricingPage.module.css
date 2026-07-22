@@ -30,63 +30,6 @@
     z-index: 1;
 }
 
-/* ═══════════════ Header ═══════════════ */
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 40px;
-}
-
-.headerLeft, .headerRight {
-    flex: 0 0 auto;
-}
-
-.headerCenter {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.logoFill {
-    fill: var(--accent);
-}
-
-.logoStroke {
-    stroke: var(--accent);
-    fill: none;
-}
-
-.logoTitle {
-    font-family: var(--font-logo);
-    font-size: 1.5rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--text-primary);
-}
-
-.backBtn {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    cursor: pointer;
-    padding: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-}
-
-@media (hover: hover) {
-    .backBtn:hover {
-        background: var(--surface-hover);
-        transform: scale(1.05);
-    }
-}
-
 /* ═══════════════ Hero ═══════════════ */
 .hero {
     text-align: center;
@@ -782,15 +725,6 @@
 @media (max-width: 480px) {
     .content {
         padding: 0 16px 40px;
-    }
-
-    .header {
-        padding: 16px 0;
-        margin-bottom: 24px;
-    }
-
-    .logoTitle {
-        font-size: 1.25rem;
     }
 
     .priceAmount {

@@ -191,8 +191,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         .from('user_profiles')
         .update({
           stripe_subscription_id: null,
-          subscription_status: 'canceled',
-          billing_interval: null,
+          subscription_status: 'active',
+          billing_interval: 'lifetime',
           cancel_at_period_end: false,
           trial_ends_at: null,
           current_period_end: null,
