@@ -41,13 +41,13 @@ describe("useMapCamera", () => {
       setLngLat: vi.fn(() => popup),
     };
 
-    renderHook(() =>
-      useMapCamera({
+    const { rerender } = renderHook(
+      ({ selectedItemId }) => useMapCamera({
         mapRef: { current: map } as unknown as React.MutableRefObject<null>,
         mapReady: true,
         popupRef: { current: popup } as unknown as React.MutableRefObject<null>,
         popupContainer: null,
-        selectedItemId: "event-1",
+        selectedItemId,
         selectionVersion: 0,
         geoItems: [story()],
         latestGeoItemsRef: { current: [story()] },
@@ -58,13 +58,74 @@ describe("useMapCamera", () => {
         initialCenter: [11.2907, 36.2494],
         initialZoom: 2.1,
       }),
+      { initialProps: { selectedItemId: "event-1" as string | null } },
     );
 
     expect(flyTo).toHaveBeenCalledTimes(1);
+    act(() => rerender({ selectedItemId: null }));
     act(() => vi.advanceTimersByTime(100));
     expect(jumpTo).not.toHaveBeenCalled();
     expect(flyTo).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  it("cancels the landing correction when the selection closes", () => {
+    const canvas = document.createElement("canvas");
+    const moveendHandlers: Array<() => void> = [];
+    const flyTo = vi.fn();
+    const easeTo = vi.fn();
+    const stop = vi.fn();
+    const map = {
+      getCanvas: () => canvas,
+      getLayer: vi.fn(),
+      getZoom: () => 3,
+      getPadding: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+      flyTo,
+      easeTo,
+      stop,
+      once: vi.fn((event: string, handler: () => void) => {
+        if (event === "moveend") moveendHandlers.push(handler);
+      }),
+    };
+    const popup = {
+      isOpen: () => true,
+      getLngLat: () => ({ lng: -74, lat: 40 }),
+      setLngLat: vi.fn(() => popup),
+    };
+    const item = story();
+    const mapRef = { current: map } as unknown as React.MutableRefObject<null>;
+
+    const { rerender } = renderHook(
+      ({ selectedItemId }) =>
+        useMapCamera({
+          mapRef,
+          mapReady: true,
+          popupRef: { current: popup } as unknown as React.MutableRefObject<null>,
+          popupContainer: null,
+          selectedItemId,
+          selectionVersion: 0,
+          geoItems: [item],
+          latestGeoItemsRef: { current: [item] },
+          animatedEffects: false,
+          isGlobe: false,
+          forceIndividualPinsRef: { current: false },
+          containerRef: { current: document.createElement("div") },
+        }),
+      { initialProps: { selectedItemId: "event-1" as string | null } },
+    );
+
+    expect(flyTo).toHaveBeenCalledTimes(1);
+    act(() => moveendHandlers[0]());
+    expect(easeTo).toHaveBeenCalledTimes(1);
+    expect(moveendHandlers).toHaveLength(2);
+
+    act(() => rerender({ selectedItemId: null }));
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    // A moveend emitted by stop must not revive the cancelled correction.
+    act(() => moveendHandlers[1]());
+    expect(easeTo).toHaveBeenCalledTimes(1);
+    expect(flyTo).toHaveBeenCalledTimes(1);
   });
 
   it("relinquishes camera control after a user gesture during a flight", () => {

@@ -47,8 +47,12 @@ export function useMapCamera({
   const lastFlownVersionRef = useRef(0);
   const lastFlownCoordsRef = useRef<[number, number] | null>(null);
   const isFlyingRef = useRef(false);
+  const selectionCameraActiveRef = useRef(false);
   // Invalidates moveend handlers from a flight superseded by a retarget.
   const activeFlightIdRef = useRef(0);
+  // Prevent the one-time post-style correction from being re-armed when a
+  // selection is later closed during the same map-ready cycle.
+  const initialCorrectionHandledRef = useRef(false);
   // A manual map gesture opts out of further camera corrections until the
   // user explicitly selects another card.
   const cameraFollowSuppressedRef = useRef(false);
@@ -95,7 +99,14 @@ export function useMapCamera({
   // correct it once after readiness. A shared selection owns the camera,
   // though: never let this delayed correction interrupt that event's flyTo.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || selectedItemId) return;
+    if (!mapReady) {
+      initialCorrectionHandledRef.current = false;
+      return;
+    }
+    if (!mapRef.current || initialCorrectionHandledRef.current) return;
+    initialCorrectionHandledRef.current = true;
+    if (selectedItemId) return;
+
     const map = mapRef.current;
     const timer = setTimeout(() => {
       if (mapRef.current !== map) return;
@@ -130,9 +141,10 @@ export function useMapCamera({
   const cancelCameraFlight = useCallback(() => {
     cameraFollowSuppressedRef.current = true;
     activeFlightIdRef.current += 1;
-    const wasFlying = isFlyingRef.current;
+    const hadSelectionCameraMotion = selectionCameraActiveRef.current;
+    selectionCameraActiveRef.current = false;
     isFlyingRef.current = false;
-    if (wasFlying) mapRef.current?.stop();
+    if (hadSelectionCameraMotion) mapRef.current?.stop();
   }, [mapRef]);
 
   // A pointer or wheel gesture belongs to the user. Cancel any pending
@@ -142,7 +154,7 @@ export function useMapCamera({
     const canvas = mapRef.current.getCanvas();
     const handleUserCameraIntent = () => {
       cameraFollowSuppressedRef.current = true;
-      if (isFlyingRef.current) cancelCameraFlight();
+      if (selectionCameraActiveRef.current) cancelCameraFlight();
     };
 
     canvas.addEventListener("pointerdown", handleUserCameraIntent, { passive: true });
@@ -207,8 +219,7 @@ export function useMapCamera({
         // detail request restores it. Treat its return as a fresh arrival so the
         // popup and camera are deterministically restored.
         if (lastFlownSelectionRef.current === selectedItemId) {
-          activeFlightIdRef.current += 1;
-          isFlyingRef.current = false;
+          cancelCameraFlight();
           lastFlownSelectionRef.current = null;
           lastFlownVersionRef.current = 0;
           lastFlownCoordsRef.current = null;
@@ -223,6 +234,7 @@ export function useMapCamera({
       if (isNewSelection) {
         cameraFollowSuppressedRef.current = false;
         isFlyingRef.current = true;
+        selectionCameraActiveRef.current = true;
       }
 
       if (popupContainer && (isNewSelection || shouldOpenPopup)) {
@@ -262,7 +274,6 @@ export function useMapCamera({
 
         map.once("moveend", () => {
           if (flightId !== activeFlightIdRef.current) return;
-          isFlyingRef.current = false;
           const finalItem =
             latestGeoItemsRef.current.find((i) =>
               matchesNewsId(i, selectedItemId),
@@ -283,6 +294,14 @@ export function useMapCamera({
                 right: 0,
               },
             });
+            map.once("moveend", () => {
+              if (flightId !== activeFlightIdRef.current) return;
+              selectionCameraActiveRef.current = false;
+              isFlyingRef.current = false;
+            });
+          } else {
+            selectionCameraActiveRef.current = false;
+            isFlyingRef.current = false;
           }
         });
       }
@@ -343,6 +362,7 @@ export function useMapCamera({
           // A server-side cluster has resolved to the selected event's exact
           // coordinate. Redirect the active flight instead of snapping after it.
           const flightId = ++activeFlightIdRef.current;
+          selectionCameraActiveRef.current = true;
           const targetZoom = Math.max(mapRef.current.getZoom(), 8.5);
           const containerHeight = containerRef.current?.clientHeight || 800;
           const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
@@ -369,6 +389,7 @@ export function useMapCamera({
 
           mapRef.current.once("moveend", () => {
             if (flightId !== activeFlightIdRef.current) return;
+            selectionCameraActiveRef.current = false;
             isFlyingRef.current = false;
 
             const finalItem = latestGeoItemsRef.current.find((i) =>
@@ -395,6 +416,9 @@ export function useMapCamera({
           }
 
           // Seamlessly align the camera with the new jittered/precise position.
+          const correctionId = ++activeFlightIdRef.current;
+          selectionCameraActiveRef.current = true;
+          isFlyingRef.current = true;
           if (dist > 0.05) {
             // Significant shift (e.g., cluster to precise coord) - use flyTo for a smooth arc.
             mapRef.current.flyTo({
@@ -411,6 +435,11 @@ export function useMapCamera({
               essential: true
             });
           }
+          mapRef.current.once("moveend", () => {
+            if (correctionId !== activeFlightIdRef.current) return;
+            selectionCameraActiveRef.current = false;
+            isFlyingRef.current = false;
+          });
           lastFlownCoordsRef.current = [selectedItem.longitude, selectedItem.latitude];
         }
       }
