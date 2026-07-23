@@ -19,6 +19,54 @@ const story = (overrides: Partial<NewsItem> = {}): NewsItem => ({
 });
 
 describe("useMapCamera", () => {
+  it("does not let delayed initial-view correction interrupt a shared-event flight", () => {
+    vi.useFakeTimers();
+    const canvas = document.createElement("canvas");
+    const flyTo = vi.fn();
+    const jumpTo = vi.fn();
+    const map = {
+      getCanvas: () => canvas,
+      getLayer: vi.fn(),
+      getZoom: () => 2.1,
+      getPadding: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+      flyTo,
+      jumpTo,
+      easeTo: vi.fn(),
+      stop: vi.fn(),
+      once: vi.fn(),
+    };
+    const popup = {
+      isOpen: () => true,
+      getLngLat: () => ({ lng: -74, lat: 40 }),
+      setLngLat: vi.fn(() => popup),
+    };
+
+    renderHook(() =>
+      useMapCamera({
+        mapRef: { current: map } as unknown as React.MutableRefObject<null>,
+        mapReady: true,
+        popupRef: { current: popup } as unknown as React.MutableRefObject<null>,
+        popupContainer: null,
+        selectedItemId: "event-1",
+        selectionVersion: 0,
+        geoItems: [story()],
+        latestGeoItemsRef: { current: [story()] },
+        animatedEffects: false,
+        isGlobe: false,
+        forceIndividualPinsRef: { current: false },
+        containerRef: { current: document.createElement("div") },
+        initialCenter: [11.2907, 36.2494],
+        initialZoom: 2.1,
+      }),
+    );
+
+    expect(flyTo).toHaveBeenCalledTimes(1);
+    act(() => vi.advanceTimersByTime(100));
+    expect(jumpTo).not.toHaveBeenCalled();
+    expect(flyTo).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
   it("relinquishes camera control after a user gesture during a flight", () => {
     const canvas = document.createElement("canvas");
     const moveendHandlers: Array<() => void> = [];

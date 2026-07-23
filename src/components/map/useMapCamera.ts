@@ -23,6 +23,8 @@ interface UseMapCameraProps {
   isGlobe: boolean;
   forceIndividualPinsRef: React.MutableRefObject<boolean>;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  initialCenter?: [number, number];
+  initialZoom?: number;
 }
 
 export function useMapCamera({
@@ -38,6 +40,8 @@ export function useMapCamera({
   isGlobe,
   forceIndividualPinsRef,
   containerRef,
+  initialCenter,
+  initialZoom,
 }: UseMapCameraProps) {
   const lastFlownSelectionRef = useRef<string | null>(null);
   const lastFlownVersionRef = useRef(0);
@@ -86,6 +90,31 @@ export function useMapCamera({
       zoom: finalZoom,
     };
   }, []);
+
+  // MapLibre can clamp its constructor view while the style initializes, so
+  // correct it once after readiness. A shared selection owns the camera,
+  // though: never let this delayed correction interrupt that event's flyTo.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || selectedItemId) return;
+    const map = mapRef.current;
+    const timer = setTimeout(() => {
+      if (mapRef.current !== map) return;
+      const initialView = getInitialViewState();
+      map.jumpTo({
+        center: initialCenter ?? initialView.center,
+        zoom: initialZoom ?? initialView.zoom,
+      });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [
+    getInitialViewState,
+    initialCenter,
+    initialZoom,
+    mapReady,
+    mapRef,
+    selectedItemId,
+  ]);
 
   const handleResetOrientation = useCallback(() => {
     if (!mapRef.current) return;

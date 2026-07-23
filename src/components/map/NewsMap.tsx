@@ -414,6 +414,8 @@ export default function NewsMap({
     isGlobe,
     forceIndividualPinsRef,
     containerRef,
+    initialCenter,
+    initialZoom,
   });
 
   const scheduleMapRecovery = useCallback((reason: string) => {
@@ -793,23 +795,6 @@ export default function NewsMap({
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
   }, []);
-
-  // Force a view adjustment after the map is ready to overcome early clamping by the map engine.
-  useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
-    const timer = setTimeout(() => {
-      if (!mapRef.current) return;
-      const initialView = getInitialViewState();
-      const targetCenter = initialCenter ?? initialView.center;
-      const targetZoom = initialZoom ?? initialView.zoom;
-      mapRef.current.jumpTo({
-        center: targetCenter,
-        zoom: targetZoom,
-      });
-    }, 100);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady]);
 
   const hasCoordinates = initialCenter !== undefined && initialZoom !== undefined;
 
