@@ -71,7 +71,6 @@ const CookieConsent: React.FC = () => {
                 <button 
                     className={styles.declineBtn} 
                     onClick={handleDecline}
-                    aria-label="Accept essential cookies only"
                     title="Use essential cookies only and decline analytics"
                 >
                     Essential Only

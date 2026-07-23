@@ -33,7 +33,7 @@
 
 .guest {
     background: hsla(var(--text-muted-h), var(--text-muted-s), var(--text-muted-l), 0.15);
-    color: var(--text-muted);
+    color: hsl(var(--text-muted-h), var(--text-muted-s), calc(var(--text-muted-l) - 4%));
 }
 
 .free {

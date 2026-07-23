@@ -52,10 +52,8 @@ const merriweather = Merriweather({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
-  themeColor: "#6366f1",
+  themeColor: "#5f62ec",
 };
 
 // Global metadata for SEO, social sharing, and PWA capabilities

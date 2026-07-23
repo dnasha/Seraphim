@@ -7,7 +7,7 @@
 
 /** Brand colors used for interactive elements and primary accents. */
 export const BRAND_COLORS = {
-    indigo: '#6366f1',
+    indigo: '#5f62ec',
     indigoHover: '#818cf8',
     indigoActive: '#4f46e5',
 };

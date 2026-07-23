@@ -60,7 +60,7 @@ const timeOptions = [
 ];
 
 const credibilityOptions = [
-    { value: 1, label: 'Verified', color: '#6366f1' },
+    { value: 1, label: 'Verified', color: '#5f62ec' },
     { value: 2, label: 'Credible', color: '#93c5fd' },
     { value: 3, label: 'Unverified', color: '#94a3b8' },
 ];
