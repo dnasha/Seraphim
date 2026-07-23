@@ -52,7 +52,11 @@ describe('homepage metadata', () => {
     expect(metadata.openGraph).toMatchObject({
       url: `https://www.seraphi.me/?eventId=${EVENT_ID}`,
       type: 'article',
-      images: [{ url: `https://www.seraphi.me/api/og?eventId=${EVENT_ID}` }],
+      images: [{ url: `https://www.seraphi.me/og/${EVENT_ID}` }],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: 'summary_large_image',
+      images: [`https://www.seraphi.me/og/${EVENT_ID}`],
     });
   });
 

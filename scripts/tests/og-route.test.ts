@@ -9,7 +9,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/og", () => ({
   ImageResponse: class extends Response {
     constructor(_element: unknown, init: ResponseInit) {
-      super("image", init);
+      super("image", {
+        ...init,
+        headers: { ...init.headers, 'Content-Type': 'image/png' },
+      });
     }
   },
 }));
@@ -30,6 +33,7 @@ vi.mock('@/lib/security/ogImage', () => ({
 }));
 
 import { GET } from "@/app/api/og/route";
+import { GET as GET_PUBLIC_OG } from "@/app/og/[eventId]/route";
 
 describe("GET /api/og", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -54,6 +58,29 @@ describe("GET /api/og", () => {
     expect(response.status).toBe(400);
     await expect(response.text()).resolves.toBe("Invalid UUID format");
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('serves event cards from the crawlable public route', async () => {
+    const eventId = '88888888-8888-4888-8888-888888888888';
+    mocks.from.mockReturnValue({
+      select: () => ({ eq: () => ({ single: async () => ({ data: { image_url: null } }) }) }),
+    });
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Response('brand', {
+      headers: { 'content-type': 'image/png' },
+    })));
+
+    const response = await GET_PUBLIC_OG(
+      new Request(`https://seraphim.example/og/${eventId}`, {
+        headers: { 'x-vercel-forwarded-for': '198.51.100.88' },
+      }),
+      { params: Promise.resolve({ eventId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('content-disposition')).toContain('seraphim-event.png');
+    expect(response.headers.get('x-robots-tag')).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('renders the branded fallback when the external event image is rejected', async () => {

@@ -475,13 +475,13 @@ export function HomeContent() {
     // Exact shared links may reference an event outside the current time range
     // or viewport, so fetch the event shell even when it was not in the feed.
     useEffect(() => {
-        if (selectedItemId) {
+        if (!isAuthResolving && selectedItemId) {
             const item = news.find(n => matchesNewsId(n, selectedItemId));
             if ((!item || item.description === undefined) && fetchEventDetails) {
                 fetchEventDetails(selectedItemId);
             }
         }
-    }, [selectedItemId, fetchEventDetails, news]);
+    }, [isAuthResolving, selectedItemId, fetchEventDetails, news]);
 
     const activeFilterCount = useMemo(() => {
         let count = 0;

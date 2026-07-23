@@ -173,78 +173,89 @@ export function useMapCamera({
 
     if (selectedItemId) {
       const item = geoItems.find((i) => matchesNewsId(i, selectedItemId));
-      if (item) {
-        const isNewSelection =
-          lastFlownSelectionRef.current !== selectedItemId ||
-          lastFlownVersionRef.current !== selectionVersion;
-        const shouldOpenPopup = !popupRef.current.isOpen();
-
-        if (isNewSelection) {
-          cameraFollowSuppressedRef.current = false;
-          isFlyingRef.current = true;
+      if (!item) {
+        // A feed refresh can briefly remove the selected entity before its exact
+        // detail request restores it. Treat its return as a fresh arrival so the
+        // popup and camera are deterministically restored.
+        if (lastFlownSelectionRef.current === selectedItemId) {
+          activeFlightIdRef.current += 1;
+          isFlyingRef.current = false;
+          lastFlownSelectionRef.current = null;
+          lastFlownVersionRef.current = 0;
+          lastFlownCoordsRef.current = null;
         }
+        return;
+      }
+      const isNewSelection =
+        lastFlownSelectionRef.current !== selectedItemId ||
+        lastFlownVersionRef.current !== selectionVersion;
+      const shouldOpenPopup = !popupRef.current.isOpen();
 
-        if (popupContainer && (isNewSelection || shouldOpenPopup)) {
-          popupRef.current
-            .setLngLat([item.longitude!, item.latitude!])
-            .setDOMContent(popupContainer)
-            .addTo(map);
-        }
+      if (isNewSelection) {
+        cameraFollowSuppressedRef.current = false;
+        isFlyingRef.current = true;
+      }
 
-        if (isNewSelection) {
-          lastFlownSelectionRef.current = selectedItemId;
-          lastFlownVersionRef.current = selectionVersion;
-          lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
-          const flightId = ++activeFlightIdRef.current;
+      if (popupContainer && (isNewSelection || shouldOpenPopup)) {
+        popupRef.current
+          .setLngLat([item.longitude!, item.latitude!])
+          .setDOMContent(popupContainer)
+          .addTo(map);
+      }
 
-          const currentZoom = map.getZoom();
-          const targetZoom = Math.max(currentZoom, 8.5);
+      if (isNewSelection) {
+        lastFlownSelectionRef.current = selectedItemId;
+        lastFlownVersionRef.current = selectionVersion;
+        lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
+        const flightId = ++activeFlightIdRef.current;
 
-          const containerHeight = containerRef.current?.clientHeight || 800;
-          const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
+        const currentZoom = map.getZoom();
+        const targetZoom = Math.max(currentZoom, 8.5);
 
-          map.flyTo({
-            center: [item.longitude!, item.latitude!],
-            zoom: targetZoom,
-            pitch: animatedEffects && isGlobe ? 45 : 0,
-            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
-            speed: animatedEffects ? 1.8 : 1.2,
-            curve: animatedEffects ? 1.2 : 1,
-            essential: true,
-            padding: {
-              top: targetZoom > 4 ? responsivePadding : 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-            },
-          });
+        const containerHeight = containerRef.current?.clientHeight || 800;
+        const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
 
-          map.once("moveend", () => {
-            if (flightId !== activeFlightIdRef.current) return;
-            isFlyingRef.current = false;
-            const finalItem =
-              latestGeoItemsRef.current.find((i) =>
-                matchesNewsId(i, selectedItemId),
-              ) || item;
+        map.flyTo({
+          center: [item.longitude!, item.latitude!],
+          zoom: targetZoom,
+          pitch: animatedEffects && isGlobe ? 45 : 0,
+          bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+          speed: animatedEffects ? 1.8 : 1.2,
+          curve: animatedEffects ? 1.2 : 1,
+          essential: true,
+          padding: {
+            top: targetZoom > 4 ? responsivePadding : 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+        });
 
-            if (popupRef.current && finalItem.latitude != null) {
-              lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
-              // Fallback for location data that arrives after the flight lands.
-              popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
-              map.easeTo({
-                center: [finalItem.longitude!, finalItem.latitude!],
-                duration: 300,
-                essential: true,
-                padding: {
-                  top: targetZoom > 4 ? responsivePadding : 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                },
-              });
-            }
-          });
-        }
+        map.once("moveend", () => {
+          if (flightId !== activeFlightIdRef.current) return;
+          isFlyingRef.current = false;
+          const finalItem =
+            latestGeoItemsRef.current.find((i) =>
+              matchesNewsId(i, selectedItemId),
+            ) || item;
+
+          if (popupRef.current && finalItem.latitude != null) {
+            lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
+            // Fallback for location data that arrives after the flight lands.
+            popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
+            map.easeTo({
+              center: [finalItem.longitude!, finalItem.latitude!],
+              duration: 300,
+              essential: true,
+              padding: {
+                top: targetZoom > 4 ? responsivePadding : 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            });
+          }
+        });
       }
     } else {
       const wasSelected = lastFlownSelectionRef.current !== null;
