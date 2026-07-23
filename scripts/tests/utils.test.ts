@@ -191,12 +191,12 @@ describe('getSourceStyle', () => {
     });
 
     it('returns brand indigo for other sources', () => {
-        expect(getSourceStyle('Ars Technica').bg).toBe('#6366f1');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#6366f1');
+        expect(getSourceStyle('Ars Technica').bg).toBe('#5f62ec');
+        expect(getSourceStyle('BleepingComputer').bg).toBe('#5f62ec');
     });
 
     it('returns brand indigo for unknown sources', () => {
-        expect(getSourceStyle('BBC News').bg).toBe('#6366f1');
+        expect(getSourceStyle('BBC News').bg).toBe('#5f62ec');
     });
 });
 

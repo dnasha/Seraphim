@@ -19,7 +19,8 @@ const excludeVolatileNextAssets = (entries: SizedManifestEntry[]) => ({
   warnings: [],
 });
 
-const cspReportOnly = buildCspReportOnly();
+const cspReportingEnabled = process.env.CSP_REPORTING_ENABLED === 'true';
+const cspReportOnly = buildCspReportOnly(process.env.NODE_ENV, cspReportingEnabled);
 
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",

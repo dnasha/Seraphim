@@ -119,6 +119,21 @@ export function useNewsData({
     const [appliedSortMode, setAppliedSortMode] = useState<string>(sortMode || 'hot');
 
     useEffect(() => {
+        const pinnedId = pinnedEventIdRef.current;
+        const retainedEntities: Array<[string, NewsItem]> = pinnedId
+            ? Array.from(entitiesRef.current.entries())
+                .filter(([, item]) => matchesNewsId(item, pinnedId))
+                .map(([entityId, item]) => [entityId, {
+                    ...item,
+                    // Detail/timeline fields are entitlement-sensitive. Preserve
+                    // the visual pin, then reload these under the new auth scope.
+                    description: undefined,
+                    sources: undefined,
+                    timelineRestricted: undefined,
+                    totalSources: undefined,
+                }])
+            : [];
+
         requestVersionRef.current += 1;
 
         if (abortControllerRef.current) {
@@ -139,8 +154,20 @@ export function useNewsData({
         fetchingDetailsRef.current.clear();
         detailInFlightRef.current.clear();
 
+        // Authentication and entitlement resolution changes the feed scope, but
+        // it must not erase an exact event named by the URL. Keep that entity as
+        // an out-of-scope pin while the new viewport request is coordinated.
+        const retainedAt = Date.now();
+        for (const [entityId, item] of retainedEntities) {
+            entitiesRef.current.set(entityId, item);
+            entityTouchedAtRef.current.set(entityId, retainedAt);
+        }
         const timer = setTimeout(() => {
-            setNews([]);
+            const activePinnedId = pinnedEventIdRef.current;
+            const activeItems = Array.from(entitiesRef.current.values()).filter((item) => (
+                matchesNewsId(item, activePinnedId)
+            ));
+            setNews(activeItems);
             setError(null);
             setIsCapped(false);
             setAppliedLimit(undefined);
@@ -371,7 +398,9 @@ export function useNewsData({
 
         if (isRefresh) {
             responseCache.clear();
-            detailCache.current.clear();
+            // Exact-event details are fetched outside the current viewport/time
+            // scope. Retain them while refreshing the feed so a shared event is
+            // not downgraded to (or replaced by) a partial cluster shell.
         }
 
         const prev = lastFetchParamsRef.current;

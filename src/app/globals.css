@@ -71,10 +71,10 @@ body {
   --weight-bold: 700;
   --weight-extrabold: 800;
 
-  /* HSL base channels for brand color: Indigo (#6366f1) */
+  /* HSL base channels for brand color: Indigo (#5f62ec) */
   --accent-h: 239;
-  --accent-s: 84%;
-  --accent-l: 67%;
+  --accent-s: 79%;
+  --accent-l: 65%;
   --accent: hsl(var(--accent-h), var(--accent-s), var(--accent-l));
   --accent-hover: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) + 7%));
   --accent-active: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) - 8%));
@@ -111,7 +111,7 @@ body {
 
   --text-muted-h: 215;
   --text-muted-s: 16%;
-  --text-muted-l: 47%;
+  --text-muted-l: 46%;
   --text-muted: hsl(var(--text-muted-h), var(--text-muted-s), var(--text-muted-l));
 
   --surface-hover-h: 231;

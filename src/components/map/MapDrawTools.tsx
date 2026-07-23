@@ -38,7 +38,7 @@ interface MapDrawToolsProps {
   onClose?: () => void;
 }
 
-const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
+const COLORS = ['#5f62ec', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
 const SIZES = [2, 4, 8];
 const MIN_DRAW_SIZE = 1;
 const MAX_DRAW_SIZE = 50;
@@ -404,12 +404,12 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
             selectedPointColor: (feature: StyledFeature) => (feature.properties?.color as `#${string}`) || colorRef.current as `#${string}`,
             selectedPointWidth: (feature: StyledFeature) => ((feature.properties?.size || sizeRef.current) * 3),
             
-            selectionPointColor: '#6366f1' as `#${string}`,
+            selectionPointColor: '#5f62ec' as `#${string}`,
             selectionPointOutlineColor: '#ffffff' as `#${string}`,
             selectionPointWidth: 5,
             selectionPointOutlineWidth: 1.5,
             
-            midPointColor: '#6366f1' as `#${string}`,
+            midPointColor: '#5f62ec' as `#${string}`,
             midPointOutlineColor: '#ffffff' as `#${string}`,
             midPointWidth: 4,
             midPointOutlineWidth: 1,

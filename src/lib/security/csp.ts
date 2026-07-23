@@ -5,7 +5,10 @@ export const CSP_ENFORCED_BASELINE = [
   "form-action 'self'",
 ].join('; ');
 
-export function buildCspReportOnly(nodeEnv = process.env.NODE_ENV) {
+export function buildCspReportOnly(
+  nodeEnv = process.env.NODE_ENV,
+  reportingEnabled = process.env.CSP_REPORTING_ENABLED === 'true',
+) {
   const scriptSources = [
     "'self'",
     "'unsafe-inline'",
@@ -23,6 +26,8 @@ export function buildCspReportOnly(nodeEnv = process.env.NODE_ENV) {
     'https://vitals.vercel-insights.com',
     'https://protomaps.github.io',
     'https://tiles.seraphi.me',
+    'https://tiles.openstreetmap.us',
+    'https://a.tile.opentopomap.org',
   ];
 
   return [
@@ -43,6 +48,6 @@ export function buildCspReportOnly(nodeEnv = process.env.NODE_ENV) {
     "media-src 'self' blob: https:",
     // Browser console warnings are sufficient during local development. Avoid
     // sending noisy report-only violations to the operations database.
-    ...(nodeEnv === 'development' ? [] : ['report-uri /api/csp-report']),
+    ...(nodeEnv !== 'development' && reportingEnabled ? ['report-uri /api/csp-report'] : []),
   ].join('; ');
 }

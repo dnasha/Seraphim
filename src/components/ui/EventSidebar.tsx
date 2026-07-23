@@ -457,7 +457,7 @@ export default function EventSidebar({
                 disabled ? (
                   <div className={styles.guestCtaCard}>
                     <div className={styles.guestCtaContent}>
-                      <h3>
+                      <h2>
                         <svg
                           viewBox="0 0 24 24"
                           width="18"
@@ -469,7 +469,7 @@ export default function EventSidebar({
                           <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
                         </svg>
                         GUEST MODE ACTIVE
-                      </h3>
+                      </h2>
                       <p>
                         You are currently limited to the top 10 events in view.
                         Create a <strong>free</strong> account to access up to 100 real-time events,

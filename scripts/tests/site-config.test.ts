@@ -81,6 +81,7 @@ describe('crawler discovery files', () => {
     expect(result.sitemap).toBe('https://www.seraphi.me/sitemap.xml');
     expect(result.rules).toMatchObject({
       userAgent: '*',
+      allow: expect.arrayContaining(['/og/']),
       disallow: ['/api/', '/auth/', '/account/'],
     });
   });

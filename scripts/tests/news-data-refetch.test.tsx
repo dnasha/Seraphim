@@ -110,4 +110,71 @@ describe('useNewsData request deduplication', () => {
       await firstLoad;
     });
   });
+
+  it('retains an exact shared event while auth changes the feed scope', async () => {
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    const sharedEvent = {
+      id: eventId,
+      title: 'Shared event',
+      description: 'Exact event detail',
+      url: 'https://example.com/shared',
+      source: 'Example',
+      sourceType: 'rss',
+      publishedAt: '2026-07-21T04:00:00.000Z',
+      latitude: 35.91,
+      longitude: 127.77,
+    };
+    const detailRequests: string[] = [];
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `/api/news/${eventId}`) {
+        detailRequests.push(url);
+        return new Response(JSON.stringify({
+          description: sharedEvent.description,
+          latitude: sharedEvent.latitude,
+          longitude: sharedEvent.longitude,
+          event: sharedEvent,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        items: [],
+        meta: { isCapped: false },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    const { result, rerender } = renderHook(
+      ({ resetKey }) => useNewsData({
+        timeRange: '1d',
+        sortMode: 'hot',
+        resetKey,
+        pinnedEventId: eventId,
+      }),
+      { initialProps: { resetKey: 'anonymous' } },
+    );
+
+    await act(async () => {
+      await result.current.onBoundsChange(globalViewport);
+      await result.current.fetchEventDetails(eventId);
+    });
+    await waitFor(() => expect(result.current.news).toEqual([
+      expect.objectContaining({ id: eventId, description: 'Exact event detail' }),
+    ]));
+
+    rerender({ resetKey: 'guest' });
+
+    await waitFor(() => expect(result.current.news).toEqual([
+      expect.objectContaining({ id: eventId, latitude: 35.91, longitude: 127.77 }),
+    ]));
+    expect(result.current.news[0].description).toBeUndefined();
+
+    await act(async () => {
+      await result.current.fetchEventDetails(eventId);
+    });
+    // A new auth scope re-authorizes timeline details while the pin remains.
+    await waitFor(() => expect(detailRequests).toEqual([
+      `/api/news/${eventId}`,
+      `/api/news/${eventId}`,
+    ]));
+  });
 });

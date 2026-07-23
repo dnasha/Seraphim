@@ -66,7 +66,10 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
             const title = `${event.title} | Seraphim OSINT`;
             const description = event.description || "Real-time OSINT event details and mapping on Seraphim.";
             const eventUrl = absoluteSiteUrl(`/?eventId=${encodeURIComponent(eventId)}`);
-            const ogImageUrl = absoluteSiteUrl(`/api/og?eventId=${encodeURIComponent(eventId)}`);
+            // Social-card crawlers (notably Twitterbot) obey robots.txt. Keep the
+            // image on a public route rather than under the intentionally blocked
+            // /api namespace.
+            const ogImageUrl = absoluteSiteUrl(`/og/${encodeURIComponent(eventId)}`);
 
             return {
                 title: { absolute: title },

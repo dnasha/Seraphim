@@ -23,6 +23,8 @@ interface UseMapCameraProps {
   isGlobe: boolean;
   forceIndividualPinsRef: React.MutableRefObject<boolean>;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  initialCenter?: [number, number];
+  initialZoom?: number;
 }
 
 export function useMapCamera({
@@ -38,13 +40,19 @@ export function useMapCamera({
   isGlobe,
   forceIndividualPinsRef,
   containerRef,
+  initialCenter,
+  initialZoom,
 }: UseMapCameraProps) {
   const lastFlownSelectionRef = useRef<string | null>(null);
   const lastFlownVersionRef = useRef(0);
   const lastFlownCoordsRef = useRef<[number, number] | null>(null);
   const isFlyingRef = useRef(false);
+  const selectionCameraActiveRef = useRef(false);
   // Invalidates moveend handlers from a flight superseded by a retarget.
   const activeFlightIdRef = useRef(0);
+  // Prevent the one-time post-style correction from being re-armed when a
+  // selection is later closed during the same map-ready cycle.
+  const initialCorrectionHandledRef = useRef(false);
   // A manual map gesture opts out of further camera corrections until the
   // user explicitly selects another card.
   const cameraFollowSuppressedRef = useRef(false);
@@ -87,6 +95,38 @@ export function useMapCamera({
     };
   }, []);
 
+  // MapLibre can clamp its constructor view while the style initializes, so
+  // correct it once after readiness. A shared selection owns the camera,
+  // though: never let this delayed correction interrupt that event's flyTo.
+  useEffect(() => {
+    if (!mapReady) {
+      initialCorrectionHandledRef.current = false;
+      return;
+    }
+    if (!mapRef.current || initialCorrectionHandledRef.current) return;
+    initialCorrectionHandledRef.current = true;
+    if (selectedItemId) return;
+
+    const map = mapRef.current;
+    const timer = setTimeout(() => {
+      if (mapRef.current !== map) return;
+      const initialView = getInitialViewState();
+      map.jumpTo({
+        center: initialCenter ?? initialView.center,
+        zoom: initialZoom ?? initialView.zoom,
+      });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [
+    getInitialViewState,
+    initialCenter,
+    initialZoom,
+    mapReady,
+    mapRef,
+    selectedItemId,
+  ]);
+
   const handleResetOrientation = useCallback(() => {
     if (!mapRef.current) return;
     mapRef.current.easeTo({
@@ -101,9 +141,10 @@ export function useMapCamera({
   const cancelCameraFlight = useCallback(() => {
     cameraFollowSuppressedRef.current = true;
     activeFlightIdRef.current += 1;
-    const wasFlying = isFlyingRef.current;
+    const hadSelectionCameraMotion = selectionCameraActiveRef.current;
+    selectionCameraActiveRef.current = false;
     isFlyingRef.current = false;
-    if (wasFlying) mapRef.current?.stop();
+    if (hadSelectionCameraMotion) mapRef.current?.stop();
   }, [mapRef]);
 
   // A pointer or wheel gesture belongs to the user. Cancel any pending
@@ -113,7 +154,7 @@ export function useMapCamera({
     const canvas = mapRef.current.getCanvas();
     const handleUserCameraIntent = () => {
       cameraFollowSuppressedRef.current = true;
-      if (isFlyingRef.current) cancelCameraFlight();
+      if (selectionCameraActiveRef.current) cancelCameraFlight();
     };
 
     canvas.addEventListener("pointerdown", handleUserCameraIntent, { passive: true });
@@ -173,78 +214,96 @@ export function useMapCamera({
 
     if (selectedItemId) {
       const item = geoItems.find((i) => matchesNewsId(i, selectedItemId));
-      if (item) {
-        const isNewSelection =
-          lastFlownSelectionRef.current !== selectedItemId ||
-          lastFlownVersionRef.current !== selectionVersion;
-        const shouldOpenPopup = !popupRef.current.isOpen();
-
-        if (isNewSelection) {
-          cameraFollowSuppressedRef.current = false;
-          isFlyingRef.current = true;
+      if (!item) {
+        // A feed refresh can briefly remove the selected entity before its exact
+        // detail request restores it. Treat its return as a fresh arrival so the
+        // popup and camera are deterministically restored.
+        if (lastFlownSelectionRef.current === selectedItemId) {
+          cancelCameraFlight();
+          lastFlownSelectionRef.current = null;
+          lastFlownVersionRef.current = 0;
+          lastFlownCoordsRef.current = null;
         }
+        return;
+      }
+      const isNewSelection =
+        lastFlownSelectionRef.current !== selectedItemId ||
+        lastFlownVersionRef.current !== selectionVersion;
+      const shouldOpenPopup = !popupRef.current.isOpen();
 
-        if (popupContainer && (isNewSelection || shouldOpenPopup)) {
-          popupRef.current
-            .setLngLat([item.longitude!, item.latitude!])
-            .setDOMContent(popupContainer)
-            .addTo(map);
-        }
+      if (isNewSelection) {
+        cameraFollowSuppressedRef.current = false;
+        isFlyingRef.current = true;
+        selectionCameraActiveRef.current = true;
+      }
 
-        if (isNewSelection) {
-          lastFlownSelectionRef.current = selectedItemId;
-          lastFlownVersionRef.current = selectionVersion;
-          lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
-          const flightId = ++activeFlightIdRef.current;
+      if (popupContainer && (isNewSelection || shouldOpenPopup)) {
+        popupRef.current
+          .setLngLat([item.longitude!, item.latitude!])
+          .setDOMContent(popupContainer)
+          .addTo(map);
+      }
 
-          const currentZoom = map.getZoom();
-          const targetZoom = Math.max(currentZoom, 8.5);
+      if (isNewSelection) {
+        lastFlownSelectionRef.current = selectedItemId;
+        lastFlownVersionRef.current = selectionVersion;
+        lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
+        const flightId = ++activeFlightIdRef.current;
 
-          const containerHeight = containerRef.current?.clientHeight || 800;
-          const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
+        const currentZoom = map.getZoom();
+        const targetZoom = Math.max(currentZoom, 8.5);
 
-          map.flyTo({
-            center: [item.longitude!, item.latitude!],
-            zoom: targetZoom,
-            pitch: animatedEffects && isGlobe ? 45 : 0,
-            bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
-            speed: animatedEffects ? 1.8 : 1.2,
-            curve: animatedEffects ? 1.2 : 1,
-            essential: true,
-            padding: {
-              top: targetZoom > 4 ? responsivePadding : 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-            },
-          });
+        const containerHeight = containerRef.current?.clientHeight || 800;
+        const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
 
-          map.once("moveend", () => {
-            if (flightId !== activeFlightIdRef.current) return;
+        map.flyTo({
+          center: [item.longitude!, item.latitude!],
+          zoom: targetZoom,
+          pitch: animatedEffects && isGlobe ? 45 : 0,
+          bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+          speed: animatedEffects ? 1.8 : 1.2,
+          curve: animatedEffects ? 1.2 : 1,
+          essential: true,
+          padding: {
+            top: targetZoom > 4 ? responsivePadding : 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+        });
+
+        map.once("moveend", () => {
+          if (flightId !== activeFlightIdRef.current) return;
+          const finalItem =
+            latestGeoItemsRef.current.find((i) =>
+              matchesNewsId(i, selectedItemId),
+            ) || item;
+
+          if (popupRef.current && finalItem.latitude != null) {
+            lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
+            // Fallback for location data that arrives after the flight lands.
+            popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
+            map.easeTo({
+              center: [finalItem.longitude!, finalItem.latitude!],
+              duration: 300,
+              essential: true,
+              padding: {
+                top: targetZoom > 4 ? responsivePadding : 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              },
+            });
+            map.once("moveend", () => {
+              if (flightId !== activeFlightIdRef.current) return;
+              selectionCameraActiveRef.current = false;
+              isFlyingRef.current = false;
+            });
+          } else {
+            selectionCameraActiveRef.current = false;
             isFlyingRef.current = false;
-            const finalItem =
-              latestGeoItemsRef.current.find((i) =>
-                matchesNewsId(i, selectedItemId),
-              ) || item;
-
-            if (popupRef.current && finalItem.latitude != null) {
-              lastFlownCoordsRef.current = [finalItem.longitude!, finalItem.latitude!];
-              // Fallback for location data that arrives after the flight lands.
-              popupRef.current.setLngLat([finalItem.longitude!, finalItem.latitude!]);
-              map.easeTo({
-                center: [finalItem.longitude!, finalItem.latitude!],
-                duration: 300,
-                essential: true,
-                padding: {
-                  top: targetZoom > 4 ? responsivePadding : 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                },
-              });
-            }
-          });
-        }
+          }
+        });
       }
     } else {
       const wasSelected = lastFlownSelectionRef.current !== null;
@@ -303,6 +362,7 @@ export function useMapCamera({
           // A server-side cluster has resolved to the selected event's exact
           // coordinate. Redirect the active flight instead of snapping after it.
           const flightId = ++activeFlightIdRef.current;
+          selectionCameraActiveRef.current = true;
           const targetZoom = Math.max(mapRef.current.getZoom(), 8.5);
           const containerHeight = containerRef.current?.clientHeight || 800;
           const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
@@ -329,6 +389,7 @@ export function useMapCamera({
 
           mapRef.current.once("moveend", () => {
             if (flightId !== activeFlightIdRef.current) return;
+            selectionCameraActiveRef.current = false;
             isFlyingRef.current = false;
 
             const finalItem = latestGeoItemsRef.current.find((i) =>
@@ -355,6 +416,9 @@ export function useMapCamera({
           }
 
           // Seamlessly align the camera with the new jittered/precise position.
+          const correctionId = ++activeFlightIdRef.current;
+          selectionCameraActiveRef.current = true;
+          isFlyingRef.current = true;
           if (dist > 0.05) {
             // Significant shift (e.g., cluster to precise coord) - use flyTo for a smooth arc.
             mapRef.current.flyTo({
@@ -371,6 +435,11 @@ export function useMapCamera({
               essential: true
             });
           }
+          mapRef.current.once("moveend", () => {
+            if (correctionId !== activeFlightIdRef.current) return;
+            selectionCameraActiveRef.current = false;
+            isFlyingRef.current = false;
+          });
           lastFlownCoordsRef.current = [selectedItem.longitude, selectedItem.latitude];
         }
       }

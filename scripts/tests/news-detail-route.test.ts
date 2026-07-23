@@ -117,6 +117,55 @@ describe("GET /api/news/[id]", () => {
     });
   });
 
+  it('applies each recipient entitlement when the same shared event is cached', async () => {
+    const id = '66666666-6666-4666-8666-666666666666';
+    mocks.from.mockReturnValue(detailQuery({
+      id,
+      title: 'Shared event',
+      description: 'Story',
+      source: 'Primary',
+      source_type: 'rss',
+      url: 'https://primary.example',
+      published_at: '2026-01-03T00:00:00Z',
+      sources: [
+        { name: 'First', url: 'https://first.example', source_type: 'rss', discovered_at: '2026-01-01T00:00:00Z' },
+        { name: 'Middle', url: 'https://middle.example', source_type: 'rss', discovered_at: '2026-01-02T00:00:00Z' },
+        { name: 'Latest', url: 'https://latest.example', source_type: 'rss', discovered_at: '2026-01-03T00:00:00Z' },
+      ],
+      latitude: 1,
+      longitude: 2,
+    }));
+
+    mocks.resolveEntitlements.mockResolvedValueOnce({
+      tier: 'guest',
+      entitlements: { timelineSourceLimit: 0 },
+      userId: null,
+    });
+    const guestResponse = await GET(request(id, '198.51.100.60'), params(id));
+    await expect(guestResponse.json()).resolves.toMatchObject({
+      timelineRestricted: true,
+      totalSources: 4,
+      sources: [expect.objectContaining({ name: 'Primary' })],
+      event: expect.objectContaining({ id, title: 'Shared event' }),
+    });
+
+    mocks.resolveEntitlements.mockResolvedValueOnce({
+      tier: 'pro',
+      entitlements: { timelineSourceLimit: null },
+      userId: 'pro-user',
+    });
+    const proResponse = await GET(request(id, '198.51.100.61'), params(id));
+    const proBody = await proResponse.json();
+    expect(proBody).toMatchObject({ timelineRestricted: false, totalSources: 4 });
+    expect(proBody.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Primary' }),
+      expect.objectContaining({ name: 'First' }),
+      expect.objectContaining({ name: 'Middle' }),
+      expect.objectContaining({ name: 'Latest' }),
+    ]));
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects exact-event requests without trusted deployment identity', async () => {
     const id = '44444444-4444-4444-8444-444444444444';
     const response = await GET(new Request(`https://seraphim.example/api/news/${id}`), params(id));

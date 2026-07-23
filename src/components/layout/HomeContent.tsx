@@ -53,7 +53,6 @@ export function HomeContent() {
         () => false
     );
     const { initialState, updateURL } = useViewState();
-    const isFirstMount = React.useRef(true);
     const [filterVersion, setFilterVersion] = useState(0);
     
     const [animatedEffects, setAnimatedEffects] = useState(true);
@@ -186,11 +185,9 @@ export function HomeContent() {
     } = useNewsFilter(news, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, appliedSortMode, selectedItemId);
 
     const hydratedPreferencesForRef = React.useRef<string | null>(null);
-    const applyingPreferencesRef = React.useRef(false);
     useEffect(() => {
         if (!user || tierLoading || !preferencesLoaded || !preferences || hydratedPreferencesForRef.current === user.id) return;
         hydratedPreferencesForRef.current = user.id;
-        applyingPreferencesRef.current = true;
 
         const urlPreferences = sanitizeSyncedPreferences({
             ...preferences,
@@ -215,9 +212,6 @@ export function HomeContent() {
         setAnimatedEffects(preferences.animatedEffects);
         setIsSidebarOpen(preferences.sidebarOpen);
         setTheme(preferences.theme);
-        requestAnimationFrame(() => {
-            applyingPreferencesRef.current = false;
-        });
     }, [
         effectiveUserTier,
         initialState.cat,
@@ -265,26 +259,21 @@ export function HomeContent() {
         updateURL({ eventId: id || undefined });
     }, [updateURL, setSelectedItemId, setSelectionVersion]);
 
-    /** Resets scroll, expansion, and selection when filters change to ensure a clean state */
-    useEffect(() => {
-        if (isFirstMount.current) {
-            isFirstMount.current = false;
-            return;
-        }
-        if (applyingPreferencesRef.current) return;
-        requestAnimationFrame(() => {
-            setFilterVersion(v => v + 1);
-            handleSelectItem(null);
-        });
-    }, [sources, categories, minVolume, credibilityTiers, timeRange, debouncedSearch, debouncedCustomStartDate, debouncedCustomEndDate, effectiveSortMode, handleSelectItem]);
+    /**
+     * Keep selection resets attached to explicit user interactions. Auth and
+     * preference hydration update the same filter state, but must not consume a
+     * shared event link or remove its eventId from the URL.
+     */
+    const resetForUserFilterChange = useCallback(() => {
+        setFilterVersion(v => v + 1);
+        handleSelectItem(null);
+    }, [handleSelectItem]);
 
     /**
      * Handles BBox changes by resetting sidebar scroll only when the selected item is
      * no longer present in the filtered result set for non-viewport reasons.
      */
     useEffect(() => {
-        if (isFirstMount.current) return;
-        
         const isVisible = selectedItemId && filteredNews.some(i => matchesNewsId(i, selectedItemId));
         
         if (!isVisible) {
@@ -305,6 +294,7 @@ export function HomeContent() {
 
     // Handles changes to the time range filter, including custom date initialization
     const handleTimeRangeChange = useCallback((range: string) => {
+        resetForUserFilterChange();
         if (range !== '1d') {
             void trackOptionalMetric('activation', {
                 milestone: range === 'custom' ? 'custom_window' : 'historical_monitoring',
@@ -332,41 +322,47 @@ export function HomeContent() {
             updateURL({ from: defaultStartDate, to: defaultEndDate });
             updatePreferences({ customStartDate: defaultStartDate, customEndDate: defaultEndDate });
         }
-    }, [customStartDate, customEndDate, updatePreferences, updateURL]);
+    }, [customStartDate, customEndDate, resetForUserFilterChange, updatePreferences, updateURL]);
 
     // Sync search changes to URL
     const handleSearchChange = useCallback((q: string) => {
+        resetForUserFilterChange();
         setSearchQuery(q);
         updateURL({ q: q || undefined });
-    }, [updateURL]);
+    }, [resetForUserFilterChange, updateURL]);
 
     const handleSortModeChange = useCallback((mode: SortMode) => {
+        resetForUserFilterChange();
         setSortMode(mode);
         updateURL({ s: mode });
         updatePreferences({ sortMode: mode });
-    }, [setSortMode, updatePreferences, updateURL]);
+    }, [resetForUserFilterChange, setSortMode, updatePreferences, updateURL]);
 
     const handleSourcesChange = useCallback((nextSources: string[]) => {
+        resetForUserFilterChange();
         setSources(nextSources);
         updateURL({ src: nextSources.join(',') });
         updatePreferences({ sources: nextSources });
-    }, [setSources, updatePreferences, updateURL]);
+    }, [resetForUserFilterChange, setSources, updatePreferences, updateURL]);
 
     const handleCategoriesChange = useCallback((nextCategories: string[]) => {
+        resetForUserFilterChange();
         setCategories(nextCategories);
         updateURL({ cat: nextCategories.join(',') });
         updatePreferences({ categories: nextCategories });
-    }, [setCategories, updatePreferences, updateURL]);
+    }, [resetForUserFilterChange, setCategories, updatePreferences, updateURL]);
 
     const handleMinVolumeChange = useCallback((value: number) => {
+        resetForUserFilterChange();
         setMinVolume(value);
         updatePreferences({ minVolume: value });
-    }, [setMinVolume, updatePreferences]);
+    }, [resetForUserFilterChange, setMinVolume, updatePreferences]);
 
     const handleCredibilityTiersChange = useCallback((tiers: number[]) => {
+        resetForUserFilterChange();
         setCredibilityTiers(tiers);
         updatePreferences({ credibilityTiers: tiers });
-    }, [setCredibilityTiers, updatePreferences]);
+    }, [resetForUserFilterChange, setCredibilityTiers, updatePreferences]);
 
     const handleAnimatedEffectsChange = useCallback((value: boolean) => {
         setAnimatedEffects(value);
@@ -374,16 +370,18 @@ export function HomeContent() {
     }, [updatePreferences]);
 
     const handleCustomStartDateChange = useCallback((value: string) => {
+        resetForUserFilterChange();
         setCustomStartDate(value);
         updateURL({ from: value || undefined });
         updatePreferences({ customStartDate: value });
-    }, [updatePreferences, updateURL]);
+    }, [resetForUserFilterChange, updatePreferences, updateURL]);
 
     const handleCustomEndDateChange = useCallback((value: string) => {
+        resetForUserFilterChange();
         setCustomEndDate(value);
         updateURL({ to: value || undefined });
         updatePreferences({ customEndDate: value });
-    }, [updatePreferences, updateURL]);
+    }, [resetForUserFilterChange, updatePreferences, updateURL]);
 
     const handleSidebarOpenChange = useCallback((value: boolean) => {
         setIsSidebarOpen(value);
@@ -475,13 +473,13 @@ export function HomeContent() {
     // Exact shared links may reference an event outside the current time range
     // or viewport, so fetch the event shell even when it was not in the feed.
     useEffect(() => {
-        if (selectedItemId) {
+        if (!isAuthResolving && selectedItemId) {
             const item = news.find(n => matchesNewsId(n, selectedItemId));
             if ((!item || item.description === undefined) && fetchEventDetails) {
                 fetchEventDetails(selectedItemId);
             }
         }
-    }, [selectedItemId, fetchEventDetails, news]);
+    }, [isAuthResolving, selectedItemId, fetchEventDetails, news]);
 
     const activeFilterCount = useMemo(() => {
         let count = 0;

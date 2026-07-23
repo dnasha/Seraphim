@@ -85,6 +85,22 @@ describe("useViewState", () => {
     replaceState.mockRestore();
   });
 
+  it("retains an initial shared event during debounced viewport writes", () => {
+    vi.useFakeTimers();
+    navigation.params = "eventId=shared-event";
+    navigation.pathname = "/";
+    const { result } = renderHook(() => useViewState());
+
+    act(() => {
+      result.current.updateURL({ lat: 36.2494, lng: 11.2907, zoom: 2.1 });
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(window.location.search).toBe(
+      "?lat=36.2494&lng=11.2907&zoom=2.1&eventId=shared-event",
+    );
+  });
+
   it('serializes custom bounds only for a custom time window', () => {
     vi.useFakeTimers();
     navigation.params = '';
