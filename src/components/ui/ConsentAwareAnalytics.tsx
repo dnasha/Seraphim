@@ -6,10 +6,10 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { getPrivacyConsent, PRIVACY_CONSENT_EVENT } from '@/lib/privacyConsent';
 
 export default function ConsentAwareAnalytics() {
-  const [enabled, setEnabled] = useState(false);
+  const [optionalMetricsEnabled, setOptionalMetricsEnabled] = useState(false);
 
   useEffect(() => {
-    const sync = () => setEnabled(getPrivacyConsent() === 'accepted');
+    const sync = () => setOptionalMetricsEnabled(getPrivacyConsent() === 'accepted');
     sync();
     window.addEventListener(PRIVACY_CONSENT_EVENT, sync);
     window.addEventListener('storage', sync);
@@ -19,6 +19,10 @@ export default function ConsentAwareAnalytics() {
     };
   }, []);
 
-  if (!enabled) return null;
-  return <><SpeedInsights /><Analytics /></>;
+  return (
+    <>
+      <Analytics />
+      {optionalMetricsEnabled ? <SpeedInsights /> : null}
+    </>
+  );
 }

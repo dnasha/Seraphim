@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DbEvent, DbEventSource } from "@/types";
-import { calculateMergedStory } from "@/lib/utils/merging";
+import { calculateMergedStory, isImageLookupEligible } from "@/lib/utils/merging";
 import {
   generateEmbeddings,
   buildEmbeddingText,
@@ -33,7 +33,48 @@ interface CandidateDetail {
   source_type: DbEvent["source_type"];
   url: string;
   image_url?: string;
+  image_source_url?: string;
+  image_source_published_at?: string;
+  image_origin?: string;
+  image_updated_at?: string;
+  image_last_checked_at?: string;
+  created_at?: string;
   published_at: string;
+}
+
+export interface ImageEnrichmentTarget {
+  targetType: "merge";
+  targetId: string;
+  articleUrl: string;
+  sourcePublishedAt: string;
+  sourceTier: number;
+  priority: 0 | 2;
+  currentImageUrl?: string;
+  currentImageSourcePublishedAt?: string;
+  currentImageUpdatedAt?: string;
+  currentCreatedAt?: string;
+  currentPublishedAt: string;
+}
+
+export interface StoryMerge {
+  sources: DbEventSource[];
+  title?: string;
+  description?: string;
+  source?: string;
+  source_type?: DbEvent["source_type"];
+  url?: string;
+  image_url?: string;
+  image_source_url?: string;
+  image_source_published_at?: string;
+  image_origin?: string;
+  image_updated_at?: string;
+  image_last_checked_at?: string;
+  credibility_tier?: number;
+  published_at?: string;
+  event_count?: number;
+  impact_score?: number;
+  expires_at?: string | null;
+  primary_discovered_at?: string | null;
 }
 
 interface VectorCandidateRow {
@@ -111,7 +152,7 @@ async function fetchCandidateDetails(
     const chunk = ids.slice(offset, offset + DETAIL_QUERY_CHUNK_SIZE);
     const { data, error } = await db
       .from("events")
-      .select("id, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, published_at")
+      .select("id, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at")
       .in("id", chunk);
 
     if (error) {
@@ -134,6 +175,12 @@ async function fetchCandidateDetails(
         source_type: row.source_type as DbEvent["source_type"],
         url: String(row.url ?? ""),
         image_url: row.image_url == null ? undefined : String(row.image_url),
+        image_source_url: row.image_source_url == null ? undefined : String(row.image_source_url),
+        image_source_published_at: row.image_source_published_at == null ? undefined : String(row.image_source_published_at),
+        image_origin: row.image_origin == null ? undefined : String(row.image_origin),
+        image_updated_at: row.image_updated_at == null ? undefined : String(row.image_updated_at),
+        image_last_checked_at: row.image_last_checked_at == null ? undefined : String(row.image_last_checked_at),
+        created_at: row.created_at == null ? undefined : String(row.created_at),
         published_at: String(row.published_at ?? ""),
       };
       details.set(detail.id, detail);
@@ -148,7 +195,7 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<Fallbac
   const since = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
   const { data, error } = await db
     .from("events")
-    .select("id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, published_at")
+    .select("id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at")
     .not("embedding", "is", null)
     .gte("published_at", since);
 
@@ -180,6 +227,12 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<Fallbac
         source_type: row.source_type as DbEvent["source_type"],
         url: String(row.url ?? ""),
         image_url: row.image_url == null ? undefined : String(row.image_url),
+        image_source_url: row.image_source_url == null ? undefined : String(row.image_source_url),
+        image_source_published_at: row.image_source_published_at == null ? undefined : String(row.image_source_published_at),
+        image_origin: row.image_origin == null ? undefined : String(row.image_origin),
+        image_updated_at: row.image_updated_at == null ? undefined : String(row.image_updated_at),
+        image_last_checked_at: row.image_last_checked_at == null ? undefined : String(row.image_last_checked_at),
+        created_at: row.created_at == null ? undefined : String(row.created_at),
         published_at: String(row.published_at ?? ""),
       };
     });
@@ -215,40 +268,14 @@ export async function resolveStoryMerges(
   db: SupabaseClient,
 ): Promise<{
   newEvents: DbEvent[];
-  merges: Map<string, {
-    sources: DbEventSource[];
-    title?: string;
-    description?: string;
-    source?: string;
-    source_type?: DbEvent["source_type"];
-    url?: string;
-    image_url?: string;
-    credibility_tier?: number;
-    published_at?: string;
-    event_count?: number;
-    impact_score?: number;
-    expires_at?: string | null;
-    primary_discovered_at?: string | null;
-  }>;
+  merges: Map<string, StoryMerge>;
+  imageTargets: ImageEnrichmentTarget[];
 }> {
   const newEvents: DbEvent[] = [];
-  const merges = new Map<string, {
-    sources: DbEventSource[];
-    title?: string;
-    description?: string;
-    source?: string;
-    source_type?: DbEvent["source_type"];
-    url?: string;
-    image_url?: string;
-    credibility_tier?: number;
-    published_at?: string;
-    event_count?: number;
-    impact_score?: number;
-    expires_at?: string | null;
-    primary_discovered_at?: string | null;
-  }>();
+  const merges = new Map<string, StoryMerge>();
+  const imageTargets = new Map<string, ImageEnrichmentTarget>();
 
-  if (dbEvents.length === 0) return { newEvents, merges };
+  if (dbEvents.length === 0) return { newEvents, merges, imageTargets: [] };
 
   console.log(`[vectorize] Generating embeddings for ${dbEvents.length} items...`);
   const texts = dbEvents.map((event) => buildEmbeddingText(event.title, event.description));
@@ -370,6 +397,37 @@ export async function resolveStoryMerges(
         const { id: _id, ...mergeData } = mergedResult;
         merges.set(bestMatchId, mergeData);
         mergeCount++;
+        if (
+          !event.image_url &&
+          isImageLookupEligible(storyState, event)
+        ) {
+          const priority = storyState.image_url ? 2 : 0;
+          const proposed: ImageEnrichmentTarget = {
+            targetType: "merge",
+            targetId: bestMatchId,
+            articleUrl: event.url,
+            sourcePublishedAt: event.published_at,
+            sourceTier: event.credibility_tier ?? 3,
+            priority,
+            currentImageUrl: storyState.image_url,
+            currentImageSourcePublishedAt: storyState.image_source_published_at,
+            currentImageUpdatedAt: storyState.image_updated_at,
+            currentCreatedAt: storyState.created_at,
+            currentPublishedAt: storyState.published_at,
+          };
+          const current = imageTargets.get(bestMatchId);
+          if (
+            !current ||
+            proposed.priority < current.priority ||
+            (
+              proposed.priority === current.priority &&
+              new Date(proposed.sourcePublishedAt).getTime() >
+                new Date(current.sourcePublishedAt).getTime()
+            )
+          ) {
+            imageTargets.set(bestMatchId, proposed);
+          }
+        }
       } else {
         const incomingTime = new Date(event.published_at).getTime();
         const currentTime = new Date(storyState.published_at).getTime();
@@ -401,6 +459,11 @@ export async function resolveStoryMerges(
         source_type: pending.source_type,
         url: pending.url,
         image_url: pending.image_url,
+        image_source_url: pending.image_source_url,
+        image_source_published_at: pending.image_source_published_at,
+        image_origin: pending.image_origin,
+        image_updated_at: pending.image_updated_at,
+        created_at: pending.created_at,
         credibility_tier: pending.credibility_tier ?? 3,
         published_at: pending.published_at,
         sources: pending.sources ?? [],
@@ -416,5 +479,5 @@ export async function resolveStoryMerges(
   }
 
   console.log(`[vectorize] Story resolution: ${mergeCount} merged, ${newEvents.length} new events`);
-  return { newEvents, merges };
+  return { newEvents, merges, imageTargets: [...imageTargets.values()] };
 }

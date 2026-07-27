@@ -27,6 +27,7 @@ import { prepareIncomingItems } from "./utils/content";
 import { parseExistingUrlRows } from "./utils/dedup";
 import { applySourceNoveltyLimits, loadSourceNoveltyLimits } from "./sourceBudget";
 import { resolveStoryMerges } from "./merger";
+import { enrichResolvedStoryImages } from "./imageEnrichment";
 import {
   ingestSequentially,
   isVectorTypeMissingError,
@@ -263,7 +264,45 @@ async function run(): Promise<void> {
     .filter((e): e is DbEvent => e !== null);
 
   console.log("[scraper] Running semantic vectorization...");
-  const { newEvents, merges } = await resolveStoryMerges(dbEvents, db);
+  const { newEvents, merges, imageTargets } = await resolveStoryMerges(dbEvents, db);
+  const imageStats = await enrichResolvedStoryImages({
+    newEvents,
+    merges,
+    imageTargets,
+  });
+  if (imageStats.pageLookups > 0) {
+    console.log(
+      `[images] lookups=${imageStats.pageLookups} hits=${imageStats.hits} ` +
+      `fills=${imageStats.fills} refreshes=${imageStats.refreshes} ` +
+      `failures=${imageStats.failures} duration_ms=${imageStats.durationMs}`,
+    );
+    await Promise.all([
+      recordMetric({
+        kind: 'operational',
+        service: 'ingestion',
+        name: 'image_page_lookups',
+        count: imageStats.pageLookups,
+      }),
+      recordMetric({
+        kind: 'operational',
+        service: 'ingestion',
+        name: 'image_fills',
+        count: imageStats.fills,
+      }),
+      recordMetric({
+        kind: 'operational',
+        service: 'ingestion',
+        name: 'image_refreshes',
+        count: imageStats.refreshes,
+      }),
+      recordMetric({
+        kind: 'operational',
+        service: 'ingestion',
+        name: 'image_enrichment_duration_ms',
+        value: imageStats.durationMs,
+      }),
+    ]);
+  }
 
   if (DRY_RUN) {
     console.log("[scraper] DRY RUN Proposed Events:");

@@ -16,7 +16,8 @@
     "test:watch": "bun x vitest",
     "test:coverage": "bun x vitest run --coverage",
     "test:accuracy": "bun x vitest run scripts/tests/geocoding-accuracy.test.ts",
-    "maintenance:lean-events": "bun run scripts/maintenance/lean-events.ts"
+    "maintenance:lean-events": "bun run scripts/maintenance/lean-events.ts",
+    "maintenance:backfill-images": "bun run scripts/maintenance/backfill-event-images.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

@@ -34,6 +34,12 @@ export interface NewsItem {
   category?: string;
   publishedAt: string;
   imageUrl?: string;
+  /** Internal ingestion provenance; omitted from public API mappings. */
+  imageSourceUrl?: string;
+  /** Publication time of the source that supplied imageUrl. */
+  imageSourcePublishedAt?: string;
+  /** Extraction path used to discover imageUrl. */
+  imageOrigin?: string;
   latitude?: number;
   longitude?: number;
   locationName?: string;

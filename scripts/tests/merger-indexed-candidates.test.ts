@@ -76,7 +76,9 @@ describe("indexed scraper candidate matching", () => {
       error: null,
     });
 
-    const result = await resolveStoryMerges([incoming()], { from, rpc } as never);
+    const result = await resolveStoryMerges([incoming({
+      published_at: "2026-07-13T00:00:00.000Z",
+    })], { from, rpc } as never);
 
     expect(rpc).toHaveBeenCalledWith("match_recent_event_candidates", expect.objectContaining({
       p_limit: 12,
@@ -109,7 +111,7 @@ describe("indexed scraper candidate matching", () => {
     const second = incoming({
       url: "https://second.example/report",
       image_url: "https://second.example/new.jpg",
-      published_at: "2026-07-12T12:00:00.000Z",
+      published_at: "2026-07-13T00:00:00.000Z",
     });
 
     const result = await resolveStoryMerges([first, second], { from, rpc } as never);

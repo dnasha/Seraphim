@@ -10,7 +10,12 @@ import {
   isPaymentsEnabled,
 } from '@/lib/security/payments';
 import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
-import { fetchPublicImage, isPublicIpAddress, validatePublicImageUrl } from '@/lib/security/ogImage';
+import {
+  fetchPublicBytes,
+  fetchPublicImage,
+  isPublicIpAddress,
+  validatePublicImageUrl,
+} from '@/lib/security/ogImage';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
 import { parseCspReport } from '@/lib/security/cspReport';
 import { buildCspReportOnly, CSP_ENFORCED_BASELINE } from '@/lib/security/csp';
@@ -173,6 +178,25 @@ describe('proxy and OG guards', () => {
 
     expect(result?.arrayBuffer.byteLength).toBeGreaterThan(0);
     expect(fetchHop).toHaveBeenCalledWith(expect.any(URL), '198.51.100.77', 1500);
+  });
+
+  it('stops public document reads at their byte budget', async () => {
+    const close = vi.fn(async () => undefined);
+    const result = await fetchPublicBytes('https://news.example/story', {
+      maxBytes: 64,
+      allowedContentTypes: ['text/html'],
+      resolveHost: async () => [{ address: '198.51.100.77', family: 4 }],
+      fetchHop: async () => ({
+        response: new Response('x'.repeat(1024), {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        }),
+        close,
+      }),
+    });
+
+    expect(result?.bytes.byteLength).toBe(64);
+    expect(result?.truncated).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
   });
 });
 

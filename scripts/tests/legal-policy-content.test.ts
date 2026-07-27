@@ -14,9 +14,11 @@ describe('launch legal content', () => {
   const faq = source('src/app/pricing/FaqSection.tsx');
 
   it('uses fixed policy versions and the approved public identity', () => {
+    expect(terms).toContain("const EFFECTIVE_DATE = 'July 17, 2026'");
+    expect(terms).toContain("const POLICY_VERSION = '2026-07-17'");
+    expect(privacy).toContain("const EFFECTIVE_DATE = 'July 26, 2026'");
+    expect(privacy).toContain("const POLICY_VERSION = '2026-07-26'");
     for (const policy of [terms, privacy]) {
-      expect(policy).toContain("const EFFECTIVE_DATE = 'July 17, 2026'");
-      expect(policy).toContain("const POLICY_VERSION = '2026-07-17'");
       expect(policy).toContain('Washington, USA');
       expect(policy).toContain('legal@seraphi.me');
       expect(policy).not.toMatch(/new Date|physical address|mailing address|legal operator/i);
@@ -45,6 +47,8 @@ describe('launch legal content', () => {
     expect(privacy).toMatch(/California notice at collection/i);
     expect(privacy).toMatch(/will not discriminate/i);
     expect(privacy).toMatch(/at least 18/i);
+    expect(privacy).toMatch(/Vercel Web Analytics runs on each visit/i);
+    expect(privacy).toMatch(/Speed Insights.+load only after you choose/i);
   });
 
   it('keeps generic signup links concise and centralizes Angel detail', () => {

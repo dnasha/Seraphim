@@ -98,6 +98,12 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         source_type: item.sourceType,
         category: item.category,
         image_url: item.imageUrl,
+        image_source_url: item.imageUrl ? (item.imageSourceUrl || item.url) : undefined,
+        image_source_published_at: item.imageUrl
+            ? ensureIsoDate(item.imageSourcePublishedAt || item.publishedAt)
+            : undefined,
+        image_origin: item.imageUrl ? (item.imageOrigin || 'feed') : undefined,
+        image_updated_at: item.imageUrl ? new Date().toISOString() : undefined,
         published_at: ensureIsoDate(item.publishedAt),
         primary_discovered_at: ensureIsoDate(item.publishedAt),
         latitude: item.latitude,
