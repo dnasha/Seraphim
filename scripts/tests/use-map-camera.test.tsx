@@ -3,7 +3,10 @@
 import type React from "react";
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useMapCamera } from "@/components/map/useMapCamera";
+import {
+  calculateSelectionCameraPadding,
+  useMapCamera,
+} from "@/components/map/useMapCamera";
 import type { NewsItem } from "@/lib/core/types";
 
 const story = (overrides: Partial<NewsItem> = {}): NewsItem => ({
@@ -19,6 +22,24 @@ const story = (overrides: Partial<NewsItem> = {}): NewsItem => ({
 });
 
 describe("useMapCamera", () => {
+  it("moves a tall desktop popup down just enough to preserve a viewport gutter", () => {
+    expect(calculateSelectionCameraPadding(1036, 720, false)).toEqual({
+      top: 436,
+      bottom: 0,
+      left: 0,
+      right: 0,
+    });
+  });
+
+  it("reserves bottom-sheet space while keeping part of the mobile map visible", () => {
+    expect(calculateSelectionCameraPadding(844, 608, true)).toEqual({
+      top: 0,
+      bottom: 624,
+      left: 0,
+      right: 0,
+    });
+  });
+
   it("does not let delayed initial-view correction interrupt a shared-event flight", () => {
     vi.useFakeTimers();
     const canvas = document.createElement("canvas");
@@ -251,6 +272,74 @@ describe("useMapCamera", () => {
     expect(flyTo).toHaveBeenCalledTimes(2);
     expect(flyTo).toHaveBeenLastCalledWith(expect.objectContaining({
       center: [-74, 40],
+    }));
+  });
+
+  it("reuses the open popup when switching directly between sidebar events", () => {
+    const canvas = document.createElement("canvas");
+    const flyTo = vi.fn();
+    const map = {
+      getCanvas: () => canvas,
+      getLayer: vi.fn(),
+      getZoom: () => 3,
+      getPadding: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+      flyTo,
+      easeTo: vi.fn(),
+      stop: vi.fn(),
+      once: vi.fn(),
+    };
+    let popupOpen = false;
+    const popup = {
+      isOpen: () => popupOpen,
+      getLngLat: () => ({ lng: -74, lat: 40 }),
+      setLngLat: vi.fn(() => popup),
+      setDOMContent: vi.fn(() => popup),
+      addTo: vi.fn(() => {
+        popupOpen = true;
+        return popup;
+      }),
+    };
+    const firstStory = story();
+    const secondStory = story({
+      id: "event-2",
+      title: "Second event",
+      longitude: -122,
+      latitude: 47,
+    });
+    const mapRef = { current: map } as unknown as React.MutableRefObject<null>;
+    const popupRef = { current: popup } as unknown as React.MutableRefObject<null>;
+    const latestGeoItemsRef = { current: [firstStory, secondStory] };
+    const popupContainer = document.createElement("div");
+
+    const { rerender } = renderHook(
+      ({ selectedItemId }) =>
+        useMapCamera({
+          mapRef,
+          mapReady: true,
+          popupRef,
+          popupContainer,
+          selectedItemId,
+          selectionVersion: 1,
+          geoItems: [firstStory, secondStory],
+          latestGeoItemsRef,
+          animatedEffects: false,
+          isGlobe: false,
+          forceIndividualPinsRef: { current: false },
+          containerRef: { current: document.createElement("div") },
+        }),
+      { initialProps: { selectedItemId: "event-1" } },
+    );
+
+    expect(popup.addTo).toHaveBeenCalledTimes(1);
+    expect(popup.setDOMContent).toHaveBeenCalledTimes(1);
+
+    act(() => rerender({ selectedItemId: "event-2" }));
+
+    expect(popup.addTo).toHaveBeenCalledTimes(1);
+    expect(popup.setDOMContent).toHaveBeenCalledTimes(1);
+    expect(popup.setLngLat).toHaveBeenLastCalledWith([-122, 47]);
+    expect(flyTo).toHaveBeenLastCalledWith(expect.objectContaining({
+      center: [-122, 47],
     }));
   });
 });

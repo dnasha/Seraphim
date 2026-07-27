@@ -106,108 +106,112 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                     )}
                 </div>
             </div>
-            <div className="news-popup-content">
-                {item.imageUrl && (
-                    <div className="news-popup-img-container">
-                        <Image 
-                            className="news-popup-img" 
-                            src={item.imageUrl} 
-                            alt="" 
-                            fill
-                            unoptimized={!canOptimizeNewsImage(item.imageUrl)}
-                            priority
-                            sizes="(max-width: 860px) 100vw, 500px"
-                            style={{ objectFit: 'cover' }}
-                            referrerPolicy="no-referrer" 
-                            onError={(e) => (e.currentTarget.style.display = 'none')} 
-                        />
-                    </div>
-                )}
-                {item.description !== undefined ? (
-                    item.description ? (
-                        <p className="news-popup-summary">{item.description}</p>
-                    ) : null
-                ) : (
-                    <div className="news-popup-summary news-popup-summary--loading">
-                        <div className="popup-skeleton-line" />
-                        <div className="popup-skeleton-line" style={{ width: '90%' }} />
-                        <div className="popup-skeleton-line" style={{ width: '75%' }} />
-                    </div>
-                )}
-                <div className="news-popup-actions">
-                    {sourceCount <= 1 && (
-                        <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer" title="Open the original source in a new tab">
-                            View source →
-                        </a>
-                    )}
-                </div>
-            </div>
-            {sourceCount > 1 && item.sources && (
-                <div className="news-popup-sources-section">
-                    <div className="news-popup-sources-header">
-                        <span>Story Timeline</span>
-                        <div className="news-popup-sources-actions">
-                            {timelineLocked && (
-                                <TimelineGateCta
-                                    userTier={userTier}
-                                    className="timeline-popup-upgrade-btn"
-                                    guestClassName="timeline-popup-guest-btn"
-                                />
-                            )}
-                            <span className="news-popup-source-count" title={`${sourceCount} sources reporting on this`}>
-                                <svg viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
-                                </svg>
-                                {sourceCount}
-                            </span>
+            <div className="news-popup-scroll-body">
+                <div className="news-popup-content">
+                    {item.imageUrl && (
+                        <div className="news-popup-img-container">
+                            <Image
+                                className="news-popup-img"
+                                src={item.imageUrl}
+                                alt=""
+                                fill
+                                unoptimized={!canOptimizeNewsImage(item.imageUrl)}
+                                priority
+                                sizes="(max-width: 860px) 100vw, 500px"
+                                style={{ objectFit: 'cover' }}
+                                referrerPolicy="no-referrer"
+                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                            />
                         </div>
-                    </div>
-                    <div className="news-popup-sources-list">
-                        {visibleSources.map((src, i) => {
-                                const srcColor = getSourceBadgeColor(src.name);
-                                const srcTime = formatTimeAgo(src.discoveredAt);
-                                return (
-                                    <div key={`${src.url}-${i}`}>
-                                        <div className="news-popup-source-entry">
-                                            {srcTime && <span className="news-popup-source-time">{srcTime}</span>}
-                                            <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
-                                                {src.name}
-                                            </span>
-                                            <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
-                                                {new URL(src.url).hostname}
-                                            </a>
-                                        </div>
-                                        {showTimelineGap && i === 0 && (
-                                            <div
-                                                className="news-popup-timeline-gap"
-                                                role="note"
-                                                aria-label={`Showing the latest and first sources, with ${hiddenSourceCount} ${hiddenSourceCount === 1 ? 'source' : 'sources'} hidden between them.`}
-                                            >
-                                                <span className="news-popup-timeline-gap-line" />
-                                                <span className="news-popup-timeline-gap-copy">
-                                                    <strong>{hiddenSourceCount} {hiddenSourceCount === 1 ? 'source' : 'sources'} hidden</strong>
-                                                    <small>Latest above · first source below</small>
-                                                </span>
-                                                <span className="news-popup-timeline-gap-line" />
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        {timelineLocked && item.sources?.length === 0 && (
-                            <p className="news-popup-timeline-preview">A source timeline preview is available with Pro.</p>
+                    )}
+                    {item.description !== undefined ? (
+                        item.description ? (
+                            <p className="news-popup-summary">{item.description}</p>
+                        ) : null
+                    ) : (
+                        <div className="news-popup-summary news-popup-summary--loading">
+                            <div className="popup-skeleton-line" />
+                            <div className="popup-skeleton-line" style={{ width: '90%' }} />
+                            <div className="popup-skeleton-line" style={{ width: '75%' }} />
+                        </div>
+                    )}
+                    <div className="news-popup-actions">
+                        {sourceCount <= 1 && (
+                            <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer" title="Open the original source in a new tab">
+                                View source →
+                            </a>
                         )}
                     </div>
                 </div>
-            )}
-            <button 
-                className="news-popup-share-btn-absolute" 
-                onClick={handleShare}
-                title={copied ? 'Shareable link copied' : 'Copy a shareable link to this event'}
-            >
-                <LuShare2 size={13} />
-                {copied ? 'Link Copied!' : 'Share Event'}
-            </button>
+                {sourceCount > 1 && item.sources && (
+                    <div className="news-popup-sources-section">
+                        <div className="news-popup-sources-header">
+                            <span>Story Timeline</span>
+                            <div className="news-popup-sources-actions">
+                                {timelineLocked && (
+                                    <TimelineGateCta
+                                        userTier={userTier}
+                                        className="timeline-popup-upgrade-btn"
+                                        guestClassName="timeline-popup-guest-btn"
+                                    />
+                                )}
+                                <span className="news-popup-source-count" title={`${sourceCount} sources reporting on this`}>
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12.43,4.1a1,1,0,0,0-1,.12L6.65,8H3A1,1,0,0,0,2,9v6a1,1,0,0,0,1,1H6.65l4.73,3.78A1,1,0,0,0,12,20a.91.91,0,0,0,.43-.1A1,1,0,0,0,13,19V5A1,1,0,0,0,12.43,4.1ZM11,16.92l-3.38-2.7A1,1,0,0,0,7,14H4V10H7a1,1,0,0,0,.62-.22L11,7.08ZM19.66,6.34a1,1,0,0,0-1.42,1.42,6,6,0,0,1-.38,8.84,1,1,0,0,0,.64,1.76,1,1,0,0,0,.64-.23,8,8,0,0,0,.52-11.79ZM16.83,9.17a1,1,0,1,0-1.42,1.42A2,2,0,0,1,16,12a2,2,0,0,1-.71,1.53,1,1,0,0,0-.13,1.41,1,1,0,0,0,1.41.12A4,4,0,0,0,18,12,4.06,4.06,0,0,0,16.83,9.17Z" />
+                                    </svg>
+                                    {sourceCount}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="news-popup-sources-list">
+                            {visibleSources.map((src, i) => {
+                                    const srcColor = getSourceBadgeColor(src.name);
+                                    const srcTime = formatTimeAgo(src.discoveredAt);
+                                    return (
+                                        <div key={`${src.url}-${i}`}>
+                                            <div className="news-popup-source-entry">
+                                                {srcTime && <span className="news-popup-source-time">{srcTime}</span>}
+                                                <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
+                                                    {src.name}
+                                                </span>
+                                                <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
+                                                    {new URL(src.url).hostname}
+                                                </a>
+                                            </div>
+                                            {showTimelineGap && i === 0 && (
+                                                <div
+                                                    className="news-popup-timeline-gap"
+                                                    role="note"
+                                                    aria-label={`Showing the latest and first sources, with ${hiddenSourceCount} ${hiddenSourceCount === 1 ? 'source' : 'sources'} hidden between them.`}
+                                                >
+                                                    <span className="news-popup-timeline-gap-line" />
+                                                    <span className="news-popup-timeline-gap-copy">
+                                                        <strong>{hiddenSourceCount} {hiddenSourceCount === 1 ? 'source' : 'sources'} hidden</strong>
+                                                        <small>Latest above · first source below</small>
+                                                    </span>
+                                                    <span className="news-popup-timeline-gap-line" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            {timelineLocked && item.sources?.length === 0 && (
+                                <p className="news-popup-timeline-preview">A source timeline preview is available with Pro.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+            <div className="news-popup-footer">
+                <button
+                    className="news-popup-share-btn-absolute"
+                    onClick={handleShare}
+                    title={copied ? 'Shareable link copied' : 'Copy a shareable link to this event'}
+                >
+                    <LuShare2 size={13} />
+                    {copied ? 'Link Copied!' : 'Share Event'}
+                </button>
+            </div>
         </div>
     );
 }
