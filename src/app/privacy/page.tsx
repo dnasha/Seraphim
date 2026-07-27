@@ -3,8 +3,8 @@ import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import PrivacyChoicesButton from '@/components/ui/PrivacyChoicesButton';
 import { createPageMetadata } from '@/lib/siteConfig';
 
-const EFFECTIVE_DATE = 'July 17, 2026';
-const POLICY_VERSION = '2026-07-17';
+const EFFECTIVE_DATE = 'July 26, 2026';
+const POLICY_VERSION = '2026-07-26';
 
 export const metadata = createPageMetadata({
   title: 'Privacy Policy',
@@ -44,7 +44,7 @@ export default function PrivacyPage() {
               <strong>Support and legal communications.</strong> We receive the information you include when emailing support, feedback, legal, privacy, copyright, refund, or dispute inquiries.
             </p>
             <p className={styles.text}>
-              <strong>Technical, security, and usage information.</strong> Servers and infrastructure providers can process IP address, request time, requested URL, browser or device information, authentication cookies, rate-limit keys, security events, error information, and aggregated operational metrics. If you allow optional analytics, we also process limited page, feature, plan, interval, and interaction events. Seraphim does not request your device’s precise geolocation.
+              <strong>Technical, security, and usage information.</strong> Servers and infrastructure providers can process IP address, request time, requested URL, browser or device information, authentication cookies, rate-limit keys, security events, error information, and aggregated operational metrics. Cookieless Vercel Web Analytics processes aggregated page-view information such as page path, referrer, approximate location, browser, operating system, and device type. If you allow optional metrics, we also process limited performance, feature, plan, interval, and interaction events. Seraphim does not request your device’s precise geolocation.
             </p>
 
             <h2 className={styles.sectionTitle}>3. Sources of information</h2>
@@ -57,12 +57,12 @@ export default function PrivacyPage() {
               We use information to create and secure accounts; authenticate users; provide, personalize, and synchronize features; create Checkout and billing-portal sessions; fulfill and revoke entitlements; manage trials, subscriptions, refunds, disputes, Angel inventory, and account deletion; provide support; prevent abuse and fraud; enforce our Terms; measure aggregate reliability and conversion; comply with law; and establish, exercise, or defend legal claims.
             </p>
             <p className={styles.text}>
-              Where laws require a legal basis, processing is based on performing our contract with you, legitimate interests in operating and securing the Service, compliance with legal obligations, protection of vital or legal interests where applicable, and consent for optional analytics. You may withdraw analytics consent without affecting prior lawful processing.
+              Where laws require a legal basis, processing is based on performing our contract with you, legitimate interests in operating, securing, and measuring aggregate use of the Service, compliance with legal obligations, protection of vital or legal interests where applicable, and consent for optional performance and product-usage metrics. You may withdraw consent for optional metrics without affecting prior lawful processing.
             </p>
 
             <h2 className={styles.sectionTitle}>5. How we disclose information</h2>
             <p className={styles.text}>
-              We disclose information only as reasonably necessary to service providers, professional advisers, authorities, transaction participants, or other parties described here. Core providers include Stripe and Link for Managed Payments and billing; Supabase for authentication and databases; Vercel for hosting, delivery, and optional analytics; Cloudflare Turnstile for abuse prevention; Upstash for rate limiting; MapTiler and other map/data providers for map resources; and enabled Google, GitHub, or Discord authentication services. These providers may process request metadata such as IP address under their own terms and privacy notices.
+              We disclose information only as reasonably necessary to service providers, professional advisers, authorities, transaction participants, or other parties described here. Core providers include Stripe and Link for Managed Payments and billing; Supabase for authentication and databases; Vercel for hosting, delivery, cookieless Web Analytics, and optional performance measurement; Cloudflare Turnstile for abuse prevention; Upstash for rate limiting; MapTiler and other map/data providers for map resources; and enabled Google, GitHub, or Discord authentication services. These providers may process request metadata such as IP address under their own terms and privacy notices.
             </p>
             <p className={styles.text}>
               We may disclose information to comply with law, court orders, or valid legal process; protect rights, safety, and security; investigate abuse; or establish and defend claims. Information may transfer as part of a merger, financing, reorganization, asset transfer, or similar transaction, subject to appropriate safeguards and notice where required.
@@ -79,9 +79,9 @@ export default function PrivacyPage() {
             </p>
             <PrivacyChoicesButton />
 
-            <h2 className={styles.sectionTitle}>8. Optional analytics</h2>
+            <h2 className={styles.sectionTitle}>8. Web analytics and optional metrics</h2>
             <p className={styles.text}>
-              Vercel Analytics, Speed Insights, and Seraphim’s limited conversion metrics load only after you choose “Accept All.” Optional metrics use controlled event names and limited dimensions rather than free-form customer content. You can change your choice through Privacy Choices. Choosing Essential Only does not affect paid features.
+              Vercel Web Analytics runs on each visit to provide cookieless, aggregated audience measurement. It does not use third-party cookies or build a browsing history across different websites. Vercel derives a daily visitor identifier from the incoming request and discards it after 24 hours. Speed Insights and Seraphim’s limited product and conversion metrics load only after you choose “Allow Optional Metrics.” Optional metrics use controlled event names and limited dimensions rather than free-form customer content. You can change that choice through Privacy Choices. Choosing Essential Only does not disable Vercel Web Analytics and does not affect paid features.
             </p>
 
             <h2 className={styles.sectionTitle}>9. Retention</h2>

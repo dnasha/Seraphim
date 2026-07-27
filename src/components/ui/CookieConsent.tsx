@@ -63,25 +63,24 @@ const CookieConsent: React.FC = () => {
             <div className={styles.content}>
                 <h3 className={styles.title}>Privacy & Cookies</h3>
                 <p className={styles.description}>
-                    Seraphim uses essential cookies to function. We also use analytics to improve the quality of your experience. 
-                    Upholding EU (GDPR) and California (CCPA) standards, we ask for your consent.
+                    Seraphim uses essential browser storage to function. With your permission, we also collect optional performance and product-usage metrics to improve your experience.
                 </p>
             </div>
             <div className={styles.actions}>
                 <button 
                     className={styles.declineBtn} 
                     onClick={handleDecline}
-                    title="Use essential cookies only and decline analytics"
+                    title="Use essential storage only and decline optional metrics"
                 >
                     Essential Only
                 </button>
                 <button 
                     className={styles.acceptBtn} 
                     onClick={handleAccept}
-                    aria-label="Accept all cookies"
-                    title="Allow essential cookies and privacy-conscious analytics"
+                    aria-label="Allow optional performance and product-usage metrics"
+                    title="Allow optional performance and product-usage metrics"
                 >
-                    Accept All
+                    Allow Optional Metrics
                 </button>
             </div>
         </div>
