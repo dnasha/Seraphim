@@ -12,7 +12,7 @@ import { canonicalEventCount } from "@/lib/utils/ranking";
 import styles from "./EventSidebar.module.css";
 import React from "react";
 import Image from "next/image";
-import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
+import { getNewsImagePresentation } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import TimelineGateCta from './TimelineGateCta';
 
@@ -39,6 +39,19 @@ export default function EventCard({
   const credStyle = getCredibilityStyle(item.credibilityTier);
   const sourceCount = canonicalEventCount(item);
   const isTier1 = item.credibilityTier === 1;
+  const thumbnailImage = getNewsImagePresentation(item, 176);
+  const detailImage = getNewsImagePresentation(item, 640);
+
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>, proxied: boolean) => {
+    const image = event.currentTarget;
+    if (proxied && item.imageUrl && image.dataset.originalFallback !== "true") {
+      image.dataset.originalFallback = "true";
+      image.removeAttribute("srcset");
+      image.src = item.imageUrl;
+      return;
+    }
+    if (image.parentElement) image.parentElement.style.display = "none";
+  };
 
   let timeAgo = "";
   try {
@@ -127,22 +140,18 @@ export default function EventCard({
 
         {/** Main layout: thumbnail and textual content */}
         <div className={styles.eventCardRow}>
-          {item.imageUrl && (
+          {thumbnailImage && (
             <div className={styles.eventCardThumb}>
               <Image
-                src={item.imageUrl}
+                src={thumbnailImage.src}
                 alt=""
                 fill
-                unoptimized={!canOptimizeNewsImage(item.imageUrl)}
+                unoptimized={thumbnailImage.unoptimized}
                 sizes="88px"
                 style={{ objectFit: 'cover' }}
                 /** Prevents 403 Forbidden errors from sources that block external hotlinking */
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  if (img.parentElement)
-                    img.parentElement.style.display = "none";
-                }}
+                onError={(event) => handleImageError(event, thumbnailImage.proxied)}
               />
             </div>
           )}
@@ -225,22 +234,18 @@ export default function EventCard({
         {/** Expanded detail panel with high-resolution image and description */}
         {isExpanded && (
           <div className={styles.eventCardDetail}>
-            {item.imageUrl && (
+            {detailImage && (
               <div className={styles.eventCardDetailImg}>
                 <Image
-                  src={item.imageUrl}
+                  src={detailImage.src}
                   alt=""
                   fill
-                  unoptimized={!canOptimizeNewsImage(item.imageUrl)}
+                  unoptimized={detailImage.unoptimized}
                   priority={isExpanded}
                   sizes="(max-width: 860px) 100vw, 400px"
                   style={{ objectFit: 'contain' }}
                   referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    if (img.parentElement)
-                      img.parentElement.style.display = "none";
-                  }}
+                  onError={(event) => handleImageError(event, detailImage.proxied)}
                 />
               </div>
             )}

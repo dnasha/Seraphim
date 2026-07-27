@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import Image from "next/image";
-import { canOptimizeNewsImage } from "@/lib/utils/newsImages";
+import { getNewsImagePresentation } from "@/lib/utils/newsImages";
 import { NewsItem } from '@/lib/core/types';
 import { 
     getSourceBadgeColor, 
@@ -38,6 +38,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
         ? Math.max(0, (item.totalSources ?? sourceCount) - visibleSources.length)
         : 0;
     const showTimelineGap = hiddenSourceCount > 0 && visibleSources.length > 1;
+    const popupImage = getNewsImagePresentation(item, 960);
 
     /**
      * Source sorting:
@@ -108,19 +109,28 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
             </div>
             <div className="news-popup-scroll-body">
                 <div className="news-popup-content">
-                    {item.imageUrl && (
+                    {popupImage && (
                         <div className="news-popup-img-container">
                             <Image
                                 className="news-popup-img"
-                                src={item.imageUrl}
+                                src={popupImage.src}
                                 alt=""
                                 fill
-                                unoptimized={!canOptimizeNewsImage(item.imageUrl)}
+                                unoptimized={popupImage.unoptimized}
                                 priority
                                 sizes="(max-width: 860px) 100vw, 500px"
                                 style={{ objectFit: 'cover' }}
                                 referrerPolicy="no-referrer"
-                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                                onError={(event) => {
+                                    const image = event.currentTarget;
+                                    if (popupImage.proxied && item.imageUrl && image.dataset.originalFallback !== 'true') {
+                                        image.dataset.originalFallback = 'true';
+                                        image.removeAttribute('srcset');
+                                        image.src = item.imageUrl;
+                                        return;
+                                    }
+                                    image.style.display = 'none';
+                                }}
                             />
                         </div>
                     )}
