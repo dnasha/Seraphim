@@ -13,6 +13,7 @@ describe("social adapters", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(`
       <div class="tgme_widget_message" data-post="example/42">
         <div class="tgme_widget_message_text">A meaningful field report <a href="https://example.com/source">source</a><a href="tg://user?id=1">ignored</a></div>
+        <a class="tgme_widget_message_photo_wrap" style="background-image:url('https://cdn.example.com/field-report.jpg')"></a>
         <time datetime="2026-01-01T00:00:00Z"></time>
       </div>`, { status: 200 })));
 
@@ -24,6 +25,8 @@ describe("social adapters", () => {
       sourceType: "social",
       tags: ["OSINT", "telegram"],
       description: expect.stringContaining("https://example.com/source"),
+      imageUrl: "https://cdn.example.com/field-report.jpg",
+      imageOrigin: "telegram",
     })]);
     expect(result[0].description).not.toContain("tg://");
   });
@@ -56,6 +59,10 @@ describe("social adapters", () => {
         full_text: "Syndicated breaking report",
         permalink: "/example/status/1",
         created_at: "2026-01-01T00:00:00Z",
+        mediaDetails: [{
+          type: "photo",
+          media_url_https: "https://pbs.twimg.com/media/report.jpg",
+        }],
       } } }] } } },
     };
     vi.stubGlobal("fetch", vi.fn((url: string) => {
@@ -72,6 +79,8 @@ describe("social adapters", () => {
       url: "https://x.com/example/status/1",
       sourceType: "social",
       tags: ["OSINT", "x"],
+      imageUrl: "https://pbs.twimg.com/media/report.jpg",
+      imageOrigin: "x",
     })]);
   });
 

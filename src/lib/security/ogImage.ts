@@ -1,4 +1,11 @@
-import 'server-only';
+if (
+  process.env.NODE_ENV !== 'test' &&
+  !process.env.VITEST &&
+  !process.versions?.bun
+) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('server-only');
+}
 
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -15,13 +22,18 @@ type PinnedResponse = {
   close: () => Promise<void>;
 };
 
-type FetchHop = (url: URL, address: string, timeoutMs: number) => Promise<PinnedResponse>;
+export type FetchHop = (url: URL, address: string, timeoutMs: number) => Promise<PinnedResponse>;
 
 export type PublicImageFetchOptions = {
   timeoutMs?: number;
   maxRedirects?: number;
   resolveHost?: ResolveHost;
   fetchHop?: FetchHop;
+};
+
+export type PublicBytesFetchOptions = PublicImageFetchOptions & {
+  maxBytes: number;
+  allowedContentTypes?: string[];
 };
 
 function unbracket(address: string) {
@@ -186,6 +198,14 @@ async function fetchPinnedHop(url: URL, address: string, timeoutMs: number): Pro
   });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const closeDispatcher = async () => {
+    const compatible = dispatcher as Agent & {
+      close?: () => Promise<void> | void;
+      destroy?: () => Promise<void> | void;
+    };
+    if (typeof compatible.close === 'function') await compatible.close();
+    else if (typeof compatible.destroy === 'function') await compatible.destroy();
+  };
   try {
     // `dispatcher` is supported by Node's undici fetch but is absent from the DOM RequestInit type.
     const response = await fetch(url, {
@@ -199,18 +219,123 @@ async function fetchPinnedHop(url: URL, address: string, timeoutMs: number): Pro
       response,
       close: async () => {
         clearTimeout(timeout);
-        await dispatcher.close();
+        await closeDispatcher();
       },
     };
   } catch (error) {
     clearTimeout(timeout);
-    await dispatcher.close();
+    await closeDispatcher();
     throw error;
   }
 }
 
 function isRedirect(response: Response) {
   return [301, 302, 303, 307, 308].includes(response.status);
+}
+
+async function readResponsePrefix(response: Response, maxBytes: number) {
+  if (!response.body || maxBytes <= 0) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let truncated = false;
+  try {
+    while (size < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = maxBytes - size;
+      if (value.byteLength > remaining) {
+        chunks.push(value.subarray(0, remaining));
+        size += remaining;
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+      chunks.push(value);
+      size += value.byteLength;
+    }
+    if (size === maxBytes && !truncated) {
+      truncated = true;
+      await reader.cancel();
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes, truncated };
+}
+
+/**
+ * Fetches a bounded prefix of a public HTTP resource through the same
+ * DNS-pinned transport used by the OG image route. Redirect destinations are
+ * revalidated independently, and the connection is closed as soon as the byte
+ * budget is reached.
+ */
+export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetchOptions) {
+  const timeoutMs = options.timeoutMs ?? 1500;
+  const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS;
+  const resolver = options.resolveHost ?? resolveHost;
+  const fetchHop = options.fetchHop ?? fetchPinnedHop;
+  let rawDestination = rawUrl;
+
+  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
+    const safeDestination = validatePublicImageUrl(rawDestination);
+    if (!safeDestination) return null;
+    const url = new URL(safeDestination);
+
+    let answers: ResolvedAddress[];
+    try {
+      answers = await resolver(unbracket(url.hostname));
+    } catch {
+      return null;
+    }
+    const address = answers.find((answer) => isPublicIpAddress(answer.address));
+    if (!address) return null;
+
+    let hop: PinnedResponse;
+    try {
+      hop = await fetchHop(url, address.address, timeoutMs);
+    } catch {
+      return null;
+    }
+
+    try {
+      if (isRedirect(hop.response)) {
+        const location = hop.response.headers.get('location');
+        if (!location || redirectCount === maxRedirects) return null;
+        rawDestination = new URL(location, url).toString();
+        continue;
+      }
+      if (!hop.response.ok) return null;
+      const contentType = (hop.response.headers.get('content-type') || '')
+        .split(';', 1)[0]
+        .trim()
+        .toLowerCase();
+      if (
+        options.allowedContentTypes?.length &&
+        !options.allowedContentTypes.some((allowed) => contentType.startsWith(allowed))
+      ) {
+        return null;
+      }
+      const prefix = await readResponsePrefix(hop.response, options.maxBytes);
+      return prefix ? {
+        ...prefix,
+        contentType,
+        finalUrl: url.toString(),
+      } : null;
+    } finally {
+      if (!hop.response.bodyUsed) await hop.response.body?.cancel();
+      await hop.close();
+    }
+  }
+
+  return null;
 }
 
 /**

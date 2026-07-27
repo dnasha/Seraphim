@@ -36,6 +36,11 @@ export interface DbEvent {
   source_type: 'gnews' | 'rss' | 'social';
   category?: string;
   image_url?: string;
+  image_source_url?: string;
+  image_source_published_at?: string;
+  image_origin?: string;
+  image_updated_at?: string;
+  image_last_checked_at?: string;
   published_at: string;       
   latitude?: number | null;
   longitude?: number | null;

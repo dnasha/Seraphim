@@ -8,6 +8,92 @@ import { DbEvent, DbEventSource } from "@/types";
 
 const DESCRIPTION_STALENESS_MS = 6 * 60 * 60 * 1000; // 6 hours
 const DESCRIPTION_LENGTH_THRESHOLD = 0.7; // 70% of current length
+export const IMAGE_FRESHNESS_GAP_MS = 12 * 60 * 60 * 1000;
+export const IMAGE_REFRESH_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+type ExistingImageState = {
+  image_url?: string;
+  image_source_url?: string;
+  image_source_published_at?: string;
+  image_origin?: string;
+  image_updated_at?: string;
+  created_at?: string;
+  published_at: string;
+};
+
+type IncomingImageState = {
+  image_url?: string;
+  image_source_url?: string;
+  image_source_published_at?: string;
+  image_origin?: string;
+  url: string;
+  published_at: string;
+};
+
+function validTime(value?: string) {
+  const parsed = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Returns image fields when an incoming source may fill or refresh the story.
+ * Image promotion deliberately does not depend on title/source promotion.
+ */
+export function evaluateImageUpdate(
+  current: ExistingImageState,
+  incoming: IncomingImageState,
+  nowMs = Date.now(),
+) {
+  const imageUrl = typeof incoming.image_url === 'string'
+    ? incoming.image_url.trim()
+    : '';
+  if (!imageUrl) return null;
+
+  if (!isImageLookupEligible(current, incoming, nowMs)) return null;
+
+  const candidatePublishedAt =
+    validTime(incoming.image_source_published_at) ??
+    validTime(incoming.published_at) ??
+    nowMs;
+  const candidateIso = new Date(candidatePublishedAt).toISOString();
+  return {
+    image_url: imageUrl,
+    image_source_url: incoming.image_source_url || incoming.url,
+    image_source_published_at: candidateIso,
+    image_origin: incoming.image_origin || 'feed',
+    image_updated_at: new Date(nowMs).toISOString(),
+  };
+}
+
+export function isImageLookupEligible(
+  current: ExistingImageState,
+  incoming: Pick<IncomingImageState, 'image_source_published_at' | 'published_at'>,
+  nowMs = Date.now(),
+) {
+  const currentImage = typeof current.image_url === 'string'
+    ? current.image_url.trim()
+    : '';
+  if (!currentImage) return true;
+
+  const candidatePublishedAt =
+    validTime(incoming.image_source_published_at) ??
+    validTime(incoming.published_at) ??
+    nowMs;
+  const currentImagePublishedAt =
+    validTime(current.image_source_published_at) ??
+    validTime(current.created_at) ??
+    validTime(current.published_at) ??
+    0;
+  const lastUpdatedAt = validTime(current.image_updated_at) ?? currentImagePublishedAt;
+
+  if (
+    candidatePublishedAt < currentImagePublishedAt + IMAGE_FRESHNESS_GAP_MS ||
+    nowMs < lastUpdatedAt + IMAGE_REFRESH_COOLDOWN_MS
+  ) {
+    return false;
+  }
+  return true;
+}
 
 /**
  * Evaluates whether an incoming event should update the "Master" content of a story.
@@ -98,6 +184,11 @@ export function calculateMergedStory(
     source_type: DbEvent["source_type"];
     url: string;
     image_url?: string;
+    image_source_url?: string;
+    image_source_published_at?: string;
+    image_origin?: string;
+    image_updated_at?: string;
+    created_at?: string;
     credibility_tier: number;
     published_at: string; // The Master timestamp
     sources: DbEventSource[];
@@ -140,9 +231,7 @@ export function calculateMergedStory(
 
   const incomingTime = new Date(incomingEvent.published_at).getTime();
   const latestPublishedAt = incomingTime > latestClusterTime ? incomingEvent.published_at : existingStory.published_at;
-  const incomingImageUrl = typeof incomingEvent.image_url === "string"
-    ? incomingEvent.image_url.trim()
-    : "";
+  const imageUpdate = evaluateImageUpdate(existingStory, incomingEvent);
 
   const incomingSource: DbEventSource = {
     name: incomingEvent.source,
@@ -191,8 +280,8 @@ export function calculateMergedStory(
       url: incomingEvent.url,
       credibility_tier: incomingTier, 
       primary_discovered_at: incomingEvent.primary_discovered_at ?? incomingEvent.published_at,
-      ...(incomingImageUrl ? { image_url: incomingImageUrl } : {}),
     } : {}),
+    ...(imageUpdate ?? {}),
     ...(updateDescription ? {
       description: incomingEvent.description,
     } : {})

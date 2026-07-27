@@ -74,6 +74,9 @@ export async function fetchGNews(
             category,
             publishedAt: article.publishedAt,
             imageUrl: article.image,
+            imageSourceUrl: article.url,
+            imageSourcePublishedAt: article.publishedAt,
+            imageOrigin: 'gnews',
         }));
         recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
         return items;
@@ -131,6 +134,9 @@ export async function searchGNews(
             sourceType: 'gnews' as const,
             publishedAt: article.publishedAt,
             imageUrl: article.image,
+            imageSourceUrl: article.url,
+            imageSourcePublishedAt: article.publishedAt,
+            imageOrigin: 'gnews',
         }));
         recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
         return items;

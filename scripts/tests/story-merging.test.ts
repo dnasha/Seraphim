@@ -161,7 +161,7 @@ describe("calculateMergedStory", () => {
     expect(result.event_count).toBe(3);
   });
 
-  it("updates the image when an incoming source becomes primary and supplies one", () => {
+  it("refreshes a populated image when the incoming source is at least 12 hours newer", () => {
     const existing = {
       id: "event-1",
       title: "Initial report",
@@ -177,13 +177,42 @@ describe("calculateMergedStory", () => {
 
     const result = calculateMergedStory(existing, incoming({
       image_url: "https://example.com/new.jpg",
-      published_at: at(2),
+      published_at: at(13),
     }));
 
     expect(result).toMatchObject({
       title: "Incoming update",
       url: "https://example.com/incoming",
       image_url: "https://example.com/new.jpg",
+      image_source_url: "https://example.com/incoming",
+      image_source_published_at: at(13),
+    });
+  });
+
+  it("fills a missing image from a corroborator without promoting its headline", () => {
+    const existing = {
+      id: "event-1",
+      title: "Current report",
+      description: "Current details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      credibility_tier: 1,
+      published_at: at(4),
+      sources: [source({ discovered_at: at(4) })],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      image_url: "https://example.com/corroborating.jpg",
+      credibility_tier: 3,
+      published_at: at(2),
+    }));
+
+    expect(result).not.toHaveProperty("title");
+    expect(result).toMatchObject({
+      image_url: "https://example.com/corroborating.jpg",
+      image_source_url: "https://example.com/incoming",
+      image_source_published_at: at(2),
     });
   });
 
@@ -231,6 +260,30 @@ describe("calculateMergedStory", () => {
     }));
 
     expect(result).not.toHaveProperty("title");
+    expect(result).not.toHaveProperty("image_url");
+  });
+
+  it("does not churn a working image inside the 12 hour freshness gap", () => {
+    const existing = {
+      id: "event-1",
+      title: "Current report",
+      description: "Current details.",
+      source: "Current source",
+      source_type: "rss" as const,
+      url: "https://example.com/current",
+      image_url: "https://example.com/current.jpg",
+      image_source_published_at: at(0),
+      image_updated_at: at(0),
+      credibility_tier: 1,
+      published_at: at(4),
+      sources: [source({ discovered_at: at(4) })],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      image_url: "https://example.com/new.jpg",
+      published_at: at(11),
+    }));
+
     expect(result).not.toHaveProperty("image_url");
   });
 });

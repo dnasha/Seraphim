@@ -13,6 +13,7 @@ import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { selectDueSources, selectRecentFeedItems, socialPollTier } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
+import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
 
 const DEFAULT_TIMEOUT = 15000;
 const X_MAX_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
@@ -54,6 +55,37 @@ interface TelegramPost {
     date: string;
     url: string;
     links: string[];
+    imageUrl?: string;
+}
+
+function telegramMediaUrl(
+    $msg: { find: (selector: string) => { attr: (name: string) => string | undefined } },
+    baseUrl: string,
+) {
+    const styleSelectors = [
+        '.tgme_widget_message_photo_wrap',
+        '.tgme_widget_message_video_thumb',
+    ];
+    for (const selector of styleSelectors) {
+        const style = $msg.find(selector).attr('style') || '';
+        const match = style.match(/background-image\s*:\s*url\(['"]?([^'")]+)['"]?\)/i);
+        if (match?.[1]) {
+            try {
+                return new URL(match[1], baseUrl).toString();
+            } catch {
+                // Continue to other media shapes.
+            }
+        }
+    }
+    const poster = $msg.find('video[poster]').attr('poster');
+    if (poster) {
+        try {
+            return new URL(poster, baseUrl).toString();
+        } catch {
+            return undefined;
+        }
+    }
+    return undefined;
 }
 
 /**
@@ -127,6 +159,7 @@ export async function scrapeTelegramChannel(
                 date: datetime,
                 url: postId ? `https://t.me/${postId}` : source.url,
                 links,
+                imageUrl: telegramMediaUrl($msg, source.url),
             });
         });
 
@@ -143,6 +176,10 @@ export async function scrapeTelegramChannel(
             sourceType: 'social' as const,
             category: source.category,
             publishedAt: ensureIsoDate(post.date),
+            imageUrl: post.imageUrl,
+            imageSourceUrl: post.imageUrl ? post.url : undefined,
+            imageSourcePublishedAt: post.imageUrl ? ensureIsoDate(post.date) : undefined,
+            imageOrigin: post.imageUrl ? 'telegram' : undefined,
             tags: ['OSINT', 'telegram'],
         }));
         recordSourceAttempt({ source_name: source.name, source_type: 'telegram', poll_tier: String(socialPollTier(source)), outcome: items.length ? 'healthy' : 'empty', fetched_count: posts.length, accepted_count: items.length, rejected_count: Math.max(0, posts.length - items.length), latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
@@ -204,11 +241,16 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
             if (entry.type === 'tweet') {
                 const t = entry.content.tweet;
                 if (!t) continue;
+                const mediaUrl =
+                    t.mediaDetails?.find((media: { type?: string }) => media.type === 'photo')?.media_url_https ||
+                    t.entities?.media?.[0]?.media_url_https ||
+                    t.photos?.[0]?.url;
                 items.push({
                     title: t.full_text || t.text || 'No title',
                     link: `https://x.com${t.permalink}`,
                     pubDate: new Date(t.created_at).toISOString(),
                     contentSnippet: t.full_text || t.text || '',
+                    ...(mediaUrl ? { 'media:content': { $: { url: mediaUrl } } } : {}),
                 });
             }
         }
@@ -322,7 +364,7 @@ function normalizeXFeed(source: SocialSource, feed: XFeed, now = Date.now()): Ne
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
 
-        items.push({
+        const newsItem: NewsItem = {
             id: `social-x-${source.name.replace(/\s+/g, '-').toLowerCase()}-${dedupeKey}-${Date.now()}`,
             title: safeSlice(title, 200),
             description: safeSlice(description, 1000),
@@ -332,7 +374,16 @@ function normalizeXFeed(source: SocialSource, feed: XFeed, now = Date.now()): Ne
             category: source.category,
             publishedAt,
             tags: ['OSINT', 'x'],
-        });
+        };
+        items.push(applyImageCandidate(newsItem, extractFeedImageCandidate(
+            item as unknown as Record<string, unknown>,
+            {
+                articleUrl: url,
+                sourcePublishedAt: publishedAt,
+                sourceTier: source.credibility_tier,
+                origin: 'x',
+            },
+        )));
     }
 
     return items.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 10);

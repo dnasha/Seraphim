@@ -18,6 +18,7 @@ import {
     selectRecentFeedItems,
 } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
+import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
@@ -72,34 +73,6 @@ const parser = new Parser({
 });
 
 /**
- * Extracts the first available image URL from varied feed formats.
- * Checks MediaRSS fields (media:content, media:thumbnail) and standard enclosures.
- * This ensures compatibility across different CMS implementations.
- */
-function extractImageUrl(item: Record<string, unknown>): string | undefined {
-    if (item['media:content'] && typeof item['media:content'] === 'object') {
-        const media = item['media:content'] as Record<string, unknown>;
-        if (media.$ && typeof media.$ === 'object' && 'url' in (media.$ as object)) {
-            return (media.$ as { url: string }).url;
-        }
-    }
-
-    if (item['media:thumbnail'] && typeof item['media:thumbnail'] === 'object') {
-        const thumb = item['media:thumbnail'] as Record<string, unknown>;
-        if (thumb.$ && typeof thumb.$ === 'object' && 'url' in (thumb.$ as object)) {
-            return (thumb.$ as { url: string }).url;
-        }
-    }
-
-    if (item.enclosure && typeof item.enclosure === 'object') {
-        const enc = item.enclosure as Record<string, unknown>;
-        if (enc.url && typeof enc.url === 'string') return enc.url;
-    }
-
-    return undefined;
-}
-
-/**
  * Fetches and parses a single standard RSS feed.
  * Utilizes an undici Agent with rejected unauthorized certs to support legacy 
  * news sources with misconfigured or expired SSL certificates.
@@ -135,17 +108,28 @@ export async function fetchSingleFeed(
             tier,
             limit: itemLimitForTier(tier),
         });
-        const items = recentItems.map((item, index) => ({
-            id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
-            title: item.title || 'No title',
-            description: item.contentSnippet || item.content || '',
-            url: item.link || '',
-            source: source.name,
-            sourceType: 'rss' as const,
-            category: source.category,
-            publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
-            imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
-        }));
+        const items = recentItems.map((item, index) => {
+            const articleUrl = item.link || '';
+            const publishedAt = ensureIsoDate(item.pubDate || item.isoDate);
+            const newsItem: NewsItem = {
+                id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
+                title: item.title || 'No title',
+                description: item.contentSnippet || item.content || '',
+                url: articleUrl,
+                source: source.name,
+                sourceType: 'rss',
+                category: source.category,
+                publishedAt,
+            };
+            return applyImageCandidate(newsItem, extractFeedImageCandidate(
+                item as unknown as Record<string, unknown>,
+                {
+                    articleUrl,
+                    sourcePublishedAt: publishedAt,
+                    sourceTier: source.credibility_tier,
+                },
+            ));
+        });
         recordSourceAttempt({
             source_name: source.name, source_type: 'rss', poll_tier: String(tier),
             outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
@@ -198,17 +182,29 @@ export async function fetchRedditFeed(
             limit: 5,
             maxAgeMs: 48 * 60 * 60 * 1000,
         });
-        const items = recentItems.map((item, index) => ({
-            id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
-            title: item.title || 'No title',
-            description: item.contentSnippet || item.content || '',
-            url: item.link || `https://www.reddit.com/r/${source.subreddit}`,
-            source: source.name,
-            sourceType: 'social' as const,
-            category: source.category,
-            publishedAt: ensureIsoDate(item.pubDate || item.isoDate),
-            imageUrl: extractImageUrl(item as unknown as Record<string, unknown>),
-        }));
+        const items = recentItems.map((item, index) => {
+            const articleUrl = item.link || `https://www.reddit.com/r/${source.subreddit}`;
+            const publishedAt = ensureIsoDate(item.pubDate || item.isoDate);
+            const newsItem: NewsItem = {
+                id: `reddit-${source.subreddit.toLowerCase()}-${index}-${Date.now()}`,
+                title: item.title || 'No title',
+                description: item.contentSnippet || item.content || '',
+                url: articleUrl,
+                source: source.name,
+                sourceType: 'social',
+                category: source.category,
+                publishedAt,
+            };
+            return applyImageCandidate(newsItem, extractFeedImageCandidate(
+                item as unknown as Record<string, unknown>,
+                {
+                    articleUrl,
+                    sourcePublishedAt: publishedAt,
+                    sourceTier: source.credibility_tier,
+                    origin: 'feed',
+                },
+            ));
+        });
         recordSourceAttempt({
             source_name: source.name, source_type: 'reddit', poll_tier: null,
             outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
