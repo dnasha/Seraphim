@@ -654,6 +654,7 @@
 @media (max-width: 860px) {
   .mapWrapper :global(.news-popup-container) {
     position: absolute !important;
+    z-index: 2050;
     top: auto !important;
     right: max(8px, env(safe-area-inset-right)) !important;
     bottom: max(8px, env(safe-area-inset-bottom)) !important;
