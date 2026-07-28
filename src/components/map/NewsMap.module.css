@@ -218,6 +218,7 @@
 }
 
 .mapWrapper :global(.news-popup-scroll-body) {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -652,9 +653,18 @@
 
 /* On narrow screens, detach story details from the marker and use a bottom sheet. */
 @media (max-width: 860px) {
+  .newsMapContainer {
+    /* The GPU transform creates a stacking context that traps MapLibre
+       popups beneath sibling map controls. Let the popup z-index participate
+       in the map wrapper's stacking order on mobile. */
+    backface-visibility: visible !important;
+    transform: none !important;
+  }
+
   .mapWrapper :global(.news-popup-container) {
     position: absolute !important;
-    z-index: 2050;
+    /* Sit above every map-local control, including the drawing tools (2100). */
+    z-index: 2200;
     top: auto !important;
     right: max(8px, env(safe-area-inset-right)) !important;
     bottom: max(8px, env(safe-area-inset-bottom)) !important;
@@ -677,7 +687,8 @@
   .mapWrapper :global(.news-popup) {
     width: 100%;
     max-width: none;
-    max-height: min(72dvh, 620px);
+    height: 60dvh;
+    max-height: 60dvh;
   }
 
   .mapWrapper :global(.news-popup-img-container) {
