@@ -173,7 +173,7 @@ export function PricingPageClient({
 
                 <section className={styles.guestPreview}>
                     <span className={styles.guestPreviewEyebrow}>Try before signing up</span>
-                    <p><strong>Guest mode</strong> lets anyone explore the live map and its top 10 events from the last 24 hours. Create a Free account for 100 events, filtering, and local annotations.</p>
+                    <p><strong>Guest mode</strong> lets anyone explore the live map and its top 10 stories from the last 24 hours. Create a Free account for 50 stories per view, filtering, and local annotations.</p>
                 </section>
 
                 {requestedFeature && recommendedTier && (

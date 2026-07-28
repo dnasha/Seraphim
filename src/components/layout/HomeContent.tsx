@@ -18,7 +18,7 @@ import { BBox, NewsItem } from '@/lib/core/types';
 import { matchesNewsId, SortMode } from '@/lib/utils/ranking';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useSyncedPreferences, sanitizeSyncedPreferences } from '@/hooks/useSyncedPreferences';
-import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
+import { canUseTimeRange, getEntitlements, hasFeature } from '@/lib/entitlements';
 import UserButton from '@/components/auth/UserButton';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import StateNotice from '@/components/ui/StateNotice';
@@ -28,6 +28,8 @@ import styles from './Layout.module.css';
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/auth/AuthModal'), { ssr: false });
+const GUEST_STORY_LIMIT = getEntitlements('guest').eventLimit;
+const FREE_STORY_LIMIT = getEntitlements('free').eventLimit;
 
 function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string | null): NewsItem[] {
     if (items.length <= limit) return items;
@@ -165,7 +167,7 @@ export function HomeContent() {
         customStartDate: effectiveCustomStartDate,
         customEndDate: effectiveCustomEndDate,
         sortMode: effectiveSortMode,
-        limit: isGuestUser ? 10 : (userTier === 'free' ? 100 : undefined),
+        limit: isGuestUser ? GUEST_STORY_LIMIT : (userTier === 'free' ? FREE_STORY_LIMIT : undefined),
         enabled: !isAuthResolving,
         resetKey: newsResetKey,
         pinnedEventId: selectedItemId
@@ -459,14 +461,14 @@ export function HomeContent() {
 
     /** Gate guests and free users while preserving the active selection. */
     const visibleMapNews = useMemo(() => {
-        if (isGuestUser) return limitWithPinned(mapNews, 10, selectedItemId);
-        if (userTier === 'free') return limitWithPinned(mapNews, 100, selectedItemId);
+        if (isGuestUser) return limitWithPinned(mapNews, GUEST_STORY_LIMIT, selectedItemId);
+        if (userTier === 'free') return limitWithPinned(mapNews, FREE_STORY_LIMIT, selectedItemId);
         return mapNews;
     }, [mapNews, isGuestUser, selectedItemId, userTier]);
 
     const visibleSidebarNews = useMemo(() => {
-        if (isGuestUser) return limitWithPinned(filteredNews, 10, selectedItemId);
-        if (userTier === 'free') return limitWithPinned(filteredNews, 100, selectedItemId);
+        if (isGuestUser) return limitWithPinned(filteredNews, GUEST_STORY_LIMIT, selectedItemId);
+        if (userTier === 'free') return limitWithPinned(filteredNews, FREE_STORY_LIMIT, selectedItemId);
         return filteredNews;
     }, [filteredNews, isGuestUser, selectedItemId, userTier]);
 

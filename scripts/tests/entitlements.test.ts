@@ -10,7 +10,7 @@ describe('tier entitlements', () => {
 
   it('sets the intended story, history, and workflow boundaries', () => {
     expect(getEntitlements('guest').eventLimit).toBe(10);
-    expect(getEntitlements('free').eventLimit).toBe(100);
+    expect(getEntitlements('free').eventLimit).toBe(50);
     expect(getEntitlements('pro').eventLimit).toBe(1000);
     expect(canUseTimeRange('free', '1w')).toBe(false);
     expect(canUseTimeRange('pro', '1m')).toBe(true);

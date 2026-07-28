@@ -80,7 +80,7 @@ export const TIER_ENTITLEMENTS: Readonly<Record<UserTier, TierEntitlements>> = {
   },
   free: {
     tier: 'free',
-    eventLimit: 100,
+    eventLimit: 50,
     allowedTimeRanges: ['1d'],
     features: FREE_FEATURES,
     overlays: ['usgs'],

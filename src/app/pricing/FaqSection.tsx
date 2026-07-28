@@ -13,7 +13,7 @@ export function FaqSection() {
                 </div>
                 <div className={styles.faqItem}>
                     <h3>What is the core difference between Free and paid?</h3>
-                    <p>Free covers the current 24-hour signal with up to 100 events per request. Pro and above can monitor up to 1,000 events per request and unlock more history.</p>
+                    <p>Free covers the current 24-hour signal with up to 50 stories per view. Pro and above can monitor up to 1,000 stories per view and unlock more history.</p>
                 </div>
                 <div className={styles.faqItem}>
                     <h3>Can I switch plans?</h3>
