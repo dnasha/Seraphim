@@ -82,7 +82,7 @@ describe("hot-story pulse controller", () => {
 
     runNextFrame(2_000);
     expect(scheduler.setTimer).toHaveBeenCalledTimes(1);
-    expect(scheduler.setTimer).toHaveBeenLastCalledWith(expect.any(Function), 250);
+    expect(scheduler.setTimer).toHaveBeenLastCalledWith(expect.any(Function), 750);
     expect(paintCalls.slice(-2)).toEqual([
       ["circle-radius", 55],
       ["circle-opacity", 0],

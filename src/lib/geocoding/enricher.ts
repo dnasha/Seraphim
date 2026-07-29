@@ -11,7 +11,7 @@
  */
 
 import { NewsItem } from '@/lib/core/types';
-import { extractLocation, geocodeLocation } from './engine';
+import { resolveLocation } from './engine';
 
 /**
  * Enriches an array of news items with geographic data.
@@ -33,23 +33,17 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
         };
         const title = toStr(item.title);
         const description = toStr(item.description);
-        const ext = extractLocation(title, description);
-        const placeName = ext.match;
-        const candidates = ext.candidates;
+        const resolution = await resolveLocation(title, description);
+        const candidates = resolution?.candidates
+            .map(candidate => candidate.displayName)
+            .filter(Boolean) ?? [];
 
-        if (!placeName) {
-            enriched.push({ ...item, foundLocations: candidates });
-            continue;
-        }
-
-        const geo = await geocodeLocation(placeName);
-
-        if (geo) {
+        if (resolution) {
             enriched.push({
                 ...item,
-                latitude: geo.lat,
-                longitude: geo.lon,
-                locationName: geo.displayName,
+                latitude: resolution.lat,
+                longitude: resolution.lon,
+                locationName: resolution.displayName,
                 foundLocations: candidates,
             });
         } else {

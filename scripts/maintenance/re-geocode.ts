@@ -1,13 +1,13 @@
 /*
   Seraphim DB Location Re-Geocoder
   Re-processes events through the current geocoding engine and produces a
-  reviewable change report. Writes require an explicit approved-ID manifest.
+  reviewable change report. Writes and deletions require an explicit
+  approved-action manifest.
 
   This is useful after tweaking extraction heuristics or updating the
   GeoNames dictionary to propagate improvements to historical data.
 
   Usage:
-    $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --dry-run --limit 50
     $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --dry-run --limit 50
     $env:IS_BENCHMARK="true"; bun run scripts/maintenance/re-geocode.ts --approved-manifest scripts/results/re-geocode-approved.json --limit 50
 
@@ -17,8 +17,9 @@
     --limit N       Process N rows (default: 10)
     --offset N      Start from row N (default: 0)
     --oldest        Sort ascending (targets oldest/most stale rows first)
+    --include-corroborated  Include event_count > 1 rows (default is uncorroborated only)
     --report PATH   Write the review report to PATH
-    --approved-manifest PATH  JSON array of reviewed event IDs, or {"approved_ids": [...]}
+    --approved-manifest PATH  [{"id":"...","action":"update|delete"}] or {"approved":[...]}
 
   Environment (loaded from .env.local by Bun automatically):
     SUPABASE_URL               - Supabase project URL
@@ -26,7 +27,7 @@
 */
 
 import { createClient } from '@supabase/supabase-js';
-import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geocoding/engine';
+import { resolveLocation, ensureInitialized } from '@/lib/geocoding/engine';
 
 // Configuration
 
@@ -50,6 +51,7 @@ const args = process.argv.slice(2);
 const DRY_RUN    = args.includes('--dry-run');
 const FULL_RUN   = args.includes('--all');
 const OLDEST     = args.includes('--oldest'); // sort ascending = oldest first
+const INCLUDE_CORROBORATED = args.includes('--include-corroborated');
 const reportIdx = args.indexOf('--report');
 const REPORT_PATH = reportIdx !== -1 && args[reportIdx + 1]
   ? args[reportIdx + 1]
@@ -86,10 +88,12 @@ interface EventRow {
   latitude: number | null;
   longitude: number | null;
   location_name: string | null;
+  event_count: number;
 }
 
 interface UpdatePayload {
   id: string;
+  action: 'update' | 'delete';
   latitude: number | null;
   longitude: number | null;
   location_name: string | null;
@@ -98,7 +102,20 @@ interface UpdatePayload {
   old_longitude: number | null;
   candidate_source: string | null;
   candidate_score: number | null;
+  gazetteer_id: string | null;
   reason: string;
+  diagnostic_candidates: Array<{
+    id: string;
+    display_name: string;
+    country_code?: string;
+    admin1_code?: string;
+    population: number;
+  }>;
+}
+
+interface ApprovedAction {
+  id: string;
+  action: UpdatePayload['action'];
 }
 
 // Supabase client
@@ -118,11 +135,13 @@ function locationNameChanged(oldName: string | null, newName: string | null): bo
 // Fetch events
 
 async function fetchEvents(limit: number, offset: number): Promise<EventRow[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('events')
-    .select('id, title, description, latitude, longitude, location_name')
+    .select('id, title, description, latitude, longitude, location_name, event_count')
     .order('published_at', { ascending: OLDEST }) // --oldest = stale rows first
     .range(offset, offset + limit - 1);
+  if (!INCLUDE_CORROBORATED) query = query.eq('event_count', 1);
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`[re-geocode] Fetch failed (offset=${offset}): ${error.message}`);
@@ -136,24 +155,28 @@ async function remapRow(row: EventRow): Promise<UpdatePayload | null> {
   const title       = row.title ?? '';
   const description = row.description ?? '';
 
-  const { match, scored } = extractLocation(title, description);
-  if (!match) {
-    /* 
-    Engine found nothing. Never downgrade an existing location to null -
-    the old value may be from a source-default or enricher fallback that
-    the content-only engine can't reproduce.
-    */
-    return null;
+  const resolution = await resolveLocation(title, description);
+  if (!resolution) {
+    if (row.latitude == null && row.longitude == null && row.location_name == null) return null;
+    return {
+      id: row.id,
+      action: 'delete',
+      latitude: null,
+      longitude: null,
+      location_name: null,
+      old_location: row.location_name,
+      old_latitude: row.latitude,
+      old_longitude: row.longitude,
+      candidate_source: null,
+      candidate_score: null,
+      gazetteer_id: null,
+      reason: 'reviewed resolver abstention in map-only event table',
+      diagnostic_candidates: [],
+    };
   }
 
-  const geo = await geocodeLocation(match);
-  if (!geo) {
-    // Extracted a name but can't resolve coords - don't downgrade existing data.
-    return null;
-  }
-
-  const nameChanged = locationNameChanged(row.location_name, geo.displayName);
-  const coordsChanged = row.latitude !== geo.lat || row.longitude !== geo.lon;
+  const nameChanged = locationNameChanged(row.location_name, resolution.displayName);
+  const coordsChanged = row.latitude !== resolution.lat || row.longitude !== resolution.lon;
 
   /*
   Canonical coordinates are now persisted, so a row with the same resolved name
@@ -161,37 +184,81 @@ async function remapRow(row: EventRow): Promise<UpdatePayload | null> {
   */
   if (!nameChanged && !coordsChanged) return null;
 
-  const winningCandidate = scored?.find(candidate => candidate.name.toLowerCase() === match.toLowerCase()) ?? null;
-
   return {
     id: row.id,
-    latitude: geo.lat,
-    longitude: geo.lon,
-    location_name: geo.displayName,
+    action: 'update',
+    latitude: resolution.lat,
+    longitude: resolution.lon,
+    location_name: resolution.displayName,
     old_location: row.location_name,
     old_latitude: row.latitude,
     old_longitude: row.longitude,
-    candidate_source: winningCandidate?.source ?? null,
-    candidate_score: winningCandidate?.score ?? null,
+    candidate_source: resolution.evidence,
+    candidate_score: resolution.confidence,
+    gazetteer_id: resolution.gazetteerId,
     reason: nameChanged
       ? 'text-supported location changed'
       : 'canonical coordinates replace legacy ingestion jitter',
+    diagnostic_candidates: resolution.candidates.map(candidate => ({
+      id: candidate.id,
+      display_name: candidate.displayName,
+      country_code: candidate.cc,
+      admin1_code: candidate.admin1Code,
+      population: candidate.population,
+    })),
   };
 }
 
-async function loadApprovedIds(): Promise<Set<string>> {
-  if (!APPROVED_MANIFEST_PATH) return new Set();
+function toReviewRecord(change: UpdatePayload) {
+  return {
+    id: change.id,
+    action: change.action,
+    old_location: {
+      display_name: change.old_location,
+      latitude: change.old_latitude,
+      longitude: change.old_longitude,
+    },
+    proposed_resolution: change.action === 'update'
+      ? {
+          display_name: change.location_name,
+          latitude: change.latitude,
+          longitude: change.longitude,
+        }
+      : null,
+    gazetteer_candidate: change.gazetteer_id
+      ? {
+          id: change.gazetteer_id,
+          display_name: change.location_name,
+        }
+      : null,
+    evidence: change.candidate_source,
+    confidence: change.candidate_score,
+    diagnostic_candidates: change.diagnostic_candidates,
+    reason: change.reason,
+  };
+}
+
+async function loadApprovedActions(): Promise<Map<string, UpdatePayload['action']>> {
+  if (!APPROVED_MANIFEST_PATH) return new Map();
   const { readFile } = await import('node:fs/promises');
   const parsed = JSON.parse(await readFile(APPROVED_MANIFEST_PATH, 'utf8')) as unknown;
-  const ids = Array.isArray(parsed)
+  const actions = Array.isArray(parsed)
     ? parsed
-    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { approved_ids?: unknown }).approved_ids)
-      ? (parsed as { approved_ids: unknown[] }).approved_ids
+    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { approved?: unknown }).approved)
+      ? (parsed as { approved: unknown[] }).approved
       : null);
-  if (!ids || ids.some(id => typeof id !== 'string')) {
-    throw new Error('[re-geocode] Approved manifest must be an ID array or {"approved_ids": ["..."]}.');
+  if (
+    !actions ||
+    actions.some(action =>
+      !action ||
+      typeof action !== 'object' ||
+      typeof (action as ApprovedAction).id !== 'string' ||
+      !['update', 'delete'].includes((action as ApprovedAction).action)
+    )
+  ) {
+    throw new Error('[re-geocode] Approved manifest must contain explicit {"id":"...","action":"update|delete"} entries.');
   }
-  return new Set(ids);
+  return new Map((actions as ApprovedAction[]).map(action => [action.id, action.action]));
 }
 
 // Batch update
@@ -232,6 +299,33 @@ async function batchUpdate(updates: UpdatePayload[]): Promise<number> {
   return totalUpdated;
 }
 
+async function batchDelete(deletions: UpdatePayload[]): Promise<{ deleted: number; bookmarked: string[] }> {
+  if (deletions.length === 0) return { deleted: 0, bookmarked: [] };
+
+  const ids = deletions.map(deletion => deletion.id);
+  const { data: bookmarkRows, error: bookmarkError } = await supabase
+    .from('user_bookmarks')
+    .select('event_id')
+    .in('event_id', ids);
+  if (bookmarkError) throw new Error(`[re-geocode] Bookmark safety check failed: ${bookmarkError.message}`);
+
+  const bookmarked = new Set((bookmarkRows ?? []).map(row => String(row.event_id)));
+  const safeIds = ids.filter(id => !bookmarked.has(id));
+  let deleted = 0;
+
+  for (let i = 0; i < safeIds.length; i += UPDATE_CHUNK_SIZE) {
+    const chunk = safeIds.slice(i, i + UPDATE_CHUNK_SIZE);
+    const { error } = await supabase.from('events').delete().in('id', chunk);
+    if (error) {
+      console.error(`[re-geocode] Delete chunk failed: ${error.message}`);
+      continue;
+    }
+    deleted += chunk.length;
+  }
+
+  return { deleted, bookmarked: [...bookmarked] };
+}
+
 // Main execution
 
 async function run() {
@@ -240,8 +334,9 @@ async function run() {
   if (!DRY_RUN && !APPROVED_MANIFEST_PATH) {
     throw new Error('[re-geocode] Refusing to write without --approved-manifest. Run --dry-run first and approve explicit IDs.');
   }
-  const approvedIds = await loadApprovedIds();
-  console.log(`[re-geocode] Mode: ${DRY_RUN ? 'DRY RUN' : `APPROVED WRITES (${approvedIds.size} IDs)`} | Scope: ${FULL_RUN ? 'ALL rows' : `${LIMIT} rows`} | Sort: ${OLDEST ? 'oldest first' : 'newest first'}${START_OFFSET > 0 ? ` | Offset: ${START_OFFSET}` : ''}`);
+  const approvedActions = await loadApprovedActions();
+  const cohort = INCLUDE_CORROBORATED ? 'all events' : 'uncorroborated events only';
+  console.log(`[re-geocode] Mode: ${DRY_RUN ? 'DRY RUN' : `APPROVED ACTIONS (${approvedActions.size})`} | Scope: ${FULL_RUN ? 'ALL rows' : `${LIMIT} rows`} (${cohort}) | Sort: ${OLDEST ? 'oldest first' : 'newest first'}${START_OFFSET > 0 ? ` | Offset: ${START_OFFSET}` : ''}`);
   console.log('[re-geocode] Initializing geocoding engine...');
 
   ensureInitialized();
@@ -274,7 +369,7 @@ async function run() {
     // Log what changed
     for (const u of pageUpdates) {
       const newCoords = u.latitude != null ? `(${u.latitude.toFixed(3)}, ${u.longitude!.toFixed(3)})` : '(null)';
-      console.log(`  -> id=${u.id.slice(0, 8)}... "${u.old_location}" -> "${u.location_name}" ${newCoords}`);
+      console.log(`  -> ${u.action.toUpperCase()} id=${u.id.slice(0, 8)}... "${u.old_location}" -> "${u.location_name}" ${newCoords}`);
     }
 
     allUpdates.push(...pageUpdates);
@@ -293,8 +388,9 @@ async function run() {
   const { writeFile } = await import('node:fs/promises');
   await writeFile(REPORT_PATH, JSON.stringify({
     generated_at: new Date().toISOString(),
+    cohort,
     fetched: totalFetched,
-    proposed_changes: allUpdates,
+    proposed_changes: allUpdates.map(toReviewRecord),
   }, null, 2));
   console.log(`[re-geocode] Review report : ${REPORT_PATH}`);
 
@@ -308,12 +404,18 @@ async function run() {
     return;
   }
 
-  const approvedUpdates = allUpdates.filter(update => approvedIds.has(update.id));
-  console.log(`\n[re-geocode] Writing ${approvedUpdates.length}/${allUpdates.length} explicitly approved updates to Supabase...`);
+  const approved = allUpdates.filter(update => approvedActions.get(update.id) === update.action);
+  const approvedUpdates = approved.filter(update => update.action === 'update');
+  const approvedDeletes = approved.filter(update => update.action === 'delete');
+  console.log(`\n[re-geocode] Applying ${approvedUpdates.length} update(s) and ${approvedDeletes.length} deletion(s) from ${approved.length}/${allUpdates.length} matching approved actions...`);
   const totalUpdated = await batchUpdate(approvedUpdates);
+  const deletionResult = await batchDelete(approvedDeletes);
+  if (deletionResult.bookmarked.length > 0) {
+    console.warn(`[re-geocode] Refused to delete ${deletionResult.bookmarked.length} bookmarked event(s): ${deletionResult.bookmarked.join(', ')}`);
+  }
 
   const finalElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-  console.log(`\n[re-geocode] Done in ${finalElapsed}s. Successfully updated ${totalUpdated}/${allUpdates.length} rows.`);
+  console.log(`\n[re-geocode] Done in ${finalElapsed}s. Updated ${totalUpdated}; deleted ${deletionResult.deleted}; bookmarked deletions refused ${deletionResult.bookmarked.length}.`);
 }
 
 run().catch(err => {

@@ -7,7 +7,7 @@
 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { extractLocation, geocodeLocation, ensureInitialized, KNOWN_LOCATIONS } from '@/lib/geocoding';
+import { extractLocation, geocodeLocation, resolveLocation, ensureInitialized, KNOWN_LOCATIONS } from '@/lib/geocoding';
 
 /*
   Dictionary Initialization
@@ -168,12 +168,102 @@ describe('extractLocation - spatial prepositions', () => {
   Tests "City, State" patterns common in regional reporting.
 */
 describe('extractLocation - comma pairs', () => {
-    it('detects "City, State" pattern', () => {
+    it('resolves a City, State pair to the exact gazetteer identity and coordinates', async () => {
         const { match, candidates } = extractLocation('Shooting in Austin, Texas leaves 3 dead', '');
         expect(match).toBeDefined();
         const allLower = candidates.map(c => c.toLowerCase());
         expect(allLower.some(c => c.includes('austin') || c.includes('texas'))).toBe(true);
+
+        const resolution = await resolveLocation('Shooting in Austin, Texas leaves 3 dead', '');
+        expect(resolution).toMatchObject({
+            displayName: 'Austin, Texas',
+            lat: 30.27,
+            lon: -97.74,
+            evidence: 'explicit_pair',
+        });
+        expect(resolution?.gazetteerId).toBe('geonames:4671654');
     });
+});
+
+describe('hierarchy-aware ambiguous location resolution', () => {
+    it('resolves Santa Cruz from an explicit California parent', async () => {
+        const resolution = await resolveLocation(
+            'Bystander video shows teen lifeguard rescue',
+            'A boy was rescued from a beach in Santa Cruz, California after being swept offshore.',
+        );
+        expect(resolution).toMatchObject({
+            displayName: 'Santa Cruz, California',
+            lat: 36.97,
+            lon: -122.03,
+            evidence: 'explicit_pair',
+        });
+        expect(resolution?.gazetteerId).toBe('geonames:5393052');
+    });
+
+    it('uses a separately mentioned admin region to resolve Santa Cruz', async () => {
+        const resolution = await resolveLocation(
+            'Ocean rescue in Santa Cruz',
+            'California authorities said the swimmer was brought safely ashore.',
+        );
+        expect(resolution).toMatchObject({
+            displayName: 'Santa Cruz, California',
+            lat: 36.97,
+            lon: -122.03,
+            evidence: 'hierarchy_context',
+        });
+    });
+
+    it.each([
+        ['Police investigate a robbery in Santa Cruz, Costa Rica', 10.26, -85.59, 'Santa Cruz, Costa Rica'],
+        ['Court issues a ruling in Santa Cruz Province', -51.63, -69.25, 'Santa Cruz, Argentina', 'Argentina'],
+        ['Officials meet in Santa Cruz Department', -17.79, -63.18, 'Santa Cruz Department', 'Bolivia'],
+    ])('resolves regional Santa Cruz context: %s', async (title, lat, lon, displayName, context = '') => {
+        const resolution = await resolveLocation(title, context);
+        expect(resolution).toMatchObject({ displayName, lat, lon });
+    });
+
+    it('abstains on bare Santa Cruz without hierarchy evidence', async () => {
+        await expect(resolveLocation('Police respond in Santa Cruz', '')).resolves.toBeNull();
+    });
+
+    it.each([
+        ['Video: suspect transported in a police van', ''],
+        ['Cyclist Van der Poel wins shortened stage', ''],
+        ['Researcher Mijke van den Hurk defended her thesis', ''],
+    ])('does not pin a vehicle or surname to Van, Türkiye: %s', async (title, description) => {
+        await expect(resolveLocation(title, description)).resolves.toBeNull();
+    });
+
+    it.each([
+        ['Crash in Van, Türkiye closes highway', 'Van, Türkiye', 'explicit_pair'],
+        ['Earthquake in Van damages homes', 'Van', 'unambiguous'],
+    ])('keeps genuine Van geography: %s', async (title, displayName, evidence) => {
+        const resolution = await resolveLocation(title, '');
+        expect(resolution).toMatchObject({
+            displayName,
+            lat: 38.49,
+            lon: 43.38,
+            evidence,
+        });
+    });
+
+    it.each([
+        ['Shooting in Springfield, Illinois', 39.8, -89.64],
+        ['Conference in Victoria, British Columbia', 48.44, -123.35],
+        ['Storm in Richmond, Virginia', 37.55, -77.46],
+        ['Fire in Salem, Oregon', 44.94, -123.04],
+        ['Conference in San Jose, California', 37.34, -121.89],
+    ])('uses explicit hierarchy for ambiguous city: %s', async (title, lat, lon) => {
+        const resolution = await resolveLocation(title, '');
+        expect(resolution).toMatchObject({ lat, lon, evidence: 'explicit_pair' });
+    });
+
+    it.each(['Springfield', 'Victoria', 'Richmond', 'San Jose'])(
+        'abstains when an ambiguous city lacks hierarchy and population dominance: %s',
+        async city => {
+            await expect(resolveLocation(`Incident reported in ${city}`, '')).resolves.toBeNull();
+        },
+    );
 });
 
 /*

@@ -1,0 +1,110 @@
+[
+  {
+    "stratum": "ambiguous_name",
+    "db_id": "17f8c4c2-1ae8-466c-b737-2f7335e50cca",
+    "event_count": 1,
+    "published_at": "2026-07-29T00:15:16Z",
+    "title": "Richmond homeless camps prompt increased concern, with one above a jet fuel pipeline",
+    "description": "Guylaine Auclair told Global News she has been offered a spot in modular housing.",
+    "current_location": "Richmond",
+    "expected": null,
+    "review_note": "No parent or independent geographic evidence identifies which Richmond is meant."
+  },
+  {
+    "stratum": "common_word_collision",
+    "db_id": "a9f7b5be-56ea-4477-84f7-08060c2f9069",
+    "event_count": 1,
+    "published_at": "2026-07-29T00:59:39Z",
+    "title": "\"Bukhanka\" (type Russian van) carrying Russian soldiers drives over anti tank mine. Donetsk region.",
+    "description": "Date unknown.",
+    "current_location": "Donetsk",
+    "expected": {
+      "displayName": "Donetsk",
+      "lat": 48.02,
+      "lon": 37.8
+    },
+    "review_note": "Van is a vehicle; Donetsk is independently identified as the region."
+  },
+  {
+    "stratum": "demonym",
+    "db_id": "53d561c1-8bce-46da-8fbc-0911906d71c9",
+    "event_count": 1,
+    "published_at": "2026-07-29T02:02:00Z",
+    "title": "The French presidential candidate who wants to blow up the Franco-German engine",
+    "description": "Jean-Luc Mélenchon, the leading left-wing hopeful in next year's contest, wants Europe to reject Berlin's economic model.",
+    "current_location": "France",
+    "expected": {
+      "displayName": "France",
+      "lat": 46.23,
+      "lon": 2.21
+    },
+    "review_note": "The French political subject supports France; Berlin is comparative context."
+  },
+  {
+    "stratum": "affiliation",
+    "db_id": "07d3fe84-8af1-44b7-b2b8-8e8ec85653ca",
+    "event_count": 1,
+    "published_at": "2026-07-28T20:46:02Z",
+    "title": "NBA President-elect meets Tinubu, vows to unite Bar",
+    "description": "ABUJA — President-elect of the Nigerian Bar Association (NBA) pledged to promote unity.",
+    "current_location": "Abuja",
+    "expected": {
+      "displayName": "Abuja",
+      "lat": 9.06,
+      "lon": 7.5
+    },
+    "review_note": "NBA is an affiliation, while the Abuja dateline supplies geographic evidence."
+  },
+  {
+    "stratum": "sports_team",
+    "db_id": "f44dc794-ba7a-4d31-9f95-1bd098891011",
+    "event_count": 1,
+    "published_at": "2026-07-28T19:47:33Z",
+    "title": "Yes, you can still get tickets to tomorrow's Liverpool vs. Wrexham game at Yankee Stadium",
+    "description": "Liverpool FC and Wrexham AFC are set to face off in a preseason friendly at Yankee Stadium.",
+    "current_location": "Liverpool",
+    "expected": null,
+    "review_note": "The city names are team affiliations; the fixture does not contain a resolvable venue location."
+  },
+  {
+    "stratum": "multi_country",
+    "db_id": "9267eb5d-c4c6-4d9e-b9db-3dd4699d1386",
+    "event_count": 1,
+    "published_at": "2026-07-29T01:00:13Z",
+    "title": "Should China aim for the lead in making AI rules for the world?",
+    "description": "Beijing should fill a global policy vacuum as a Chinese AI model opens a divide in the United States and sends shock waves through Silicon Valley and the White House.",
+    "current_location": "White House",
+    "expected": null,
+    "review_note": "Several countries and institutions are discussed, but no event location is established."
+  },
+  {
+    "stratum": "dateline",
+    "db_id": "d4c3cce1-61bd-45cd-bec8-001ba22d1d31",
+    "event_count": 1,
+    "published_at": "2026-07-29T02:09:23Z",
+    "title": "Actress Moon Geun-young weds musical actor in private ceremony",
+    "description": "SEOUL, July 29 (Yonhap) -- Actress Moon Geun-young has married.",
+    "current_location": "Seoul",
+    "expected": {
+      "displayName": "Seoul",
+      "lat": 37.57,
+      "lon": 126.98
+    },
+    "review_note": "The explicit wire-service dateline supports Seoul."
+  },
+  {
+    "stratum": "explicit_parent_pair",
+    "db_id": "56de28a4-9cc7-4e48-9dd2-7112317375bc",
+    "event_count": 1,
+    "published_at": "2026-04-28T19:00:41.934747Z",
+    "title": "You can get dragged into a police investigation by proximity alone",
+    "description": "The case involved a 2019 bank robbery outside Richmond, Virginia.",
+    "current_location": "Richmond",
+    "expected": {
+      "displayName": "Richmond, Virginia",
+      "lat": 37.55,
+      "lon": -77.46
+    },
+    "review_note": "The explicit state parent uniquely identifies Richmond, Virginia."
+  }
+]

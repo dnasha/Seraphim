@@ -37,6 +37,10 @@ import {
     KNOWN_LOCATIONS,
     MULTI_WORD_LOC_SET,
     ensureInitialized,
+    getDefaultLocationCandidate,
+    getDominantLocationCandidate,
+    getLocationCandidates,
+    type LocationEntry,
 } from './dictionary';
 import {
     extractDemonym,
@@ -143,12 +147,10 @@ export function extractLocation(title: string, description: string): { match: st
     COMMA_PAIR_PATTERN.lastIndex = 0;
     let commaMatch;
     while ((commaMatch = COMMA_PAIR_PATTERN.exec(title)) !== null) {
-        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair', placement: 'title' });
         candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'title' });
     }
     COMMA_PAIR_PATTERN.lastIndex = 0;
     while ((commaMatch = COMMA_PAIR_PATTERN.exec(description)) !== null) {
-        candidates.push({ name: `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`, source: 'comma_pair', placement: 'description' });
         candidates.push({ name: commaMatch[1].trim(), source: 'comma_pair', placement: 'description' });
     }
 
@@ -514,6 +516,379 @@ export function extractLocation(title: string, description: string): { match: st
     return { match: finalMatch, candidates: finalCandidates, scored: bestCandidates };
 }
 
+export type LocationEvidence =
+    | 'explicit_pair'
+    | 'hierarchy_context'
+    | 'dominant_population'
+    | 'unambiguous'
+    | 'manual_override'
+    | 'legacy_override';
+
+export interface LocationResolutionCandidate {
+    id: string;
+    displayName: string;
+    lat: number;
+    lon: number;
+    type: LocationEntry['type'];
+    cc?: string;
+    admin1Code?: string;
+    population: number;
+}
+
+export interface LocationResolution {
+    gazetteerId: string;
+    displayName: string;
+    lat: number;
+    lon: number;
+    matchedText: string;
+    evidence: LocationEvidence;
+    confidence: number;
+    candidates: LocationResolutionCandidate[];
+}
+
+interface HierarchyPair {
+    child: string;
+    parent: string;
+}
+
+function normalizedLocationKey(value: string): string {
+    return normalizeAccents(cleanCandidate(value).toLowerCase().trim());
+}
+
+function entryIdentity(entry: LocationEntry): string {
+    return entry.id || `${entry.type}:${entry.cc || ''}:${entry.admin1Code || ''}:${entry.lat}:${entry.lon}`;
+}
+
+function uniqueEntries(entries: LocationEntry[]): LocationEntry[] {
+    const seen = new Set<string>();
+    return entries.filter(entry => {
+        const identity = entryIdentity(entry);
+        if (seen.has(identity)) return false;
+        seen.add(identity);
+        return true;
+    });
+}
+
+function hierarchyPairsInText(text: string): HierarchyPair[] {
+    const pairs: HierarchyPair[] = [];
+    COMMA_PAIR_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = COMMA_PAIR_PATTERN.exec(text)) !== null) {
+        const child = cleanCandidate(match[1]);
+        const parent = cleanCandidate(match[2]);
+        if (child && parent) pairs.push({ child, parent });
+    }
+    COMMA_PAIR_PATTERN.lastIndex = 0;
+    return pairs;
+}
+
+function isHierarchyParent(entry: LocationEntry): boolean {
+    return entry.type === 'country' || entry.type === 'admin1';
+}
+
+function entryMatchesParent(entry: LocationEntry, parent: LocationEntry): boolean {
+    if (parent.type === 'country') return !!entry.cc && entry.cc === parent.cc;
+    if (parent.type === 'admin1') {
+        return !!entry.admin1Code && entry.admin1Code === parent.admin1Code;
+    }
+    return false;
+}
+
+function diagnosticCandidates(entries: LocationEntry[]): LocationResolutionCandidate[] {
+    return uniqueEntries(entries).map(entry => ({
+        id: entryIdentity(entry),
+        displayName: entry.name || '',
+        lat: entry.lat,
+        lon: entry.lon,
+        type: entry.type,
+        cc: entry.cc,
+        admin1Code: entry.admin1Code,
+        population: entry.pop,
+    }));
+}
+
+function buildResolution(
+    entry: LocationEntry,
+    matchedText: string,
+    evidence: LocationEvidence,
+    confidence: number,
+    allCandidates: LocationEntry[],
+    parentDisplay?: string,
+): LocationResolution {
+    const matchedKey = normalizedLocationKey(matchedText);
+    const baseDisplay =
+        LANDMARK_DISPLAY_ALIASES[matchedKey] ||
+        toTitleCase(cleanCandidate(matchedText));
+    const candidateCountries = new Set(allCandidates.map(candidate => candidate.cc).filter(Boolean));
+    const shouldQualify = evidence === 'explicit_pair' || candidateCountries.size > 1;
+    const displayName = shouldQualify && parentDisplay && !baseDisplay.toLowerCase().includes(parentDisplay.toLowerCase())
+        ? `${baseDisplay}, ${toTitleCase(parentDisplay)}`
+        : baseDisplay;
+    return {
+        gazetteerId: entryIdentity(entry),
+        displayName,
+        lat: entry.lat,
+        lon: entry.lon,
+        matchedText,
+        evidence,
+        confidence,
+        candidates: diagnosticCandidates(allCandidates),
+    };
+}
+
+function strongEvidenceForKey(scored: ScoredCandidate[] | undefined, key: string): boolean {
+    return (scored || []).some(candidate =>
+        candidate.key === key &&
+        ['dateline', 'regex', 'action_target', 'possessive_focus', 'title_subject'].includes(candidate.source)
+    );
+}
+
+function appearsAsSportsTeam(matchedText: string, title: string, description: string): boolean {
+    const escaped = cleanCandidate(matchedText).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!escaped) return false;
+    const text = `${title} ${description}`;
+    const affiliation = new RegExp(
+        `(?:\\b${escaped}\\s+(?:FC|AFC|United|City)\\b|\\b${escaped}\\s+(?:vs?\\.?|versus)\\s+[A-Z]|\\b[A-Z][A-Za-z'’-]+\\s+(?:vs?\\.?|versus)\\s+${escaped}\\b)`,
+        'i',
+    );
+    if (!affiliation.test(text)) return false;
+    const spatial = new RegExp(`\\b(?:at|in|near|outside|around|from)\\s+${escaped}\\b`, 'i');
+    return !spatial.test(text);
+}
+
+function isInstitutionalLandmarkInMultiCountryStory(
+    matchedKey: string,
+    scored: ScoredCandidate[] | undefined,
+    title: string,
+    description: string,
+): boolean {
+    if (matchedKey !== 'white house') return false;
+    const text = `${title} ${description}`;
+    if (/\b(?:at|in|near|outside|around|from)\s+(?:the\s+)?White House\b/i.test(text)) {
+        return false;
+    }
+    const countryCodes = new Set(
+        (scored || []).flatMap(candidate =>
+            getLocationCandidates(candidate.key)
+                .filter(entry => entry.type === 'country' && entry.cc)
+                .map(entry => entry.cc!)
+        )
+    );
+    return countryCodes.size > 1;
+}
+
+function shouldRejectBareMinorCity(
+    matchedText: string,
+    entry: LocationEntry,
+    scored: ScoredCandidate[] | undefined,
+    title: string,
+    description: string,
+): boolean {
+    const key = normalizedLocationKey(matchedText);
+    if (
+        entry.manual ||
+        entry.type !== 'city' ||
+        key.includes(' ')
+    ) {
+        return false;
+    }
+    if (strongEvidenceForKey(scored, key)) return false;
+
+    const combinedText = `${title} ${description}`;
+    if (key === 'van') {
+        if (/\b(?:police|delivery|cargo|moving|rental|camper|passenger|white|hot)\s+van\b/i.test(combinedText)) {
+            return true;
+        }
+        if (/\bVan\s+(?:de|den|der|het|der|Norden|Staden|Oosterhout)\b/.test(combinedText)) {
+            return true;
+        }
+    }
+
+    const escapedMatch = cleanCandidate(matchedText).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b[A-Z][A-Za-z\\u00C0-\\u024F'’-]+,\\s*${escapedMatch}\\b`).test(combinedText)) {
+        return true;
+    }
+
+    const people = [
+        ...(nlp(title).people().out('array') as string[]),
+        ...(nlp(description).people().out('array') as string[]),
+    ];
+    return people.some(person =>
+        person.split(/\s+/).some(word => normalizedLocationKey(word) === key)
+    );
+}
+
+function selectDominantFromEntries(entries: LocationEntry[]): LocationEntry | null {
+    const populated = uniqueEntries(entries)
+        .filter(entry => entry.type === 'city' && entry.pop > 0)
+        .sort((a, b) => b.pop - a.pop);
+    const winner = populated[0];
+    const runnerUp = populated[1];
+    if (winner && winner.pop >= 100000 && (!runnerUp || winner.pop >= runnerUp.pop * 5)) {
+        return winner;
+    }
+    return null;
+}
+
+/**
+ * Resolves article text directly to a unique gazetteer entry. Unlike the
+ * compatibility extract-then-geocode API, this preserves the hierarchy context
+ * needed to distinguish names such as "Santa Cruz, California".
+ */
+export async function resolveLocation(title: string, description: string): Promise<LocationResolution | null> {
+    ensureInitialized();
+    const extracted = extractLocation(title, description);
+    const allPairs = [
+        ...hierarchyPairsInText(title),
+        ...hierarchyPairsInText(description),
+    ];
+    for (const pair of allPairs) {
+        const childCandidates = uniqueEntries(getLocationCandidates(pair.child));
+        const parentEntries = getLocationCandidates(pair.parent).filter(isHierarchyParent);
+        const matched = uniqueEntries(childCandidates.filter(candidate =>
+            parentEntries.some(parent => entryMatchesParent(candidate, parent))
+        ));
+        if (matched.length === 1) {
+            return buildResolution(matched[0], pair.child, 'explicit_pair', 1, childCandidates, pair.parent);
+        }
+    }
+
+    if (!extracted.match) return null;
+
+    const matchedText = extracted.match;
+    const matchedKey = normalizedLocationKey(matchedText);
+    const allCandidates = uniqueEntries(getLocationCandidates(matchedKey));
+
+    if (allCandidates.length === 0) {
+        const legacy = await geocodeLocation(matchedText);
+        return legacy ? {
+            gazetteerId: `legacy:${matchedKey}`,
+            displayName: legacy.displayName,
+            lat: legacy.lat,
+            lon: legacy.lon,
+            matchedText,
+            evidence: 'legacy_override',
+            confidence: 0.9,
+            candidates: [],
+        } : null;
+    }
+
+    if (appearsAsSportsTeam(matchedText, title, description)) return null;
+    if (isInstitutionalLandmarkInMultiCountryStory(
+        matchedKey,
+        extracted.scored,
+        title,
+        description,
+    )) return null;
+
+    const manual = allCandidates.find(entry => entry.manual);
+    if (manual) {
+        return buildResolution(manual, matchedText, 'manual_override', 1, allCandidates);
+    }
+
+    const pairs = allPairs.filter(pair => normalizedLocationKey(pair.child) === matchedKey);
+
+    for (const pair of pairs) {
+        const parentEntries = getLocationCandidates(pair.parent).filter(isHierarchyParent);
+        const matched = uniqueEntries(allCandidates.filter(candidate =>
+            parentEntries.some(parent => entryMatchesParent(candidate, parent))
+        ));
+        if (matched.length === 1) {
+            return buildResolution(matched[0], pair.child, 'explicit_pair', 1, allCandidates, pair.parent);
+        }
+    }
+
+    const countryEntries = allCandidates.filter(entry => entry.type === 'country');
+    if (countryEntries.length === 1) {
+        return buildResolution(countryEntries[0], matchedText, 'unambiguous', 0.9, allCandidates);
+    }
+
+    const adminEntries = allCandidates.filter(entry => entry.type === 'admin1');
+    if (adminEntries.length === 1 && KNOWN_LOCATIONS[matchedKey]?.type === 'admin1') {
+        return buildResolution(adminEntries[0], matchedText, 'unambiguous', 0.9, allCandidates);
+    }
+
+    const otherKeys = new Set(
+        (extracted.scored || [])
+            .map(candidate => candidate.key)
+            .filter(key => key !== matchedKey)
+    );
+    const parentEntries = uniqueEntries(
+        [...otherKeys].flatMap(key => getLocationCandidates(key).filter(isHierarchyParent))
+    );
+
+    const adminCodes = new Set(
+        parentEntries
+            .filter(entry => entry.type === 'admin1' && entry.admin1Code)
+            .map(entry => entry.admin1Code!)
+    );
+    if (adminCodes.size === 1) {
+        const adminCode = [...adminCodes][0];
+        const matched = allCandidates.filter(candidate => candidate.admin1Code === adminCode);
+        if (matched.length === 1) {
+            const parent = parentEntries.find(entry => entry.admin1Code === adminCode);
+            return buildResolution(
+                matched[0],
+                matchedText,
+                'hierarchy_context',
+                0.95,
+                allCandidates,
+                parent?.name,
+            );
+        }
+    }
+
+    const countryCodes = new Set(
+        parentEntries
+            .filter(entry => entry.type === 'country' && entry.cc)
+            .map(entry => entry.cc!)
+    );
+    if (countryCodes.size === 1) {
+        const countryCode = [...countryCodes][0];
+        const matched = allCandidates.filter(candidate => candidate.cc === countryCode);
+        if (matched.length === 1) {
+            const parent = parentEntries.find(entry => entry.type === 'country' && entry.cc === countryCode);
+            return buildResolution(
+                matched[0],
+                matchedText,
+                'hierarchy_context',
+                0.9,
+                allCandidates,
+                parent?.name,
+            );
+        }
+        if (strongEvidenceForKey(extracted.scored, matchedKey)) {
+            const dominant = selectDominantFromEntries(matched);
+            if (dominant) {
+                const parent = parentEntries.find(entry => entry.type === 'country' && entry.cc === countryCode);
+                return buildResolution(
+                    dominant,
+                    matchedText,
+                    'dominant_population',
+                    0.75,
+                    allCandidates,
+                    parent?.name,
+                );
+            }
+        }
+    }
+
+    if (allCandidates.length === 1) {
+        const entry = allCandidates[0];
+        if (shouldRejectBareMinorCity(matchedText, entry, extracted.scored, title, description)) return null;
+        return buildResolution(entry, matchedText, 'unambiguous', 0.85, allCandidates);
+    }
+
+    if (strongEvidenceForKey(extracted.scored, matchedKey)) {
+        const dominant = getDominantLocationCandidate(matchedKey);
+        if (dominant) {
+            return buildResolution(dominant, matchedText, 'dominant_population', 0.65, allCandidates);
+        }
+    }
+
+    return null;
+}
+
 // Canonical display overrides for ambiguous landmark names
 const LANDMARK_DISPLAY_ALIASES: Record<string, string> = {
     'hormuz': 'Strait of Hormuz',
@@ -570,7 +945,27 @@ export async function geocodeLocation(
         return { lat: 28.57, lon: -80.65, displayName: 'Kennedy Space Center, Florida' };
     }
 
-    const known = KNOWN_LOCATIONS[key];
+    const commaIndex = placeName.indexOf(',');
+    if (commaIndex > 0) {
+        const child = placeName.slice(0, commaIndex).trim();
+        const parent = placeName.slice(commaIndex + 1).trim();
+        const childCandidates = getLocationCandidates(child);
+        const parentCandidates = getLocationCandidates(parent).filter(isHierarchyParent);
+        const matched = uniqueEntries(childCandidates.filter(candidate =>
+            parentCandidates.some(parentEntry => entryMatchesParent(candidate, parentEntry))
+        ));
+        if (matched.length === 1) {
+            return { lat: matched[0].lat, lon: matched[0].lon, displayName: placeName };
+        }
+    }
+
+    // Preserve the historical context-free lookup contract for diagnostics and
+    // callers that supply only a name. Article ingestion uses resolveLocation,
+    // which applies hierarchy-aware ambiguity and abstention rules.
+    const known =
+        getDefaultLocationCandidate(key) ||
+        getDominantLocationCandidate(key) ||
+        KNOWN_LOCATIONS[key];
     if (known) {
         const displayName = LANDMARK_DISPLAY_ALIASES[key] || placeName;
         return { lat: known.lat, lon: known.lon, displayName };
