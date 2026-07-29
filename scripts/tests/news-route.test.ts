@@ -282,12 +282,12 @@ describe("GET /api/news", () => {
   });
 
   it('enforces the Free cap and rejects unavailable history before querying data', async () => {
-    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 100 } });
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 50 } });
     mocks.rpc.mockResolvedValue({ data: [], error: null });
 
     const capped = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=999&time_range=1d'));
-    expect(mocks.rpc).toHaveBeenCalledWith('get_clustered_events', expect.objectContaining({ p_limit: 100 }));
-    expect((await capped.json()).meta).toMatchObject({ appliedLimit: 100 });
+    expect(mocks.rpc).toHaveBeenCalledWith('get_clustered_events', expect.objectContaining({ p_limit: 50 }));
+    expect((await capped.json()).meta).toMatchObject({ appliedLimit: 50 });
 
     const historical = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&time_range=1w'));
     expect(historical.status).toBe(403);

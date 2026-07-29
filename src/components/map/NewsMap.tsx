@@ -27,6 +27,8 @@ import { applyClientJitter } from "./utils";
 import { useMapLayers } from "./useMapLayers";
 import { useMapCamera } from "./useMapCamera";
 import { startVisiblePolling } from "./overlayPolling";
+import { buildNewsFeatureCollection } from "./newsGeoJson";
+import { createHotStoryPulseController } from "./pulseController";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import UpgradeButton from "./UpgradeButton";
@@ -122,7 +124,6 @@ export default function NewsMap({
   const [mapBearing, setMapBearing] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const pulseAnimationFrameRef = useRef<number | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
@@ -233,83 +234,33 @@ export default function NewsMap({
     overlaysRef.current = overlays;
   }, [overlays]);
 
-  // Drive the hot-story pulse continuously with a linear curve. MapLibre paint
-  // transitions are hard-coded to cubic easing, which makes a repeating pulse
-  // appear to pause at both ends of the cycle.
+  // Decorative paint transitions are paused during camera interaction so they
+  // never compete with MapLibre's pan/zoom render loop.
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
-
-    const setTransitionDuration = (duration: number) => {
-      if (!map.getLayer("hot-story-pulse")) return;
-      map.setPaintProperty("hot-story-pulse", "circle-radius-transition", { duration, delay: 0 });
-      map.setPaintProperty("hot-story-pulse", "circle-opacity-transition", { duration, delay: 0 });
-    };
+    const pulse = createHotStoryPulseController(map);
 
     if (!animatedEffects) {
-      if (map.getLayer("hot-story-pulse")) {
-        setTransitionDuration(0);
-        map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
-        map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
-      }
+      pulse.stop();
       return;
     }
 
-    let running = false;
-    let cycleStartedAt: number | null = null;
-    // Use a calm 2:1 motion-to-rest rhythm within the 2.5s pulse cycle.
-    const duration = 1667;
-    const pauseDuration = 833;
-    const cycleDuration = duration + pauseDuration;
-    let inPause = false;
-
-    const animate = (timestamp: number) => {
-      if (!running) return;
-      if (cycleStartedAt == null) cycleStartedAt = timestamp;
-
-      if (map.getLayer("hot-story-pulse")) {
-        const elapsed = (timestamp - cycleStartedAt) % cycleDuration;
-        if (elapsed < duration) {
-          inPause = false;
-          const t = elapsed / duration;
-          map.setPaintProperty("hot-story-pulse", "circle-radius", 4 + t * 51);
-          map.setPaintProperty("hot-story-pulse", "circle-opacity", 0.6 * (1 - t));
-        } else if (!inPause) {
-          inPause = true;
-          map.setPaintProperty("hot-story-pulse", "circle-radius", 55);
-          map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
-        }
-      }
-      pulseAnimationFrameRef.current = requestAnimationFrame(animate);
-    };
-
     const start = () => {
-      if (running || document.hidden) return;
-      running = true;
-      cycleStartedAt = null;
-      inPause = false;
-      setTransitionDuration(0);
-      pulseAnimationFrameRef.current = requestAnimationFrame(animate);
+      if (!document.hidden) pulse.start();
     };
-    const stop = () => {
-      running = false;
-      if (pulseAnimationFrameRef.current != null) {
-        cancelAnimationFrame(pulseAnimationFrameRef.current);
-        pulseAnimationFrameRef.current = null;
-      }
-      if (map.getLayer("hot-story-pulse")) {
-        setTransitionDuration(0);
-        map.setPaintProperty("hot-story-pulse", "circle-radius", 0);
-        map.setPaintProperty("hot-story-pulse", "circle-opacity", 0);
-      }
-    };
+    const stop = () => pulse.stop();
     const onVisibilityChange = () => document.hidden ? stop() : start();
 
     document.addEventListener("visibilitychange", onVisibilityChange);
+    map.on("movestart", stop);
+    map.on("moveend", start);
     start();
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      stop();
+      map.off("movestart", stop);
+      map.off("moveend", start);
+      pulse.dispose();
     };
   }, [mapReady, animatedEffects]);
 
@@ -841,33 +792,7 @@ export default function NewsMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current || isResizingRef.current) return;
 
-    const geojson: GeoJSON.FeatureCollection = {
-      type: "FeatureCollection",
-      features: geoItems.map((item) => ({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [item.longitude!, item.latitude!],
-        },
-        properties: {
-          id: item.id,
-          canonicalId: canonicalNewsId(item),
-          category: item.category,
-          title: item.title,
-          source: item.source,
-          publishedAt: item.publishedAt,
-          locationName: item.locationName,
-          imageUrl: item.imageUrl,
-          description: item.description,
-          eventCount: item.sourcesCount,
-          storyCount: item.storyCount ?? 1,
-          sourcesCount: item.sourcesCount ?? 1,
-          isTopHot: item.isTopHot ?? false,
-          credibilityTier: item.credibilityTier ?? 3,
-          sourceCount: canonicalEventCount(item),
-        },
-      })),
-    };
+    const geojson = buildNewsFeatureCollection(geoItems);
 
     pendingGeoJsonRef.current = geojson;
 

@@ -471,8 +471,8 @@ export default function EventSidebar({
                         GUEST MODE ACTIVE
                       </h2>
                       <p>
-                        You are currently limited to the top 10 events in view.
-                        Create a <strong>free</strong> account to access up to 100 real-time events,
+                        You are currently limited to the top 10 stories in view.
+                        Create a <strong>free</strong> account to access up to 50 real-time stories per view,
                         live filters, customization, and annotation tools.
                       </p>
                     </div>

@@ -28,7 +28,7 @@ export const TIERS: TierConfig[] = [
         popular: false,
         trialDays: 0,
         features: [
-            'Live global map with up to 100 events',
+            'Live global map with up to 50 stories per view',
             'Search the current 24-hour signal by source and category',
             'Standard and Dark maps with earthquake monitoring',
             'Draw, measure, and add local map notes',
@@ -106,7 +106,7 @@ export const TIERS: TierConfig[] = [
 
 export const COMPARISON_SECTIONS = [
     { label: 'Feed access', rows: [
-        { feature: 'Events per request', free: '100', pro: '1,000', analyst: '1,000', angel: '1,000' },
+        { feature: 'Stories per view', free: '50', pro: '1,000', analyst: '1,000', angel: '1,000' },
         { feature: 'History', free: '24 hours', pro: 'Up to 1 month', analyst: 'All retained + custom', angel: 'All retained + custom' },
         { feature: 'Source timeline', free: 'First + latest', pro: 'Full', analyst: 'Full', angel: 'Full' },
     ]},

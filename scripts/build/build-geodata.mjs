@@ -239,12 +239,14 @@ const citiesRaw = readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8');
 const citiesLines = citiesRaw.split('\n').filter(l => l.trim());
 
 const cityMap = new Map();
+const cityCandidateMap = new Map();
 const admin1Centroids = new Map();
 
 for (const line of citiesLines) {
     const cols = line.split('\t');
     if (cols.length < 15) continue;
 
+    const geonameId = parseInt(cols[0], 10);
     const name = (cols[1] || '').trim();
     const asciiName = (cols[2] || '').trim();
     const lat = parseFloat(cols[4]);
@@ -256,18 +258,37 @@ for (const line of citiesLines) {
     if (!name || name.length <= 2 || isNaN(lat) || isNaN(lon)) continue;
 
     const key = (asciiName || name).toLowerCase();
+    const city = {
+        id: Number.isFinite(geonameId) ? geonameId : undefined,
+        name,
+        lat,
+        lon,
+        pop: population,
+        cc: countryCode,
+        a1: admin1Code,
+    };
+
+    const registerCandidate = (candidateKey) => {
+        const candidates = cityCandidateMap.get(candidateKey) || [];
+        if (!candidates.some(candidate => candidate.id === city.id)) {
+            candidates.push(city);
+            cityCandidateMap.set(candidateKey, candidates);
+        }
+    };
+    registerCandidate(key);
 
     // Priority Selection: Keep the city with the highest population if names collide.
     const existing = cityMap.get(key);
     if (!existing || population > existing.pop) {
-        cityMap.set(key, { lat, lon, pop: population, cc: countryCode });
+        cityMap.set(key, city);
     }
 
     const nameKey = name.toLowerCase();
     if (nameKey !== key) {
+        registerCandidate(nameKey);
         const existingName = cityMap.get(nameKey);
         if (!existingName || population > existingName.pop) {
-            cityMap.set(nameKey, { lat, lon, pop: population, cc: countryCode });
+            cityMap.set(nameKey, city);
         }
     }
 
@@ -296,6 +317,7 @@ const admin1Raw = readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8');
 const admin1Lines = admin1Raw.split('\n').filter(l => l.trim());
 
 const admin1Map = new Map();
+const admin1CandidateMap = new Map();
 
 for (const line of admin1Lines) {
     const cols = line.split('\t');
@@ -304,6 +326,7 @@ for (const line of admin1Lines) {
     const code = (cols[0] || '').trim();
     const name = (cols[1] || '').trim();
     const asciiName = (cols[2] || '').trim();
+    const geonameId = parseInt(cols[3], 10);
 
     if (!code || !name) continue;
 
@@ -320,13 +343,31 @@ for (const line of admin1Lines) {
     const existingCity = cityMap.get(key);
     if (existingCity && existingCity.pop > 500000) continue;
 
-    admin1Map.set(key, { lat: centroid.lat, lon: centroid.lon, cc: countryCode, name });
+    const region = {
+        id: Number.isFinite(geonameId) ? geonameId : undefined,
+        name,
+        code,
+        lat: centroid.lat,
+        lon: centroid.lon,
+        cc: countryCode,
+    };
+    const registerAdmin1Candidate = (candidateKey) => {
+        const candidates = admin1CandidateMap.get(candidateKey) || [];
+        if (!candidates.some(candidate => candidate.code === region.code)) {
+            candidates.push(region);
+            admin1CandidateMap.set(candidateKey, candidates);
+        }
+    };
+
+    registerAdmin1Candidate(key);
+    admin1Map.set(key, region);
 
     const nameKey = name.toLowerCase();
     if (nameKey !== key) {
+        registerAdmin1Candidate(nameKey);
         const existingCity2 = cityMap.get(nameKey);
         if (!existingCity2 || existingCity2.pop <= 500000) {
-            admin1Map.set(nameKey, { lat: centroid.lat, lon: centroid.lon, cc: countryCode, name });
+            admin1Map.set(nameKey, region);
         }
     }
 }
@@ -359,19 +400,77 @@ console.log(`  ${countryCount} country name entries`);
 const cities = {};
 for (const [key, val] of cityMap.entries()) {
     if (key.length <= 2) continue;
-    cities[key] = { lat: Math.round(val.lat * 100) / 100, lon: Math.round(val.lon * 100) / 100, pop: val.pop, cc: val.cc };
+    cities[key] = {
+        lat: Math.round(val.lat * 100) / 100,
+        lon: Math.round(val.lon * 100) / 100,
+        pop: val.pop,
+        cc: val.cc,
+    };
 }
 
 const admin1 = {};
+const admin1Meta = {};
 for (const [key, val] of admin1Map.entries()) {
     if (key.length <= 2) continue;
-    admin1[key] = { lat: Math.round(val.lat * 100) / 100, lon: Math.round(val.lon * 100) / 100, cc: val.cc };
+    admin1[key] = {
+        lat: Math.round(val.lat * 100) / 100,
+        lon: Math.round(val.lon * 100) / 100,
+        cc: val.cc,
+    };
+    admin1Meta[key] = val.code;
 }
 
-const output = { cities, admin1, countries: countriesOut };
+const cityCandidates = {};
+const cityCandidateNames = {};
+for (const [key, values] of cityCandidateMap.entries()) {
+    if (key.length <= 2 || values.length <= 1) continue;
+    cityCandidates[key] = values
+        .sort((a, b) => b.pop - a.pop)
+        .map(val => {
+            const id = val.id.toString(36);
+            if (val.name.toLowerCase() !== key) cityCandidateNames[id] = val.name;
+            return [
+                id,
+                Math.round(val.lat * 100) / 100,
+                Math.round(val.lon * 100) / 100,
+                val.pop.toString(36),
+                val.cc,
+                val.a1,
+            ].join(',');
+        })
+        .join('|');
+}
+
+const admin1Candidates = {};
+const admin1CandidateNames = {};
+for (const [key, values] of admin1CandidateMap.entries()) {
+    if (key.length <= 2 || values.length <= 1) continue;
+    admin1Candidates[key] = values.map(val => {
+        const id = val.id.toString(36);
+        if (val.name.toLowerCase() !== key) admin1CandidateNames[id] = val.name;
+        return [
+            id,
+            Math.round(val.lat * 100) / 100,
+            Math.round(val.lon * 100) / 100,
+            val.cc,
+            val.code,
+        ].join(',');
+    }).join('|');
+}
+
+const output = {
+    cities,
+    cityCandidates,
+    cityCandidateNames,
+    admin1,
+    admin1Meta,
+    admin1Candidates,
+    admin1CandidateNames,
+    countries: countriesOut,
+};
 const outPath = join(DATA_DIR, 'geonames.json');
 writeFileSync(outPath, JSON.stringify(output));
 
 const sizeKB = Math.round(readFileSync(outPath).length / 1024);
 console.log(`\nWrote ${outPath} (${sizeKB} KB)`);
-console.log(`  ${Object.keys(cities).length} cities, ${Object.keys(admin1).length} admin1 regions, ${Object.keys(countriesOut).length} country names`);
+console.log(`  ${Object.keys(cities).length} city names (${Object.keys(cityCandidates).length} ambiguous), ${Object.keys(admin1).length} admin1 regions (${Object.keys(admin1Candidates).length} ambiguous), ${Object.keys(countriesOut).length} country names`);

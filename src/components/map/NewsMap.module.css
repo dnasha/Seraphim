@@ -204,14 +204,39 @@
   display: flex;
   flex-direction: column;
   width: 500px;
+  max-height: min(720px, calc(100dvh - 32px));
   background: var(--surface);
-  position: relative; /* Enabled for absolute share button */
+  position: relative;
 }
+
 .mapWrapper :global(.news-popup-header) {
+  flex: 0 0 auto;
   padding: 14px 30px 8px 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.mapWrapper :global(.news-popup-scroll-body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.mapWrapper :global(.news-popup-scroll-body::-webkit-scrollbar) {
+  width: 5px;
+}
+
+.mapWrapper :global(.news-popup-scroll-body::-webkit-scrollbar-thumb) {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mapWrapper :global(.news-popup-scroll-body::-webkit-scrollbar-track) {
+  background: transparent;
 }
 
 .mapWrapper :global(.news-popup-title) {
@@ -290,8 +315,6 @@
   color: var(--text-secondary);
   line-height: 1.5;
   margin: 0 0 2px;
-  max-height: 200px;
-  overflow-y: auto;
   padding-right: 4px;
 }
 .mapWrapper :global(.news-popup-link) {
@@ -326,7 +349,6 @@
   margin-top: 10px;
   gap: 12px;
   width: 100%;
-  padding-right: 120px; /* Leave space for absolute button */
   box-sizing: border-box;
 }
 
@@ -460,18 +482,6 @@
   position: relative;
 }
 
-/* Subtle fade at the bottom to indicate more sources if scrollable */
-.mapWrapper :global(.news-popup-sources-section::after) {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  background: linear-gradient(to top, var(--surface), transparent);
-  pointer-events: none;
-}
-
 .mapWrapper :global(.news-popup-sources-header) {
   font-family: var(--font-ui);
   font-size: 0.75rem; /* 12px */
@@ -498,17 +508,18 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: calc((5 * 28px) + (4 * 4px)); /* Roughly 5 visible items */
-  overflow-y: auto;
-  padding-right: 120px; /* Leave space on the right for absolute button */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+}
+
+.mapWrapper :global(.news-popup-footer) {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .mapWrapper :global(.news-popup-share-btn-absolute) {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -524,7 +535,6 @@
   transition: all 0.15s ease;
   line-height: 1;
   outline: none !important;
-  z-index: 50; /* Float over timeline scrollbar and list */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -537,19 +547,6 @@
 
 .mapWrapper :global(.news-popup-share-btn-absolute:active) {
   transform: translateY(1px);
-}
-
-.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar) {
-  width: 4px;
-}
-
-.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar-thumb) {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-.mapWrapper :global(.news-popup-sources-list::-webkit-scrollbar-track) {
-  background: transparent;
 }
 
 .mapWrapper :global(.news-popup-source-entry) {
@@ -635,23 +632,6 @@
   text-align: left;
 }
 
-/* Responsive adjustments for mobile devices */
-@media (max-width: 860px) {
-  .mapWrapper :global(.news-popup) {
-    width: calc(100vw - 48px);
-    max-width: 380px;
-  }
-
-  .mapWrapper :global(.news-popup-container .maplibregl-popup-content) {
-    max-width: calc(100vw - 32px);
-    width: auto !important;
-  }
-
-  .mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
-    margin-top: calc(44px + 12px + 8px) !important;
-  }
-}
-
 @media (max-height: 1080px) {
   .mapWrapper :global(.news-popup) {
     width: 460px;
@@ -666,12 +646,57 @@
     padding: 0 14px 6px;
   }
 
-  .mapWrapper :global(.news-popup-summary) {
-    max-height: 156px;
-  }
-
   .mapWrapper :global(.news-popup-sources-section) {
     padding: 6px 14px 8px;
+  }
+}
+
+/* On narrow screens, detach story details from the marker and use a bottom sheet. */
+@media (max-width: 860px) {
+  .newsMapContainer {
+    /* The GPU transform creates a stacking context that traps MapLibre
+       popups beneath sibling map controls. Let the popup z-index participate
+       in the map wrapper's stacking order on mobile. */
+    backface-visibility: visible !important;
+    transform: none !important;
+  }
+
+  .mapWrapper :global(.news-popup-container) {
+    position: absolute !important;
+    /* Sit above every map-local control, including the drawing tools (2100). */
+    z-index: 2200;
+    top: auto !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    left: max(8px, env(safe-area-inset-left)) !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+
+  .mapWrapper :global(.news-popup-container .maplibregl-popup-content) {
+    width: 100% !important;
+    max-width: none;
+    border-radius: 16px;
+  }
+
+  .mapWrapper :global(.news-popup-container .maplibregl-popup-tip) {
+    display: none;
+  }
+
+  .mapWrapper :global(.news-popup) {
+    width: 100%;
+    max-width: none;
+    height: 60dvh;
+    max-height: 60dvh;
+  }
+
+  .mapWrapper :global(.news-popup-img-container) {
+    max-height: 160px;
+  }
+
+  .mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+    margin-top: calc(44px + 12px + 8px) !important;
   }
 }
 

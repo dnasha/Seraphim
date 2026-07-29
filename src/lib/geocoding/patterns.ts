@@ -19,7 +19,7 @@ export const METADATA_COUNTRY_REGEX = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a
  * Common comma-separated pairs (e.g., "Kyiv, Ukraine").
  * Used to resolve ambiguous city names via their parent region.
  */
-export const COMMA_PAIR_PATTERN = /([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g;
+export const COMMA_PAIR_PATTERN = /([A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+)*),\s*([A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+)*)/g;
 
 // Unicode-aware letter class for robust location capture
 const L = '[a-zA-Z\u00C0-\u024F]';

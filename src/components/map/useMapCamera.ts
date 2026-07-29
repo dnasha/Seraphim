@@ -27,6 +27,61 @@ interface UseMapCameraProps {
   initialZoom?: number;
 }
 
+type SelectionCameraPadding = {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
+
+const POPUP_VIEWPORT_GUTTER = 16;
+const MOBILE_MINIMUM_VISIBLE_MAP_HEIGHT = 160;
+
+export function calculateSelectionCameraPadding(
+  mapHeight: number,
+  popupHeight: number,
+  isMobile: boolean,
+): SelectionCameraPadding {
+  const availableHeight = Math.max(1, mapHeight);
+  const fittedPopupHeight = Math.max(
+    0,
+    Math.min(popupHeight, availableHeight - POPUP_VIEWPORT_GUTTER),
+  );
+
+  if (isMobile) {
+    return {
+      top: 0,
+      bottom: Math.max(
+        0,
+        Math.min(
+          availableHeight - MOBILE_MINIMUM_VISIBLE_MAP_HEIGHT,
+          Math.ceil(fittedPopupHeight + POPUP_VIEWPORT_GUTTER),
+        ),
+      ),
+      left: 0,
+      right: 0,
+    };
+  }
+
+  const requiredMarkerY = Math.min(
+    availableHeight - POPUP_VIEWPORT_GUTTER,
+    fittedPopupHeight + POPUP_VIEWPORT_GUTTER,
+  );
+
+  return {
+    top: Math.max(
+      0,
+      Math.min(
+        availableHeight - POPUP_VIEWPORT_GUTTER * 2,
+        Math.ceil(requiredMarkerY * 2 - availableHeight),
+      ),
+    ),
+    bottom: 0,
+    left: 0,
+    right: 0,
+  };
+}
+
 export function useMapCamera({
   mapRef,
   mapReady,
@@ -56,6 +111,24 @@ export function useMapCamera({
   // A manual map gesture opts out of further camera corrections until the
   // user explicitly selects another card.
   const cameraFollowSuppressedRef = useRef(false);
+
+  const getSelectionCameraPadding = useCallback(() => {
+    const containerHeight =
+      containerRef.current?.clientHeight ||
+      (typeof window !== "undefined" ? window.innerHeight : 0) ||
+      800;
+    const popupElement = popupRef.current?.getElement?.();
+    const measuredPopupHeight = popupElement?.getBoundingClientRect().height || 0;
+    const fallbackPopupHeight = Math.min(720, containerHeight * 0.65);
+    const isMobile =
+      typeof window !== "undefined" && window.innerWidth <= 860;
+
+    return calculateSelectionCameraPadding(
+      containerHeight,
+      measuredPopupHeight || fallbackPopupHeight,
+      isMobile,
+    );
+  }, [containerRef, popupRef]);
 
   // Resolution-aware initial view calculation.
   // Performs linear interpolation between two known-good display profiles:
@@ -238,10 +311,16 @@ export function useMapCamera({
       }
 
       if (popupContainer && (isNewSelection || shouldOpenPopup)) {
-        popupRef.current
-          .setLngLat([item.longitude!, item.latitude!])
-          .setDOMContent(popupContainer)
-          .addTo(map);
+        popupRef.current.setLngLat([item.longitude!, item.latitude!]);
+
+        // Reuse an open popup in place when switching events. Calling addTo()
+        // again removes the existing popup first, which emits "close" and can
+        // clear the newly selected event before its camera flight begins.
+        if (shouldOpenPopup) {
+          popupRef.current
+            .setDOMContent(popupContainer)
+            .addTo(map);
+        }
       }
 
       if (isNewSelection) {
@@ -252,9 +331,7 @@ export function useMapCamera({
 
         const currentZoom = map.getZoom();
         const targetZoom = Math.max(currentZoom, 8.5);
-
-        const containerHeight = containerRef.current?.clientHeight || 800;
-        const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
+        const selectionPadding = getSelectionCameraPadding();
 
         map.flyTo({
           center: [item.longitude!, item.latitude!],
@@ -264,12 +341,10 @@ export function useMapCamera({
           speed: animatedEffects ? 1.8 : 1.2,
           curve: animatedEffects ? 1.2 : 1,
           essential: true,
-          padding: {
-            top: targetZoom > 4 ? responsivePadding : 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
-          },
+          padding:
+            targetZoom > 4
+              ? selectionPadding
+              : { top: 0, bottom: 0, left: 0, right: 0 },
         });
 
         map.once("moveend", () => {
@@ -287,12 +362,10 @@ export function useMapCamera({
               center: [finalItem.longitude!, finalItem.latitude!],
               duration: 300,
               essential: true,
-              padding: {
-                top: targetZoom > 4 ? responsivePadding : 0,
-                bottom: 0,
-                left: 0,
-                right: 0,
-              },
+              padding:
+                targetZoom > 4
+                  ? getSelectionCameraPadding()
+                  : { top: 0, bottom: 0, left: 0, right: 0 },
             });
             map.once("moveend", () => {
               if (flightId !== activeFlightIdRef.current) return;
@@ -309,7 +382,13 @@ export function useMapCamera({
       const wasSelected = lastFlownSelectionRef.current !== null;
       if (wasSelected) {
         cancelCameraFlight();
-        if (map.getPadding().top !== 0) {
+        const currentPadding = map.getPadding();
+        if (
+          currentPadding.top !== 0 ||
+          currentPadding.bottom !== 0 ||
+          currentPadding.left !== 0 ||
+          currentPadding.right !== 0
+        ) {
           map.easeTo({
             padding: { top: 0, bottom: 0, left: 0, right: 0 },
             duration: 300,
@@ -333,6 +412,89 @@ export function useMapCamera({
     latestGeoItemsRef,
     containerRef,
     cancelCameraFlight,
+    getSelectionCameraPadding,
+  ]);
+
+  useEffect(() => {
+    if (
+      !selectedItemId ||
+      !mapReady ||
+      !mapRef.current ||
+      !popupRef.current ||
+      typeof ResizeObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const popupElement = popupRef.current.getElement?.();
+    const observedElement =
+      popupElement?.querySelector<HTMLElement>(".news-popup") || popupElement;
+    if (!observedElement) return;
+
+    let animationFrame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        if (
+          cameraFollowSuppressedRef.current ||
+          isFlyingRef.current ||
+          !popupRef.current?.isOpen()
+        ) {
+          return;
+        }
+
+        const selectedItem = latestGeoItemsRef.current.find((item) =>
+          matchesNewsId(item, selectedItemId),
+        );
+        if (
+          !selectedItem ||
+          selectedItem.latitude == null ||
+          selectedItem.longitude == null
+        ) {
+          return;
+        }
+
+        const nextPadding = getSelectionCameraPadding();
+        const currentPadding = map.getPadding();
+        if (
+          Math.abs((currentPadding.top ?? 0) - nextPadding.top) < 1 &&
+          Math.abs((currentPadding.bottom ?? 0) - nextPadding.bottom) < 1 &&
+          Math.abs((currentPadding.left ?? 0) - nextPadding.left) < 1 &&
+          Math.abs((currentPadding.right ?? 0) - nextPadding.right) < 1
+        ) {
+          return;
+        }
+
+        const correctionId = ++activeFlightIdRef.current;
+        selectionCameraActiveRef.current = true;
+        isFlyingRef.current = true;
+        map.easeTo({
+          center: [selectedItem.longitude, selectedItem.latitude],
+          padding: nextPadding,
+          duration: 250,
+          essential: true,
+        });
+        map.once("moveend", () => {
+          if (correctionId !== activeFlightIdRef.current) return;
+          selectionCameraActiveRef.current = false;
+          isFlyingRef.current = false;
+        });
+      });
+    });
+
+    observer.observe(observedElement);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+    };
+  }, [
+    getSelectionCameraPadding,
+    latestGeoItemsRef,
+    mapReady,
+    mapRef,
+    popupRef,
+    selectedItemId,
   ]);
 
   useEffect(() => {
@@ -364,8 +526,7 @@ export function useMapCamera({
           const flightId = ++activeFlightIdRef.current;
           selectionCameraActiveRef.current = true;
           const targetZoom = Math.max(mapRef.current.getZoom(), 8.5);
-          const containerHeight = containerRef.current?.clientHeight || 800;
-          const responsivePadding = Math.min(380, Math.floor(containerHeight * 0.4));
+          const selectionPadding = getSelectionCameraPadding();
 
           popupRef.current.setLngLat([
             selectedItem.longitude,
@@ -379,12 +540,10 @@ export function useMapCamera({
             speed: animatedEffects && isGlobe ? 1.8 : 1.2,
             curve: animatedEffects ? 1.2 : 1,
             essential: true,
-            padding: {
-              top: targetZoom > 4 ? responsivePadding : 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-            },
+            padding:
+              targetZoom > 4
+                ? selectionPadding
+                : { top: 0, bottom: 0, left: 0, right: 0 },
           });
 
           mapRef.current.once("moveend", () => {
@@ -454,6 +613,7 @@ export function useMapCamera({
     containerRef,
     animatedEffects,
     isGlobe,
+    getSelectionCameraPadding,
   ]);
 
   return {
