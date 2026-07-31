@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildNewsFeatureCollection } from "@/components/map/newsGeoJson";
+import { selectedJitterAnchor } from "@/components/map/utils";
 import {
   createHotStoryPulseController,
   type PulsePaintMap,
@@ -7,6 +8,18 @@ import {
 } from "@/components/map/pulseController";
 
 describe("map feature payload", () => {
+  it("only changes the jitter anchor for collocated selections", () => {
+    const items = [
+      { id: 'a', title: 'A', url: 'https://a', source: 'A', sourceType: 'rss' as const, category: 'world', publishedAt: '2026-07-27T00:00:00Z', latitude: 10, longitude: 20 },
+      { id: 'b', title: 'B', url: 'https://b', source: 'B', sourceType: 'rss' as const, category: 'world', publishedAt: '2026-07-27T00:00:00Z', latitude: 10, longitude: 20 },
+      { id: 'c', title: 'C', url: 'https://c', source: 'C', sourceType: 'rss' as const, category: 'world', publishedAt: '2026-07-27T00:00:00Z', latitude: 30, longitude: 40 },
+    ];
+
+    expect(selectedJitterAnchor(items, 'c')).toBeNull();
+    expect(selectedJitterAnchor(items, 'a')).toBe('a');
+    expect(selectedJitterAnchor(items, 'b')).toBe('b');
+  });
+
   it("keeps article and image metadata out of MapLibre worker data", () => {
     const collection = buildNewsFeatureCollection([
       {

@@ -19,6 +19,38 @@ export const CATEGORIES = [
   "health",
 ];
 
+export function selectedJitterAnchor(items: NewsItem[], selectedId: string | null) {
+  if (!selectedId) return null;
+  const selected = items.find((item) =>
+    item.id === selectedId || item.originalId === selectedId
+  );
+  if (
+    !selected ||
+    selected.latitude == null ||
+    selected.longitude == null ||
+    (selected.storyCount != null && selected.storyCount > 1)
+  ) {
+    return null;
+  }
+
+  const selectedKey = `${selected.latitude.toFixed(5)},${selected.longitude.toFixed(5)}`;
+  let matches = 0;
+  for (const item of items) {
+    if (
+      item.latitude == null ||
+      item.longitude == null ||
+      (item.storyCount != null && item.storyCount > 1)
+    ) {
+      continue;
+    }
+    if (`${item.latitude.toFixed(5)},${item.longitude.toFixed(5)}` === selectedKey) {
+      matches++;
+      if (matches > 1) return selected.originalId || selected.id;
+    }
+  }
+  return null;
+}
+
 /**
  * Deterministic client-side jitter to prevent unclustered pins from stacking perfectly.
  * 

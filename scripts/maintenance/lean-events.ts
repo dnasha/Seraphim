@@ -59,6 +59,15 @@ interface EventRow {
   sources: DbEventSource[] | null;
 }
 
+interface DuplicateScanRow {
+  id: string;
+  title: string;
+  published_at: string;
+  latitude: number;
+  longitude: number;
+  location_name: string | null;
+}
+
 interface MaintenanceUpdate {
   id: string;
   title?: string;
@@ -243,6 +252,29 @@ async function scanRows(onPage: (rows: EventRow[]) => Promise<void>) {
   }
 }
 
+async function scanDuplicateRows(onPage: (rows: DuplicateScanRow[]) => Promise<void>) {
+  let cursor: string | null = null;
+  while (report.rows_scanned < LIMIT) {
+    const pageSize = Math.min(BATCH_SIZE, LIMIT - report.rows_scanned);
+    let query = db.from("events")
+      .select("id,title,published_at,latitude,longitude,location_name")
+      .order("id", { ascending: true })
+      .limit(pageSize);
+    if (cursor) query = query.gt("id", cursor);
+    const { data, error } = await query;
+    if (error) throw new Error(`Duplicate candidate page failed: ${error.message}`);
+    const rows = (data ?? []) as DuplicateScanRow[];
+    if (rows.length === 0) break;
+    await onPage(rows);
+    report.rows_scanned += rows.length;
+    cursor = rows[rows.length - 1].id;
+    if (report.rows_scanned % 10_000 < BATCH_SIZE) {
+      console.log(`[lean-events] scanned ${report.rows_scanned.toLocaleString()} duplicate candidates`);
+    }
+    await wait(PAUSE_MS);
+  }
+}
+
 async function cleanArchive() {
   await scanRows(async (rows) => {
     const updates: MaintenanceUpdate[] = [];
@@ -291,7 +323,7 @@ async function cleanArchive() {
   });
 }
 
-function duplicateGroupKey(row: EventRow): string | null {
+function duplicateGroupKey(row: DuplicateScanRow): string | null {
   const fingerprint = normalizeTitleFingerprint(row.title);
   if (fingerprint.length < 32) return null;
   const place = (row.location_name ?? `${row.latitude.toFixed(2)},${row.longitude.toFixed(2)}`).toLocaleLowerCase("en-US");
@@ -299,14 +331,9 @@ function duplicateGroupKey(row: EventRow): string | null {
 }
 
 async function collapseExactDuplicates() {
-  const bookmarked = new Set<string>();
-  const { data: bookmarks, error: bookmarkError } = await db.from("user_bookmarks").select("event_id");
-  if (bookmarkError) throw new Error(`Bookmark lookup failed: ${bookmarkError.message}`);
-  for (const row of bookmarks ?? []) bookmarked.add(row.event_id as string);
-
-  const groups = new Map<string, EventRow[]>();
+  const groups = new Map<string, DuplicateScanRow[]>();
   report.rows_scanned = 0;
-  await scanRows(async (rows) => {
+  await scanDuplicateRows(async (rows) => {
     for (const row of rows) {
       const key = duplicateGroupKey(row);
       if (!key) continue;
@@ -316,7 +343,30 @@ async function collapseExactDuplicates() {
     }
   });
 
-  for (const group of groups.values()) {
+  const candidateGroups = [...groups.values()].filter((group) => group.length > 1);
+  const candidateIds = [...new Set(candidateGroups.flatMap((group) => group.map((row) => row.id)))];
+  groups.clear();
+  const bookmarked = new Set<string>();
+  const fullRows = new Map<string, EventRow>();
+  const LOOKUP_BATCH_SIZE = 500;
+  for (let offset = 0; offset < candidateIds.length; offset += LOOKUP_BATCH_SIZE) {
+    const ids = candidateIds.slice(offset, offset + LOOKUP_BATCH_SIZE);
+    const [{ data: bookmarks, error: bookmarkError }, { data: events, error: eventError }] = await Promise.all([
+      db.from("user_bookmarks").select("event_id").in("event_id", ids),
+      db.from("events")
+        .select("id,title,description,url,source,source_type,category,published_at,created_at,primary_discovered_at,latitude,longitude,location_name,credibility_tier,event_count,impact_score,sources")
+        .in("id", ids),
+    ]);
+    if (bookmarkError) throw new Error(`Bookmark lookup failed: ${bookmarkError.message}`);
+    if (eventError) throw new Error(`Duplicate detail lookup failed: ${eventError.message}`);
+    for (const row of bookmarks ?? []) bookmarked.add(row.event_id as string);
+    for (const row of (events ?? []) as EventRow[]) fullRows.set(row.id, row);
+  }
+
+  for (const candidates of candidateGroups) {
+    const group = candidates
+      .map((candidate) => fullRows.get(candidate.id))
+      .filter((row): row is EventRow => row !== undefined);
     if (group.length < 2) continue;
     group.sort((a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime());
 

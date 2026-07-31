@@ -27,6 +27,7 @@ export type FetchHop = (
   address: string,
   timeoutMs: number,
   headers?: HeadersInit,
+  signal?: AbortSignal,
 ) => Promise<PinnedResponse>;
 
 export type PublicImageFetchOptions = {
@@ -34,13 +35,16 @@ export type PublicImageFetchOptions = {
   maxRedirects?: number;
   resolveHost?: ResolveHost;
   fetchHop?: FetchHop;
+  signal?: AbortSignal;
 };
 
 export type PublicBytesFetchOptions = PublicImageFetchOptions & {
   maxBytes: number;
   allowedContentTypes?: string[];
+  allowedStatuses?: number[];
   headers?: HeadersInit;
   requireHttps?: boolean;
+  stopWhen?: (bytes: Uint8Array, contentType: string) => boolean;
 };
 
 function unbracket(address: string) {
@@ -195,28 +199,61 @@ async function resolveHost(hostname: string): Promise<ResolvedAddress[]> {
   return answers.filter((answer): answer is ResolvedAddress => answer.family === 4 || answer.family === 6);
 }
 
+const MAX_PINNED_AGENT_POOL_SIZE = 32;
+const pinnedAgentPool = new Map<string, Agent>();
+
+function pooledPinnedAgent(url: URL, address: string, timeoutMs: number) {
+  const key = `${url.protocol}//${url.hostname}|${address}|${timeoutMs}`;
+  const existing = pinnedAgentPool.get(key);
+  if (existing) {
+    pinnedAgentPool.delete(key);
+    pinnedAgentPool.set(key, existing);
+    return existing;
+  }
+
+  const connector = buildConnector({ timeout: timeoutMs });
+  const dispatcher = new Agent({
+    connections: 2,
+    keepAliveTimeout: 5_000,
+    keepAliveMaxTimeout: 15_000,
+    connect(options, callback) {
+      connector({ ...options, hostname: address, servername: url.hostname }, callback);
+    },
+  });
+  pinnedAgentPool.set(key, dispatcher);
+
+  while (pinnedAgentPool.size > MAX_PINNED_AGENT_POOL_SIZE) {
+    const oldestKey = pinnedAgentPool.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    const oldest = pinnedAgentPool.get(oldestKey);
+    pinnedAgentPool.delete(oldestKey);
+    void oldest?.close();
+  }
+  return dispatcher;
+}
+
+export async function closePublicFetchAgents() {
+  const agents = [...pinnedAgentPool.values()];
+  pinnedAgentPool.clear();
+  await Promise.allSettled(agents.map((agent) => agent.close()));
+}
+
 async function fetchPinnedHop(
   url: URL,
   address: string,
   timeoutMs: number,
   headers?: HeadersInit,
+  signal?: AbortSignal,
 ): Promise<PinnedResponse> {
-  const connector = buildConnector({ timeout: timeoutMs });
-  const dispatcher = new Agent({
-    connections: 1,
-    connect(options, callback) {
-      connector({ ...options, hostname: address, servername: url.hostname }, callback);
-    },
-  });
+  const dispatcher = pooledPinnedAgent(url, address, timeoutMs);
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromCaller();
+  else signal?.addEventListener('abort', abortFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const closeDispatcher = async () => {
-    const compatible = dispatcher as Agent & {
-      close?: () => Promise<void> | void;
-      destroy?: () => Promise<void> | void;
-    };
-    if (typeof compatible.close === 'function') await compatible.close();
-    else if (typeof compatible.destroy === 'function') await compatible.destroy();
+  const releaseRequest = async () => {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abortFromCaller);
   };
   try {
     // `dispatcher` is supported by Node's undici fetch but is absent from the DOM RequestInit type.
@@ -229,14 +266,10 @@ async function fetchPinnedHop(
     });
     return {
       response,
-      close: async () => {
-        clearTimeout(timeout);
-        await closeDispatcher();
-      },
+      close: releaseRequest,
     };
   } catch (error) {
-    clearTimeout(timeout);
-    await closeDispatcher();
+    await releaseRequest();
     throw error;
   }
 }
@@ -245,10 +278,15 @@ function isRedirect(response: Response) {
   return [301, 302, 303, 307, 308].includes(response.status);
 }
 
-async function readResponsePrefix(response: Response, maxBytes: number) {
+async function readResponsePrefix(
+  response: Response,
+  maxBytes: number,
+  contentType: string,
+  stopWhen?: (bytes: Uint8Array, contentType: string) => boolean,
+) {
   if (!response.body || maxBytes <= 0) return null;
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const buffer = new Uint8Array(maxBytes);
   let size = 0;
   let truncated = false;
   try {
@@ -257,14 +295,18 @@ async function readResponsePrefix(response: Response, maxBytes: number) {
       if (done) break;
       const remaining = maxBytes - size;
       if (value.byteLength > remaining) {
-        chunks.push(value.subarray(0, remaining));
+        buffer.set(value.subarray(0, remaining), size);
         size += remaining;
         truncated = true;
         await reader.cancel();
         break;
       }
-      chunks.push(value);
+      buffer.set(value, size);
       size += value.byteLength;
+      if (stopWhen?.(buffer.subarray(0, size), contentType)) {
+        await reader.cancel();
+        break;
+      }
     }
     if (size === maxBytes && !truncated) {
       truncated = true;
@@ -274,13 +316,7 @@ async function readResponsePrefix(response: Response, maxBytes: number) {
     reader.releaseLock();
   }
 
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { bytes, truncated };
+  return { bytes: buffer.slice(0, size), truncated };
 }
 
 /**
@@ -313,7 +349,7 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
 
     let hop: PinnedResponse;
     try {
-      hop = await fetchHop(url, address.address, timeoutMs, options.headers);
+      hop = await fetchHop(url, address.address, timeoutMs, options.headers, options.signal);
     } catch {
       return null;
     }
@@ -325,7 +361,7 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
         rawDestination = new URL(location, url).toString();
         continue;
       }
-      if (!hop.response.ok) return null;
+      if (!hop.response.ok && !options.allowedStatuses?.includes(hop.response.status)) return null;
       const contentType = (hop.response.headers.get('content-type') || '')
         .split(';', 1)[0]
         .trim()
@@ -336,12 +372,26 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
       ) {
         return null;
       }
-      const prefix = await readResponsePrefix(hop.response, options.maxBytes);
-      return prefix ? {
-        ...prefix,
+      const responseMeta = {
         contentType,
         finalUrl: url.toString(),
-      } : null;
+        status: hop.response.status,
+        headers: new Headers(hop.response.headers),
+      };
+      if (!hop.response.body) {
+        return {
+          bytes: new Uint8Array(0),
+          truncated: false,
+          ...responseMeta,
+        };
+      }
+      const prefix = await readResponsePrefix(
+        hop.response,
+        options.maxBytes,
+        contentType,
+        options.stopWhen,
+      );
+      return prefix ? { ...prefix, ...responseMeta } : null;
     } finally {
       if (!hop.response.bodyUsed) await hop.response.body?.cancel();
       await hop.close();

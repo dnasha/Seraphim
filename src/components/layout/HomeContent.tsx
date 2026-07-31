@@ -42,7 +42,7 @@ function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string 
     return [...items.slice(0, limit - 1), items[pinnedIndex]];
 }
 
-export function HomeContent() {
+export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) {
     const { resolvedTheme, setTheme } = useTheme();
     const { user, supabase, isLoading: authLoading, isGuest, setShowAuthModal } = useAuth();
     const { preferences, isLoaded: preferencesLoaded, updatePreferences } = useSyncedPreferences(supabase, user);
@@ -525,7 +525,7 @@ export function HomeContent() {
     );
 
     return (
-        <div className={styles.appLayout}>
+        <div className={`${styles.appLayout} ${fontClassName}`}>
             {!isSidebarOpen && (
                 <div className={styles.floatingActions}>
                     <button

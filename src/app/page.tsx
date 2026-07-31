@@ -10,6 +10,8 @@ import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { HomeContent } from '@/components/layout/HomeContent';
+import { AuthProvider } from '@/components/auth/AuthProvider';
+import { merriweather } from './homeFont';
 import {
     absoluteSiteUrl,
     buildWebsiteJsonLd,
@@ -120,9 +122,11 @@ export default function Home() {
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: websiteJsonLd }}
             />
-            <Suspense fallback={null}>
-                <HomeContent />
-            </Suspense>
+            <AuthProvider>
+                <Suspense fallback={null}>
+                    <HomeContent fontClassName={merriweather.variable} />
+                </Suspense>
+            </AuthProvider>
         </>
     );
 }

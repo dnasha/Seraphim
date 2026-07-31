@@ -9,6 +9,18 @@ vi.mock("rss-parser", () => ({
 }));
 
 vi.mock("@/lib/security/feedFetch", () => ({
+  fetchBoundedFeed: async (url: string, options: { headers?: HeadersInit }) => {
+    const response = await fetch(url, { headers: options.headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = (await response.text()).trim();
+    if (!text.startsWith("<")) throw new Error("Invalid XML response");
+    return {
+      notModified: false,
+      text,
+      etag: response.headers.get('etag'),
+      lastModified: response.headers.get('last-modified'),
+    };
+  },
   fetchBoundedFeedText: async (url: string, options: { headers?: HeadersInit }) => {
     const response = await fetch(url, { headers: options.headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -212,6 +212,33 @@ describe('proxy and OG guards', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('cancels a public document read as soon as its completion predicate succeeds', async () => {
+    const cancel = vi.fn();
+    const firstChunk = new Uint8Array(24);
+    firstChunk.set([0x89, 0x50, 0x4e, 0x47]);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(firstChunk);
+        controller.enqueue(new Uint8Array(1024));
+      },
+      cancel,
+    });
+    const result = await fetchPublicBytes('https://news.example/image.png', {
+      maxBytes: 2048,
+      allowedContentTypes: ['image/'],
+      stopWhen: (bytes) => bytes.byteLength >= 24,
+      resolveHost: async () => [{ address: '198.51.100.77', family: 4 }],
+      fetchHop: async () => ({
+        response: new Response(stream, { headers: { 'content-type': 'image/png' } }),
+        close: async () => undefined,
+      }),
+    });
+
+    expect(result?.bytes.byteLength).toBe(24);
+    expect(result?.truncated).toBe(false);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('enforces HTTPS across public document redirects', async () => {
     const fetchHop = vi.fn(async () => ({
       response: new Response(null, { status: 302, headers: { location: 'http://news.example/feed.xml' } }),

@@ -111,35 +111,37 @@ async function reClusterHistoricalData() {
         }
         const masterUpdates: MasterUpdate[] = [];
 
-        const CONCURRENCY = 50;
+        const MATCH_BATCH_SIZE = 100;
         const eventMap = new Map(events.map(e => [e.id, e]));
 
-        for (let i = 0; i < events.length; i += CONCURRENCY) {
-            const chunk = events.slice(i, i + CONCURRENCY);
-            
-            // Execute vector similarity searches in parallel for the chunk.
-            const matchPromises = chunk.map(async (event) => {
+        for (let i = 0; i < events.length; i += MATCH_BATCH_SIZE) {
+            const chunk = events.slice(i, i + MATCH_BATCH_SIZE);
+            const queries = chunk.map((event, queryIndex) => {
                 if (processedIds.has(event.id) || !event.embedding) return null;
-                
                 const embedding = typeof event.embedding === 'string' ? JSON.parse(event.embedding) : event.embedding;
-                const windowStart = new Date(new Date(event.published_at).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                return {
+                    query_index: queryIndex,
+                    embedding: `[${embedding.join(',')}]`,
+                    since: new Date(new Date(event.published_at).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    threshold: SIMILARITY_THRESHOLD_PROXIMITY,
+                };
+            }).filter((query): query is NonNullable<typeof query> => query !== null);
 
-                const { data: matches, error } = await db
-                    .rpc('match_events', {
-                        query_embedding: embedding,
-                        match_threshold: SIMILARITY_THRESHOLD_PROXIMITY,
-                        match_count: 10,
-                        p_since: windowStart
-                    });
-
-                if (error) {
-                    console.error('[re-cluster] Match RPC error:', error.message);
-                    return null;
-                }
-                return { event, matches: matches || [] };
+            const { data: batchMatches, error: matchError } = await db.rpc('match_events_batch', {
+                p_queries: queries,
+                p_match_count: 10,
             });
-
-            const chunkResults = await Promise.all(matchPromises);
+            if (matchError) throw new Error(`[re-cluster] Batch match RPC failed: ${matchError.message}`);
+            const matchesByQuery = new Map<number, Array<{ id: string; similarity: number }>>();
+            for (const match of batchMatches ?? []) {
+                const rows = matchesByQuery.get(match.query_index) ?? [];
+                rows.push({ id: match.id, similarity: match.similarity });
+                matchesByQuery.set(match.query_index, rows);
+            }
+            const chunkResults = queries.map((query) => ({
+                event: chunk[query.query_index],
+                matches: matchesByQuery.get(query.query_index) ?? [],
+            }));
 
             // Fetch missing events identified as potential matches.
             const missingIds = new Set<string>();
@@ -254,35 +256,27 @@ async function reClusterHistoricalData() {
             }
         }
 
-        // Execute bulk database updates and deletions for the batch.
-        if (idsToDelete.length > 0) {
-            if (DRY_RUN) {
-                console.log(`[re-cluster] Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
-            } else {
-                console.log(`[re-cluster] Action: Deleting ${idsToDelete.length} merged items.`);
-                const DELETE_CHUNK_SIZE = 500;
-                for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
-                    const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
-                    const { error: delErr } = await db.from('events').delete().in('id', chunk);
-                    if (delErr) {
-                        console.error('[re-cluster] Bulk delete error:', delErr.message);
-                    }
-                }
-            }
-        }
-
-        if (masterUpdates.length > 0) {
-            if (DRY_RUN) {
-                console.log(`[re-cluster] Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
-            } else {
-                console.log(`[re-cluster] Action: Updating ${masterUpdates.length} master stories.`);
-                const UPDATE_CHUNK_SIZE = 50;
-                for (let i = 0; i < masterUpdates.length; i += UPDATE_CHUNK_SIZE) {
-                    const chunk = masterUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
-                    await Promise.all(chunk.map(u => 
-                        db.from('events').update(u.data).eq('id', u.id)
-                    ));
-                }
+        // Apply updates and deletions in bounded set-based transactions.
+        if (DRY_RUN) {
+            if (idsToDelete.length > 0) console.log(`[re-cluster] Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
+            if (masterUpdates.length > 0) console.log(`[re-cluster] Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
+        } else {
+            const WRITE_BATCH_SIZE = 100;
+            const writeBatches = Math.max(
+                Math.ceil(idsToDelete.length / WRITE_BATCH_SIZE),
+                Math.ceil(masterUpdates.length / WRITE_BATCH_SIZE),
+            );
+            for (let offset = 0; offset < writeBatches; offset++) {
+                const { error: writeError } = await db.rpc('apply_recluster_batch', {
+                    p_updates: masterUpdates
+                        .slice(offset * WRITE_BATCH_SIZE, (offset + 1) * WRITE_BATCH_SIZE)
+                        .map((update) => ({ id: update.id, ...update.data })),
+                    p_delete_ids: idsToDelete.slice(
+                        offset * WRITE_BATCH_SIZE,
+                        (offset + 1) * WRITE_BATCH_SIZE,
+                    ),
+                });
+                if (writeError) throw new Error(`[re-cluster] Batch write failed: ${writeError.message}`);
             }
         }
 

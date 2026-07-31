@@ -18,7 +18,10 @@ import {
 } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
-import { fetchBoundedFeedText } from '@/lib/security/feedFetch';
+import {
+    fetchBoundedFeed,
+    type FeedValidator,
+} from '@/lib/security/feedFetch';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
@@ -31,6 +34,11 @@ interface ParsedFeedItem {
     link?: string;
     pubDate?: string;
     isoDate?: string;
+}
+
+export interface RSSFetchOptions {
+    validators?: ReadonlyMap<string, FeedValidator>;
+    onValidator?: (sourceUrl: string, validator: FeedValidator) => void;
 }
 
 async function mapWithConcurrency<T, R>(
@@ -76,17 +84,31 @@ const parser = new Parser({
  * Fetches through the shared bounded, TLS-verified public-resource transport.
  */
 export async function fetchSingleFeed(
-    source: RSSSource, 
-    timeoutMs: number = DEFAULT_TIMEOUT
+    source: RSSSource,
+    timeoutMs: number = DEFAULT_TIMEOUT,
+    options: RSSFetchOptions = {},
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
     try {
-        const text = await fetchBoundedFeedText(source.url, {
+        const fetched = await fetchBoundedFeed(source.url, {
             headers: RSS_HEADERS,
             timeoutMs,
+            validator: options.validators?.get(source.url),
+        });
+        if (fetched.notModified) {
+            recordSourceAttempt({
+                source_name: source.name, source_type: 'rss', poll_tier: String(rssPollTier(source)),
+                outcome: 'healthy', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+                duration_ms: Date.now() - startedAt, error_code: null,
+            });
+            return [];
+        }
+        options.onValidator?.(source.url, {
+            etag: fetched.etag ?? null,
+            lastModified: fetched.lastModified ?? null,
         });
 
-        const feed = await parser.parseString(text);
+        const feed = await parser.parseString(fetched.text!);
 
         // Map feed items to internal NewsItem format. IDs are generated using a 
         // combination of source name, index, and timestamp to ensure uniqueness 
@@ -215,10 +237,17 @@ export async function fetchRedditFeed(
 /**
  * Fetches all configured RSS feeds concurrently and returns them sorted by date.
  */
-export async function fetchAllRSSFeeds(now = Date.now()): Promise<NewsItem[]> {
+export async function fetchAllRSSFeeds(
+    now = Date.now(),
+    options: RSSFetchOptions = {},
+): Promise<NewsItem[]> {
     const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now);
     console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due`);
-    const rssResults = await mapWithConcurrency(dueSources, RSS_CONCURRENCY, fetchSingleFeed);
+    const rssResults = await mapWithConcurrency(
+        dueSources,
+        RSS_CONCURRENCY,
+        (source) => fetchSingleFeed(source, DEFAULT_TIMEOUT, options),
+    );
     const allItems = rssResults.flat();
 
     return allItems.sort((a, b) =>

@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const maybeSingle = vi.hoisted(() => vi.fn());
 
+vi.mock('next/font/google', () => ({
+  Merriweather: () => ({ variable: 'font-merriweather' }),
+}));
+
 vi.mock('@/lib/core/supabase-admin', () => ({
   supabaseAdmin: {
     from: () => ({

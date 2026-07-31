@@ -23,7 +23,7 @@ import {
   latestReportTimestamp,
   matchesNewsId,
 } from "@/lib/utils/ranking";
-import { applyClientJitter } from "./utils";
+import { applyClientJitter, selectedJitterAnchor } from "./utils";
 import { useMapLayers } from "./useMapLayers";
 import { useMapCamera } from "./useMapCamera";
 import { startVisiblePolling } from "./overlayPolling";
@@ -287,12 +287,17 @@ export default function NewsMap({
     };
   }, [currentStyle, isDarkMode, onSyncedPreferencesChange, syncedPreferences?.mapStyle]);
 
+  const selectedJitterId = useMemo(
+    () => selectedJitterAnchor(items, selectedItemId),
+    [items, selectedItemId],
+  );
+
   // Pre-process items for the map: filter valid coords, apply jitter, and identify top stories.
   const geoItems = useMemo(() => {
     const valid = items.filter(
       (i) => i.latitude != null && i.longitude != null,
     );
-    const jittered = applyClientJitter(valid, selectedItemId);
+    const jittered = applyClientJitter(valid, selectedJitterId);
 
     const sorted = [...jittered].sort((a, b) => {
       if (sortMode === "hot") {
@@ -314,7 +319,7 @@ export default function NewsMap({
       ...item,
       isTopHot: topIds.has(canonicalNewsId(item)),
     }));
-  }, [items, sortMode, selectedItemId]);
+  }, [items, sortMode, selectedJitterId]);
 
   const selectedItem = useMemo(() => {
     if (!selectedItemId) return null;

@@ -18,7 +18,6 @@ import { supabaseAdmin as supabase } from "@/lib/core/supabase-admin";
 import { fetchAllRSSFeeds, fetchAllRedditFeeds } from "@/lib/api/rss";
 import { fetchHealthEventGNews } from "@/lib/api/gnews";
 import { fetchSocialFeeds } from "@/lib/api/social";
-import { enrichItemsWithLocation } from '@/lib/geocoding';
 import { NewsItem } from "@/lib/core/types";
 import type { DbEvent } from "@/types";
 import { hasUsableCoordinates, newsItemToDbEvent } from "./utils/transforms";
@@ -26,7 +25,6 @@ import { filterItemsByQuality } from "./utils/quality";
 import { prepareIncomingItems } from "./utils/content";
 import { parseExistingUrlRows } from "./utils/dedup";
 import { applySourceNoveltyLimits, loadSourceNoveltyLimits } from "./sourceBudget";
-import { resolveStoryMerges } from "./merger";
 import { enrichResolvedStoryImages } from "./imageEnrichment";
 import {
   ingestSequentially,
@@ -38,6 +36,8 @@ import {
   completeSourceHealthCollection,
 } from '@/lib/api/sourceHealth';
 import { createOperationsRecorder } from '@/lib/operationsCore';
+import { loadFeedValidators, persistFeedValidators } from './feedValidators';
+import { closePublicFetchAgents } from '@/lib/security/ogImage';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 
@@ -135,15 +135,22 @@ async function run(): Promise<void> {
     `[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`,
   );
 
+  const feedValidators = await loadFeedValidators(db);
+  const updatedFeedValidators = new Map<string, { etag?: string | null; lastModified?: string | null }>();
+
   const [rssItems, redditItems, gnewsItems, socialItems] =
     (await Promise.allSettled([
-      fetchAllRSSFeeds(),
+      fetchAllRSSFeeds(Date.now(), {
+        validators: feedValidators,
+        onValidator: (sourceUrl, validator) => updatedFeedValidators.set(sourceUrl, validator),
+      }),
       fetchAllRedditFeeds(),
       fetchHealthEventGNews(20),
       fetchSocialFeeds(),
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
     )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[]];
+  await persistFeedValidators(db, updatedFeedValidators);
 
   const rawItems: NewsItem[] = [
     ...rssItems,
@@ -234,6 +241,7 @@ async function run(): Promise<void> {
   }
 
   console.log("[scraper] Running NLP geocoding...");
+  const { enrichItemsWithLocation } = await import('@/lib/geocoding');
   const enrichedItems = await enrichItemsWithLocation(newItems);
 
   const geocodedCount = enrichedItems.filter(hasUsableCoordinates).length;
@@ -264,6 +272,7 @@ async function run(): Promise<void> {
     .filter((e): e is DbEvent => e !== null);
 
   console.log("[scraper] Running semantic vectorization...");
+  const { resolveStoryMerges } = await import("./merger");
   const { newEvents, merges, imageTargets } = await resolveStoryMerges(dbEvents, db);
   const imageStats = await enrichResolvedStoryImages({
     newEvents,
@@ -434,9 +443,13 @@ async function run(): Promise<void> {
   );
 }
 
-run().catch(async (err) => {
-  completeSourceHealthCollection();
-  await finalizeIngestionRun('failed', 'pipeline_failure');
-  console.error("[scraper] Unhandled error:", err);
-  process.exit(1);
-});
+run()
+  .catch(async (err) => {
+    completeSourceHealthCollection();
+    await finalizeIngestionRun('failed', 'pipeline_failure');
+    console.error("[scraper] Unhandled error:", err);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closePublicFetchAgents();
+  });
