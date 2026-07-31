@@ -202,6 +202,30 @@ async function resolveHost(hostname: string): Promise<ResolvedAddress[]> {
 const MAX_PINNED_AGENT_POOL_SIZE = 32;
 const pinnedAgentPool = new Map<string, Agent>();
 
+/**
+ * Node's undici Agent exposes close/destroy, while Bun's compatible dispatcher
+ * may expose neither. Transport cleanup must never turn a completed ingestion
+ * run into a failed job.
+ */
+export async function disposePublicFetchAgent(agent: unknown) {
+  if (!agent || typeof agent !== 'object') return;
+  const compatible = agent as {
+    close?: () => Promise<void> | void;
+    destroy?: () => Promise<void> | void;
+  };
+
+  try {
+    if (typeof compatible.close === 'function') {
+      await compatible.close();
+      return;
+    }
+    if (typeof compatible.destroy === 'function') await compatible.destroy();
+  } catch {
+    // The process is already exiting and requests are complete. Cleanup is
+    // best-effort, so a runtime-specific dispatcher error must not fail the run.
+  }
+}
+
 function pooledPinnedAgent(url: URL, address: string, timeoutMs: number) {
   const key = `${url.protocol}//${url.hostname}|${address}|${timeoutMs}`;
   const existing = pinnedAgentPool.get(key);
@@ -227,7 +251,7 @@ function pooledPinnedAgent(url: URL, address: string, timeoutMs: number) {
     if (!oldestKey) break;
     const oldest = pinnedAgentPool.get(oldestKey);
     pinnedAgentPool.delete(oldestKey);
-    void oldest?.close();
+    void disposePublicFetchAgent(oldest);
   }
   return dispatcher;
 }
@@ -235,7 +259,7 @@ function pooledPinnedAgent(url: URL, address: string, timeoutMs: number) {
 export async function closePublicFetchAgents() {
   const agents = [...pinnedAgentPool.values()];
   pinnedAgentPool.clear();
-  await Promise.allSettled(agents.map((agent) => agent.close()));
+  await Promise.all(agents.map(disposePublicFetchAgent));
 }
 
 async function fetchPinnedHop(
