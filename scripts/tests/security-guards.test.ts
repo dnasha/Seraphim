@@ -11,6 +11,7 @@ import {
 } from '@/lib/security/payments';
 import { parseProxyCoordinate, validateTilePath } from '@/lib/security/proxyGuards';
 import {
+  disposePublicFetchAgent,
   fetchPublicBytes,
   fetchPublicImage,
   isPublicIpAddress,
@@ -117,6 +118,20 @@ describe('payment guards', () => {
 });
 
 describe('proxy and OG guards', () => {
+  it('cleans up dispatchers across Node and Bun-compatible agent shapes', async () => {
+    const close = vi.fn(async () => undefined);
+    const destroy = vi.fn(async () => undefined);
+
+    await expect(disposePublicFetchAgent({ close })).resolves.toBeUndefined();
+    await expect(disposePublicFetchAgent({ destroy })).resolves.toBeUndefined();
+    await expect(disposePublicFetchAgent({})).resolves.toBeUndefined();
+    await expect(disposePublicFetchAgent({ close: () => { throw new Error('cleanup failed'); } }))
+      .resolves.toBeUndefined();
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('validates coordinates and tile ranges', () => {
     expect(parseProxyCoordinate('37.7', -90, 90)).toBe(37.7);
     expect(parseProxyCoordinate('999', -90, 90)).toBeNull();
