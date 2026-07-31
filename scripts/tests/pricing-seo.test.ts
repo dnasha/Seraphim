@@ -11,6 +11,8 @@ describe('pricing search parameters', () => {
   it('rejects external and protocol-relative return destinations', () => {
     expect(sanitizeReturnTo('https://example.com')).toBe('/');
     expect(sanitizeReturnTo('//example.com')).toBe('/');
+    expect(sanitizeReturnTo('/\\evil.example')).toBe('/');
+    expect(sanitizeReturnTo('/account\nnext')).toBe('/');
     expect(sanitizeReturnTo(undefined)).toBe('/');
   });
 

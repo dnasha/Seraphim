@@ -1,3 +1,5 @@
+import { safeRelativePath } from '@/lib/security/redirects';
+
 export interface PricingSearchParams {
   returnTo: string;
   requestedFeature: string | null;
@@ -10,11 +12,7 @@ function firstValue(value: string | string[] | undefined) {
 }
 
 export function sanitizeReturnTo(value: string | string[] | undefined) {
-  const candidate = firstValue(value);
-  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) {
-    return '/';
-  }
-  return candidate;
+  return safeRelativePath(firstValue(value));
 }
 
 export function parsePricingSearchParams(

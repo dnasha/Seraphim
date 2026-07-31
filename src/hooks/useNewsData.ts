@@ -693,7 +693,10 @@ export function useNewsData({
     useEffect(() => {
         if (typeof window === 'undefined' || !enabled) return;
 
-        let pollTimeout: NodeJS.Timeout | undefined;
+        let pollTimeout: ReturnType<typeof setTimeout> | undefined;
+        let nextPollAt = 0;
+        let disposed = false;
+        let refreshInFlight = false;
 
         const getMsToNextFetch = (): number => {
             const now = new Date();
@@ -717,21 +720,54 @@ export function useNewsData({
         };
 
         const scheduleNextPoll = () => {
+            if (disposed || document.visibilityState === 'hidden') return;
+            if (pollTimeout) clearTimeout(pollTimeout);
             const ms = getMsToNextFetch();
+            nextPollAt = Date.now() + ms;
             log(`[useNewsData] Scheduling next scraper-aligned update poll in ${(ms / 1000 / 60).toFixed(2)} minutes.`);
             
             pollTimeout = setTimeout(async () => {
+                pollTimeout = undefined;
+                if (document.visibilityState === 'hidden') return;
                 log('[useNewsData] Scraper-aligned update poll triggered. Fetching fresh events...');
                 // Trigger a refresh (caches are cleared, new events are merged, existing viewport is retained)
-                await coordinateLoad(true);
+                refreshInFlight = true;
+                try {
+                    await coordinateLoad(true);
+                } finally {
+                    refreshInFlight = false;
+                }
                 scheduleNextPoll();
             }, ms);
         };
 
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                if (pollTimeout) clearTimeout(pollTimeout);
+                pollTimeout = undefined;
+                return;
+            }
+
+            if (nextPollAt > 0 && Date.now() >= nextPollAt) {
+                if (refreshInFlight) return;
+                nextPollAt = 0;
+                refreshInFlight = true;
+                void coordinateLoad(true).finally(() => {
+                    refreshInFlight = false;
+                    scheduleNextPoll();
+                });
+            } else {
+                scheduleNextPoll();
+            }
+        };
+
         scheduleNextPoll();
+        document.addEventListener('visibilitychange', onVisibilityChange);
 
         return () => {
+            disposed = true;
             if (pollTimeout) clearTimeout(pollTimeout);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
         };
     }, [enabled, coordinateLoad]);
 

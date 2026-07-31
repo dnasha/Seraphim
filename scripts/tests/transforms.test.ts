@@ -104,6 +104,10 @@ describe('newsItemToDbEvent', () => {
         expect(newsItemToDbEvent(item)).toBeNull();
     });
 
+    it('rejects malformed HTTP URLs instead of storing them', () => {
+        expect(newsItemToDbEvent(makeNewsItem({ url: 'https://%' }))).toBeNull();
+    });
+
     it('allows http:// URLs', () => {
         const item = makeNewsItem({ url: 'http://example.com/article' });
         const event = newsItemToDbEvent(item);
@@ -125,6 +129,11 @@ describe('newsItemToDbEvent', () => {
         const event = newsItemToDbEvent(item);
         expect(event!.title).toBe('Testtitle');
         expect(event!.description).toBe('Desctext');
+    });
+
+    it('caps titles at the database boundary even when preparation is bypassed', () => {
+        const event = newsItemToDbEvent(makeNewsItem({ title: 'x'.repeat(10_000) }));
+        expect(event!.title).toHaveLength(500);
     });
 
     it('rejects an item with NaN latitude', () => {

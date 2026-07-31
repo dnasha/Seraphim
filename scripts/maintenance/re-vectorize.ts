@@ -51,10 +51,10 @@ async function run() {
     let processed = 0;
 
     while (true) {
-        /* Fetch a batch of events with all required columns to satisfy constraints during upsert */
+        /* Fetch only the fields needed to build embeddings. */
         const { data: batch, error: fetchErr } = await supabase
             .from('events')
-            .select('id, title, url, source, source_type, published_at, description')
+            .select('id, title, published_at, description')
             .is('embedding', null)
             .order('published_at', { ascending: false })
             .limit(BATCH_SIZE);
@@ -73,15 +73,15 @@ async function run() {
         const texts = batch.map(e => buildEmbeddingText(e.title, e.description));
         const embeddings = await generateEmbeddings(texts);
 
-        /* Write embeddings back in one bulk operation, including required columns */
+        /* Update only the embedding column through one set-based RPC. */
         const updates = batch.map((item, i) => ({
-            ...item,
+            id: item.id,
             embedding: `[${embeddings[i].join(',')}]`
         }));
 
-        const { error: updateErr } = await supabase
-            .from('events')
-            .upsert(updates);
+        const { error: updateErr } = await supabase.rpc('update_event_embeddings', {
+            p_updates: updates,
+        });
 
         if (updateErr) {
             console.error(`[re-vectorize] Bulk update failed:`, updateErr.message);

@@ -7,6 +7,7 @@
  */
 
 import Parser from 'rss-parser';
+import { fetchBoundedFeedText } from '@/lib/security/feedFetch';
 import * as cheerio from 'cheerio';
 import { NewsItem } from '@/lib/core/types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
@@ -195,15 +196,18 @@ export async function scrapeTelegramChannel(
  * Fetches feed with timeout and instance validation.
  * Includes a check for whitelist-only instances that block anonymous RSS readers.
  */
-async function fetchInstanceTimeout(url: string, timeoutMs = DEFAULT_TIMEOUT): Promise<ReturnType<typeof parser.parseURL>> {
-    const res = await fetch(url, {
+async function fetchInstanceTimeout(
+    url: string,
+    timeoutMs = DEFAULT_TIMEOUT,
+    signal?: AbortSignal,
+): Promise<ReturnType<typeof parser.parseURL>> {
+    const text = await fetchBoundedFeedText(url, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
-        signal: AbortSignal.timeout(timeoutMs)
+        timeoutMs,
+        signal,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const feed = await parser.parseString(text) as any;
 
@@ -270,6 +274,8 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
  * Remembers the 'best' instance to optimize subsequent requests.
  */
 let bestNitterInstance: string | null = null;
+type InstanceDiscovery = { instance: string; username: string; feed: XFeed };
+let nitterDiscovery: Promise<InstanceDiscovery | null> | null = null;
 function feedHasRecentItems(feed: XFeed, now = Date.now()): boolean {
     return (feed.items ?? []).some((item) => {
         const value = item.pubDate || item.isoDate;
@@ -283,22 +289,41 @@ function feedHasRecentItems(feed: XFeed, now = Date.now()): boolean {
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         if (bestNitterInstance) {
+            const preferred = bestNitterInstance;
             try {
-                const feed = await fetchInstanceTimeout(`${bestNitterInstance}/${username}/rss`);
+                const feed = await fetchInstanceTimeout(`${preferred}/${username}/rss`);
                 if (!feedHasRecentItems(feed)) throw new Error('Stale Nitter feed');
                 return feed;
             } catch {
-                bestNitterInstance = null;
+                if (bestNitterInstance === preferred) bestNitterInstance = null;
             }
         }
 
-        const promises = NITTER_INSTANCES.map(async (instance) => {
-            const res = await fetchInstanceTimeout(`${instance}/${username}/rss`);
-            if (!feedHasRecentItems(res)) throw new Error('Stale Nitter feed');
-            bestNitterInstance = instance;
-            return res;
-        });
-        return await Promise.any(promises);
+        if (!nitterDiscovery) {
+            const controller = new AbortController();
+            nitterDiscovery = Promise.any(NITTER_INSTANCES.map(async (instance) => {
+                const feed = await fetchInstanceTimeout(
+                    `${instance}/${username}/rss`,
+                    DEFAULT_TIMEOUT,
+                    controller.signal,
+                );
+                if (!feedHasRecentItems(feed)) throw new Error('Stale Nitter feed');
+                return { instance, username, feed };
+            }))
+                .then((result) => {
+                    bestNitterInstance = result.instance;
+                    controller.abort();
+                    return result;
+                })
+                .catch(() => null)
+                .finally(() => controller.abort());
+        }
+        const discovered = await nitterDiscovery;
+        nitterDiscovery = null;
+        if (!discovered) return null;
+        if (discovered.username === username) return discovered.feed;
+        const feed = await fetchInstanceTimeout(`${discovered.instance}/${username}/rss`);
+        return feedHasRecentItems(feed) ? feed : null;
     } catch {
         return null;
     }
@@ -309,25 +334,45 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
  * Similar to Nitter, utilizes community-hosted RSSHub instances as a secondary fallback.
  */
 let bestRSSHubInstance: string | null = null;
+let rssHubDiscovery: Promise<InstanceDiscovery | null> | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
     try {
         if (bestRSSHubInstance) {
+            const preferred = bestRSSHubInstance;
             try {
-                const feed = await fetchInstanceTimeout(`${bestRSSHubInstance}/twitter/user/${username}`);
+                const feed = await fetchInstanceTimeout(`${preferred}/twitter/user/${username}`);
                 if (!feedHasRecentItems(feed)) throw new Error('Stale RSSHub feed');
                 return feed;
             } catch {
-                bestRSSHubInstance = null;
+                if (bestRSSHubInstance === preferred) bestRSSHubInstance = null;
             }
         }
 
-        const promises = RSSHUB_INSTANCES.map(async (instance) => {
-            const res = await fetchInstanceTimeout(`${instance}/twitter/user/${username}`);
-            if (!feedHasRecentItems(res)) throw new Error('Stale RSSHub feed');
-            bestRSSHubInstance = instance;
-            return res;
-        });
-        return await Promise.any(promises);
+        if (!rssHubDiscovery) {
+            const controller = new AbortController();
+            rssHubDiscovery = Promise.any(RSSHUB_INSTANCES.map(async (instance) => {
+                const feed = await fetchInstanceTimeout(
+                    `${instance}/twitter/user/${username}`,
+                    DEFAULT_TIMEOUT,
+                    controller.signal,
+                );
+                if (!feedHasRecentItems(feed)) throw new Error('Stale RSSHub feed');
+                return { instance, username, feed };
+            }))
+                .then((result) => {
+                    bestRSSHubInstance = result.instance;
+                    controller.abort();
+                    return result;
+                })
+                .catch(() => null)
+                .finally(() => controller.abort());
+        }
+        const discovered = await rssHubDiscovery;
+        rssHubDiscovery = null;
+        if (!discovered) return null;
+        if (discovered.username === username) return discovered.feed;
+        const feed = await fetchInstanceTimeout(`${discovered.instance}/twitter/user/${username}`);
+        return feedHasRecentItems(feed) ? feed : null;
     } catch {
         return null;
     }

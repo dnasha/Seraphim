@@ -6,6 +6,7 @@ import {
   createPageMetadata,
   serializeJsonLd,
 } from '@/lib/siteConfig';
+import { AuthProvider } from '@/components/auth/AuthProvider';
 
 const PRICING_DESCRIPTION =
   'Compare Seraphim plans for live global event monitoring, deeper history, advanced filters, intelligence overlays, and investigation tools.';
@@ -30,7 +31,9 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: softwareJsonLd }}
       />
-      <PricingPageClient {...pricingParams} />
+      <AuthProvider>
+        <PricingPageClient {...pricingParams} />
+      </AuthProvider>
     </>
   );
 }

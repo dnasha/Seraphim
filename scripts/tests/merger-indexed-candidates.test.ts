@@ -1,13 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DbEvent } from "@/types";
+
+const vectorMocks = vi.hoisted(() => ({
+  generateEmbeddings: vi.fn(async (texts: string[]) =>
+    texts.map(() => Array.from({ length: 384 }, (_, index) => index === 0 ? 1 : 0)),
+  ),
+}));
 
 vi.mock("@/lib/utils/vectorize", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/utils/vectorize")>();
   return {
     ...actual,
-    generateEmbeddings: vi.fn(async (texts: string[]) =>
-      texts.map(() => Array.from({ length: 384 }, (_, index) => index === 0 ? 1 : 0)),
-    ),
+    generateEmbeddings: vectorMocks.generateEmbeddings,
   };
 });
 
@@ -32,6 +36,10 @@ const incoming = (overrides: Partial<DbEvent> = {}): DbEvent => ({
 });
 
 describe("indexed scraper candidate matching", () => {
+  beforeEach(() => {
+    vectorMocks.generateEmbeddings.mockClear();
+  });
+
   it("uses the batch matcher and fetches full details only for the selected event", async () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
@@ -123,5 +131,85 @@ describe("indexed scraper candidate matching", () => {
       image_url: "https://second.example/new.jpg",
       event_count: 2,
     });
+  });
+
+  it("does not embed an incoming event that already has an exact database title match", async () => {
+    const existingId = "11111111-1111-4111-8111-111111111111";
+    const titleQuery = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({
+        data: [{ id: existingId, title: incoming().title, published_at: "2026-07-12T11:00:00.000Z" }],
+        error: null,
+      }),
+    };
+    const detailQuery = {
+      select: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({
+        data: [{
+          id: existingId, sources: [], latitude: 10, longitude: 20,
+          location_name: "Example City", title: incoming().title,
+          description: "Earlier details.", credibility_tier: 2, impact_score: 1,
+          event_count: 1, source: "Existing", source_type: "rss",
+          url: "https://existing.example/report", published_at: "2026-07-12T11:00:00.000Z",
+        }],
+        error: null,
+      }),
+    };
+    const from = vi.fn().mockReturnValueOnce(titleQuery).mockReturnValueOnce(detailQuery);
+    const rpc = vi.fn();
+
+    const result = await resolveStoryMerges([incoming()], { from, rpc } as never);
+
+    expect(vectorMocks.generateEmbeddings).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+    expect(result.merges.has(existingId)).toBe(true);
+  });
+
+  it("embeds and semantically rematches when an exact-title row disappears", async () => {
+    const vanishedId = "11111111-1111-4111-8111-111111111111";
+    const fallbackId = "22222222-2222-4222-8222-222222222222";
+    const titleQuery = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({
+        data: [{ id: vanishedId, title: incoming().title, published_at: "2026-07-12T11:00:00.000Z" }],
+        error: null,
+      }),
+    };
+    const vanishedDetailQuery = {
+      select: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const fallbackDetailQuery = {
+      select: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({
+        data: [{
+          id: fallbackId, sources: [], latitude: 10, longitude: 20,
+          location_name: "Example City", title: "Related report from Example City",
+          description: "Earlier details.", credibility_tier: 2, impact_score: 1,
+          event_count: 1, source: "Existing", source_type: "rss",
+          url: "https://existing.example/related", published_at: "2026-07-12T11:00:00.000Z",
+        }],
+        error: null,
+      }),
+    };
+    const from = vi.fn()
+      .mockReturnValueOnce(titleQuery)
+      .mockReturnValueOnce(vanishedDetailQuery)
+      .mockReturnValueOnce(fallbackDetailQuery);
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{
+        query_index: 0, event_id: fallbackId, similarity: 0.9,
+        latitude: 10, longitude: 20, location_name: "Example City",
+      }],
+      error: null,
+    });
+
+    const result = await resolveStoryMerges([incoming()], { from, rpc } as never);
+
+    expect(vectorMocks.generateEmbeddings).toHaveBeenCalledOnce();
+    expect(result.merges.has(fallbackId)).toBe(true);
+    expect(result.newEvents).toHaveLength(0);
   });
 });

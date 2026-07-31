@@ -15,6 +15,7 @@ import Image from "next/image";
 import { getNewsImagePresentation } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import TimelineGateCta from './TimelineGateCta';
+import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 
 interface EventCardProps {
   item: NewsItem;
@@ -326,6 +327,7 @@ export default function EventCard({
               ) : (
                 visibleSources.map((src, i) => {
                   const srcStyle = getSourceStyle(src.name);
+                  const sourceUrl = safeExternalHttpUrl(src.url);
                   let srcTimeAgo = "";
                   try {
                     srcTimeAgo = formatTimeAgo(src.discoveredAt);
@@ -349,15 +351,19 @@ export default function EventCard({
                         >
                           {src.name}
                         </span>
-                        <a
-                          className={styles.timelineEntryLink}
-                          href={src.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`Open ${src.name} in a new tab`}
-                        >
-                          {new URL(src.url).hostname}
-                        </a>
+                        {sourceUrl ? (
+                          <a
+                            className={styles.timelineEntryLink}
+                            href={sourceUrl.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open ${src.name} in a new tab`}
+                          >
+                            {sourceUrl.hostname}
+                          </a>
+                        ) : (
+                          <span className={styles.timelineEntryLink}>{src.name}</span>
+                        )}
                       </div>
                       {showTimelineGap && i === 0 && (
                         <div

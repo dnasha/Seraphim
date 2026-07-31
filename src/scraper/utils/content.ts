@@ -1,6 +1,7 @@
 import type { NewsItem } from "@/lib/core/types";
 
 export const MAX_STORED_DESCRIPTION_CHARS = 2_000;
+export const MAX_STORED_TITLE_CHARS = 500;
 export const LOW_SIGNAL_RETENTION_DAYS = 180;
 
 const TRACKING_PARAMETER_NAMES = new Set([
@@ -53,7 +54,7 @@ export function canonicalizeEventUrl(rawUrl: unknown): string {
 
   try {
     const url = new URL(input);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return input;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
 
     url.hostname = url.hostname.toLowerCase();
     url.hash = "";
@@ -71,8 +72,24 @@ export function canonicalizeEventUrl(rawUrl: unknown): string {
 
     return url.toString();
   } catch {
-    return input;
+    return "";
   }
+}
+
+export function cleanAndCapTitle(title: unknown): string {
+  const rawTitle = coerceFeedText(title);
+  if (!rawTitle) return "";
+
+  const codePoints = rawTitle[Symbol.iterator]();
+  let bounded = "";
+  let length = 0;
+  while (length < MAX_STORED_TITLE_CHARS) {
+    const next = codePoints.next();
+    if (next.done) break;
+    bounded += next.value;
+    length += 1;
+  }
+  return bounded.replace(/\s+/g, " ").trim();
 }
 
 export function normalizeTitleFingerprint(title: string): string {
@@ -145,7 +162,7 @@ export function prepareIncomingItems(items: NewsItem[]): NewsItem[] {
 
   for (const original of items) {
     const url = canonicalizeEventUrl(original.url);
-    const title = coerceFeedText(original.title).replace(/\s+/g, " ").trim();
+    const title = cleanAndCapTitle(original.title);
     const description = cleanAndCapDescription(original.description);
     if (!url || !title) continue;
 

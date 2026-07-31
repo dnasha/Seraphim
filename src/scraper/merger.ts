@@ -277,23 +277,6 @@ export async function resolveStoryMerges(
 
   if (dbEvents.length === 0) return { newEvents, merges, imageTargets: [] };
 
-  console.log(`[vectorize] Generating embeddings for ${dbEvents.length} items...`);
-  const texts = dbEvents.map((event) => buildEmbeddingText(event.title, event.description));
-  const startMs = Date.now();
-  let embeddings: Array<number[] | null>;
-  try {
-    embeddings = await generateEmbeddings(texts);
-  } catch {
-    console.error("[vectorize] Embedding generation failed. Exact matching will continue without vectors.");
-    embeddings = dbEvents.map(() => null);
-  }
-  console.log(`[vectorize] Embeddings generated in ${((Date.now() - startMs) / 1000).toFixed(1)}s`);
-
-  for (let index = 0; index < dbEvents.length; index++) {
-    const embedding = embeddings[index];
-    if (embedding) dbEvents[index].embedding = `[${embedding.join(",")}]`;
-  }
-
   const since = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
   const eventFingerprints = dbEvents.map((event) => normalizeTitleFingerprint(event.title));
   let titleRows: Array<{ id: string; title: string; published_at: string }> = [];
@@ -316,6 +299,36 @@ export async function resolveStoryMerges(
     return fingerprint.length >= 24 ? exactTitleIds.get(fingerprint) ?? null : null;
   });
 
+  const embeddings: Array<number[] | null> = dbEvents.map(() => null);
+  const embedIndices = async (indices: number[]) => {
+    if (indices.length === 0) return true;
+    console.log(`[vectorize] Generating embeddings for ${indices.length}/${dbEvents.length} items...`);
+    const texts = indices.map((index) => buildEmbeddingText(
+      dbEvents[index].title,
+      dbEvents[index].description,
+    ));
+    const startMs = Date.now();
+    try {
+      const generated = await generateEmbeddings(texts);
+      for (let offset = 0; offset < indices.length; offset++) {
+        const index = indices[offset];
+        const embedding = generated[offset];
+        embeddings[index] = embedding;
+        dbEvents[index].embedding = `[${embedding.join(",")}]`;
+      }
+      console.log(`[vectorize] Embeddings generated in ${((Date.now() - startMs) / 1000).toFixed(1)}s`);
+      return true;
+    } catch {
+      console.error("[vectorize] Embedding generation failed. Exact matching will continue without vectors.");
+      return false;
+    }
+  };
+
+  const unmatchedIndices = bestMatchIds
+    .map((matchId, index) => matchId ? null : index)
+    .filter((index): index is number => index !== null);
+  await embedIndices(unmatchedIndices);
+
   let indexedCandidates: Map<number, VectorCandidateRow[]> | null = null;
   let fallbackCandidates: FallbackCandidate[] | null = null;
   try {
@@ -330,42 +343,46 @@ export async function resolveStoryMerges(
     console.log(`[vectorize] ${fallbackCandidates.length} fallback candidates loaded`);
   }
 
-  for (let index = 0; index < dbEvents.length; index++) {
-    if (bestMatchIds[index]) continue;
-    const event = dbEvents[index];
-    const embedding = embeddings[index];
-    if (!embedding) continue;
+  const assignSemanticMatches = (indices: number[]) => {
+    for (const index of indices) {
+      if (bestMatchIds[index]) continue;
+      const event = dbEvents[index];
+      const embedding = embeddings[index];
+      if (!embedding) continue;
 
-    if (indexedCandidates) {
-      let best: VectorCandidateRow | null = null;
-      for (const candidate of indexedCandidates.get(index) ?? []) {
-        if (!candidatePassesMergeThreshold(event, candidate)) continue;
-        if (!best || candidate.similarity > best.similarity) best = candidate;
+      if (indexedCandidates) {
+        let best: VectorCandidateRow | null = null;
+        for (const candidate of indexedCandidates.get(index) ?? []) {
+          if (!candidatePassesMergeThreshold(event, candidate)) continue;
+          if (!best || candidate.similarity > best.similarity) best = candidate;
+        }
+        bestMatchIds[index] = best?.event_id ?? null;
+        continue;
       }
-      bestMatchIds[index] = best?.event_id ?? null;
-      continue;
-    }
 
-    let bestId: string | null = null;
-    let highestSimilarity = -1;
-    for (const candidate of fallbackCandidates ?? []) {
-      const isExactTitle = eventFingerprints[index].length >= 24 &&
-        eventFingerprints[index] === candidate.fingerprint;
-      const similarity = cosineSimilarity(embedding, candidate.embedding);
-      const passes = isExactTitle || candidatePassesMergeThreshold(event, {
-        similarity,
-        latitude: candidate.latitude ?? null,
-        longitude: candidate.longitude ?? null,
-        location_name: candidate.location_name ?? null,
-      });
-      const score = isExactTitle ? 2 : similarity;
-      if (passes && score > highestSimilarity) {
-        highestSimilarity = score;
-        bestId = candidate.id;
+      let bestId: string | null = null;
+      let highestSimilarity = -1;
+      for (const candidate of fallbackCandidates ?? []) {
+        const isExactTitle = eventFingerprints[index].length >= 24 &&
+          eventFingerprints[index] === candidate.fingerprint;
+        const similarity = cosineSimilarity(embedding, candidate.embedding);
+        const passes = isExactTitle || candidatePassesMergeThreshold(event, {
+          similarity,
+          latitude: candidate.latitude ?? null,
+          longitude: candidate.longitude ?? null,
+          location_name: candidate.location_name ?? null,
+        });
+        const score = isExactTitle ? 2 : similarity;
+        if (passes && score > highestSimilarity) {
+          highestSimilarity = score;
+          bestId = candidate.id;
+        }
       }
+      bestMatchIds[index] = bestId;
     }
-    bestMatchIds[index] = bestId;
-  }
+  };
+
+  assignSemanticMatches(unmatchedIndices);
 
   let candidateDetails: Map<string, CandidateDetail>;
   if (fallbackCandidates) {
@@ -373,6 +390,37 @@ export async function resolveStoryMerges(
   } else {
     const matchedIds = [...new Set(bestMatchIds.filter((id): id is string => id !== null))];
     candidateDetails = await fetchCandidateDetails(db, matchedIds);
+  }
+
+  // An exact-title row can be deleted between the lightweight title lookup and
+  // the detail query. Preserve the old behavior by embedding only those raced
+  // items on demand and giving semantic matching one chance before insertion.
+  const racedExactIndices = bestMatchIds
+    .map((matchId, index) => matchId && !candidateDetails.has(matchId) ? index : null)
+    .filter((index): index is number => index !== null);
+  if (racedExactIndices.length > 0) {
+    for (const index of racedExactIndices) bestMatchIds[index] = null;
+    await embedIndices(racedExactIndices);
+    if (indexedCandidates) {
+      const racedEmbeddings = embeddings.map((embedding, index) =>
+        racedExactIndices.includes(index) ? embedding : null
+      );
+      const racedCandidates = await fetchIndexedVectorCandidates(db, racedEmbeddings, since);
+      for (const [index, candidates] of racedCandidates) {
+        indexedCandidates.set(index, candidates);
+      }
+    }
+    assignSemanticMatches(racedExactIndices);
+
+    if (!fallbackCandidates) {
+      const racedMatchIds = [...new Set(
+        racedExactIndices
+          .map((index) => bestMatchIds[index])
+          .filter((id): id is string => id !== null),
+      )];
+      const racedDetails = await fetchCandidateDetails(db, racedMatchIds);
+      for (const [id, detail] of racedDetails) candidateDetails.set(id, detail);
+    }
   }
 
   let mergeCount = 0;

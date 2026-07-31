@@ -1,4 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/security/feedFetch", () => ({
+  fetchBoundedFeedText: async (url: string, options: { headers?: HeadersInit }) => {
+    const response = await fetch(url, { headers: options.headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = (await response.text()).trim();
+    if (!text.startsWith("<")) throw new Error("Invalid XML response");
+    return text;
+  },
+}));
+
 import { fetchXFeed, scrapeTelegramChannel } from "@/lib/api/social";
 
 afterEach(() => {

@@ -122,6 +122,7 @@ export async function probePublicNewsImage(
     ...options,
     maxBytes: options.imageProbeMaxBytes ?? IMAGE_PROBE_MAX_BYTES,
     allowedContentTypes: ['image/'],
+    stopWhen: (bytes, contentType) => imageDimensions(bytes, contentType) !== null,
   });
   if (!result || result.contentType === 'image/svg+xml') return null;
   const dimensions = imageDimensions(result.bytes, result.contentType);

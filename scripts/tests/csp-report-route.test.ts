@@ -98,7 +98,7 @@ describe('POST /api/csp-report', () => {
     await POST(makeRequest());
     await POST(makeRequest());
 
-    expect(mocks.rateLimit).toHaveBeenCalledTimes(3);
+    expect(mocks.rateLimit).toHaveBeenCalledTimes(5);
     expect(mocks.recordMetric).toHaveBeenCalledOnce();
     expect(mocks.recordIncident).toHaveBeenCalledOnce();
   });
@@ -141,6 +141,69 @@ describe('POST /api/csp-report', () => {
     expect(response.status).toBe(204);
     expect(mocks.rateLimit).not.toHaveBeenCalled();
     expect(mocks.recordMetric).not.toHaveBeenCalled();
+    expect(mocks.recordIncident).not.toHaveBeenCalled();
+  });
+
+  it('rejects a declared oversized report without reading its body', async () => {
+    const getReader = vi.fn();
+    const request = {
+      headers: new Headers({
+        'content-type': 'application/csp-report',
+        'content-length': '20000',
+        'x-vercel-forwarded-for': '198.51.100.34',
+      }),
+      body: { getReader },
+    };
+
+    expect((await POST(request as never)).status).toBe(204);
+    expect(getReader).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.recordIncident).not.toHaveBeenCalled();
+  });
+
+  it('cancels a lengthless report as soon as its streamed byte budget is exceeded', async () => {
+    const cancel = vi.fn();
+    let chunksSent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunksSent += 1;
+        controller.enqueue(new Uint8Array(9_000));
+        if (chunksSent === 3) controller.close();
+      },
+      cancel,
+    }, { highWaterMark: 0 });
+    const request = new Request('https://seraphim.example/api/csp-report', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/csp-report',
+        'x-vercel-forwarded-for': '198.51.100.35',
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+
+    expect((await POST(request as never)).status).toBe(204);
+    expect(chunksSent).toBe(2);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.recordIncident).not.toHaveBeenCalled();
+  });
+
+  it('applies ingress rate limits before pulling a report body', async () => {
+    mocks.rateLimit.mockImplementation(async (prefix: string) => ({
+      success: !prefix.endsWith('seraphim-csp-client'),
+      reset: Date.now() + 60_000,
+    }));
+    const getReader = vi.fn();
+    const request = {
+      headers: new Headers({
+        'content-type': 'application/csp-report',
+        'x-vercel-forwarded-for': '198.51.100.36',
+      }),
+      body: { getReader },
+    };
+
+    expect((await POST(request as never)).status).toBe(204);
+    expect(getReader).not.toHaveBeenCalled();
     expect(mocks.recordIncident).not.toHaveBeenCalled();
   });
 

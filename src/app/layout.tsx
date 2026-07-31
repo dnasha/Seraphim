@@ -10,7 +10,6 @@ import type { Metadata, Viewport } from "next";
 import {
   Inter,
   Space_Grotesk,
-  Merriweather,
 } from "next/font/google";
 import { Providers } from "@/components/layout/Providers";
 import CookieConsent from "@/components/ui/CookieConsent";
@@ -37,14 +36,6 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-space-grotesk",
-  display: "swap",
-});
-
-const merriweather = Merriweather({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  style: ["normal"],
-  variable: "--font-merriweather",
   display: "swap",
 });
 
@@ -109,7 +100,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${merriweather.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable}`}
     >
       <body suppressHydrationWarning>
         <Providers>

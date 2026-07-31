@@ -8,7 +8,7 @@ import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
-import { lowSignalExpiry, shouldExpireLowSignalEvent } from './content';
+import { canonicalizeEventUrl, cleanAndCapTitle, lowSignalExpiry, shouldExpireLowSignalEvent } from './content';
 
 /* 
 Pre-computes a static lookup map of source names to their assigned credibility tiers.
@@ -72,11 +72,9 @@ Primary validations:
 - Assigns initial credibility metrics and the Story model sources array.
 */
 export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
-    if (!item.url) return null;
-
-    if (!item.url.startsWith('http://') && !item.url.startsWith('https://')) {
-        return null;
-    }
+    const url = canonicalizeEventUrl(item.url);
+    const title = cleanAndCapTitle(item.title);
+    if (!url || !title) return null;
 
     if (!hasUsableCoordinates(item)) {
         return null;
@@ -84,16 +82,16 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
 
     const tier = SOURCE_TIER_MAP.get(item.source) ?? 3;
     const expiresAt = shouldExpireLowSignalEvent({
-        title: item.title,
+        title,
         description: item.description,
         sourceType: item.sourceType,
         credibilityTier: tier,
     }) ? lowSignalExpiry(item.publishedAt) : null;
     
     return {
-        title: cleanString(item.title),
+        title: cleanString(title),
         description: cleanString(item.description),
-        url: item.url,
+        url,
         source: item.source,
         source_type: item.sourceType,
         category: item.category,

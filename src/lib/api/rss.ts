@@ -6,7 +6,6 @@
  */
 
 import Parser from 'rss-parser';
-import { Agent } from 'undici';
 import { NewsItem } from '@/lib/core/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
@@ -19,11 +18,14 @@ import {
 } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
+import {
+    fetchBoundedFeed,
+    type FeedValidator,
+} from '@/lib/security/feedFetch';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
 const REDDIT_CONCURRENCY = 3;
-const rssDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
 
 interface ParsedFeedItem {
     title?: string;
@@ -32,6 +34,11 @@ interface ParsedFeedItem {
     link?: string;
     pubDate?: string;
     isoDate?: string;
+}
+
+export interface RSSFetchOptions {
+    validators?: ReadonlyMap<string, FeedValidator>;
+    onValidator?: (sourceUrl: string, validator: FeedValidator) => void;
 }
 
 async function mapWithConcurrency<T, R>(
@@ -74,30 +81,34 @@ const parser = new Parser({
 
 /**
  * Fetches and parses a single standard RSS feed.
- * Utilizes an undici Agent with rejected unauthorized certs to support legacy 
- * news sources with misconfigured or expired SSL certificates.
+ * Fetches through the shared bounded, TLS-verified public-resource transport.
  */
 export async function fetchSingleFeed(
-    source: RSSSource, 
-    timeoutMs: number = DEFAULT_TIMEOUT
+    source: RSSSource,
+    timeoutMs: number = DEFAULT_TIMEOUT,
+    options: RSSFetchOptions = {},
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
     try {
-        const res = await fetch(source.url, {
+        const fetched = await fetchBoundedFeed(source.url, {
             headers: RSS_HEADERS,
-            signal: AbortSignal.timeout(timeoutMs),
-            // @ts-expect-error - dispatcher is not in standard fetch types but works in Node's undici
-            dispatcher: rssDispatcher
+            timeoutMs,
+            validator: options.validators?.get(source.url),
+        });
+        if (fetched.notModified) {
+            recordSourceAttempt({
+                source_name: source.name, source_type: 'rss', poll_tier: String(rssPollTier(source)),
+                outcome: 'healthy', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+                duration_ms: Date.now() - startedAt, error_code: null,
+            });
+            return [];
+        }
+        options.onValidator?.(source.url, {
+            etag: fetched.etag ?? null,
+            lastModified: fetched.lastModified ?? null,
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        
-        const text = (await res.text()).trim();
-        if (!text.startsWith('<')) {
-            throw new Error(`Invalid XML response (starts with "${text.slice(0, 20)}...")`);
-        }
-
-        const feed = await parser.parseString(text);
+        const feed = await parser.parseString(fetched.text!);
 
         // Map feed items to internal NewsItem format. IDs are generated using a 
         // combination of source name, index, and timestamp to ensure uniqueness 
@@ -226,10 +237,17 @@ export async function fetchRedditFeed(
 /**
  * Fetches all configured RSS feeds concurrently and returns them sorted by date.
  */
-export async function fetchAllRSSFeeds(now = Date.now()): Promise<NewsItem[]> {
+export async function fetchAllRSSFeeds(
+    now = Date.now(),
+    options: RSSFetchOptions = {},
+): Promise<NewsItem[]> {
     const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now);
     console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due`);
-    const rssResults = await mapWithConcurrency(dueSources, RSS_CONCURRENCY, fetchSingleFeed);
+    const rssResults = await mapWithConcurrency(
+        dueSources,
+        RSS_CONCURRENCY,
+        (source) => fetchSingleFeed(source, DEFAULT_TIMEOUT, options),
+    );
     const allItems = rssResults.flat();
 
     return allItems.sort((a, b) =>

@@ -17,6 +17,7 @@ import type { UserTier } from '@/components/ui/TierBadge';
 import type { AngelStatus } from './auth/profileCache';
 import { useUserProfile, normalizeUserTier } from './auth/profileCache';
 import { useStripeCheckoutPoll } from './auth/stripePoll';
+import { useAuthModalState } from '@/hooks/useAuthModalState';
 
 const GUEST_STORAGE_KEY = 'seraphim_guest_mode';
 
@@ -58,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isGuest, setIsGuest] = useState(false);
-    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useAuthModalState();
 
     const userRef = useRef<User | null>(null);
 
@@ -366,6 +367,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         continueAsGuest,
         showAuthModal,
+        setShowAuthModal,
         effectiveUserTier,
         tierSource,
         overrideExpiresAt,

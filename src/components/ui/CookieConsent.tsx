@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthModalState } from '@/hooks/useAuthModalState';
 import {
     getPrivacyConsent,
     PRIVACY_CONSENT_EVENT,
@@ -15,7 +15,7 @@ import {
 import styles from './CookieConsent.module.css';
 
 const CookieConsent: React.FC = () => {
-    const { showAuthModal } = useAuth();
+    const [showAuthModal] = useAuthModalState();
     const [isVisible, setIsVisible] = useState(false);
 
     /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalizeEventUrl,
+  cleanAndCapTitle,
   cleanAndCapDescription,
   lowSignalExpiry,
   normalizeTitleFingerprint,
@@ -25,6 +26,20 @@ describe("lean ingestion content normalization", () => {
   it("removes only recognized tracking parameters", () => {
     expect(canonicalizeEventUrl("https://EXAMPLE.com/a/?utm_source=x&ref=essential&fbclid=1"))
       .toBe("https://example.com/a?ref=essential");
+  });
+
+  it("fails closed for malformed and unsupported event URLs", () => {
+    expect(canonicalizeEventUrl("https://%" )).toBe("");
+    expect(canonicalizeEventUrl("javascript:alert(1)")).toBe("");
+    expect(prepareIncomingItems([item({ url: "https://%" })])).toEqual([]);
+  });
+
+  it("caps titles before downstream processing without splitting Unicode", () => {
+    const cleaned = cleanAndCapTitle(`${"A".repeat(499)}😀${"B".repeat(10_000)}`);
+    expect([...cleaned]).toHaveLength(500);
+    expect(cleaned.endsWith("😀")).toBe(true);
+    expect(prepareIncomingItems([item({ title: `${"C".repeat(10_000)} Port City` })])[0].title)
+      .toHaveLength(500);
   });
 
   it("caps descriptions and removes a trailing subscription block", () => {
