@@ -7,6 +7,7 @@
  */
 
 import Parser from 'rss-parser';
+import { fetchBoundedFeedText } from '@/lib/security/feedFetch';
 import * as cheerio from 'cheerio';
 import { NewsItem } from '@/lib/core/types';
 import { SocialSource, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
@@ -196,14 +197,12 @@ export async function scrapeTelegramChannel(
  * Includes a check for whitelist-only instances that block anonymous RSS readers.
  */
 async function fetchInstanceTimeout(url: string, timeoutMs = DEFAULT_TIMEOUT): Promise<ReturnType<typeof parser.parseURL>> {
-    const res = await fetch(url, {
+    const text = await fetchBoundedFeedText(url, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
-        signal: AbortSignal.timeout(timeoutMs)
+        timeoutMs,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const feed = await parser.parseString(text) as any;
 

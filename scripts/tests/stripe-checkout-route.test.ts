@@ -144,6 +144,14 @@ describe('POST /api/stripe/checkout', () => {
     }), { idempotencyKey: 'checkout-intent-intent-1' });
   });
 
+  it('falls back to the site root for browser-normalized external return paths', async () => {
+    await POST(request('pro_monthly', '/\\evil.example'));
+
+    expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      success_url: 'https://seraphim.example/?checkout=success&checkoutPlan=pro',
+    }), { idempotencyKey: 'checkout-intent-intent-1' });
+  });
+
   it('expires an abandoned Checkout Session before switching subscription tiers', async () => {
     mocks.rpc
       .mockResolvedValueOnce({

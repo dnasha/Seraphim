@@ -22,7 +22,12 @@ type PinnedResponse = {
   close: () => Promise<void>;
 };
 
-export type FetchHop = (url: URL, address: string, timeoutMs: number) => Promise<PinnedResponse>;
+export type FetchHop = (
+  url: URL,
+  address: string,
+  timeoutMs: number,
+  headers?: HeadersInit,
+) => Promise<PinnedResponse>;
 
 export type PublicImageFetchOptions = {
   timeoutMs?: number;
@@ -34,6 +39,8 @@ export type PublicImageFetchOptions = {
 export type PublicBytesFetchOptions = PublicImageFetchOptions & {
   maxBytes: number;
   allowedContentTypes?: string[];
+  headers?: HeadersInit;
+  requireHttps?: boolean;
 };
 
 function unbracket(address: string) {
@@ -188,7 +195,12 @@ async function resolveHost(hostname: string): Promise<ResolvedAddress[]> {
   return answers.filter((answer): answer is ResolvedAddress => answer.family === 4 || answer.family === 6);
 }
 
-async function fetchPinnedHop(url: URL, address: string, timeoutMs: number): Promise<PinnedResponse> {
+async function fetchPinnedHop(
+  url: URL,
+  address: string,
+  timeoutMs: number,
+  headers?: HeadersInit,
+): Promise<PinnedResponse> {
   const connector = buildConnector({ timeout: timeoutMs });
   const dispatcher = new Agent({
     connections: 1,
@@ -211,7 +223,7 @@ async function fetchPinnedHop(url: URL, address: string, timeoutMs: number): Pro
     const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'manual',
-      headers: { 'User-Agent': 'Seraphim/1.0 (OG image fetcher)' },
+      headers: headers ?? { 'User-Agent': 'Seraphim/1.0 (OG image fetcher)' },
       // @ts-expect-error undici dispatcher extension
       dispatcher,
     });
@@ -288,6 +300,7 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
     const safeDestination = validatePublicImageUrl(rawDestination);
     if (!safeDestination) return null;
     const url = new URL(safeDestination);
+    if (options.requireHttps && url.protocol !== 'https:') return null;
 
     let answers: ResolvedAddress[];
     try {
@@ -300,7 +313,7 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
 
     let hop: PinnedResponse;
     try {
-      hop = await fetchHop(url, address.address, timeoutMs);
+      hop = await fetchHop(url, address.address, timeoutMs, options.headers);
     } catch {
       return null;
     }

@@ -8,7 +8,18 @@ vi.mock("rss-parser", () => ({
   },
 }));
 
+vi.mock("@/lib/security/feedFetch", () => ({
+  fetchBoundedFeedText: async (url: string, options: { headers?: HeadersInit }) => {
+    const response = await fetch(url, { headers: options.headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = (await response.text()).trim();
+    if (!text.startsWith("<")) throw new Error("Invalid XML response");
+    return text;
+  },
+}));
+
 import { fetchAllRedditFeeds, fetchRedditFeed, fetchSingleFeed } from "@/lib/api/rss";
+import { RSS_SOURCES } from '@/data/sources';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -17,6 +28,10 @@ afterEach(() => {
 });
 
 describe("RSS adapters", () => {
+  it('configures every publisher feed with HTTPS', () => {
+    expect(RSS_SOURCES.every((source) => new URL(source.url).protocol === 'https:')).toBe(true);
+  });
+
   it("normalizes standard feeds and prefers MediaRSS images", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));

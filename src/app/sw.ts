@@ -10,6 +10,10 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { NetworkOnly, Serwist } from "serwist";
+import {
+  apiRuntimeCaching,
+  purgeLegacyApiCache,
+} from '@/lib/pwa/runtimeCaching';
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -33,9 +37,14 @@ const serwist = new Serwist({
       matcher: ({ request }) => request.mode === "navigate",
       handler: new NetworkOnly(),
     },
+    ...apiRuntimeCaching,
     ...defaultCache,
   ],
   disableDevLogs: true,
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(purgeLegacyApiCache(self.caches));
 });
 
 serwist.addEventListeners();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { validateNewsSearchParams } from '@/lib/security/newsParams';
-import { safeRelativeRedirect } from '@/lib/security/redirects';
+import { safeRelativePath, safeRelativeRedirect } from '@/lib/security/redirects';
 import {
   canFulfillAngelCheckout,
   getConfiguredSiteUrl,
@@ -21,6 +21,7 @@ import { parseCspReport } from '@/lib/security/cspReport';
 import { buildCspReportOnly, CSP_ENFORCED_BASELINE } from '@/lib/security/csp';
 import { createLocalFixedWindowLimiter } from '@/lib/security/localRateLimit';
 import { createSingleFlight } from '@/lib/server/singleFlight';
+import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 
 describe('news API param validation', () => {
   it('clamps numeric limits and accepts valid bbox searches', () => {
@@ -62,6 +63,18 @@ describe('redirect guard', () => {
     expect(safeRelativeRedirect('//evil.test', origin)).toBe('https://seraphi.me/');
     expect(safeRelativeRedirect('@evil.test/path', origin)).toBe('https://seraphi.me/');
     expect(safeRelativeRedirect('/\\evil', origin)).toBe('https://seraphi.me/');
+    expect(safeRelativePath('/\\evil.example')).toBe('/');
+    expect(safeRelativePath('/account?tab=billing#plan')).toBe('/account?tab=billing#plan');
+  });
+
+  it('parses stored outbound links without throwing', () => {
+    expect(safeExternalHttpUrl('https://News.Example/story')).toEqual({
+      href: 'https://news.example/story',
+      hostname: 'news.example',
+    });
+    expect(safeExternalHttpUrl('https://%')).toBeNull();
+    expect(safeExternalHttpUrl('javascript:alert(1)')).toBeNull();
+    expect(safeExternalHttpUrl('https://user:secret@news.example/story')).toBeNull();
   });
 });
 
@@ -197,6 +210,42 @@ describe('proxy and OG guards', () => {
     expect(result?.bytes.byteLength).toBe(64);
     expect(result?.truncated).toBe(true);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('enforces HTTPS across public document redirects', async () => {
+    const fetchHop = vi.fn(async () => ({
+      response: new Response(null, { status: 302, headers: { location: 'http://news.example/feed.xml' } }),
+      close: async () => undefined,
+    }));
+
+    await expect(fetchPublicBytes('https://news.example/feed.xml', {
+      maxBytes: 1024,
+      requireHttps: true,
+      resolveHost: async () => [{ address: '198.51.100.77', family: 4 }],
+      fetchHop,
+    })).resolves.toBeNull();
+
+    expect(fetchHop).toHaveBeenCalledOnce();
+  });
+
+  it('rejects public document redirects to private networks before connecting', async () => {
+    const fetchHop = vi.fn(async () => ({
+      response: new Response(null, { status: 302, headers: { location: 'https://private.example/feed.xml' } }),
+      close: async () => undefined,
+    }));
+    const resolver = vi.fn(async (hostname: string) => hostname === 'private.example'
+      ? [{ address: '10.0.0.9', family: 4 as const }]
+      : [{ address: '198.51.100.77', family: 4 as const }]);
+
+    await expect(fetchPublicBytes('https://news.example/feed.xml', {
+      maxBytes: 1024,
+      requireHttps: true,
+      resolveHost: resolver,
+      fetchHop,
+    })).resolves.toBeNull();
+
+    expect(fetchHop).toHaveBeenCalledOnce();
+    expect(resolver).toHaveBeenNthCalledWith(2, 'private.example');
   });
 });
 

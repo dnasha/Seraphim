@@ -44,9 +44,9 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'CNA Asia', url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Nikkei Asia', url: 'https://asia.nikkei.com/rss/feed/nar', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'The Hindu', url: 'https://www.thehindu.com/news/international/feeder/default.rss', category: 'world', credibility_tier: 1, region: 'asia' },
-    { name: 'BBC Africa', url: 'http://feeds.bbci.co.uk/news/world/africa/rss.xml', category: 'world', credibility_tier: 1, region: 'africa' },
+    { name: 'BBC Africa', url: 'https://feeds.bbci.co.uk/news/world/africa/rss.xml', category: 'world', credibility_tier: 1, region: 'africa' },
     { name: 'Africanews', url: 'https://www.africanews.com/feed/rss', category: 'world', credibility_tier: 1, region: 'africa' },
-    { name: 'BBC Middle East', url: 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', category: 'world', credibility_tier: 1, region: 'middle_east' },
+    { name: 'BBC Middle East', url: 'https://feeds.bbci.co.uk/news/world/middle_east/rss.xml', category: 'world', credibility_tier: 1, region: 'middle_east' },
     { name: 'Al Arabiya English', url: 'https://news.google.com/rss/search?q=site:english.alarabiya.net&hl=en', category: 'world', credibility_tier: 1, region: 'middle_east' },
     { name: 'RNZ World', url: 'https://www.rnz.co.nz/rss/world.xml', category: 'world', credibility_tier: 1, region: 'oceania' },
     { name: 'SBS News Australia', url: 'https://www.sbs.com.au/news/topic/australia/feed', category: 'world', credibility_tier: 1, region: 'oceania' },
@@ -99,7 +99,7 @@ export const RSS_SOURCES: RSSSource[] = [
     // Regional OSINT
     { name: 'Dawn Pakistan', url: 'https://www.dawn.com/feeds/home', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Daily Star Bangladesh', url: 'https://www.thedailystar.net/frontpage/rss.xml', category: 'world', credibility_tier: 1, region: 'asia' },
-    { name: 'Ada Derana Sri Lanka', url: 'http://www.adaderana.lk/rss.php', category: 'world', credibility_tier: 2, region: 'asia' },
+    { name: 'Ada Derana Sri Lanka', url: 'https://adaderana.lk/rss.xml', category: 'world', credibility_tier: 2, region: 'asia' },
     { name: 'Defence24 Poland', url: 'https://defence24.com/rss', category: 'crisis', credibility_tier: 2, region: 'europe' },
     { name: 'Romania Insider', url: 'https://www.romania-insider.com/feed', category: 'world', credibility_tier: 2, region: 'europe' },
 

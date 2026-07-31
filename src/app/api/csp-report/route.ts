@@ -68,13 +68,12 @@ const reportDistributedLimitUnavailable = createThrottledDiagnostic(() => {
   serverDiagnostic('csp_rate_limit_unavailable');
 });
 
-async function acceptReport(clientIp: string, fingerprint: string) {
+async function acceptIngress(clientIp: string) {
   const now = Date.now();
   if (!localClientLimit.check([clientIp], now).success) return false;
-  if (!localFingerprintSampleLimit.check([fingerprint], now).success) return false;
   if (!localGlobalReportLimit.check(['all'], now).success) return false;
 
-  if (!clientRateLimit || !fingerprintSampleLimit || !globalReportLimit) {
+  if (!clientRateLimit || !globalReportLimit) {
     reportDistributedLimitUnavailable(now);
     return true;
   }
@@ -82,7 +81,6 @@ async function acceptReport(clientIp: string, fingerprint: string) {
   try {
     const results = await Promise.all([
       clientRateLimit.limit(clientIp),
-      fingerprintSampleLimit.limit(fingerprint),
       globalReportLimit.limit('all'),
     ]);
     return results.every(({ success }) => success);
@@ -91,6 +89,45 @@ async function acceptReport(clientIp: string, fingerprint: string) {
     // bounded local gates above still cap writes from this server instance.
     reportDistributedLimitUnavailable(now);
     return true;
+  }
+}
+
+async function acceptFingerprint(fingerprint: string) {
+  const now = Date.now();
+  if (!localFingerprintSampleLimit.check([fingerprint], now).success) return false;
+  if (!fingerprintSampleLimit) {
+    reportDistributedLimitUnavailable(now);
+    return true;
+  }
+
+  try {
+    return (await fingerprintSampleLimit.limit(fingerprint)).success;
+  } catch {
+    reportDistributedLimitUnavailable(now);
+    return true;
+  }
+}
+
+async function readBoundedRequestText(request: Request, maxBytes: number) {
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -117,8 +154,10 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 204 });
   }
 
-  const raw = await request.text();
-  if (raw.length > MAX_REPORT_BYTES) return new NextResponse(null, { status: 204 });
+  if (!await acceptIngress(clientIp)) return new NextResponse(null, { status: 204 });
+
+  const raw = await readBoundedRequestText(request, MAX_REPORT_BYTES);
+  if (raw === null) return new NextResponse(null, { status: 204 });
 
   let parsedBody: unknown;
   try {
@@ -131,7 +170,7 @@ export async function POST(request: NextRequest) {
   if (!report) return new NextResponse(null, { status: 204 });
 
   const fingerprint = `${report.effectiveDirective}:${report.blockedOrigin}`;
-  if (!await acceptReport(clientIp, fingerprint)) {
+  if (!await acceptFingerprint(fingerprint)) {
     return new NextResponse(null, { status: 204 });
   }
 

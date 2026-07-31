@@ -6,7 +6,6 @@
  */
 
 import Parser from 'rss-parser';
-import { Agent } from 'undici';
 import { NewsItem } from '@/lib/core/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
@@ -19,11 +18,11 @@ import {
 } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
+import { fetchBoundedFeedText } from '@/lib/security/feedFetch';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 16;
 const REDDIT_CONCURRENCY = 3;
-const rssDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
 
 interface ParsedFeedItem {
     title?: string;
@@ -74,8 +73,7 @@ const parser = new Parser({
 
 /**
  * Fetches and parses a single standard RSS feed.
- * Utilizes an undici Agent with rejected unauthorized certs to support legacy 
- * news sources with misconfigured or expired SSL certificates.
+ * Fetches through the shared bounded, TLS-verified public-resource transport.
  */
 export async function fetchSingleFeed(
     source: RSSSource, 
@@ -83,19 +81,10 @@ export async function fetchSingleFeed(
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
     try {
-        const res = await fetch(source.url, {
+        const text = await fetchBoundedFeedText(source.url, {
             headers: RSS_HEADERS,
-            signal: AbortSignal.timeout(timeoutMs),
-            // @ts-expect-error - dispatcher is not in standard fetch types but works in Node's undici
-            dispatcher: rssDispatcher
+            timeoutMs,
         });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        
-        const text = (await res.text()).trim();
-        if (!text.startsWith('<')) {
-            throw new Error(`Invalid XML response (starts with "${text.slice(0, 20)}...")`);
-        }
 
         const feed = await parser.parseString(text);
 

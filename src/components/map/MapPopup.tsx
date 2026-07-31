@@ -21,6 +21,7 @@ import { canonicalEventCount, canonicalNewsId } from '@/lib/utils/ranking';
 import { LuShare2 } from 'react-icons/lu';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import TimelineGateCta from '@/components/ui/TimelineGateCta';
+import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 
 interface MapPopupProps {
     item: NewsItem;
@@ -177,6 +178,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                             {visibleSources.map((src, i) => {
                                     const srcColor = getSourceBadgeColor(src.name);
                                     const srcTime = formatTimeAgo(src.discoveredAt);
+                                    const sourceUrl = safeExternalHttpUrl(src.url);
                                     return (
                                         <div key={`${src.url}-${i}`}>
                                             <div className="news-popup-source-entry">
@@ -184,9 +186,13 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                                                 <span className="news-popup-source-name" style={{ background: srcColor, color: '#fff' }}>
                                                     {src.name}
                                                 </span>
-                                                <a className="news-popup-source-link" href={src.url} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
-                                                    {new URL(src.url).hostname}
-                                                </a>
+                                                {sourceUrl ? (
+                                                    <a className="news-popup-source-link" href={sourceUrl.href} target="_blank" rel="noopener noreferrer" title={`Open ${src.name} in a new tab`}>
+                                                        {sourceUrl.hostname}
+                                                    </a>
+                                                ) : (
+                                                    <span className="news-popup-source-link">{src.name}</span>
+                                                )}
                                             </div>
                                             {showTimelineGap && i === 0 && (
                                                 <div

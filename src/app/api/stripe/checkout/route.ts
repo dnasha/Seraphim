@@ -11,6 +11,7 @@ import {
 import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
 import { recordIncident, recordMetric } from '@/lib/server/operations';
 import { retireCheckoutReservation } from '@/lib/server/checkoutReservations';
+import { safeRelativePath } from '@/lib/security/redirects';
 
 type PriceKey = keyof typeof STRIPE_PRICES;
 type IntentReservation = {
@@ -158,9 +159,7 @@ export async function POST(request: NextRequest) {
     return checkoutError('checkout_conflict');
   }
 
-  const returnTo = body.returnTo?.startsWith('/') && !body.returnTo.startsWith('//')
-    ? body.returnTo
-    : '/';
+  const returnTo = safeRelativePath(body.returnTo);
   const maxAngel = isAngel ? await getAngelMaxQuantity(priceId) : ANGEL_MAX_QUANTITY;
   const mode = isAngel ? 'payment' : 'subscription';
 
