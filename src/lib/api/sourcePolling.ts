@@ -3,6 +3,7 @@ import type { RSSSource, SocialSource } from "@/data/sources";
 export type PollTier = "fast" | "normal" | "slow";
 
 export const BASE_POLL_INTERVAL_MS = 15 * 60 * 1000;
+export const EMERGENCY_COUNT_MULTIPLIER = 1.5;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 const FAST_RSS_SOURCES = new Set([
@@ -55,12 +56,18 @@ export function selectDueSources<T>(
   sources: readonly T[],
   getTier: (source: T) => PollTier,
   now = Date.now(),
+  forceAll = false,
 ): T[] {
+  if (forceAll) return [...sources];
   return sources.filter((source) => isPollDue(getTier(source), now));
 }
 
-export function itemLimitForTier(tier: PollTier): number {
-  return TIER_ITEM_LIMIT[tier];
+export function expandedItemLimit(baseLimit: number, emergency = false): number {
+  return emergency ? Math.ceil(baseLimit * EMERGENCY_COUNT_MULTIPLIER) : baseLimit;
+}
+
+export function itemLimitForTier(tier: PollTier, emergency = false): number {
+  return expandedItemLimit(TIER_ITEM_LIMIT[tier], emergency);
 }
 
 export function selectRecentFeedItems<T>(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BASE_POLL_INTERVAL_MS,
+  expandedItemLimit,
   isPollDue,
   rssPollTier,
   selectDueSources,
@@ -41,5 +42,13 @@ describe("source polling policy", () => {
     const sources = ["fast", "normal", "slow"] as const;
     expect(selectDueSources(sources, (tier) => tier, BASE_POLL_INTERVAL_MS * 2))
       .toEqual(["fast", "normal"]);
+  });
+
+  it("forces all sources and moderately expands item counts in emergency mode", () => {
+    const sources = ["fast", "normal", "slow"] as const;
+    expect(selectDueSources(sources, (tier) => tier, BASE_POLL_INTERVAL_MS, true))
+      .toEqual(sources);
+    expect(expandedItemLimit(10, true)).toBe(15);
+    expect(expandedItemLimit(10)).toBe(10);
   });
 });

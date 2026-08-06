@@ -11,6 +11,7 @@ import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sou
 import { ensureIsoDate } from '@/lib/utils/date';
 import {
     BASE_POLL_INTERVAL_MS,
+    expandedItemLimit,
     itemLimitForTier,
     rssPollTier,
     selectDueSources,
@@ -39,6 +40,7 @@ interface ParsedFeedItem {
 export interface RSSFetchOptions {
     validators?: ReadonlyMap<string, FeedValidator>;
     onValidator?: (sourceUrl: string, validator: FeedValidator) => void;
+    emergency?: boolean;
 }
 
 async function mapWithConcurrency<T, R>(
@@ -117,7 +119,7 @@ export async function fetchSingleFeed(
         const feedItems = (feed.items || []) as ParsedFeedItem[];
         const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
             tier,
-            limit: itemLimitForTier(tier),
+            limit: itemLimitForTier(tier, options.emergency),
         });
         const items = recentItems.map((item, index) => {
             const articleUrl = item.link || '';
@@ -170,7 +172,8 @@ export async function fetchSingleFeed(
  */
 export async function fetchRedditFeed(
     source: RedditSource, 
-    timeoutMs: number = DEFAULT_TIMEOUT
+    timeoutMs: number = DEFAULT_TIMEOUT,
+    emergency = false,
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
     try {
@@ -190,7 +193,7 @@ export async function fetchRedditFeed(
 
         const feedItems = (feed.items || []) as ParsedFeedItem[];
         const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
-            limit: 5,
+            limit: expandedItemLimit(5, emergency),
             maxAgeMs: 48 * 60 * 60 * 1000,
         });
         const items = recentItems.map((item, index) => {
@@ -241,7 +244,7 @@ export async function fetchAllRSSFeeds(
     now = Date.now(),
     options: RSSFetchOptions = {},
 ): Promise<NewsItem[]> {
-    const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now);
+    const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now, options.emergency);
     console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due`);
     const rssResults = await mapWithConcurrency(
         dueSources,
@@ -258,10 +261,14 @@ export async function fetchAllRSSFeeds(
 /**
  * Fetches all configured Reddit feeds concurrently.
  */
-export async function fetchAllRedditFeeds(now = Date.now()): Promise<NewsItem[]> {
-    const dueSources = Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
+export async function fetchAllRedditFeeds(now = Date.now(), emergency = false): Promise<NewsItem[]> {
+    const dueSources = emergency || Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
     console.log(`[polling] Reddit: ${dueSources.length}/${REDDIT_SOURCES.length} sources due`);
-    const results = await mapWithConcurrency(dueSources, REDDIT_CONCURRENCY, fetchRedditFeed);
+    const results = await mapWithConcurrency(
+        dueSources,
+        REDDIT_CONCURRENCY,
+        (source) => fetchRedditFeed(source, DEFAULT_TIMEOUT, emergency),
+    );
     return results.flat();
 }
 

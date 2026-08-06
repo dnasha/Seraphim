@@ -4,10 +4,12 @@ Main ingestion worker for processing news from multiple sources.
 
 Usage:
 bun run src/scraper/index.ts
+bun run src/scraper/index.ts --emergency
 
 Execution Modes:
 - Standard: Fetches, geocodes, vectorizes, and commits to Supabase.
 - Dry Run: Set DRY_RUN=true to skip database writes and view proposed payloads.
+- Emergency: Polls every configured source and raises intake caps by 50%.
 
 Requirements:
 - SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for database access.
@@ -38,8 +40,10 @@ import {
 import { createOperationsRecorder } from '@/lib/operationsCore';
 import { loadFeedValidators, persistFeedValidators } from './feedValidators';
 import { closePublicFetchAgents } from '@/lib/security/ogImage';
+import { EMERGENCY_COUNT_MULTIPLIER } from '@/lib/api/sourcePolling';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
+const EMERGENCY_MODE = process.argv.slice(2).includes("--emergency");
 
 if (!supabase) {
   console.error(
@@ -132,8 +136,14 @@ async function run(): Promise<void> {
   await startIngestionRun();
   beginSourceHealthCollection();
   console.log(
-    `[scraper] Starting ingestion run at ${new Date().toISOString()} (dry_run=${DRY_RUN})`,
+    `[scraper] Starting ingestion run at ${new Date().toISOString()} ` +
+      `(dry_run=${DRY_RUN}, emergency=${EMERGENCY_MODE})`,
   );
+  if (EMERGENCY_MODE) {
+    console.warn(
+      `[scraper] EMERGENCY MODE: polling every configured source with ${EMERGENCY_COUNT_MULTIPLIER}x item caps.`,
+    );
+  }
 
   const feedValidators = await loadFeedValidators(db);
   const updatedFeedValidators = new Map<string, { etag?: string | null; lastModified?: string | null }>();
@@ -143,10 +153,11 @@ async function run(): Promise<void> {
       fetchAllRSSFeeds(Date.now(), {
         validators: feedValidators,
         onValidator: (sourceUrl, validator) => updatedFeedValidators.set(sourceUrl, validator),
+        emergency: EMERGENCY_MODE,
       }),
-      fetchAllRedditFeeds(),
-      fetchHealthEventGNews(20),
-      fetchSocialFeeds(),
+      fetchAllRedditFeeds(Date.now(), EMERGENCY_MODE),
+      fetchHealthEventGNews(EMERGENCY_MODE ? 30 : 20),
+      fetchSocialFeeds(Date.now(), EMERGENCY_MODE),
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
     )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[]];
@@ -227,7 +238,11 @@ async function run(): Promise<void> {
   const unseenItems = qualityItems.filter((item) => !knownUrls.has(item.url));
   activeRunStats.deduplicated_count = qualityItems.length - unseenItems.length;
   const sourceLimits = await loadSourceNoveltyLimits(db);
-  const { accepted: newItems, cappedBySource } = applySourceNoveltyLimits(unseenItems, sourceLimits);
+  const { accepted: newItems, cappedBySource } = applySourceNoveltyLimits(
+    unseenItems,
+    sourceLimits,
+    EMERGENCY_MODE ? EMERGENCY_COUNT_MULTIPLIER : 1,
+  );
   const cappedCount = Object.values(cappedBySource).reduce((sum, count) => sum + count, 0);
   if (cappedCount > 0) {
     console.warn(`[scraper] Adaptive source safety cap deferred ${cappedCount} item(s):`, cappedBySource);
