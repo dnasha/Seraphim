@@ -52,14 +52,37 @@ export function isPollDue(tier: PollTier, now = Date.now()): boolean {
   return slot % TIER_DIVISOR[tier] === 0;
 }
 
+function stableSourceHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function isSourcePollDue(tier: PollTier, sourceKey: string, now = Date.now()) {
+  const divisor = TIER_DIVISOR[tier];
+  if (divisor === 1) return true;
+  const slot = Math.floor(now / BASE_POLL_INTERVAL_MS);
+  return slot % divisor === stableSourceHash(sourceKey) % divisor;
+}
+
 export function selectDueSources<T>(
   sources: readonly T[],
   getTier: (source: T) => PollTier,
   now = Date.now(),
   forceAll = false,
+  getSourceKey: (source: T) => string = (source) => {
+    if (typeof source === 'string') return source;
+    if (source && typeof source === 'object' && 'name' in source) {
+      return String(source.name);
+    }
+    return String(source);
+  },
 ): T[] {
   if (forceAll) return [...sources];
-  return sources.filter((source) => isPollDue(getTier(source), now));
+  return sources.filter((source) => isSourcePollDue(getTier(source), getSourceKey(source), now));
 }
 
 export function expandedItemLimit(baseLimit: number, emergency = false): number {

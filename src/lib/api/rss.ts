@@ -23,9 +23,11 @@ import {
     fetchBoundedFeed,
     type FeedValidator,
 } from '@/lib/security/feedFetch';
+import { scheduleOutboundSource, sourceHost } from './outboundScheduler';
+import { isSourceCircuitOpen } from './sourceCircuit';
 
 const DEFAULT_TIMEOUT = 15000;
-const RSS_CONCURRENCY = 16;
+const RSS_CONCURRENCY = 10;
 const REDDIT_CONCURRENCY = 3;
 
 interface ParsedFeedItem {
@@ -41,6 +43,7 @@ export interface RSSFetchOptions {
     validators?: ReadonlyMap<string, FeedValidator>;
     onValidator?: (sourceUrl: string, validator: FeedValidator) => void;
     emergency?: boolean;
+    openCircuits?: ReadonlySet<string>;
 }
 
 async function mapWithConcurrency<T, R>(
@@ -65,7 +68,7 @@ async function mapWithConcurrency<T, R>(
  * Headers optimized for standard news feeds to minimize bot detection.
  */
 const RSS_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'User-Agent': process.env.FEED_USER_AGENT || 'server:seraphim:v1.0 (feed reader; contact: https://github.com/dnasha/Seraphim)',
     'Accept': 'application/rss+xml, application/xml, text/xml, */*',
     'Accept-Language': 'en-US,en;q=0.9',
 };
@@ -91,23 +94,31 @@ export async function fetchSingleFeed(
     options: RSSFetchOptions = {},
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
-    try {
-        const fetched = await fetchBoundedFeed(source.url, {
-            headers: RSS_HEADERS,
-            timeoutMs,
-            validator: options.validators?.get(source.url),
+    const tier = rssPollTier(source);
+    const urls = [source.url, ...(source.fallbackUrls ?? [])];
+    let lastError: unknown;
+    let primaryErrorCode: string | null = null;
+
+    for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
+      const sourceUrl = urls[urlIndex];
+      try {
+        const fetched = await fetchBoundedFeed(sourceUrl, {
+          headers: RSS_HEADERS,
+          timeoutMs,
+          validator: options.validators?.get(sourceUrl),
+          maxAttempts: 2,
         });
         if (fetched.notModified) {
-            recordSourceAttempt({
-                source_name: source.name, source_type: 'rss', poll_tier: String(rssPollTier(source)),
-                outcome: 'healthy', fetched_count: 0, accepted_count: 0, rejected_count: 0,
-                duration_ms: Date.now() - startedAt, error_code: null,
-            });
-            return [];
+          recordSourceAttempt({
+            source_name: source.name, source_type: 'rss', poll_tier: String(tier),
+            outcome: 'healthy', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+            duration_ms: Date.now() - startedAt, error_code: null,
+          });
+          return [];
         }
-        options.onValidator?.(source.url, {
-            etag: fetched.etag ?? null,
-            lastModified: fetched.lastModified ?? null,
+        options.onValidator?.(sourceUrl, {
+          etag: fetched.etag ?? null,
+          lastModified: fetched.lastModified ?? null,
         });
 
         const feed = await parser.parseString(fetched.text!);
@@ -115,7 +126,6 @@ export async function fetchSingleFeed(
         // Map feed items to internal NewsItem format. IDs are generated using a 
         // combination of source name, index, and timestamp to ensure uniqueness 
         // during high-frequency ingestion.
-        const tier = rssPollTier(source);
         const feedItems = (feed.items || []) as ParsedFeedItem[];
         const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
             tier,
@@ -147,23 +157,31 @@ export async function fetchSingleFeed(
             source_name: source.name, source_type: 'rss', poll_tier: String(tier),
             outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
             accepted_count: items.length, rejected_count: Math.max(0, feedItems.length - items.length),
-            latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null,
+            latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt,
+            error_code: urlIndex > 0 && primaryErrorCode ? `fallback_${primaryErrorCode}`.slice(0, 64) : null,
         });
-        return items;
-    } catch (error) {
-        const errorCode = safeSourceErrorCode(error);
-        recordSourceAttempt({
-            source_name: source.name, source_type: 'rss', poll_tier: String(rssPollTier(source)),
-            outcome: errorCode === 'parse' ? 'parse_error' : 'provider_error', fetched_count: 0,
-            accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: errorCode,
-        });
-        if (error instanceof Error && error.message.includes('timeout')) {
-            console.warn(`[RSS] Feed timeout for ${source.name} (${timeoutMs}ms)`);
-        } else {
-            console.error(`[RSS] fetch failed for ${source.name}:`, error instanceof Error ? error.message : error);
+        if (urlIndex > 0) {
+          console.log(`[RSS] ${source.name}: fallback feed responded (${items.length} recent item(s))`);
         }
-        return [];
+        return items;
+      } catch (error) {
+        lastError = error;
+        const errorCode = safeSourceErrorCode(error);
+        if (urlIndex === 0) primaryErrorCode = errorCode;
+        if (urlIndex + 1 < urls.length) {
+          console.warn(`[RSS] ${source.name}: primary failed (${errorCode}); trying configured fallback`);
+        }
+      }
     }
+
+    const errorCode = safeSourceErrorCode(lastError);
+    recordSourceAttempt({
+      source_name: source.name, source_type: 'rss', poll_tier: String(tier),
+      outcome: errorCode === 'parse' || errorCode === 'invalid_xml' ? 'parse_error' : 'provider_error', fetched_count: 0,
+      accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: errorCode,
+    });
+    console.error(`[RSS] fetch failed for ${source.name} (${errorCode}):`, lastError instanceof Error ? lastError.message : lastError);
+    return [];
 }
 
 /**
@@ -178,18 +196,15 @@ export async function fetchRedditFeed(
     const startedAt = Date.now();
     try {
         const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
-        const res = await fetch(url, {
+        const fetched = await fetchBoundedFeed(url, {
             headers: {
-                'User-Agent': 'Seraphim/1.0 (news aggregator)',
+                'User-Agent': process.env.FEED_USER_AGENT || 'server:seraphim:v1.0 (feed reader; contact: https://github.com/dnasha/Seraphim)',
                 'Accept': 'application/rss+xml, application/xml, text/xml',
             },
-            signal: AbortSignal.timeout(timeoutMs),
+            timeoutMs,
+            maxAttempts: 2,
         });
-        
-        if (!res.ok) throw new Error(`Status code ${res.status}`);
-
-        const text = await res.text();
-        const feed = await parser.parseString(text);
+        const feed = await parser.parseString(fetched.text!);
 
         const feedItems = (feed.items || []) as ParsedFeedItem[];
         const recentItems = selectRecentFeedItems(feedItems, (item) => item.pubDate || item.isoDate, {
@@ -227,12 +242,13 @@ export async function fetchRedditFeed(
         });
         return items;
     } catch (error) {
+        const errorCode = safeSourceErrorCode(error);
         recordSourceAttempt({
             source_name: source.name, source_type: 'reddit', poll_tier: null,
-            outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0,
-            duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error),
+            outcome: errorCode === 'http_429' ? 'rate_limited' : 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+            duration_ms: Date.now() - startedAt, error_code: errorCode,
         });
-        console.error(`reddit fetch failed for ${source.name}:`, error instanceof Error ? error.message : error);
+        console.error(`reddit fetch failed for ${source.name} (${errorCode}):`, error instanceof Error ? error.message : error);
         return [];
     }
 }
@@ -244,12 +260,19 @@ export async function fetchAllRSSFeeds(
     now = Date.now(),
     options: RSSFetchOptions = {},
 ): Promise<NewsItem[]> {
-    const dueSources = selectDueSources(RSS_SOURCES, rssPollTier, now, options.emergency);
-    console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due`);
+    const scheduledSources = selectDueSources(RSS_SOURCES, rssPollTier, now, options.emergency);
+    const dueSources = scheduledSources.filter((source) =>
+      !isSourceCircuitOpen(options.openCircuits, 'rss', source.name)
+    );
+    const suppressed = scheduledSources.length - dueSources.length;
+    console.log(`[polling] RSS: ${dueSources.length}/${RSS_SOURCES.length} sources due${suppressed ? ` (${suppressed} circuit-open)` : ''}`);
     const rssResults = await mapWithConcurrency(
         dueSources,
         RSS_CONCURRENCY,
-        (source) => fetchSingleFeed(source, DEFAULT_TIMEOUT, options),
+        (source) => scheduleOutboundSource(
+          sourceHost(source.url, `rss:${source.name}`),
+          () => fetchSingleFeed(source, DEFAULT_TIMEOUT, options),
+        ),
     );
     const allItems = rssResults.flat();
 
@@ -261,13 +284,24 @@ export async function fetchAllRSSFeeds(
 /**
  * Fetches all configured Reddit feeds concurrently.
  */
-export async function fetchAllRedditFeeds(now = Date.now(), emergency = false): Promise<NewsItem[]> {
-    const dueSources = emergency || Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
-    console.log(`[polling] Reddit: ${dueSources.length}/${REDDIT_SOURCES.length} sources due`);
+export async function fetchAllRedditFeeds(
+    now = Date.now(),
+    emergency = false,
+    openCircuits?: ReadonlySet<string>,
+): Promise<NewsItem[]> {
+    const scheduledSources = emergency || Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
+    const dueSources = scheduledSources.filter((source) =>
+      !isSourceCircuitOpen(openCircuits, 'reddit', source.name)
+    );
+    const suppressed = scheduledSources.length - dueSources.length;
+    console.log(`[polling] Reddit: ${dueSources.length}/${REDDIT_SOURCES.length} sources due${suppressed ? ` (${suppressed} circuit-open)` : ''}`);
     const results = await mapWithConcurrency(
         dueSources,
         REDDIT_CONCURRENCY,
-        (source) => fetchRedditFeed(source, DEFAULT_TIMEOUT, emergency),
+        (source) => scheduleOutboundSource(
+          'www.reddit.com',
+          () => fetchRedditFeed(source, DEFAULT_TIMEOUT, emergency),
+        ),
     );
     return results.flat();
 }
@@ -278,7 +312,9 @@ export async function fetchAllRedditFeeds(now = Date.now(), emergency = false): 
 export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
     const sources = RSS_SOURCES.filter(s => s.category === category);
 
-    const results = await mapWithConcurrency(sources, RSS_CONCURRENCY, fetchSingleFeed);
+    const results = await mapWithConcurrency(sources, RSS_CONCURRENCY, (source) =>
+      scheduleOutboundSource(sourceHost(source.url, `rss:${source.name}`), () => fetchSingleFeed(source))
+    );
     const allItems = results.flat();
 
     return allItems.sort((a, b) =>

@@ -37,8 +37,12 @@ const geoAdmin1 = rawGeoData.admin1;
 const geoCountries = rawGeoData.countries || {};
 
 let isInitialized = false;
-export const KNOWN_LOCATIONS: Record<string, LocationEntry> = {};
-export const LOCATION_CANDIDATES: Record<string, LocationEntry[]> = {};
+// Location names come from untrusted article text. A normal object inherits keys
+// such as "constructor" and "toString", which can be mistaken for gazetteer
+// entries when accessed dynamically. Null-prototype dictionaries ensure that an
+// unknown location always behaves like a missing key.
+export const KNOWN_LOCATIONS: Record<string, LocationEntry> = Object.create(null);
+export const LOCATION_CANDIDATES: Record<string, LocationEntry[]> = Object.create(null);
 export const MULTI_WORD_LOC_SET: Set<string> = new Set();
 
 const ADMIN_SUFFIX_STRIP = /\s+(state|province|department|oblast|governorate|prefecture|county|district|region|krai|raion|emirate|wilayah|republic)$/i;

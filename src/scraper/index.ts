@@ -41,6 +41,9 @@ import { createOperationsRecorder } from '@/lib/operationsCore';
 import { loadFeedValidators, persistFeedValidators } from './feedValidators';
 import { closePublicFetchAgents } from '@/lib/security/ogImage';
 import { EMERGENCY_COUNT_MULTIPLIER } from '@/lib/api/sourcePolling';
+import { loadOpenSourceCircuits } from './sourceCircuits';
+import { isSourceCircuitOpen } from '@/lib/api/sourceCircuit';
+import { scheduleOutboundSource } from '@/lib/api/outboundScheduler';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 const EMERGENCY_MODE = process.argv.slice(2).includes("--emergency");
@@ -147,17 +150,30 @@ async function run(): Promise<void> {
 
   const feedValidators = await loadFeedValidators(db);
   const updatedFeedValidators = new Map<string, { etag?: string | null; lastModified?: string | null }>();
+  const pollingNow = Date.now();
+  const openCircuits = EMERGENCY_MODE
+    ? new Set<string>()
+    : await loadOpenSourceCircuits(db, pollingNow);
+  if (openCircuits.size > 0) {
+    console.warn(`[polling] ${openCircuits.size} source circuit(s) are cooling down.`);
+  }
 
   const [rssItems, redditItems, gnewsItems, socialItems] =
     (await Promise.allSettled([
-      fetchAllRSSFeeds(Date.now(), {
+      fetchAllRSSFeeds(pollingNow, {
         validators: feedValidators,
         onValidator: (sourceUrl, validator) => updatedFeedValidators.set(sourceUrl, validator),
         emergency: EMERGENCY_MODE,
+        openCircuits,
       }),
-      fetchAllRedditFeeds(Date.now(), EMERGENCY_MODE),
-      fetchHealthEventGNews(EMERGENCY_MODE ? 30 : 20),
-      fetchSocialFeeds(Date.now(), EMERGENCY_MODE),
+      fetchAllRedditFeeds(pollingNow, EMERGENCY_MODE, openCircuits),
+      isSourceCircuitOpen(openCircuits, 'gnews', 'GNews health events')
+        ? Promise.resolve([])
+        : scheduleOutboundSource(
+            'gnews.io',
+            () => fetchHealthEventGNews(EMERGENCY_MODE ? 30 : 20),
+          ),
+      fetchSocialFeeds(pollingNow, EMERGENCY_MODE, openCircuits),
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
     )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[]];

@@ -15,6 +15,8 @@ import { ensureIsoDate } from '@/lib/utils/date';
 import { expandedItemLimit, selectDueSources, selectRecentFeedItems, socialPollTier } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
+import { scheduleOutboundSource, sourceHost } from './outboundScheduler';
+import { isSourceCircuitOpen } from './sourceCircuit';
 
 const DEFAULT_TIMEOUT = 15000;
 const X_MAX_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
@@ -458,14 +460,16 @@ function bestXCandidate(candidates: Array<{ strategy: string; items: NewsItem[] 
 export async function fetchXFeed(source: SocialSource, emergency = false): Promise<NewsItem[]> {
     const startedAt = Date.now();
     const username = source.url;
-    const [syndication, nitter] = await Promise.all([
-        trySyndicationFeed(username),
-        tryNitterFeed(username),
-    ]);
-    const directCandidate = bestXCandidate([
+    const syndication = await trySyndicationFeed(username);
+    let directCandidate = bestXCandidate([
         { strategy: 'syndication', items: syndication ? normalizeXFeed(source, syndication, Date.now(), emergency) : [] },
-        { strategy: 'nitter', items: nitter ? normalizeXFeed(source, nitter, Date.now(), emergency) : [] },
     ]);
+    if (!directCandidate) {
+        const nitter = await tryNitterFeed(username);
+        directCandidate = bestXCandidate([
+            { strategy: 'nitter', items: nitter ? normalizeXFeed(source, nitter, Date.now(), emergency) : [] },
+        ]);
+    }
     if (directCandidate) {
         recordSourceAttempt({ source_name: source.name, source_type: 'x', poll_tier: String(socialPollTier(source)), outcome: 'healthy', fetched_count: directCandidate.items.length, accepted_count: directCandidate.items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(directCandidate.items), duration_ms: Date.now() - startedAt, error_code: null });
         console.log(`[X] ${source.name}: ${directCandidate.strategy} (${directCandidate.items.length} fresh items)`);
@@ -487,12 +491,29 @@ export async function fetchXFeed(source: SocialSource, emergency = false): Promi
 /**
  * Orchestrates social media feed ingestion from all configured channels.
  */
-export async function fetchSocialFeeds(now = Date.now(), emergency = false): Promise<NewsItem[]> {
-    const dueTelegram = selectDueSources(TELEGRAM_CHANNELS, socialPollTier, now, emergency);
-    const dueX = selectDueSources(X_ACCOUNTS, socialPollTier, now, emergency);
-    console.log(`[polling] Social: ${dueTelegram.length}/${TELEGRAM_CHANNELS.length} Telegram and ${dueX.length}/${X_ACCOUNTS.length} X sources due`);
-    const telegramPromises = dueTelegram.map(source => scrapeTelegramChannel(source, DEFAULT_TIMEOUT, emergency));
-    const xPromises = dueX.map(source => fetchXFeed(source, emergency));
+export async function fetchSocialFeeds(
+    now = Date.now(),
+    emergency = false,
+    openCircuits?: ReadonlySet<string>,
+): Promise<NewsItem[]> {
+    const scheduledTelegram = selectDueSources(TELEGRAM_CHANNELS, socialPollTier, now, emergency);
+    const scheduledX = selectDueSources(X_ACCOUNTS, socialPollTier, now, emergency);
+    const dueTelegram = scheduledTelegram.filter((source) =>
+        !isSourceCircuitOpen(openCircuits, 'telegram', source.name)
+    );
+    const dueX = scheduledX.filter((source) =>
+        !isSourceCircuitOpen(openCircuits, 'x', source.name)
+    );
+    const suppressed = scheduledTelegram.length + scheduledX.length - dueTelegram.length - dueX.length;
+    console.log(`[polling] Social: ${dueTelegram.length}/${TELEGRAM_CHANNELS.length} Telegram and ${dueX.length}/${X_ACCOUNTS.length} X sources due${suppressed ? ` (${suppressed} circuit-open)` : ''}`);
+    const telegramPromises = dueTelegram.map(source => scheduleOutboundSource(
+        sourceHost(source.url, 'telegram'),
+        () => scrapeTelegramChannel(source, DEFAULT_TIMEOUT, emergency),
+    ));
+    const xPromises = dueX.map(source => scheduleOutboundSource(
+        'x-social',
+        () => fetchXFeed(source, emergency),
+    ));
 
     const results = await Promise.allSettled([...telegramPromises, ...xPromises]);
 

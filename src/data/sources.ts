@@ -11,6 +11,7 @@ Credibility Tier System:
 export interface RSSSource {
     name: string;
     url: string;
+    fallbackUrls?: string[];
     category: string;
     credibility_tier: 1 | 2 | 3;
     region?: string;
@@ -40,7 +41,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'DW News', url: 'https://rss.dw.com/rdf/rss-en-eu', category: 'world', credibility_tier: 1, region: 'europe' },
     { name: 'France 24', url: 'https://www.france24.com/en/europe/rss', category: 'world', credibility_tier: 1, region: 'europe' },
     { name: 'Politico Europe', url: 'https://www.politico.eu/feed/', category: 'world', credibility_tier: 1, region: 'europe' },
-    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed', category: 'world', credibility_tier: 1, region: 'asia' },
+    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'CNA Asia', url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Nikkei Asia', url: 'https://asia.nikkei.com/rss/feed/nar', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'The Hindu', url: 'https://www.thehindu.com/news/international/feeder/default.rss', category: 'world', credibility_tier: 1, region: 'asia' },
@@ -61,12 +62,12 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'The Straits Times', url: 'https://www.straitstimes.com/news/asia/rss.xml', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'ANTARA News', url: 'https://en.antaranews.com/rss/news.xml', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Nunatsiaq News', url: 'https://nunatsiaq.com/feed/', category: 'world', credibility_tier: 2, region: 'north_america' },
-    { name: 'Times of Israel', url: 'https://www.timesofisrael.com/feed/', category: 'world', credibility_tier: 2, region: 'middle_east' },
+    { name: 'Times of Israel', url: 'https://www.timesofisrael.com/feed/', fallbackUrls: ['https://news.google.com/rss/search?q=site%3Atimesofisrael.com&hl=en-US&gl=US&ceid=US%3Aen'], category: 'world', credibility_tier: 2, region: 'middle_east' },
     { name: 'Middle East Eye', url: 'https://www.middleeasteye.net/rss', category: 'world', credibility_tier: 2, region: 'middle_east' },
     { name: 'MercoPress LatAm', url: 'https://en.mercopress.com/rss/', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'The Rio Times', url: 'https://www.riotimesonline.com/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'AllAfrica News', url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', category: 'world', credibility_tier: 2, region: 'africa' },
-    { name: 'Mail & Guardian', url: 'https://mg.co.za/feed/', category: 'world', credibility_tier: 2, region: 'africa' },
+    { name: 'Mail & Guardian', url: 'https://mg.co.za/rss/', category: 'world', credibility_tier: 2, region: 'africa' },
     { name: 'Latin America Reports', url: 'https://latinamericareports.com/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'The Tico Times', url: 'https://ticotimes.net/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'Mexico News Daily', url: 'https://mexiconewsdaily.com/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
@@ -145,7 +146,7 @@ export const RSS_SOURCES: RSSSource[] = [
 
     // LATIN AMERICA
     { name: 'Buenos Aires Times', url: 'https://www.batimes.com.ar/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
-    { name: 'The Santiago Times', url: 'https://santiagotimes.cl/feed', category: 'world', credibility_tier: 2, region: 'latin_america' },
+    { name: 'The Santiago Times', url: 'https://santiagotimes.com/feed', fallbackUrls: ['https://news.google.com/rss/search?q=site%3Asantiagotimes.com&hl=en-US&gl=US&ceid=US%3Aen'], category: 'world', credibility_tier: 2, region: 'latin_america' },
     { name: 'Colombia Reports', url: 'https://colombiareports.com/feed/', category: 'world', credibility_tier: 2, region: 'latin_america' },
 
     // AFRICA
@@ -161,7 +162,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Japan Times', url: 'https://www.japantimes.co.jp/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'Yonhap News', url: 'https://en.yna.co.kr/RSS/news.xml', category: 'world', credibility_tier: 1, region: 'asia' },
     { name: 'VNExpress International', url: 'https://e.vnexpress.net/rss/news.rss', category: 'world', credibility_tier: 1, region: 'asia' },
-    { name: 'Indian Express', url: 'https://indianexpress.com/feed/', category: 'world', credibility_tier: 1, region: 'asia' },
+    { name: 'Indian Express', url: 'https://indianexpress.com/feed/', fallbackUrls: ['https://news.google.com/rss/search?q=site%3Aindianexpress.com&hl=en-US&gl=US&ceid=US%3Aen'], category: 'world', credibility_tier: 1, region: 'asia' },
 
     // OCEANIA & PACIFIC
     { name: 'Post Courier', url: 'https://postcourier.com.pg/feed/', category: 'world', credibility_tier: 1, region: 'oceania' },

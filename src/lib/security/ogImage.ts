@@ -45,7 +45,54 @@ export type PublicBytesFetchOptions = PublicImageFetchOptions & {
   headers?: HeadersInit;
   requireHttps?: boolean;
   stopWhen?: (bytes: Uint8Array, contentType: string) => boolean;
+  throwOnError?: boolean;
 };
+
+export type PublicFetchFailureCode =
+  | 'invalid_url'
+  | 'https_required'
+  | 'dns_failure'
+  | 'no_public_address'
+  | 'timeout'
+  | 'connect_failure'
+  | 'redirect_missing'
+  | 'redirect_limit'
+  | 'http_error'
+  | 'content_type'
+  | 'body_read_failure';
+
+export class PublicFetchError extends Error {
+  readonly code: PublicFetchFailureCode;
+  readonly status?: number;
+  readonly retryAfterMs?: number;
+  readonly finalUrl?: string;
+
+  constructor(
+    code: PublicFetchFailureCode,
+    message: string,
+    details: { status?: number; retryAfterMs?: number; finalUrl?: string } = {},
+  ) {
+    super(message);
+    this.name = 'PublicFetchError';
+    this.code = code;
+    this.status = details.status;
+    this.retryAfterMs = details.retryAfterMs;
+    this.finalUrl = details.finalUrl;
+  }
+}
+
+function parseRetryAfter(value: string | null, now = Date.now()) {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
+}
+
+function failPublicBytes(options: PublicBytesFetchOptions, error: PublicFetchError): null {
+  if (options.throwOnError) throw error;
+  return null;
+}
 
 function unbracket(address: string) {
   return address.startsWith('[') && address.endsWith(']')
@@ -358,34 +405,92 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
 
   for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
     const safeDestination = validatePublicImageUrl(rawDestination);
-    if (!safeDestination) return null;
+    if (!safeDestination) {
+      return failPublicBytes(options, new PublicFetchError(
+        'invalid_url',
+        'Public resource URL is invalid or blocked',
+        { finalUrl: rawDestination },
+      ));
+    }
     const url = new URL(safeDestination);
-    if (options.requireHttps && url.protocol !== 'https:') return null;
+    if (options.requireHttps && url.protocol !== 'https:') {
+      return failPublicBytes(options, new PublicFetchError(
+        'https_required',
+        `HTTPS required for redirect destination ${url.hostname}`,
+        { finalUrl: url.toString() },
+      ));
+    }
 
     let answers: ResolvedAddress[];
     try {
       answers = await resolver(unbracket(url.hostname));
-    } catch {
-      return null;
+    } catch (error) {
+      return failPublicBytes(options, new PublicFetchError(
+        'dns_failure',
+        `DNS resolution failed for ${url.hostname}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        { finalUrl: url.toString() },
+      ));
     }
-    const address = answers.find((answer) => isPublicIpAddress(answer.address));
-    if (!address) return null;
+    const publicAddresses = answers.filter((answer) => isPublicIpAddress(answer.address));
+    if (publicAddresses.length === 0) {
+      return failPublicBytes(options, new PublicFetchError(
+        'no_public_address',
+        `No public address available for ${url.hostname}`,
+        { finalUrl: url.toString() },
+      ));
+    }
 
-    let hop: PinnedResponse;
-    try {
-      hop = await fetchHop(url, address.address, timeoutMs, options.headers, options.signal);
-    } catch {
-      return null;
+    let hop: PinnedResponse | null = null;
+    let lastConnectError: unknown;
+    for (const address of publicAddresses) {
+      try {
+        hop = await fetchHop(url, address.address, timeoutMs, options.headers, options.signal);
+        break;
+      } catch (error) {
+        lastConnectError = error;
+      }
+    }
+    if (!hop) {
+      const timedOut = lastConnectError instanceof Error &&
+        (lastConnectError.name === 'AbortError' || /timeout|aborted/i.test(lastConnectError.message));
+      return failPublicBytes(options, new PublicFetchError(
+        timedOut ? 'timeout' : 'connect_failure',
+        `${timedOut ? 'Request timed out' : 'Connection failed'} for ${url.hostname}`,
+        { finalUrl: url.toString() },
+      ));
     }
 
     try {
       if (isRedirect(hop.response)) {
         const location = hop.response.headers.get('location');
-        if (!location || redirectCount === maxRedirects) return null;
+        if (!location) {
+          return failPublicBytes(options, new PublicFetchError(
+            'redirect_missing',
+            `Redirect from ${url.hostname} did not include a destination`,
+            { status: hop.response.status, finalUrl: url.toString() },
+          ));
+        }
+        if (redirectCount === maxRedirects) {
+          return failPublicBytes(options, new PublicFetchError(
+            'redirect_limit',
+            `Redirect limit exceeded for ${url.hostname}`,
+            { status: hop.response.status, finalUrl: url.toString() },
+          ));
+        }
         rawDestination = new URL(location, url).toString();
         continue;
       }
-      if (!hop.response.ok && !options.allowedStatuses?.includes(hop.response.status)) return null;
+      if (!hop.response.ok && !options.allowedStatuses?.includes(hop.response.status)) {
+        return failPublicBytes(options, new PublicFetchError(
+          'http_error',
+          `HTTP ${hop.response.status} from ${url.hostname}`,
+          {
+            status: hop.response.status,
+            retryAfterMs: parseRetryAfter(hop.response.headers.get('retry-after')),
+            finalUrl: url.toString(),
+          },
+        ));
+      }
       const contentType = (hop.response.headers.get('content-type') || '')
         .split(';', 1)[0]
         .trim()
@@ -394,7 +499,11 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
         options.allowedContentTypes?.length &&
         !options.allowedContentTypes.some((allowed) => contentType.startsWith(allowed))
       ) {
-        return null;
+        return failPublicBytes(options, new PublicFetchError(
+          'content_type',
+          `Unexpected content type "${contentType || 'unknown'}" from ${url.hostname}`,
+          { status: hop.response.status, finalUrl: url.toString() },
+        ));
       }
       const responseMeta = {
         contentType,
@@ -409,20 +518,40 @@ export async function fetchPublicBytes(rawUrl: string, options: PublicBytesFetch
           ...responseMeta,
         };
       }
-      const prefix = await readResponsePrefix(
-        hop.response,
-        options.maxBytes,
-        contentType,
-        options.stopWhen,
-      );
-      return prefix ? { ...prefix, ...responseMeta } : null;
+      try {
+        const prefix = await readResponsePrefix(
+          hop.response,
+          options.maxBytes,
+          contentType,
+          options.stopWhen,
+        );
+        return prefix ? { ...prefix, ...responseMeta } : failPublicBytes(
+          options,
+          new PublicFetchError('body_read_failure', `Response body unavailable from ${url.hostname}`, {
+            status: hop.response.status,
+            finalUrl: url.toString(),
+          }),
+        );
+      } catch (error) {
+        return failPublicBytes(options, new PublicFetchError(
+          error instanceof Error && (error.name === 'AbortError' || /timeout|aborted/i.test(error.message))
+            ? 'timeout'
+            : 'body_read_failure',
+          `Response read failed for ${url.hostname}`,
+          { status: hop.response.status, finalUrl: url.toString() },
+        ));
+      }
     } finally {
       if (!hop.response.bodyUsed) await hop.response.body?.cancel();
       await hop.close();
     }
   }
 
-  return null;
+  return failPublicBytes(options, new PublicFetchError(
+    'redirect_limit',
+    'Redirect limit exceeded',
+    { finalUrl: rawDestination },
+  ));
 }
 
 /**

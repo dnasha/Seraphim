@@ -80,6 +80,22 @@ describe('geocodeLocation', () => {
         const result = await geocodeLocation('KYIV');
         expect(result).not.toBeNull();
     });
+
+    it.each(['constructor', 'toString', '__proto__'])(
+        'treats Object prototype key %s as an unknown location',
+        async placeName => {
+            await expect(geocodeLocation(placeName)).resolves.toBeNull();
+        },
+    );
+});
+
+describe('prototype-like article text', () => {
+    it('does not crash or create a location for a non-geographic Constructor mention', async () => {
+        await expect(resolveLocation(
+            'Constructor killed in factory accident',
+            'Officials said the constructor was working near machinery.',
+        )).resolves.toBeNull();
+    });
 });
 
 /*
