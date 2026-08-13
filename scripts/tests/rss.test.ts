@@ -31,7 +31,8 @@ vi.mock("@/lib/security/feedFetch", () => ({
 }));
 
 import { fetchAllRedditFeeds, fetchRedditFeed, fetchSingleFeed } from "@/lib/api/rss";
-import { RSS_SOURCES } from '@/data/sources';
+import { REDDIT_SOURCES, RSS_SOURCES } from '@/data/sources';
+import { sourceCircuitKey } from '@/lib/api/sourceCircuit';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -47,7 +48,8 @@ describe("RSS adapters", () => {
   it("normalizes standard feeds and prefers MediaRSS images", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<rss></rss>", { status: 200 })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response("<rss></rss>", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     mocks.parseString.mockResolvedValue({ items: [{
       title: "Headline",
       contentSnippet: "Summary",
@@ -65,6 +67,33 @@ describe("RSS adapters", () => {
       category: "world",
       imageUrl: "https://example.com/image.jpg",
     })]);
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('user-agent')).toMatch(/^server:seraphim:/);
+  });
+
+  it('recovers a blocked primary publisher through its configured fallback feed', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('blocked', { status: 403 }))
+      .mockResolvedValueOnce(new Response('<rss></rss>', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.parseString.mockResolvedValue({ items: [{
+      title: 'Fallback headline',
+      link: 'https://publisher.example/story',
+      pubDate: new Date().toISOString(),
+    }] });
+
+    const result = await fetchSingleFeed({
+      name: 'Blocked Publisher',
+      url: 'https://publisher.example/feed',
+      fallbackUrls: ['https://news.google.com/rss/search?q=site%3Apublisher.example'],
+      category: 'world',
+      credibility_tier: 2,
+    });
+    expect(result).toHaveLength(1);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://news.google.com/rss/search?q=site%3Apublisher.example',
+      expect.any(Object),
+    );
   });
 
   it("rejects non-XML and HTTP failures without passing unsafe input to the parser", async () => {
@@ -110,5 +139,15 @@ describe("RSS adapters", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(15);
     expect(maxActive).toBeLessThanOrEqual(3);
+  });
+
+  it('suppresses Reddit requests while source circuits are cooling down', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const openCircuits = new Set(REDDIT_SOURCES.map((source) =>
+      sourceCircuitKey('reddit', source.name)
+    ));
+    await expect(fetchAllRedditFeeds(0, false, openCircuits)).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

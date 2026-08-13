@@ -208,6 +208,26 @@ describe('proxy and OG guards', () => {
     expect(fetchHop).toHaveBeenCalledWith(expect.any(URL), '198.51.100.77', 1500);
   });
 
+  it('tries another vetted DNS address after a connection failure', async () => {
+    const fetchHop = vi.fn()
+      .mockRejectedValueOnce(new Error('edge unavailable'))
+      .mockResolvedValueOnce({
+        response: new Response('document', { headers: { 'content-type': 'text/plain' } }),
+        close: async () => undefined,
+      });
+    const result = await fetchPublicBytes('https://news.example/story', {
+      maxBytes: 1024,
+      resolveHost: async () => [
+        { address: '198.51.100.10', family: 4 },
+        { address: '198.51.100.11', family: 4 },
+      ],
+      fetchHop,
+    });
+    expect(result?.bytes.byteLength).toBeGreaterThan(0);
+    expect(fetchHop).toHaveBeenNthCalledWith(1, expect.any(URL), '198.51.100.10', 1500, undefined, undefined);
+    expect(fetchHop).toHaveBeenNthCalledWith(2, expect.any(URL), '198.51.100.11', 1500, undefined, undefined);
+  });
+
   it('stops public document reads at their byte budget', async () => {
     const close = vi.fn(async () => undefined);
     const result = await fetchPublicBytes('https://news.example/story', {

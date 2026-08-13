@@ -25,4 +25,14 @@ describe("adaptive source novelty budget", () => {
     expect(result.accepted).toHaveLength(20);
     expect(result.cappedBySource).toEqual({ Unknown: 5 });
   });
+
+  it("raises source caps by 50 percent for emergency recovery", () => {
+    const result = applySourceNoveltyLimits(
+      Array.from({ length: 35 }, (_, i) => item(i)),
+      new Map([["Noisy", 20]]),
+      1.5,
+    );
+    expect(result.accepted).toHaveLength(30);
+    expect(result.cappedBySource).toEqual({ Noisy: 5 });
+  });
 });

@@ -51,6 +51,11 @@ export function latestItemAt(items: Array<{ publishedAt: string }>) {
 }
 
 export function safeSourceErrorCode(error: unknown): string {
+  const structuredCode = error && typeof error === 'object' &&
+    'sourceErrorCode' in error && typeof error.sourceErrorCode === 'string'
+    ? error.sourceErrorCode
+    : null;
+  if (structuredCode) return structuredCode.slice(0, 64);
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (message.includes('timeout') || message.includes('aborted')) return 'timeout';
   if (message.includes('xml') || message.includes('parse')) return 'parse';

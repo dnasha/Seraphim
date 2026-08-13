@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BASE_POLL_INTERVAL_MS,
+  expandedItemLimit,
   isPollDue,
   rssPollTier,
   selectDueSources,
@@ -41,5 +42,31 @@ describe("source polling policy", () => {
     const sources = ["fast", "normal", "slow"] as const;
     expect(selectDueSources(sources, (tier) => tier, BASE_POLL_INTERVAL_MS * 2))
       .toEqual(["fast", "normal"]);
+  });
+
+  it('stagger-distributes normal and slow sources across their polling windows', () => {
+    const sources = Array.from({ length: 12 }, (_, index) => ({ name: `Source ${index}` }));
+    const normalCounts = new Map(sources.map((source) => [source.name, 0]));
+    const slowCounts = new Map(sources.map((source) => [source.name, 0]));
+    for (let slot = 0; slot < 2; slot++) {
+      for (const source of selectDueSources(sources, () => 'normal', BASE_POLL_INTERVAL_MS * slot)) {
+        normalCounts.set(source.name, normalCounts.get(source.name)! + 1);
+      }
+    }
+    for (let slot = 0; slot < 4; slot++) {
+      for (const source of selectDueSources(sources, () => 'slow', BASE_POLL_INTERVAL_MS * slot)) {
+        slowCounts.set(source.name, slowCounts.get(source.name)! + 1);
+      }
+    }
+    expect([...normalCounts.values()]).toEqual(Array(12).fill(1));
+    expect([...slowCounts.values()]).toEqual(Array(12).fill(1));
+  });
+
+  it("forces all sources and moderately expands item counts in emergency mode", () => {
+    const sources = ["fast", "normal", "slow"] as const;
+    expect(selectDueSources(sources, (tier) => tier, BASE_POLL_INTERVAL_MS, true))
+      .toEqual(sources);
+    expect(expandedItemLimit(10, true)).toBe(15);
+    expect(expandedItemLimit(10)).toBe(10);
   });
 });

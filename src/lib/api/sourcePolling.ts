@@ -3,6 +3,7 @@ import type { RSSSource, SocialSource } from "@/data/sources";
 export type PollTier = "fast" | "normal" | "slow";
 
 export const BASE_POLL_INTERVAL_MS = 15 * 60 * 1000;
+export const EMERGENCY_COUNT_MULTIPLIER = 1.5;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 const FAST_RSS_SOURCES = new Set([
@@ -51,16 +52,45 @@ export function isPollDue(tier: PollTier, now = Date.now()): boolean {
   return slot % TIER_DIVISOR[tier] === 0;
 }
 
+function stableSourceHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function isSourcePollDue(tier: PollTier, sourceKey: string, now = Date.now()) {
+  const divisor = TIER_DIVISOR[tier];
+  if (divisor === 1) return true;
+  const slot = Math.floor(now / BASE_POLL_INTERVAL_MS);
+  return slot % divisor === stableSourceHash(sourceKey) % divisor;
+}
+
 export function selectDueSources<T>(
   sources: readonly T[],
   getTier: (source: T) => PollTier,
   now = Date.now(),
+  forceAll = false,
+  getSourceKey: (source: T) => string = (source) => {
+    if (typeof source === 'string') return source;
+    if (source && typeof source === 'object' && 'name' in source) {
+      return String(source.name);
+    }
+    return String(source);
+  },
 ): T[] {
-  return sources.filter((source) => isPollDue(getTier(source), now));
+  if (forceAll) return [...sources];
+  return sources.filter((source) => isSourcePollDue(getTier(source), getSourceKey(source), now));
 }
 
-export function itemLimitForTier(tier: PollTier): number {
-  return TIER_ITEM_LIMIT[tier];
+export function expandedItemLimit(baseLimit: number, emergency = false): number {
+  return emergency ? Math.ceil(baseLimit * EMERGENCY_COUNT_MULTIPLIER) : baseLimit;
+}
+
+export function itemLimitForTier(tier: PollTier, emergency = false): number {
+  return expandedItemLimit(TIER_ITEM_LIMIT[tier], emergency);
 }
 
 export function selectRecentFeedItems<T>(

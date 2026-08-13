@@ -31,13 +31,15 @@ export async function loadSourceNoveltyLimits(
 export function applySourceNoveltyLimits(
   items: NewsItem[],
   limits: Map<string, number>,
+  limitMultiplier = 1,
 ): SourceBudgetResult {
   const accepted: NewsItem[] = [];
   const seen = new Map<string, number>();
   const cappedBySource: Record<string, number> = {};
 
   for (const item of items) {
-    const limit = limits.get(item.source) ?? DEFAULT_PER_SOURCE_LIMIT;
+    const baseLimit = limits.get(item.source) ?? DEFAULT_PER_SOURCE_LIMIT;
+    const limit = Math.ceil(baseLimit * limitMultiplier);
     const count = seen.get(item.source) ?? 0;
     if (count >= limit) {
       cappedBySource[item.source] = (cappedBySource[item.source] ?? 0) + 1;
