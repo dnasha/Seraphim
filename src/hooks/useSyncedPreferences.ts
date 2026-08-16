@@ -29,6 +29,7 @@ export interface SyncedPreferences {
   mapStyle: string;
   overlays: Record<string, boolean>;
   forceIndividualPins: boolean;
+  mutedClusters: boolean;
   globe: boolean;
 }
 
@@ -48,6 +49,7 @@ export const DEFAULT_SYNCED_PREFERENCES: SyncedPreferences = {
   mapStyle: 'standard',
   overlays: Object.fromEntries([...ALLOWED_OVERLAYS].map((key) => [key, false])),
   forceIndividualPins: false,
+  mutedClusters: false,
   globe: false,
 };
 
@@ -95,6 +97,7 @@ export function sanitizeSyncedPreferences(value: unknown): SyncedPreferences {
     mapStyle: typeof raw.mapStyle === 'string' && ALLOWED_MAP_STYLES.has(raw.mapStyle) ? raw.mapStyle : 'standard',
     overlays,
     forceIndividualPins: raw.forceIndividualPins === true,
+    mutedClusters: raw.mutedClusters === true,
     globe: raw.globe === true,
   };
 }

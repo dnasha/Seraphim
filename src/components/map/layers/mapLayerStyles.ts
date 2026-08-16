@@ -60,6 +60,31 @@ export const CLUSTERS_CIRCLE_PAINT: CirclePaint = {
   "circle-stroke-color": "#ffffff",
 };
 
+export const MUTED_CLUSTERS_CIRCLE_PAINT: CirclePaint = {
+  ...CLUSTERS_CIRCLE_PAINT,
+  "circle-color": "#64748b",
+  "circle-radius": [
+    "interpolate",
+    ["linear"],
+    ["coalesce", ["get", "summedStoryCount"], ["get", "storyCount"], 0],
+    2,
+    12,
+    10,
+    16,
+    50,
+    19,
+    100,
+    23,
+    250,
+    25,
+    500,
+    28,
+    1000,
+    32,
+  ],
+  "circle-opacity": 0.82,
+};
+
 export const HOT_STORY_PULSE_PAINT: CirclePaint = {
   "circle-radius": 0,
   "circle-color": [

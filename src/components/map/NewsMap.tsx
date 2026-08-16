@@ -29,6 +29,10 @@ import { useMapCamera } from "./useMapCamera";
 import { startVisiblePolling } from "./overlayPolling";
 import { buildNewsFeatureCollection } from "./newsGeoJson";
 import { createHotStoryPulseController } from "./pulseController";
+import {
+  CLUSTERS_CIRCLE_PAINT,
+  MUTED_CLUSTERS_CIRCLE_PAINT,
+} from "./layers/mapLayerStyles";
 import MapSettings from "./MapSettings";
 import MapActionTools from "./MapActionTools";
 import UpgradeButton from "./UpgradeButton";
@@ -135,6 +139,7 @@ export default function NewsMap({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
+  const [mutedClusters, setMutedClusters] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
     isDarkMode ? "dark" : "standard",
   );
@@ -191,6 +196,7 @@ export default function NewsMap({
     setCurrentStyle(allowedStyle);
     setOverlays((current) => ({ ...current, ...allowedOverlays }));
     setForceIndividualPins(hasFeature(userTier, 'individualPins') && syncedPreferences.forceIndividualPins);
+    setMutedClusters(syncedPreferences.mutedClusters);
     setIsGlobe(hasFeature(userTier, 'globe') && syncedPreferences.globe);
   }, [isDarkMode, preferenceOwnerId, syncedPreferences, userTier]);
 
@@ -233,6 +239,19 @@ export default function NewsMap({
   useEffect(() => {
     overlaysRef.current = overlays;
   }, [overlays]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map?.getLayer("clusters-circle")) return;
+
+    const paint = mutedClusters
+      ? MUTED_CLUSTERS_CIRCLE_PAINT
+      : CLUSTERS_CIRCLE_PAINT;
+    if (!paint) return;
+    for (const [property, value] of Object.entries(paint)) {
+      map.setPaintProperty("clusters-circle", property, value);
+    }
+  }, [mapReady, mutedClusters]);
 
   // Decorative paint transitions are paused during camera interaction so they
   // never compete with MapLibre's pan/zoom render loop.
@@ -1106,6 +1125,11 @@ export default function NewsMap({
             panelRef={settingsPanelRef as React.RefObject<HTMLDivElement>}
             animatedEffects={animatedEffects}
             onAnimatedEffectsChange={onAnimatedEffectsChange}
+            mutedClusters={mutedClusters}
+            onMutedClustersChange={(value) => {
+              setMutedClusters(value);
+              onSyncedPreferencesChange?.({ mutedClusters: value });
+            }}
             userTier={userTier}
           />
           <MapActionTools
