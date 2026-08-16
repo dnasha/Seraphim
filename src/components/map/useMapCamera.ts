@@ -34,6 +34,11 @@ type SelectionCameraPadding = {
   right: number;
 };
 
+type CameraOrientation = {
+  pitch: number;
+  bearing: number;
+};
+
 const POPUP_VIEWPORT_GUTTER = 16;
 const MOBILE_MINIMUM_VISIBLE_MAP_HEIGHT = 160;
 
@@ -103,6 +108,10 @@ export function useMapCamera({
   const lastFlownCoordsRef = useRef<[number, number] | null>(null);
   const isFlyingRef = useRef(false);
   const selectionCameraActiveRef = useRef(false);
+  // Globe story flights temporarily own pitch and bearing. Keep the user's
+  // prior orientation for the whole selection session so closing a story (or
+  // switching through several stories, then closing) can return it intact.
+  const preSelectionOrientationRef = useRef<CameraOrientation | null>(null);
   // Invalidates moveend handlers from a flight superseded by a retarget.
   const activeFlightIdRef = useRef(0);
   // Prevent the one-time post-style correction from being re-armed when a
@@ -202,6 +211,9 @@ export function useMapCamera({
 
   const handleResetOrientation = useCallback(() => {
     if (!mapRef.current) return;
+    // An explicit reset becomes the new user-owned orientation; closing the
+    // current story must not restore an older angle afterward.
+    preSelectionOrientationRef.current = null;
     mapRef.current.easeTo({
       pitch: 0,
       bearing: 0,
@@ -332,12 +344,20 @@ export function useMapCamera({
         const currentZoom = map.getZoom();
         const targetZoom = Math.max(currentZoom, 8.5);
         const selectionPadding = getSelectionCameraPadding();
+        const appliesGlobeOrientation = animatedEffects && isGlobe;
+
+        if (appliesGlobeOrientation && !preSelectionOrientationRef.current) {
+          preSelectionOrientationRef.current = {
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
+          };
+        }
 
         map.flyTo({
           center: [item.longitude!, item.latitude!],
           zoom: targetZoom,
-          pitch: animatedEffects && isGlobe ? 45 : 0,
-          bearing: animatedEffects && isGlobe ? (Math.random() - 0.5) * 10 : 0,
+          pitch: appliesGlobeOrientation ? 45 : 0,
+          bearing: appliesGlobeOrientation ? (Math.random() - 0.5) * 10 : 0,
           speed: animatedEffects ? 1.8 : 1.2,
           curve: animatedEffects ? 1.2 : 1,
           essential: true,
@@ -379,21 +399,32 @@ export function useMapCamera({
         });
       }
     } else {
-      const wasSelected = lastFlownSelectionRef.current !== null;
-      if (wasSelected) {
+      const hadSelectionCameraState =
+        lastFlownSelectionRef.current !== null ||
+        preSelectionOrientationRef.current !== null;
+      if (hadSelectionCameraState) {
         cancelCameraFlight();
         const currentPadding = map.getPadding();
-        if (
+        const hasSelectionPadding =
           currentPadding.top !== 0 ||
           currentPadding.bottom !== 0 ||
           currentPadding.left !== 0 ||
-          currentPadding.right !== 0
-        ) {
+          currentPadding.right !== 0;
+        const previousOrientation = preSelectionOrientationRef.current;
+
+        if (hasSelectionPadding || (previousOrientation && isGlobe)) {
           map.easeTo({
             padding: { top: 0, bottom: 0, left: 0, right: 0 },
+            ...(previousOrientation && isGlobe
+              ? {
+                  pitch: previousOrientation.pitch,
+                  bearing: previousOrientation.bearing,
+                }
+              : {}),
             duration: 300,
           });
         }
+        preSelectionOrientationRef.current = null;
         lastFlownSelectionRef.current = null;
         lastFlownVersionRef.current = 0;
       }
