@@ -17,6 +17,10 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { DbEventSource } from "@/types";
 import {
+  calculateImpactScore,
+  countIndependentSources,
+} from "@/lib/utils/corroboration";
+import {
   canonicalizeEventUrl,
   cleanAndCapDescription,
   isClearlyNonEvent,
@@ -301,19 +305,25 @@ async function cleanArchive() {
       const descriptionChanged = cleanedDescription !== (row.description ?? "");
       const count = 1 + normalized.sources.length;
       const countChanged = count !== row.event_count;
+      const independentPublisherCount = countIndependentSources({
+        name: row.source,
+        url: row.url,
+        source_type: row.source_type,
+        title: row.title,
+      }, normalized.sources);
+      const impactScore = calculateImpactScore(row.credibility_tier, independentPublisherCount);
+      const impactScoreChanged = impactScore !== row.impact_score;
       const primaryTimeChanged = normalized.primaryDiscoveredAt !== row.primary_discovered_at;
       if (normalized.removedSelf) report.self_links_removed++;
       if (descriptionChanged) report.descriptions_capped++;
 
-      if (sourcesChanged || descriptionChanged || countChanged || primaryTimeChanged) {
+      if (sourcesChanged || descriptionChanged || countChanged || impactScoreChanged || primaryTimeChanged) {
         updates.push({
           id: row.id,
           ...(sourcesChanged ? { sources: normalized.sources } : {}),
           ...(descriptionChanged ? { description: cleanedDescription } : {}),
-          ...(countChanged ? {
-            event_count: count,
-            impact_score: count * (5 - (row.credibility_tier || 3)),
-          } : {}),
+          ...(countChanged ? { event_count: count } : {}),
+          ...(impactScoreChanged ? { impact_score: impactScore } : {}),
           ...(primaryTimeChanged ? { primary_discovered_at: normalized.primaryDiscoveredAt } : {}),
         });
       }
@@ -408,11 +418,17 @@ async function collapseExactDuplicates() {
       unique.delete(canonicalizeEventUrl(winner.url));
       const sources = [...unique.values()];
       const count = 1 + sources.length;
+      const independentPublisherCount = countIndependentSources({
+        name: winner.source,
+        url: winner.url,
+        source_type: winner.source_type,
+        title: winner.title,
+      }, sources);
       await applyBatch([{
         id: winner.id,
         sources,
         event_count: count,
-        impact_score: count * (5 - (winner.credibility_tier || 3)),
+        impact_score: calculateImpactScore(winner.credibility_tier, independentPublisherCount),
         primary_discovered_at: winner.primary_discovered_at ?? winner.published_at,
       }], cluster.filter((row) => row.id !== winner.id).map((row) => row.id));
       report.duplicate_groups++;

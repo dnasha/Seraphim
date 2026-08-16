@@ -309,7 +309,6 @@ export async function GET(request: Request) {
           query = sort === "hot"
             ? query
                 .order("impact_score", { ascending: false, nullsFirst: false })
-                .order("event_count", { ascending: false, nullsFirst: false })
                 .order("published_at", { ascending: false })
             : query.order("published_at", { ascending: false });
           query = query.limit(effectiveLimit);

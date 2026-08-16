@@ -324,9 +324,6 @@ export default function NewsMap({
         const scoreB = b.impactScore || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
 
-        const countA = canonicalEventCount(a);
-        const countB = canonicalEventCount(b);
-        if (countB !== countA) return countB - countA;
       }
 
       return latestReportTimestamp(b) - latestReportTimestamp(a);

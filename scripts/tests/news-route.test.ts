@@ -195,7 +195,7 @@ describe("GET /api/news", () => {
 
     expect(mocks.from).toHaveBeenCalledTimes(1);
     expect(query.order).toHaveBeenCalledWith("impact_score", { ascending: false, nullsFirst: false });
-    expect(query.order).toHaveBeenCalledWith("event_count", { ascending: false, nullsFirst: false });
+    expect(query.order).not.toHaveBeenCalledWith("event_count", expect.anything());
     expect(query.gte).toHaveBeenCalledWith("latitude", -0.00001);
     expect(query.lte).toHaveBeenCalledWith("longitude", 30.00001);
     await expect(first.json()).resolves.toMatchObject({ items: [expect.objectContaining({ id: eventRow.id })] });

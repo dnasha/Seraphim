@@ -109,13 +109,11 @@ export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): numb
         const scoreB = (b.impactScore ?? rawB.impact_score) as number || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
 
-        // 2. Source Count (Descending)
-        const countA = canonicalEventCount(a);
-        const countB = canonicalEventCount(b);
-        if (countB !== countA) return countB - countA;
+        // Raw article volume is not a corroboration signal. Same-publisher
+        // templates may legitimately leave many entries in a timeline.
     }
 
-    // 3. Recency (Descending)
+    // 2. Recency (Descending)
     const timeA = latestReportTimestamp(a);
     const timeB = latestReportTimestamp(b);
     if (timeB !== timeA) return timeB - timeA;

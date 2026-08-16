@@ -11,7 +11,8 @@ import {
   SIMILARITY_THRESHOLD_PROXIMITY,
   MAX_MERGE_DISTANCE_KM,
 } from "@/lib/utils/vectorize";
-import { canonicalizeEventUrl, normalizeTitleFingerprint } from "./utils/content";
+import { canonicalizeEventUrl, isRecurringTemplatePair, normalizeTitleFingerprint } from "./utils/content";
+import { publisherKey } from "@/lib/utils/corroboration";
 
 const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
 const VECTOR_QUERY_CHUNK_SIZE = 100;
@@ -431,7 +432,19 @@ export async function resolveStoryMerges(
     const bestMatchId = bestMatchIds[index];
     const matchedCandidate = bestMatchId ? candidateDetails.get(bestMatchId) : undefined;
 
-    if (bestMatchId && matchedCandidate) {
+    const samePublisherRecurringTemplate = matchedCandidate
+      ? publisherKey({
+          name: event.source,
+          url: event.url,
+          source_type: event.source_type,
+        }) === publisherKey({
+          name: matchedCandidate.source,
+          url: matchedCandidate.url,
+          source_type: matchedCandidate.source_type,
+        }) && isRecurringTemplatePair(event.title, matchedCandidate.title)
+      : false;
+
+    if (bestMatchId && matchedCandidate && !samePublisherRecurringTemplate) {
       const existingMerge = merges.get(bestMatchId);
       const storyState = existingMerge ? { ...matchedCandidate, ...existingMerge } : matchedCandidate;
       const sourceExists =

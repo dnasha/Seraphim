@@ -7,10 +7,25 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { latestReportTimestamp, canonicalEventCount } from '@/lib/utils/ranking';
+import { latestReportTimestamp, canonicalEventCount, compareNewsItems } from '@/lib/utils/ranking';
 import { NewsItem } from '@/lib/core/types';
 
 describe('Ranking Logic Robustness', () => {
+    it('does not use raw same-publisher article volume as a hot-sort tiebreaker', () => {
+        const olderTemplate = {
+            id: 'template', title: 'Daily brief', url: 'https://example.com/template',
+            source: 'Example', sourceType: 'rss', publishedAt: '2026-04-10T10:00:00Z',
+            sourcesCount: 50, impactScore: 1.5,
+        } as NewsItem;
+        const newerReport = {
+            id: 'newer', title: 'New report', url: 'https://other.example/report',
+            source: 'Other', sourceType: 'rss', publishedAt: '2026-04-10T11:00:00Z',
+            sourcesCount: 1, impactScore: 1.5,
+        } as NewsItem;
+
+        expect(compareNewsItems(olderTemplate, newerReport, 'hot')).toBeGreaterThan(0);
+    });
+
     /*
       latestReportTimestamp
       Ensures the latest activity or publication date is correctly identified

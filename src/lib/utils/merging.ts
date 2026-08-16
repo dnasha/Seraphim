@@ -5,6 +5,11 @@
  */
 
 import { DbEvent, DbEventSource } from "@/types";
+import {
+  calculateImpactScore,
+  contentFingerprint,
+  countIndependentSources,
+} from "@/lib/utils/corroboration";
 
 const DESCRIPTION_STALENESS_MS = 6 * 60 * 60 * 1000; // 6 hours
 const DESCRIPTION_LENGTH_THRESHOLD = 0.7; // 70% of current length
@@ -238,6 +243,7 @@ export function calculateMergedStory(
     url: incomingEvent.url,
     source_type: incomingEvent.source_type,
     discovered_at: incomingEvent.published_at,
+    content_fingerprint: contentFingerprint(incomingEvent.title),
   };
 
   const existingPrimary: DbEventSource = {
@@ -245,7 +251,12 @@ export function calculateMergedStory(
     url: existingStory.url,
     source_type: existingStory.source_type,
     discovered_at: masterSource?.discovered_at ?? existingStory.published_at,
+    content_fingerprint: contentFingerprint(existingStory.title),
   };
+  const previousIndependentPublisherCount = countIndependentSources(
+    existingPrimary,
+    existingStory.sources,
+  );
   const finalPrimaryUrl = updateTitle ? incomingEvent.url : existingStory.url;
   const uniqueByUrl = new Map<string, DbEventSource>();
   for (const article of [existingPrimary, ...existingStory.sources, incomingSource]) {
@@ -254,14 +265,18 @@ export function calculateMergedStory(
   uniqueByUrl.delete(finalPrimaryUrl);
   const updatedSources = [...uniqueByUrl.values()];
   const eventCount = 1 + updatedSources.length;
+  const finalPrimary = updateTitle ? incomingSource : existingPrimary;
+  const independentPublisherCount = countIndependentSources(finalPrimary, updatedSources);
+  const gainedIndependentCorroboration =
+    independentPublisherCount > previousIndependentPublisherCount;
   
   /**
    * Impact Score Calculation:
-   * Multiplies the number of events by a credibility factor (5 minus the best tier).
-   * This ensures stories with more sources and higher credibility are ranked higher.
+   * Preserves the credibility baseline and rewards only independent editorial
+   * origins, collapsing same-publisher volume and identical syndicated copy.
    */
   const bestTierForImpact = Math.min(currentTier, incomingTier);
-  const impactScore = eventCount * (5.0 - bestTierForImpact);
+  const impactScore = calculateImpactScore(bestTierForImpact, independentPublisherCount);
 
   return {
     id: existingStory.id,
@@ -269,9 +284,8 @@ export function calculateMergedStory(
     published_at: latestPublishedAt,
     event_count: eventCount,
     impact_score: impactScore,
-    // Any independent corroboration promotes a temporary low-signal report
-    // into the durable archive.
-    expires_at: null,
+    // Same-publisher updates do not make a temporary low-signal report durable.
+    ...(gainedIndependentCorroboration ? { expires_at: null } : {}),
     // Apply content updates if evaluation returned true
     ...(updateTitle ? {
       title: incomingEvent.title,
