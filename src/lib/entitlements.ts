@@ -10,6 +10,7 @@ export type TimeRangeKey = '1d' | '3d' | '1w' | '1m' | 'custom';
 
 export type EntitlementFeature =
   | 'search'
+  | 'randomEvent'
   | 'basicFilters'
   | 'advancedFilters'
   | 'fullTimeline'
@@ -33,6 +34,7 @@ export interface TierEntitlements {
 
 const GUEST_FEATURES: Record<EntitlementFeature, boolean> = {
   search: false,
+  randomEvent: false,
   basicFilters: false,
   advancedFilters: false,
   fullTimeline: false,
@@ -48,6 +50,7 @@ const GUEST_FEATURES: Record<EntitlementFeature, boolean> = {
 const FREE_FEATURES: Record<EntitlementFeature, boolean> = {
   ...GUEST_FEATURES,
   search: true,
+  randomEvent: true,
   basicFilters: true,
   drawTools: true,
 };

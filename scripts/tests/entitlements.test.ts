@@ -16,6 +16,8 @@ describe('tier entitlements', () => {
     expect(canUseTimeRange('pro', '1m')).toBe(true);
     expect(canUseTimeRange('pro', 'custom')).toBe(false);
     expect(canUseTimeRange('analyst', 'custom')).toBe(true);
+    expect(hasFeature('guest', 'randomEvent')).toBe(false);
+    expect(hasFeature('free', 'randomEvent')).toBe(true);
     expect(hasFeature('pro', 'geoJsonTransfer')).toBe(false);
     expect(hasFeature('analyst', 'geoJsonTransfer')).toBe(true);
   });

@@ -85,21 +85,25 @@ describe("calculateMergedStory", () => {
       sources: [source()],
     };
 
-    const result = calculateMergedStory(existing, incoming({ credibility_tier: 1, published_at: at(2) }));
+    const result = calculateMergedStory(existing, incoming({
+      credibility_tier: 1,
+      published_at: at(2),
+      url: "https://incoming.example/report",
+    }));
 
     expect(result).toMatchObject({
       id: "event-1",
       title: "Incoming update",
       description: "A fuller incoming description.",
       source: "Incoming source",
-      url: "https://example.com/incoming",
+      url: "https://incoming.example/report",
       credibility_tier: 1,
       source_type: "rss",
       published_at: at(2),
       event_count: 2,
-      impact_score: 8,
+      impact_score: 6.5,
     });
-    expect(result.sources).toEqual([source()]);
+    expect(result.sources).toEqual([expect.objectContaining(source())]);
   });
 
   it("keeps the current master timestamp when an older source is merely corroborating", () => {
@@ -120,9 +124,10 @@ describe("calculateMergedStory", () => {
       description: "Brief older report.",
       credibility_tier: 3,
       published_at: at(2),
+      url: "https://incoming.example/report",
     }));
 
-    expect(result).toMatchObject({ published_at: at(4), event_count: 2, impact_score: 8 });
+    expect(result).toMatchObject({ published_at: at(4), event_count: 2, impact_score: 6.5 });
     expect(result).not.toHaveProperty("title");
     expect(result).not.toHaveProperty("description");
   });
@@ -159,6 +164,33 @@ describe("calculateMergedStory", () => {
       url: "https://example.com/incoming",
     }));
     expect(result.event_count).toBe(3);
+  });
+
+  it("keeps same-publisher article volume out of impact and archive promotion", () => {
+    const existing = {
+      id: "event-1",
+      title: "São Paulo Nightlife Tonight — August 14, 2026",
+      description: "A dated nightlife listing.",
+      source: "The Rio Times",
+      source_type: "rss" as const,
+      url: "https://www.riotimesonline.com/sao-paulo-nightlife-tonight-august-14-2026",
+      credibility_tier: 2,
+      published_at: at(0),
+      sources: [source({
+        name: "The Rio Times",
+        url: "https://www.riotimesonline.com/sao-paulo-daily-brief-august-13-2026",
+      })],
+    };
+
+    const result = calculateMergedStory(existing, incoming({
+      title: "São Paulo Nightlife Tonight — August 15, 2026",
+      source: "The Rio Times",
+      url: "https://www.riotimesonline.com/sao-paulo-nightlife-tonight-august-15-2026",
+      published_at: at(1),
+    }));
+
+    expect(result).toMatchObject({ event_count: 3, impact_score: 1.5 });
+    expect(result).not.toHaveProperty("expires_at");
   });
 
   it("refreshes a populated image when the incoming source is at least 12 hours newer", () => {

@@ -23,6 +23,8 @@ interface MapSettingsProps {
     panelRef: React.RefObject<HTMLDivElement>;
     animatedEffects: boolean;
     onAnimatedEffectsChange: (val: boolean) => void;
+    mutedClusters: boolean;
+    onMutedClustersChange: (val: boolean) => void;
     userTier?: UserTier;
 }
 
@@ -45,6 +47,8 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     panelRef,
     animatedEffects,
     onAnimatedEffectsChange,
+    mutedClusters,
+    onMutedClustersChange,
     userTier = 'guest'
 }) => {
     const router = useRouter();
@@ -161,6 +165,12 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                         <button className={styles.settingsToggle} onClick={() => onAnimatedEffectsChange(!animatedEffects)} title={`${animatedEffects ? 'Disable' : 'Enable'} animated map and story effects`}>
                             <span className={styles.settingsToggleLabel}>Animated effects</span>
                             <div className={`${styles.toggleSwitch}${animatedEffects ? ` ${styles.toggleSwitchOn}` : ''}`}>
+                                <div className={styles.toggleKnob} />
+                            </div>
+                        </button>
+                        <button className={styles.settingsToggle} onClick={() => onMutedClustersChange(!mutedClusters)} title={`${mutedClusters ? 'Restore colorful' : 'Use smaller monochrome'} map clusters`}>
+                            <span className={styles.settingsToggleLabel}>Muted clusters</span>
+                            <div className={`${styles.toggleSwitch}${mutedClusters ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div>
                         </button>

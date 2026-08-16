@@ -929,6 +929,13 @@ Includes card expansion details and responsive mobile layouts.
   gap: 0;
 }
 
+.toolbarActionGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .sortToggleBtn {
   font-family: var(--font-ui);
   display: flex;
@@ -1297,6 +1304,51 @@ Includes card expansion details and responsive mobile layouts.
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+.randomEventBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.randomEventBtn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.randomEventBtnCoolingDown svg {
+  animation: randomDiceRoll 0.35s ease-out;
+}
+
+@keyframes randomDiceRoll {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(120deg) scale(1.15); }
+  100% { transform: rotate(240deg) scale(1); }
+}
+
+@container sidebar (max-width: 520px) {
+  .sortToggleRow {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .sortToggleBtn,
+  .filterToggleBtn {
+    padding-inline: 10px;
+  }
+
+  .toolbarActionGroup {
+    gap: 4px;
+  }
+
+  .updatedLabel {
+    display: none;
+  }
+
+  .liveStatusWrapper {
+    gap: 4px;
+  }
 }
 
 .filterBadgeCount {

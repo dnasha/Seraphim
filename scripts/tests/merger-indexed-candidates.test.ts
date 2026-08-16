@@ -212,4 +212,61 @@ describe("indexed scraper candidate matching", () => {
     expect(result.merges.has(fallbackId)).toBe(true);
     expect(result.newEvents).toHaveLength(0);
   });
+
+  it("keeps successive dated templates from one publisher as separate events", async () => {
+    const existingId = "33333333-3333-4333-8333-333333333333";
+    const titleQuery = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const detailQuery = {
+      select: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({
+        data: [{
+          id: existingId,
+          sources: [],
+          latitude: -23.55,
+          longitude: -46.63,
+          location_name: "São Paulo",
+          title: "São Paulo Nightlife Tonight — August 14, 2026",
+          description: "The previous dated nightlife listing.",
+          credibility_tier: 2,
+          impact_score: 1.5,
+          event_count: 1,
+          source: "The Rio Times",
+          source_type: "rss",
+          url: "https://www.riotimesonline.com/sao-paulo-nightlife-tonight-august-14-2026",
+          published_at: "2026-08-14T15:00:00.000Z",
+        }],
+        error: null,
+      }),
+    };
+    const from = vi.fn().mockReturnValueOnce(titleQuery).mockReturnValueOnce(detailQuery);
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{
+        query_index: 0,
+        event_id: existingId,
+        similarity: 0.98,
+        latitude: -23.55,
+        longitude: -46.63,
+        location_name: "São Paulo",
+      }],
+      error: null,
+    });
+
+    const result = await resolveStoryMerges([incoming({
+      title: "São Paulo Nightlife Tonight — August 15, 2026",
+      description: "The next dated nightlife listing.",
+      source: "The Rio Times",
+      url: "https://www.riotimesonline.com/sao-paulo-nightlife-tonight-august-15-2026",
+      published_at: "2026-08-15T15:00:00.000Z",
+      latitude: -23.55,
+      longitude: -46.63,
+      location_name: "São Paulo",
+    })], { from, rpc } as never);
+
+    expect(result.merges.size).toBe(0);
+    expect(result.newEvents).toHaveLength(1);
+  });
 });

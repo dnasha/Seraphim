@@ -41,6 +41,7 @@ describe('sanitizeSyncedPreferences', () => {
       mapStyle: 'satellite',
       overlays: { usgs: true, madeUp: true },
       forceIndividualPins: true,
+      mutedClusters: true,
       globe: true,
     })).toMatchObject({
       sources: ['reddit', 'news'],
@@ -57,6 +58,7 @@ describe('sanitizeSyncedPreferences', () => {
       mapStyle: 'satellite',
       overlays: expect.objectContaining({ usgs: true }),
       forceIndividualPins: true,
+      mutedClusters: true,
       globe: true,
     });
     expect(sanitizeSyncedPreferences({ overlays: { madeUp: true } }).overlays).not.toHaveProperty('madeUp');

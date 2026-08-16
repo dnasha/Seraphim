@@ -8,6 +8,7 @@ import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { RSS_SOURCES, REDDIT_SOURCES, TELEGRAM_CHANNELS, X_ACCOUNTS } from '@/data/sources';
+import { calculateImpactScore } from '@/lib/utils/corroboration';
 import { canonicalizeEventUrl, cleanAndCapTitle, lowSignalExpiry, shouldExpireLowSignalEvent } from './content';
 
 /* 
@@ -109,8 +110,7 @@ export function newsItemToDbEvent(item: NewsItem): DbEvent | null {
         location_name: cleanString(item.locationName) || null,
         credibility_tier: tier,
         event_count: 1,
-        /* Impact score calculation: Tier 1 (3.5 - 1 = 2.5), Tier 2 (1.5), Tier 3 (0.5) */
-        impact_score: 3.5 - tier,
+        impact_score: calculateImpactScore(tier, 1),
         // Corroborators only; the primary article already lives in source/url.
         sources: [],
         expires_at: expiresAt,

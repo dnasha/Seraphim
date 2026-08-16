@@ -1,4 +1,5 @@
 import type { NewsItem } from "@/lib/core/types";
+import { contentFingerprint } from "@/lib/utils/corroboration";
 
 export const MAX_STORED_DESCRIPTION_CHARS = 2_000;
 export const MAX_STORED_TITLE_CHARS = 500;
@@ -27,6 +28,22 @@ const OBVIOUS_NON_EVENT_PATTERNS = [
   /\b(?:betting odds|match odds|fantasy football)\b/i,
   /\b(?:transfer rumours?|starting lineup|match preview|live score)\b/i,
 ];
+
+// Recurring editorial products are useful content, but they are not discrete
+// events and their date variants are especially prone to semantic chaining.
+const RECURRING_EDITORIAL_TITLE_PATTERNS = [
+  /\b(?:daily|morning|evening|nightly|weekly)\s+(?:brief|briefing|digest|roundup|recap|headlines?)\b/i,
+  /\bnightlife\s+(?:tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*\b(?:january|february|march|april|may|june|july|august|september|october|november|december|20\d{2})\b/i,
+  /\btoday in (?:[\p{L}\p{N}]+\s+){0,3}history\b/iu,
+  /\btop headlines\b/i,
+  /\bconference-by-conference\b.*\b(?:leaders|rankings)\b/i,
+  /\b(?:football|basketball|baseball|hockey|soccer|cricket)\b.*\breturning\b.*\b(?:stat(?:istic)?\s+)?leaders\b/i,
+  /\bmost expensive homes sold\b/i,
+  /\bwhat(?:'|’)s on\b.*\b(?:today|tonight|week|weekend)\b/i,
+];
+
+const TEMPORAL_TITLE_MARKER = /\b(?:today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|20\d{2}|\d{1,2}(?:st|nd|rd|th)?)\b/i;
+const TEMPORAL_TEMPLATE_PARTS = /\b(?:today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|20\d{2}|\d{1,2}(?:st|nd|rd|th)?)\b/gi;
 
 const LOW_SIGNAL_ARCHIVE_PATTERNS = /\b(?:analysis|commentary|opinion|interview|explainer|podcast|newsletter|thread|what to know|five things|takeaways?)\b/i;
 
@@ -93,13 +110,23 @@ export function cleanAndCapTitle(title: unknown): string {
 }
 
 export function normalizeTitleFingerprint(title: string): string {
-  return title
-    .normalize("NFKC")
-    .toLocaleLowerCase("en-US")
-    .replace(/&(?:amp;)?/g, " and ")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return contentFingerprint(title);
+}
+
+export function recurringTemplateFingerprint(title: string): string {
+  return normalizeTitleFingerprint(title.replace(TEMPORAL_TEMPLATE_PARTS, " "));
+}
+
+/** Prevents successive dated editions from becoming one endlessly refreshed event. */
+export function isRecurringTemplatePair(firstTitle: string, secondTitle: string): boolean {
+  const first = normalizeTitleFingerprint(firstTitle);
+  const second = normalizeTitleFingerprint(secondTitle);
+  if (!first || !second || first === second) return false;
+  if (!TEMPORAL_TITLE_MARKER.test(firstTitle) || !TEMPORAL_TITLE_MARKER.test(secondTitle)) return false;
+
+  const firstTemplate = recurringTemplateFingerprint(firstTitle);
+  const secondTemplate = recurringTemplateFingerprint(secondTitle);
+  return firstTemplate.length >= 12 && firstTemplate === secondTemplate;
 }
 
 export function cleanAndCapDescription(description?: unknown): string {
@@ -136,6 +163,7 @@ export function cleanAndCapDescription(description?: unknown): string {
 
 export function isClearlyNonEvent(item: Pick<NewsItem, "title" | "description">): boolean {
   const text = `${item.title} ${item.description ?? ""}`.replace(/\s+/g, " ");
+  if (RECURRING_EDITORIAL_TITLE_PATTERNS.some((pattern) => pattern.test(item.title))) return true;
   if (STRONG_EVENT_TERMS.test(text)) return false;
   return OBVIOUS_NON_EVENT_PATTERNS.some((pattern) => pattern.test(text));
 }

@@ -19,6 +19,7 @@ export interface DbEventSource {
   url: string;
   source_type: string;
   discovered_at: string;
+  content_fingerprint?: string;
 }
 
 /**

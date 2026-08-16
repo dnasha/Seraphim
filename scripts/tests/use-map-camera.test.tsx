@@ -149,6 +149,71 @@ describe("useMapCamera", () => {
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
 
+  it("restores the user's orientation after globe stories are deselected", () => {
+    const canvas = document.createElement("canvas");
+    let pitch = 18;
+    let bearing = -12;
+    const flyTo = vi.fn((options: { pitch?: number; bearing?: number }) => {
+      pitch = options.pitch ?? pitch;
+      bearing = options.bearing ?? bearing;
+    });
+    const easeTo = vi.fn();
+    const map = {
+      getCanvas: () => canvas,
+      getLayer: vi.fn(),
+      getZoom: () => 3,
+      getPitch: () => pitch,
+      getBearing: () => bearing,
+      getPadding: () => ({ top: 120, bottom: 0, left: 0, right: 0 }),
+      flyTo,
+      easeTo,
+      stop: vi.fn(),
+      once: vi.fn(),
+    };
+    const popup = {
+      isOpen: () => true,
+      getLngLat: () => ({ lng: -74, lat: 40 }),
+      setLngLat: vi.fn(() => popup),
+    };
+    const item = story();
+    const secondItem = story({
+      id: "event-2",
+      longitude: -122,
+      latitude: 47,
+    });
+
+    const { rerender } = renderHook(
+      ({ selectedItemId }) =>
+        useMapCamera({
+          mapRef: { current: map } as unknown as React.MutableRefObject<null>,
+          mapReady: true,
+          popupRef: { current: popup } as unknown as React.MutableRefObject<null>,
+          popupContainer: null,
+          selectedItemId,
+          selectionVersion: 1,
+          geoItems: [item, secondItem],
+          latestGeoItemsRef: { current: [item, secondItem] },
+          animatedEffects: true,
+          isGlobe: true,
+          forceIndividualPinsRef: { current: false },
+          containerRef: { current: document.createElement("div") },
+        }),
+      { initialProps: { selectedItemId: "event-1" as string | null } },
+    );
+
+    expect(flyTo).toHaveBeenCalledWith(expect.objectContaining({ pitch: 45 }));
+
+    act(() => rerender({ selectedItemId: "event-2" }));
+    act(() => rerender({ selectedItemId: null }));
+
+    expect(easeTo).toHaveBeenLastCalledWith({
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      pitch: 18,
+      bearing: -12,
+      duration: 300,
+    });
+  });
+
   it("relinquishes camera control after a user gesture during a flight", () => {
     const canvas = document.createElement("canvas");
     const moveendHandlers: Array<() => void> = [];

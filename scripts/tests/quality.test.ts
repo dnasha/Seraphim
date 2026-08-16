@@ -57,4 +57,15 @@ describe("source quality gate", () => {
       description: "Authorities evacuated spectators after an explosion near the venue.",
     }))).toBeNull();
   });
+
+  it.each([
+    "N.J. football’s 2026 statewide, conference-by-conference returning defensive stat leaders",
+    "São Paulo Nightlife Tonight — August 15, 2026",
+    "Rio de Janeiro Nightlife Tonight — August 15, 2026",
+    "Rio de Janeiro Daily Brief for Thursday, August 13, 2026",
+    "Today in Korean history",
+    "10 most expensive homes sold in North Bergen area, Aug. 3-9",
+  ])("rejects recurring editorial template: %s", (title) => {
+    expect(getQualityRejectionReason(item({ title }))).toBe("clearly_non_event");
+  });
 });
