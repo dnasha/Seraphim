@@ -18,6 +18,7 @@ import {
   useCallback,
 } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
+import { LuDices } from "react-icons/lu";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import TierBadge from "@/components/ui/TierBadge";
@@ -32,7 +33,30 @@ import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./EventSidebar.module.css";
-import type { UserTier as EntitlementTier } from '@/lib/entitlements';
+import { hasFeature, type UserTier as EntitlementTier } from '@/lib/entitlements';
+
+const RANDOM_SELECTION_COOLDOWN_MS = 750;
+
+function randomIndex(length: number): number {
+  if (length <= 1) return 0;
+
+  // Browser crypto gives each loaded event an unbiased turn when available.
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const values = new Uint32Array(1);
+    const range = 0x1_0000_0000;
+    const limit = range - (range % length);
+    let value: number;
+
+    do {
+      crypto.getRandomValues(values);
+      value = values[0];
+    } while (value >= limit);
+
+    return value % length;
+  }
+
+  return Math.floor(Math.random() * length);
+}
 
 interface EventSidebarProps {
   items: NewsItem[];
@@ -90,9 +114,14 @@ export default function EventSidebar({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const hasInitialScrollRef = useRef(false);
+  const randomSeenIdsRef = useRef(new Set<string>());
+  const randomCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+  const [isRandomCoolingDown, setIsRandomCoolingDown] = useState(false);
   const { setShowAuthModal } = useAuth();
+
+  const canSelectRandom = !disabled && hasFeature(userTier as EntitlementTier, 'randomEvent');
 
   /* Resizable Sidebar Logic */
   const { sidebarWidth, isResizing, startResizing } = useResizable({
@@ -199,6 +228,60 @@ export default function EventSidebar({
     },
     [selectedItemId, onSelectItem, onToggleSidebar, onFetchDetails],
   );
+
+  const handleRandomSelect = useCallback(() => {
+    if (!canSelectRandom || isLoading || isRandomCoolingDown || items.length === 0) return;
+
+    const loadedItems = new Map<string, NewsItem>();
+    for (const item of items) {
+      loadedItems.set(canonicalNewsId(item), item);
+    }
+
+    const loadedIds = Array.from(loadedItems.keys());
+    const seenIds = randomSeenIdsRef.current;
+
+    // Forget events that disappeared after a search, filter, or viewport change.
+    for (const seenId of seenIds) {
+      if (!loadedItems.has(seenId)) seenIds.delete(seenId);
+    }
+
+    let candidates = loadedIds.filter(
+      (id) => id !== selectedItemId && !seenIds.has(id),
+    );
+
+    // Start a fresh bag only after every available alternative has had a turn.
+    if (candidates.length === 0) {
+      seenIds.clear();
+      candidates = loadedIds.filter((id) => id !== selectedItemId);
+    }
+
+    // A one-event result set can still be selected/re-centered.
+    if (candidates.length === 0) candidates = loadedIds;
+
+    const targetId = candidates[randomIndex(candidates.length)];
+    const targetItem = loadedItems.get(targetId);
+    if (!targetItem) return;
+
+    const needsTimelineDetails = canonicalEventCount(targetItem) > 1 && !targetItem.sources;
+    if (targetItem.description === undefined || needsTimelineDetails) {
+      onFetchDetails?.(targetId);
+    }
+
+    seenIds.add(targetId);
+    setExpandedId(null);
+    onSelectItem(targetId);
+
+    setIsRandomCoolingDown(true);
+    if (randomCooldownTimerRef.current) clearTimeout(randomCooldownTimerRef.current);
+    randomCooldownTimerRef.current = setTimeout(() => {
+      setIsRandomCoolingDown(false);
+      randomCooldownTimerRef.current = null;
+    }, RANDOM_SELECTION_COOLDOWN_MS);
+  }, [canSelectRandom, isLoading, isRandomCoolingDown, items, onFetchDetails, onSelectItem, selectedItemId]);
+
+  useEffect(() => () => {
+    if (randomCooldownTimerRef.current) clearTimeout(randomCooldownTimerRef.current);
+  }, []);
 
   const renderItem = useCallback(
     (index: number, item: NewsItem) => {
@@ -379,24 +462,43 @@ export default function EventSidebar({
           </button>
         </div>
 
-        <button
-          className={`${styles.filterToggleBtn} ${isFiltersExpanded ? styles.filterToggleBtnActive : ""} ${disabled ? styles.filterToggleBtnDisabled : ""}`}
-          onClick={() => !disabled && setIsFiltersExpanded((prev) => !prev)}
-          aria-pressed={isFiltersExpanded}
-          aria-label="Toggle filters"
-          aria-disabled={disabled}
-          title={disabled
-            ? 'Story filters require a free account'
-            : isFiltersExpanded ? 'Hide story filters' : 'Show story filters'}
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-            <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
-          </svg>
-          Filters
-          {filterCount > 0 && (
-            <span className={styles.filterBadgeCount}>{filterCount}</span>
-          )}
-        </button>
+        <div className={styles.toolbarActionGroup}>
+          <button
+            className={`${styles.filterToggleBtn} ${isFiltersExpanded ? styles.filterToggleBtnActive : ""} ${disabled ? styles.filterToggleBtnDisabled : ""}`}
+            onClick={() => !disabled && setIsFiltersExpanded((prev) => !prev)}
+            aria-pressed={isFiltersExpanded}
+            aria-label="Toggle filters"
+            aria-disabled={disabled}
+            title={disabled
+              ? 'Story filters require a free account'
+              : isFiltersExpanded ? 'Hide story filters' : 'Show story filters'}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
+            </svg>
+            Filters
+            {filterCount > 0 && (
+              <span className={styles.filterBadgeCount}>{filterCount}</span>
+            )}
+          </button>
+
+          <button
+            className={`${styles.filterToggleBtn} ${styles.randomEventBtn} ${isRandomCoolingDown ? styles.randomEventBtnCoolingDown : ""} ${!canSelectRandom ? styles.filterToggleBtnDisabled : ""}`}
+            onClick={handleRandomSelect}
+            disabled={!canSelectRandom || tierLoading || isLoading || items.length === 0 || isRandomCoolingDown}
+            aria-label={canSelectRandom ? 'Select a random loaded event' : 'Random event selection requires a free account'}
+            title={!canSelectRandom
+              ? 'Random event selection requires a free account'
+              : items.length === 0
+                ? 'No loaded events to select'
+                : isRandomCoolingDown
+                  ? 'Ready again in a moment'
+                  : 'Select a random loaded event'}
+          >
+            <LuDices aria-hidden="true" />
+            Random
+          </button>
+        </div>
 
         {/* Prevents hydration mismatch for time strings */}
         {(newestEventTime || isLoading) && (
