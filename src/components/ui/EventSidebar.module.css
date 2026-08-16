@@ -1351,6 +1351,19 @@ Includes card expansion details and responsive mobile layouts.
   }
 }
 
+@media (max-width: 860px) {
+  .sortToggleRow {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .liveStatusWrapper {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+}
+
 .filterBadgeCount {
   display: inline-flex;
   align-items: center;
