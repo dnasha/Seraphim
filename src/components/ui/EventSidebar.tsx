@@ -33,7 +33,10 @@ import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./EventSidebar.module.css";
-import { hasFeature, type UserTier as EntitlementTier } from '@/lib/entitlements';
+import {
+  hasFeature,
+  type UserTier as EntitlementTier,
+} from "@/lib/entitlements";
 
 const RANDOM_SELECTION_COOLDOWN_MS = 750;
 
@@ -115,13 +118,16 @@ export default function EventSidebar({
   const sidebarRef = useRef<HTMLElement>(null);
   const hasInitialScrollRef = useRef(false);
   const randomSeenIdsRef = useRef(new Set<string>());
-  const randomCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const randomCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isRandomCoolingDown, setIsRandomCoolingDown] = useState(false);
   const { setShowAuthModal } = useAuth();
 
-  const canSelectRandom = !disabled && hasFeature(userTier as EntitlementTier, 'randomEvent');
+  const canSelectRandom =
+    !disabled && hasFeature(userTier as EntitlementTier, "randomEvent");
 
   /* Resizable Sidebar Logic */
   const { sidebarWidth, isResizing, startResizing } = useResizable({
@@ -193,7 +199,9 @@ export default function EventSidebar({
   /* Scroll to selected item */
   useEffect(() => {
     if (!selectedItemId) return;
-    const index = displayItems.findIndex((i) => matchesNewsId(i, selectedItemId));
+    const index = displayItems.findIndex((i) =>
+      matchesNewsId(i, selectedItemId),
+    );
     if (index >= 0 && virtuosoRef.current) {
       virtuosoRef.current.scrollToIndex({
         index,
@@ -230,7 +238,13 @@ export default function EventSidebar({
   );
 
   const handleRandomSelect = useCallback(() => {
-    if (!canSelectRandom || isLoading || isRandomCoolingDown || items.length === 0) return;
+    if (
+      !canSelectRandom ||
+      isLoading ||
+      isRandomCoolingDown ||
+      items.length === 0
+    )
+      return;
 
     const loadedItems = new Map<string, NewsItem>();
     for (const item of items) {
@@ -262,7 +276,8 @@ export default function EventSidebar({
     const targetItem = loadedItems.get(targetId);
     if (!targetItem) return;
 
-    const needsTimelineDetails = canonicalEventCount(targetItem) > 1 && !targetItem.sources;
+    const needsTimelineDetails =
+      canonicalEventCount(targetItem) > 1 && !targetItem.sources;
     if (targetItem.description === undefined || needsTimelineDetails) {
       onFetchDetails?.(targetId);
     }
@@ -272,16 +287,29 @@ export default function EventSidebar({
     onSelectItem(targetId);
 
     setIsRandomCoolingDown(true);
-    if (randomCooldownTimerRef.current) clearTimeout(randomCooldownTimerRef.current);
+    if (randomCooldownTimerRef.current)
+      clearTimeout(randomCooldownTimerRef.current);
     randomCooldownTimerRef.current = setTimeout(() => {
       setIsRandomCoolingDown(false);
       randomCooldownTimerRef.current = null;
     }, RANDOM_SELECTION_COOLDOWN_MS);
-  }, [canSelectRandom, isLoading, isRandomCoolingDown, items, onFetchDetails, onSelectItem, selectedItemId]);
+  }, [
+    canSelectRandom,
+    isLoading,
+    isRandomCoolingDown,
+    items,
+    onFetchDetails,
+    onSelectItem,
+    selectedItemId,
+  ]);
 
-  useEffect(() => () => {
-    if (randomCooldownTimerRef.current) clearTimeout(randomCooldownTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (randomCooldownTimerRef.current)
+        clearTimeout(randomCooldownTimerRef.current);
+    },
+    [],
+  );
 
   const renderItem = useCallback(
     (index: number, item: NewsItem) => {
@@ -328,7 +356,11 @@ export default function EventSidebar({
 
       <div className={styles.eventSidebarHeader}>
         <div className={styles.eventSidebarLogo}>
-          <Link href="/" className={styles.logoLink} title="Return to the live intelligence map">
+          <Link
+            href="/"
+            className={styles.logoLink}
+            title="Return to the live intelligence map"
+          >
             <svg
               className={styles.sidebarLogoImg}
               width="200"
@@ -408,15 +440,23 @@ export default function EventSidebar({
           <input
             id="sidebar-search-input"
             type="text"
-            placeholder={disabled
-              ? "Sign in to search"
-              : `Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`}
+            placeholder={
+              disabled
+                ? "Sign in to search"
+                : `Search ${isCapped && appliedLimit ? `${appliedLimit.toLocaleString()}+` : totalStoryCount.toLocaleString()} stories...`
+            }
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className={styles.statsSearchInput}
             disabled={disabled}
-            aria-label={disabled ? "Sign in to search" : "Search stories by keyword"}
-            title={disabled ? "Sign in to search stories" : "Search stories by keyword"}
+            aria-label={
+              disabled ? "Sign in to search" : "Search stories by keyword"
+            }
+            title={
+              disabled
+                ? "Sign in to search stories"
+                : "Search stories by keyword"
+            }
           />
         </div>
       </div>
@@ -430,7 +470,11 @@ export default function EventSidebar({
             aria-pressed={sortMode === "new"}
             aria-label="Sort by new"
             aria-disabled={disabled}
-            title={disabled ? 'Story sorting requires a free account' : 'Sort stories by newest first'}
+            title={
+              disabled
+                ? "Story sorting requires a free account"
+                : "Sort stories by newest first"
+            }
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
               <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
@@ -443,7 +487,11 @@ export default function EventSidebar({
             aria-pressed={sortMode === "hot"}
             aria-label="Sort by hot"
             aria-disabled={disabled}
-            title={disabled ? 'Story sorting requires a free account' : 'Sort stories by activity and impact'}
+            title={
+              disabled
+                ? "Story sorting requires a free account"
+                : "Sort stories by activity and impact"
+            }
           >
             <svg
               viewBox="0 0 46.11 46.11"
@@ -469,9 +517,13 @@ export default function EventSidebar({
             aria-pressed={isFiltersExpanded}
             aria-label="Toggle filters"
             aria-disabled={disabled}
-            title={disabled
-              ? 'Story filters require a free account'
-              : isFiltersExpanded ? 'Hide story filters' : 'Show story filters'}
+            title={
+              disabled
+                ? "Story filters require a free account"
+                : isFiltersExpanded
+                  ? "Hide story filters"
+                  : "Show story filters"
+            }
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
               <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
@@ -485,15 +537,27 @@ export default function EventSidebar({
           <button
             className={`${styles.filterToggleBtn} ${styles.randomEventBtn} ${isRandomCoolingDown ? styles.randomEventBtnCoolingDown : ""} ${!canSelectRandom ? styles.filterToggleBtnDisabled : ""}`}
             onClick={handleRandomSelect}
-            disabled={!canSelectRandom || tierLoading || isLoading || items.length === 0 || isRandomCoolingDown}
-            aria-label={canSelectRandom ? 'Select a random loaded event' : 'Random event selection requires a free account'}
-            title={!canSelectRandom
-              ? 'Random event selection requires a free account'
-              : items.length === 0
-                ? 'No loaded events to select'
-                : isRandomCoolingDown
-                  ? 'Ready again in a moment'
-                  : 'Select a random loaded event'}
+            disabled={
+              !canSelectRandom ||
+              tierLoading ||
+              isLoading ||
+              items.length === 0 ||
+              isRandomCoolingDown
+            }
+            aria-label={
+              canSelectRandom
+                ? "Select a random loaded event"
+                : "Random event selection requires a free account"
+            }
+            title={
+              !canSelectRandom
+                ? "Random event selection requires a free account"
+                : items.length === 0
+                  ? "No loaded events to select"
+                  : isRandomCoolingDown
+                    ? "Ready again in a moment"
+                    : "Select a random loaded event"
+            }
           >
             <LuDices aria-hidden="true" />
             Random
@@ -574,8 +638,9 @@ export default function EventSidebar({
                       </h2>
                       <p>
                         You are currently limited to the top 10 stories in view.
-                        Create a <strong>free</strong> account to access up to 50 real-time stories per view,
-                        live filters, customization, and annotation tools.
+                        Create a <strong>free</strong> account to access up to
+                        50 real-time stories per view, live filters,
+                        customization, and annotation tools.
                       </p>
                     </div>
                     <button
