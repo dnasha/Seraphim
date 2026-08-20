@@ -5,22 +5,27 @@ export type FreehandPointerEvent = Parameters<TerraDrawFreehandLineStringMode['o
 export class DragFriendlyFreehandLineStringMode extends TerraDrawFreehandLineStringMode {
   private isDragSketchActive = false;
 
+  // Sketch is intentionally press-drag-release only. A bare touch tap would
+  // otherwise start Terra Draw's click-move-click workflow and leave a partial
+  // feature waiting for a second tap.
+  public onClick(): void {}
+
   public onDragStart(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
     if (!event) return;
     this.isDragSketchActive = true;
     setMapDraggability?.(false);
-    this.onClick({ ...event, button: 'left', isContextMenu: false });
+    super.onClick({ ...event, button: 'left', isContextMenu: false });
   }
 
   public onDrag(event?: FreehandPointerEvent): void {
     if (!event || !this.isDragSketchActive) return;
-    this.onMouseMove(event);
+    super.onMouseMove(event);
   }
 
   public onDragEnd(event?: FreehandPointerEvent, setMapDraggability?: (enabled: boolean) => void): void {
     if (event && this.isDragSketchActive) {
-      this.onMouseMove(event);
-      this.onClick({ ...event, button: 'left', isContextMenu: false });
+      super.onMouseMove(event);
+      super.onClick({ ...event, button: 'left', isContextMenu: false });
     }
     this.isDragSketchActive = false;
     setMapDraggability?.(true);
