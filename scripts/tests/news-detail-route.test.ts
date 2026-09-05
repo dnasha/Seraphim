@@ -74,7 +74,7 @@ describe("GET /api/news/[id]", () => {
     expect(await response.json()).toEqual(expect.objectContaining({ description: "Full story", latitude: 1, longitude: 2 }));
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get('x-robots-tag')).toContain('noindex');
-    expect(query.select).toHaveBeenCalledWith("id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at");
+    expect(query.select).toHaveBeenCalledWith("id, title, description, description_provenance, independent_publisher_count, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at");
 
     const cachedResponse = await GET(request(id), params(id));
     expect(await cachedResponse.json()).toEqual(expect.objectContaining({ latitude: 1, longitude: 2 }));

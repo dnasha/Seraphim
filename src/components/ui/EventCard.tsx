@@ -42,6 +42,7 @@ export default function EventCard({
   const isTier1 = item.credibilityTier === 1;
   const thumbnailImage = getNewsImagePresentation(item, 176);
   const detailImage = getNewsImagePresentation(item, 640);
+  const descriptionSourceUrl = safeExternalHttpUrl(item.descriptionProvenance?.url);
 
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>, proxied: boolean) => {
     const image = event.currentTarget;
@@ -254,6 +255,11 @@ export default function EventCard({
               </div>
             )}
             {/** Renders skeleton placeholders during lazy-fetch or the description text if available */}
+            {item.headlinePublishedAt && (
+              <p className={styles.timelinePreview}>
+                Headline: {item.source} · <time dateTime={item.headlinePublishedAt} title={item.headlinePublishedAt}>{formatTimeAgo(item.headlinePublishedAt)}</time>
+              </p>
+            )}
             {item.description != null ? (
               item.description ? (
                 <p className={styles.eventCardDetailDesc}>
@@ -272,6 +278,20 @@ export default function EventCard({
                   style={{ width: "75%" }}
                 />
               </div>
+            )}
+
+            {item.description && (
+              <p className={styles.timelinePreview}>
+                {item.descriptionProvenance ? <>
+                  Description: {descriptionSourceUrl
+                    ? <a href={descriptionSourceUrl.href} target="_blank" rel="noopener noreferrer" title={`Open description source: ${item.descriptionProvenance.name}`}>{item.descriptionProvenance.name}</a>
+                    : item.descriptionProvenance.name}
+                  {' · '}<time dateTime={item.descriptionProvenance.published_at} title={item.descriptionProvenance.published_at}>{formatTimeAgo(item.descriptionProvenance.published_at)}</time>
+                </> : 'Description attribution unavailable for this older story.'}
+              </p>
+            )}
+            {item.independentPublisherCount != null && (
+              <p className={styles.timelinePreview}>{item.independentPublisherCount} independent reporting {item.independentPublisherCount === 1 ? 'source' : 'sources'}</p>
             )}
 
             {/** Fallback link for single-source events */}

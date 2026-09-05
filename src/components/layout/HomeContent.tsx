@@ -11,7 +11,7 @@ import { useTheme } from 'next-themes';
 import FilterBar from '@/components/ui/FilterBar';
 import EventSidebar from '@/components/ui/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
-import { useNewsFilter } from '@/hooks/useNewsFilter';
+import { useNewsFilter, useNewsFilterState } from '@/hooks/useNewsFilter';
 import { useViewState } from '@/hooks/useViewState';
 import { useAuth } from '@/hooks/useAuth';
 import { BBox, NewsItem } from '@/lib/core/types';
@@ -141,6 +141,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     const effectiveCustomEndDate = isGuestUser ? '' : debouncedCustomEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
+    const filterState = useNewsFilterState();
     const newsResetKey = `${isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous'}:${effectiveUserTier}`;
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
@@ -162,6 +163,12 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     }, [isAuthResolving, isGuestUser, searchQuery, debouncedSearch, timeRange, sortMode, updateURL]);
 
     const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+        filters: isGuestUser ? undefined : {
+            sources: filterState.sources, categories: filterState.categories,
+            ...(hasFeature(effectiveUserTier, 'advancedFilters') ? {
+                minVolume: filterState.minVolume, credibilityTiers: filterState.credibilityTiers,
+            } : {}),
+        },
         searchQuery: effectiveSearchQuery, 
         timeRange: effectiveTimeRange,
         customStartDate: effectiveCustomStartDate,
@@ -184,7 +191,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         credibilityTiers, setCredibilityTiers,
         filteredNews,
         mapNews,
-    } = useNewsFilter(news, effectiveTimeRange, effectiveSearchQuery, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, appliedSortMode, selectedItemId);
+    } = useNewsFilter(filterState, news, effectiveTimeRange, effectiveCustomStartDate, effectiveCustomEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, appliedSortMode, selectedItemId);
 
     const hydratedPreferencesForRef = React.useRef<string | null>(null);
     useEffect(() => {

@@ -6,7 +6,7 @@
  */
 
 import { NewsItem } from '@/lib/core/types';
-import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
+import { contentFreshness, latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
@@ -78,7 +78,7 @@ export async function fetchGNews(
             imageSourcePublishedAt: article.publishedAt,
             imageOrigin: 'gnews',
         }));
-        recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
+        recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: contentFreshness(items, 48 * 60 * 60_000), fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
         return items;
     } catch (error) {
         recordSourceAttempt({ source_name: `GNews headlines:${category}`, source_type: 'gnews', poll_tier: null, outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error) });
@@ -138,7 +138,7 @@ export async function searchGNews(
             imageSourcePublishedAt: article.publishedAt,
             imageOrigin: 'gnews',
         }));
-        recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: items.length ? 'healthy' : 'empty', fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
+        recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: contentFreshness(items, 48 * 60 * 60_000), fetched_count: data.articles.length, accepted_count: items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt, error_code: null });
         return items;
     } catch (error) {
         recordSourceAttempt({ source_name: sourceName, source_type: 'gnews', poll_tier: null, outcome: 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0, duration_ms: Date.now() - startedAt, error_code: safeSourceErrorCode(error) });

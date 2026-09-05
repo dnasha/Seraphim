@@ -116,6 +116,8 @@ export function evaluateContentUpdate(
     description?: string; 
     tier: number; 
     contentPublishedAt: number; // Publication time of the current Master content
+    descriptionPublishedAt?: number;
+    descriptionTier?: number;
     latestClusterTime: number;  // Latest known activity in the whole cluster
   },
   incoming: { 
@@ -127,7 +129,8 @@ export function evaluateContentUpdate(
 ) {
   const isNewerThanMaster = incoming.publishedAt > current.contentPublishedAt;
   const isMuchNewerThanMaster = incoming.publishedAt > current.contentPublishedAt + (15 * 60 * 1000);
-  const isDescriptionStale = incoming.publishedAt > current.contentPublishedAt + DESCRIPTION_STALENESS_MS;
+  const isDescriptionStale = incoming.publishedAt > (current.descriptionPublishedAt ?? current.contentPublishedAt) + DESCRIPTION_STALENESS_MS;
+  const descriptionTier = current.descriptionTier ?? current.tier;
   
   const currentLen = (current.title?.length || 0) + (current.description?.length || 0);
   const incomingLen = (incoming.title?.length || 0) + (incoming.description?.length || 0);
@@ -156,23 +159,25 @@ export function evaluateContentUpdate(
    * For the same tier, descriptions are updated if the current one is stale and the new one
    * is sufficiently long, or if the new one simply provides more depth (longer).
    */
-  if (incoming.tier < current.tier) {
+  const currentDescriptionLength = current.description?.trim().length ?? 0;
+  const incomingDescriptionLength = incoming.description?.trim().length ?? 0;
+  if (incoming.tier < descriptionTier || !currentDescriptionLength) {
     updateDescription = true;
-  } else if (incoming.tier === current.tier) {
-    if (isDescriptionStale && incomingLen >= currentLen * DESCRIPTION_LENGTH_THRESHOLD) {
+  } else if (incoming.tier === descriptionTier) {
+    if (isDescriptionStale && incomingDescriptionLength >= currentDescriptionLength * DESCRIPTION_LENGTH_THRESHOLD) {
       updateDescription = true;
     }
-    else if (incomingLen > currentLen) {
+    else if (incomingDescriptionLength > currentDescriptionLength) {
       updateDescription = true;
     }
-  } else if (incoming.tier === current.tier + 1 && isDescriptionStale && incomingLen >= currentLen) {
+  } else if (incoming.tier === descriptionTier + 1 && isDescriptionStale && incomingDescriptionLength >= currentDescriptionLength) {
     updateDescription = true;
   }
 
   return {
     updateTitle,
-    updateDescription,
-    shouldUpdateMaster: updateTitle || updateDescription
+    updateDescription: updateDescription && incomingDescriptionLength > 0,
+    shouldUpdateMaster: updateTitle || (updateDescription && incomingDescriptionLength > 0)
   };
 }
 
@@ -182,6 +187,8 @@ export function evaluateContentUpdate(
  */
 export function calculateMergedStory(
   existingStory: {
+    description_provenance?: DbEvent['description_provenance'];
+    primary_discovered_at?: string | null;
     id: string;
     title: string;
     description?: string;
@@ -208,9 +215,7 @@ export function calculateMergedStory(
    * apply the eviction policy. Fallback to the story's published_at if not found.
    */
   const masterSource = existingStory.sources.find(s => s.url === existingStory.url);
-  const contentPublishedAt = masterSource 
-    ? new Date(masterSource.discovered_at).getTime() 
-    : new Date(existingStory.published_at).getTime();
+  const contentPublishedAt = new Date(existingStory.primary_discovered_at ?? masterSource?.discovered_at ?? existingStory.published_at).getTime();
 
   let latestClusterTime = new Date(existingStory.published_at).getTime();
   for (const s of existingStory.sources) {
@@ -224,6 +229,8 @@ export function calculateMergedStory(
       description: existingStory.description,
       tier: currentTier,
       contentPublishedAt,
+      descriptionPublishedAt: validTime(existingStory.description_provenance?.published_at) ?? contentPublishedAt,
+      descriptionTier: existingStory.description_provenance?.tier ?? currentTier,
       latestClusterTime
     },
     {
@@ -250,7 +257,7 @@ export function calculateMergedStory(
     name: existingStory.source,
     url: existingStory.url,
     source_type: existingStory.source_type,
-    discovered_at: masterSource?.discovered_at ?? existingStory.published_at,
+    discovered_at: existingStory.primary_discovered_at ?? masterSource?.discovered_at ?? existingStory.published_at,
     content_fingerprint: contentFingerprint(existingStory.title),
   };
   const previousIndependentPublisherCount = countIndependentSources(
@@ -283,6 +290,7 @@ export function calculateMergedStory(
     sources: updatedSources,
     published_at: latestPublishedAt,
     event_count: eventCount,
+    independent_publisher_count: independentPublisherCount,
     impact_score: impactScore,
     // Same-publisher updates do not make a temporary low-signal report durable.
     ...(gainedIndependentCorroboration ? { expires_at: null } : {}),
@@ -298,6 +306,10 @@ export function calculateMergedStory(
     ...(imageUpdate ?? {}),
     ...(updateDescription ? {
       description: incomingEvent.description,
+      description_provenance: incomingEvent.description_provenance ?? {
+        name: incomingEvent.source, url: incomingEvent.url,
+        published_at: incomingEvent.primary_discovered_at ?? incomingEvent.published_at, tier: incomingTier,
+      },
     } : {})
   };
 }

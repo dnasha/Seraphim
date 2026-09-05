@@ -19,6 +19,7 @@ import {
     FALSE_POSITIVES,
     LANDMARKS,
     CONTINENT_FALLBACKS,
+    DEMONYM_MAP,
 } from './constants';
 import {
     DATELINE_PATTERN,
@@ -737,7 +738,26 @@ function selectDominantFromEntries(entries: LocationEntry[]): LocationEntry | nu
  */
 export async function resolveLocation(title: string, description: string): Promise<LocationResolution | null> {
     ensureInitialized();
+    if (/^which country\b/i.test(title.trim())) return null;
+    // Affiliation of a company, fund, or research institution is not the
+    // location of the event it discusses. Preserve other geographic evidence.
+    const affiliations = new RegExp(`\\b(?:${Object.keys(DEMONYM_MAP).join('|')}|U\\.S\\.|US)\\s+(?=(?:investment\\s+)?(?:firm|provider|customers?|autoworkers?\\s+union|XFEL)\\b)`, 'gi');
+    const stripAffiliations = (text: string) => text
+        .replace(affiliations, '')
+        .replace(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?=\s+pension fund\b)/g, '')
+        .replace(/\bUC\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?=\s+researchers?\b)/g, 'research institution')
+        .replace(/\bEuropean\s+XFEL\b/g, 'XFEL');
+    title = preprocessText(stripAffiliations(title));
+    description = preprocessText(stripAffiliations(description));
+    if (/^Researchers at\b/i.test(description) && /\b(?:study|experiments?|research)\b/i.test(description) &&
+        !extractLocation(title, '').match) return null;
     const extracted = extractLocation(title, description);
+    const subjectCountry = extractDemonym(title);
+    if (subjectCountry && (/\b(?:lawmakers|legislators|parliamentarians|MPs)\b.*\b(?:propose|pass|draft|vote|ban)\b/i.test(title) ||
+        /\b(?:novels|literature|cinema|culture)\b/i.test(title))) {
+        const country = getLocationCandidates(subjectCountry).find(entry => entry.type === 'country');
+        if (country) return buildResolution(country, subjectCountry, 'unambiguous', 0.9, [country]);
+    }
     const allPairs = [
         ...hierarchyPairsInText(title),
         ...hierarchyPairsInText(description),
@@ -758,6 +778,11 @@ export async function resolveLocation(title: string, description: string): Promi
     const matchedText = extracted.match;
     const matchedKey = normalizedLocationKey(matchedText);
     const allCandidates = uniqueEntries(getLocationCandidates(matchedKey));
+    if (/\bdaily briefing\b/i.test(title) && (extracted.scored ?? []).every(candidate =>
+        ['demonym', 'abbrev'].includes(candidate.source))) return null;
+    const escapedKey = matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\bborder(?:\\s+infrastructure)?\\s+with\\s+${escapedKey}\\b`, 'i').test(description) &&
+        !new RegExp(`\\b${escapedKey}\\b`, 'i').test(title)) return null;
 
     if (allCandidates.length === 0) {
         const legacy = await geocodeLocation(matchedText);
@@ -796,6 +821,10 @@ export async function resolveLocation(title: string, description: string): Promi
         if (matched.length === 1) {
             return buildResolution(matched[0], pair.child, 'explicit_pair', 1, allCandidates, pair.parent);
         }
+        if (matched.length > 1) {
+            const parent = parentEntries.length === 1 ? parentEntries[0] : null;
+            if (parent?.name) return buildResolution(parent, parent.name, 'hierarchy_context', 0.8, [parent]);
+        }
     }
 
     const countryEntries = allCandidates.filter(entry => entry.type === 'country');
@@ -804,6 +833,10 @@ export async function resolveLocation(title: string, description: string): Promi
     }
 
     const adminEntries = allCandidates.filter(entry => entry.type === 'admin1');
+    if (new RegExp(`\\b${escapedKey}\\s+Attorney General\\b`, 'i').test(`${title} ${description}`)) {
+        const state = adminEntries.find(entry => entry.cc === 'US');
+        if (state) return buildResolution(state, matchedText, 'hierarchy_context', 0.9, allCandidates, 'United States');
+    }
     if (adminEntries.length === 1 && KNOWN_LOCATIONS[matchedKey]?.type === 'admin1') {
         return buildResolution(adminEntries[0], matchedText, 'unambiguous', 0.9, allCandidates);
     }
@@ -814,7 +847,11 @@ export async function resolveLocation(title: string, description: string): Promi
             .filter(key => key !== matchedKey)
     );
     const parentEntries = uniqueEntries(
-        [...otherKeys].flatMap(key => getLocationCandidates(key).filter(isHierarchyParent))
+        [...otherKeys].flatMap(key => {
+            const candidates = getLocationCandidates(key).filter(isHierarchyParent);
+            const countries = candidates.filter(entry => entry.type === 'country');
+            return countries.length ? countries : candidates;
+        })
     );
 
     const adminCodes = new Set(
@@ -835,6 +872,10 @@ export async function resolveLocation(title: string, description: string): Promi
                 allCandidates,
                 parent?.name,
             );
+        }
+        if (matched.length > 1) {
+            const parent = parentEntries.find(entry => entry.type === 'admin1' && entry.admin1Code === adminCode);
+            if (parent?.name) return buildResolution(parent, parent.name, 'hierarchy_context', 0.8, [parent]);
         }
     }
 
@@ -870,6 +911,10 @@ export async function resolveLocation(title: string, description: string): Promi
                     parent?.name,
                 );
             }
+        }
+        if (matched.length > 1) {
+            const parent = parentEntries.find(entry => entry.type === 'country' && entry.cc === countryCode);
+            if (parent?.name) return buildResolution(parent, parent.name, 'hierarchy_context', 0.8, [parent]);
         }
     }
 

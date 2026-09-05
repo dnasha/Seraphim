@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  complete: vi.fn(),
   getUser: vi.fn(),
   getClaims: vi.fn(),
   deleteUser: vi.fn(),
@@ -10,7 +12,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser, getClaims: mocks.getClaims } }) }));
-vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, auth: { admin: { deleteUser: mocks.deleteUser } } } }));
+vi.mock('@/lib/server/recoveryJobs', () => ({
+  claimRecoveryJob: async () => ({ job_key: 'delete:job-1', kind: 'account_deletion', claim_token: 'token', payload: { deletionJobId: 'job-1' } }),
+  completeRecoveryJob: mocks.complete,
+  failRecoveryJob: vi.fn(),
+}));
+vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { rpc: mocks.rpc, from: mocks.from, auth: { admin: { deleteUser: mocks.deleteUser } } } }));
 vi.mock('@/lib/stripe', () => ({ stripe: { customers: { del: mocks.deleteCustomer } } }));
 vi.mock('@/lib/server/effectiveProfile', () => ({ resolveEffectiveProfile: mocks.profile }));
 vi.mock('@/lib/security/payments', () => ({ getConfiguredSiteUrl: () => 'https://seraphim.example' }));
@@ -27,16 +34,17 @@ function req(origin = 'https://seraphim.example') {
 }
 
 function query(table: string) {
-  let operation = 'select';
   const value: Record<string, unknown> = {};
   value.select = vi.fn(() => value);
   value.eq = vi.fn(() => value);
   value.neq = vi.fn(() => value);
-  value.insert = vi.fn(() => { operation = 'insert'; return value; });
-  value.update = vi.fn(() => { operation = 'update'; return value; });
-  value.delete = vi.fn(() => { operation = 'delete'; return value; });
+  value.gt = vi.fn(() => value);
+  value.limit = vi.fn(() => value);
+  value.insert = vi.fn(() => value);
+  value.update = vi.fn(() => value);
+  value.delete = vi.fn(() => value);
   value.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
-  value.single = vi.fn(async () => ({ data: operation === 'insert' && table === 'account_deletion_jobs' ? { id: 'job-1' } : null, error: null }));
+  value.single = vi.fn(async () => ({ data: table === 'account_deletion_jobs' ? { id: 'job-1', user_id: 'user-1', user_id_hash: 'hash', stripe_customer_id: 'cus-1', status: 'pending' } : null, error: null }));
   value.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
   return value;
 }
@@ -44,6 +52,8 @@ function query(table: string) {
 describe('POST /api/auth/delete-account', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.complete.mockResolvedValue(undefined);
+    mocks.rpc.mockResolvedValue({ data: 'job-1', error: null });
     mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', last_sign_in_at: new Date().toISOString() } }, error: null });
     mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'user-1', session_id: 'session-1', amr: [{ method: 'otp', timestamp: Math.floor(Date.now() / 1000) }] } }, error: null });
     mocks.deleteUser.mockResolvedValue({ error: null });
@@ -82,16 +92,9 @@ describe('POST /api/auth/delete-account', () => {
   });
 
   it('does not return success when finalization fails after Auth deletion', async () => {
-    let calls = 0;
-    mocks.from.mockImplementation((table: string) => {
-      const result = query(table);
-      if (table === 'account_deletion_jobs' && ++calls === 4) {
-        result.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ error: { message: 'database unavailable' } }).then(resolve);
-      }
-      return result;
-    });
+    mocks.complete.mockRejectedValue(new Error('database unavailable'));
     const response = await POST(req());
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ reference: 'job-1', error: expect.stringContaining('Your account was deleted') });
+    expect(await response.json()).toMatchObject({ reference: 'job-1', error: expect.stringContaining('automatic recovery') });
   });
 });

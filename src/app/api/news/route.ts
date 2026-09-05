@@ -57,14 +57,6 @@ const REFRESH_COOLDOWN = 60000;
 
 const RAW_LIMIT = NEWS_DEFAULT_LIMIT;
 
-/**
- * Optimized column selection. 
- * Heavy JSONB and text columns (like description) are omitted for list views 
- * to reduce egress costs and improve parsing speed.
- */
-const LIST_SELECT =
-  "id, title, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count";
-
 function pruneSourceCache() {
   if (sourceCache.size <= SOURCE_CACHE_MAX_ENTRIES) return;
   const overflow = sourceCache.size - SOURCE_CACHE_MAX_ENTRIES;
@@ -101,16 +93,24 @@ export async function GET(request: Request) {
     maxLng,
     searchQuery,
     zoom,
-    sort,
+    sort: requestedSort,
     hasRequestedLimit,
     requestedLimit,
     sinceStr,
     untilStr,
     forceRaw,
-    timeRange,
+    timeRange, sources, categories, credibilityTiers, minVolume,
   } = validated.params;
 
   const access = await resolveRequestEntitlements();
+  const sort = access.tier === 'guest' ? 'hot' : requestedSort;
+  const basicFiltered = sources.length !== 5 || (categories.length > 0 && !categories.includes('all'));
+  const advancedFiltered = minVolume > 1 || (credibilityTiers.length > 0 && credibilityTiers.length !== 3);
+  if ((basicFiltered && !hasFeature(access.tier, 'basicFilters')) ||
+      (advancedFiltered && !hasFeature(access.tier, 'advancedFilters'))) {
+    return NextResponse.json({ error: 'These filters require an upgraded account', code: 'feature_required',
+      requiredTier: advancedFiltered ? 'pro' : 'free' }, { status: 403 });
+  }
   const rateLimitKeys = getRateLimitKeys(clientIp, access.userId);
   if (searchQuery && !hasFeature(access.tier, 'search')) {
     return NextResponse.json(
@@ -206,10 +206,13 @@ export async function GET(request: Request) {
   const bboxKeyPart = ignoreBBox
     ? "global"
     : `${minLat},${maxLat},${minLng},${maxLng}`;
-  const cacheKey =
+  const filterKey = JSON.stringify([sources, categories, credibilityTiers, minVolume]);
+  const cacheKey = filterKey +
+    (
     hasBBox || ignoreBBox
       ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${isClusteredQuery ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
-      : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`;
+      : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
+    );
   const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
 
@@ -263,71 +266,18 @@ export async function GET(request: Request) {
       result = { ...cached };
     } else {
       result = await sourceSingleFlight.run(cacheKey, async () => {
-        let rows: unknown[] | null = null;
-        let error: { message?: string } | null = null;
-        let normMinLng: number | null = null;
-        let normMaxLng: number | null = null;
-
-        if (!ignoreBBox && hasBBox) {
-          normMinLng = minLng! - EPSILON;
-          normMaxLng = maxLng! + EPSILON;
-        }
-
-        if (isClusteredQuery) {
-          const rpcParams: Record<string, unknown> = {
-            p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
-            p_min_lat: ignoreBBox ? null : minLat! - EPSILON,
-            p_max_lat: ignoreBBox ? null : maxLat! + EPSILON,
-            p_min_lng: ignoreBBox ? null : normMinLng,
-            p_max_lng: ignoreBBox ? null : normMaxLng,
-            p_sort_mode: sort,
-            p_limit: effectiveLimit,
-          };
-          if (normalizedSince) rpcParams.p_since = normalizedSince;
-          if (untilStr) rpcParams.p_until = untilStr;
-          if (searchQuery) rpcParams.p_search_query = searchQuery;
-          const response = await supabaseAdmin.rpc("get_clustered_events", rpcParams);
-          rows = response.data;
-          error = response.error;
-        } else if (searchQuery) {
-          const response = await supabaseAdmin.rpc("search_events", {
-            p_search_query: searchQuery,
-            p_min_lat: !ignoreBBox && hasBBox ? minLat! - EPSILON : null,
-            p_max_lat: !ignoreBBox && hasBBox ? maxLat! + EPSILON : null,
-            p_min_lng: !ignoreBBox && hasBBox ? minLng! - EPSILON : null,
-            p_max_lng: !ignoreBBox && hasBBox ? maxLng! + EPSILON : null,
-            p_since: normalizedSince,
-            p_until: untilStr,
-            p_sort_mode: sort,
-            p_limit: effectiveLimit,
-            p_unmapped_only: false,
-          });
-          rows = response.data;
-          error = response.error;
-        } else {
-          let query = supabaseAdmin.from("events").select(LIST_SELECT);
-          query = sort === "hot"
-            ? query
-                .order("impact_score", { ascending: false, nullsFirst: false })
-                .order("published_at", { ascending: false })
-            : query.order("published_at", { ascending: false });
-          query = query.limit(effectiveLimit);
-          if (normalizedSince) query = query.gte("published_at", normalizedSince);
-          if (untilStr) query = query.lte("published_at", untilStr);
-          if (!ignoreBBox && hasBBox) {
-            const latMin = minLat! - EPSILON;
-            const latMax = maxLat! + EPSILON;
-            const lngMin = minLng! - EPSILON;
-            const lngMax = maxLng! + EPSILON;
-            query = query.gte("latitude", latMin).lte("latitude", latMax);
-            query = lngMin <= lngMax
-              ? query.gte("longitude", lngMin).lte("longitude", lngMax)
-              : query.or(`longitude.gte.${lngMin},longitude.lte.${lngMax}`);
-          }
-          const response = await query;
-          rows = response.data;
-          error = response.error;
-        }
+        const { data: payload, error } = await supabaseAdmin.rpc('query_news_v2', {
+          p_cluster: isClusteredQuery,
+          p_zoom_level: zoom !== null ? Math.floor(zoom) : null,
+          p_min_lat: !ignoreBBox && hasBBox ? minLat! - EPSILON : null,
+          p_max_lat: !ignoreBBox && hasBBox ? maxLat! + EPSILON : null,
+          p_min_lng: !ignoreBBox && hasBBox ? minLng! - EPSILON : null,
+          p_max_lng: !ignoreBBox && hasBBox ? maxLng! + EPSILON : null,
+          p_since: normalizedSince, p_until: untilStr, p_search_query: searchQuery,
+          p_sort_mode: sort, p_limit: effectiveLimit,
+          p_sources: sources, p_categories: categories,
+          p_credibility: credibilityTiers, p_min_reports: minVolume,
+        });
 
         if (error) {
           console.error("[api/news] Supabase query failed:", error.message);
@@ -342,11 +292,11 @@ export async function GET(request: Request) {
           throw new Error('news_query_unavailable');
         }
 
-        const safeRows = (rows || []) as DbEvent[];
-        const totalRawCount = isClusteredQuery
-          ? safeRows.reduce((count, row) => count + (Number(row.story_count) || 1), 0)
-          : safeRows.length;
-        const isCapped = totalRawCount >= effectiveLimit;
+        if (!payload || !Array.isArray(payload.items) || typeof payload.is_capped !== 'boolean') {
+          throw new Error('news_contract_invalid');
+        }
+        const safeRows = payload.items as DbEvent[];
+        const isCapped = payload.is_capped;
         let data = safeRows.map((row) => {
           const item = dbEventToNewsItem(row);
           if (isClusteredQuery && item.clusterId != null && (item.storyCount ?? 1) > 1) {

@@ -140,7 +140,7 @@ async function run(): Promise<void> {
   await startIngestionRun();
   beginSourceHealthCollection();
   console.log(
-    `[scraper] Starting ingestion run at ${new Date().toISOString()} ` +
+    `[scraper] Starting ingestion run at ${new Date().toISOString()} commit=${process.env.GITHUB_SHA ?? "local"} ` +
       `(dry_run=${DRY_RUN}, emergency=${EMERGENCY_MODE})`,
   );
   if (EMERGENCY_MODE) {
@@ -150,7 +150,7 @@ async function run(): Promise<void> {
   }
 
   const feedValidators = await loadFeedValidators(db);
-  const updatedFeedValidators = new Map<string, { etag?: string | null; lastModified?: string | null }>();
+  const updatedFeedValidators = new Map<string, import('@/lib/security/feedFetch').FeedValidator>();
   const pollingNow = Date.now();
   const openCircuits = EMERGENCY_MODE
     ? new Set<string>()

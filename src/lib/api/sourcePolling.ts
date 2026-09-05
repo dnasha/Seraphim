@@ -27,7 +27,7 @@ const FAST_X_SOURCES = new Set([
 
 const TIER_DIVISOR: Record<PollTier, number> = { fast: 1, normal: 2, slow: 4 };
 const TIER_ITEM_LIMIT: Record<PollTier, number> = { fast: 15, normal: 12, slow: 8 };
-const TIER_MAX_AGE_MS: Record<PollTier, number> = {
+export const TIER_MAX_AGE_MS: Record<PollTier, number> = {
   fast: 36 * 60 * 60 * 1000,
   normal: 48 * 60 * 60 * 1000,
   slow: 96 * 60 * 60 * 1000,

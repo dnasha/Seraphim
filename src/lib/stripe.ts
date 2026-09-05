@@ -64,6 +64,7 @@ export const ANGEL_MAX_QUANTITY = 100;
 
 /** Map a price ID back to its tier name */
 export function tierFromPriceId(priceId: string): string {
+    if (!priceId) return 'free';
     if (priceId === STRIPE_PRICES.pro_monthly || priceId === STRIPE_PRICES.pro_yearly) return 'pro';
     if (priceId === STRIPE_PRICES.analyst_monthly || priceId === STRIPE_PRICES.analyst_yearly) return 'analyst';
     if (priceId === STRIPE_PRICES.angel) return 'angel';
@@ -72,6 +73,7 @@ export function tierFromPriceId(priceId: string): string {
 
 /** Map a price ID to its billing interval */
 export function intervalFromPriceId(priceId: string): string {
+    if (!priceId) return 'month';
     if (priceId === STRIPE_PRICES.pro_yearly || priceId === STRIPE_PRICES.analyst_yearly) return 'year';
     if (priceId === STRIPE_PRICES.angel) return 'lifetime';
     return 'month';

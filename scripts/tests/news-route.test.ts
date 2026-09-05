@@ -57,25 +57,38 @@ function request(query: string, headers: HeadersInit = {}) {
   });
 }
 
-function rawQuery(rows = [eventRow], error: { message: string } | null = null) {
-  const result = { data: rows, error };
-  const query: Record<string, unknown> = {
-    select: vi.fn(() => query),
-    order: vi.fn(() => query),
-    limit: vi.fn(() => query),
-    is: vi.fn(() => query),
-    gte: vi.fn(() => query),
-    lte: vi.fn(() => query),
-    or: vi.fn(() => query),
-    then: (resolve: (value: typeof result) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(result).then(resolve, reject),
-  };
-  return query;
+function rpcResult(rows = [eventRow], isCapped = false) {
+  return { data: { items: rows, is_capped: isCapped }, error: null };
 }
 
 describe("GET /api/news", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.rpc.mockReset().mockResolvedValue(rpcResult());
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: { eventLimit: 1000 } });
+  });
+
+  it('passes authorized filters before the cap and trusts explicit truncation', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 50 } });
+    mocks.rpc.mockResolvedValue(rpcResult(Array.from({ length: 50 }, () => eventRow), false));
+    const body = await (await GET(request('sources=news&categories=crisis&limit=500&force_raw=true'))).json();
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_sources: ['news'], p_categories: ['crisis'], p_limit: 50 }));
+    expect(body.meta.isCapped).toBe(false);
+  });
+
+  it('rejects forged guest and Free filters before querying', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'guest', entitlements: { eventLimit: 10 } });
+    expect((await GET(request('sources=news'))).status).toBe(403);
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 50 } });
+    expect((await GET(request('credibility=1&min_reports=3'))).status).toBe(403);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps guest ranking on Hot even with a forged New request', async () => {
+    mocks.resolveEntitlements.mockResolvedValue({ tier: 'guest', entitlements: { eventLimit: 10 } });
+    const body = await (await GET(request('sort=new&force_raw=true&limit=9'))).json();
+    expect(body.meta.sort).toBe('hot');
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_sort_mode: 'hot', p_limit: 9 }));
   });
 
   it("rejects invalid parameters before any database call", async () => {
@@ -89,14 +102,14 @@ describe("GET /api/news", () => {
 
   it("uses the clustering RPC at low zoom and preserves a canonical detail id", async () => {
     mocks.rpc.mockResolvedValue({
-      data: [{ ...eventRow, cluster_id: 0, story_count: 4, center_lat: 11, center_lng: 21 }],
+      data: { items: [{ ...eventRow, cluster_id: 0, story_count: 4, center_lat: 11, center_lng: 21 }], is_capped: false },
       error: null,
     });
 
     const response = await GET(request("zoom=3&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=10"));
     const body = await response.json();
 
-    expect(mocks.rpc).toHaveBeenCalledWith("get_clustered_events", expect.objectContaining({
+    expect(mocks.rpc).toHaveBeenCalledWith("query_news_v2", expect.objectContaining({
       p_zoom_level: 3,
       p_min_lat: -0.00001,
       p_max_lng: 30.00001,
@@ -112,38 +125,38 @@ describe("GET /api/news", () => {
   });
 
   it("uses the search RPC for high-zoom searches", async () => {
-    mocks.rpc.mockResolvedValue({ data: [eventRow], error: null });
+    mocks.rpc.mockResolvedValue(rpcResult());
 
     const response = await GET(request("zoom=8&query=city&sort=hot&limit=12"));
     const body = await response.json();
 
-    expect(mocks.rpc).toHaveBeenCalledWith("search_events", expect.objectContaining({
+    expect(mocks.rpc).toHaveBeenCalledWith("query_news_v2", expect.objectContaining({
       p_search_query: "city",
       p_min_lat: null,
       p_max_lng: null,
       p_sort_mode: "hot",
       p_limit: 12,
-      p_unmapped_only: false,
+      p_cluster: false,
     }));
     expect(body.meta).toMatchObject({ clustered: false, scope: "viewport", sort: "hot" });
   });
 
   it('does not mark an empty small-limit response as capped', async () => {
-    mocks.from.mockReturnValue(rawQuery([]));
+    mocks.rpc.mockResolvedValue(rpcResult([]));
     const body = await (await GET(request('zoom=9&limit=1&time_range=3d'))).json();
     expect(body.meta.isCapped).toBe(false);
   });
 
   it('ignores boxes consistently for globally cached raw and search requests', async () => {
-    const query = rawQuery(); mocks.from.mockReturnValue(query);
+    mocks.rpc.mockResolvedValue(rpcResult());
     const base = 'scope=global&zoom=9&limit=73&time_range=1w';
     await GET(request(base + '&minLat=0&maxLat=20&minLng=10&maxLng=30'));
     await GET(request(base + '&minLat=40&maxLat=60&minLng=100&maxLng=120'));
-    expect(query.gte).not.toHaveBeenCalledWith('latitude', expect.anything());
-    expect(mocks.from).toHaveBeenCalledTimes(1);
-    mocks.rpc.mockResolvedValue({ data: [eventRow], error: null });
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_min_lat: null }));
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    mocks.rpc.mockResolvedValue(rpcResult());
     await GET(request(base + '&query=global-audit&minLat=0&maxLat=20&minLng=10&maxLng=30'));
-    expect(mocks.rpc).toHaveBeenCalledWith('search_events', expect.objectContaining({ p_min_lat: null, p_max_lat: null, p_min_lng: null, p_max_lng: null }));
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_min_lat: null, p_max_lat: null, p_min_lng: null, p_max_lng: null }));
   });
 
   it('rejects guest search before cache or database work', async () => {
@@ -159,29 +172,27 @@ describe("GET /api/news", () => {
 
   it('keeps guest, zoom, and force_raw limits monotonic', async () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'guest', entitlements: { eventLimit: 10 } });
-    const query = rawQuery([]);
-    mocks.from.mockReturnValue(query);
+    mocks.rpc.mockResolvedValue(rpcResult([]));
 
     const response = await GET(request('zoom=8&limit=999&force_raw=true'));
 
-    expect(query.limit).toHaveBeenCalledWith(10);
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_limit: 10 }));
     await expect(response.json()).resolves.toMatchObject({ meta: { appliedLimit: 10 } });
   });
 
   it('does not let broad history undo the high-zoom cap', async () => {
-    const query = rawQuery([]);
-    mocks.from.mockReturnValue(query);
+    mocks.rpc.mockResolvedValue(rpcResult([]));
 
     const response = await GET(request('zoom=8&time_range=1w'));
 
-    expect(query.limit).toHaveBeenCalledWith(250);
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_limit: 250 }));
     await expect(response.json()).resolves.toMatchObject({ meta: { appliedLimit: 250 } });
   });
 
   it('coalesces concurrent identical cache misses', async () => {
     mocks.rpc.mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
-      return { data: [eventRow], error: null };
+      return rpcResult();
     });
     const queryString = 'zoom=8&query=singleflight-city&limit=12';
 
@@ -195,7 +206,7 @@ describe("GET /api/news", () => {
   it('removes a failed in-flight query so a retry can run', async () => {
     mocks.rpc
       .mockRejectedValueOnce(new Error('transient failure'))
-      .mockResolvedValueOnce({ data: [eventRow], error: null });
+      .mockResolvedValueOnce(rpcResult());
     const queryString = 'zoom=8&query=singleflight-retry&limit=12';
 
     expect((await GET(request(queryString))).status).toBe(500);
@@ -203,32 +214,26 @@ describe("GET /api/news", () => {
     expect(mocks.rpc).toHaveBeenCalledTimes(2);
   });
 
-  it("uses direct event reads at high zoom and caches equivalent requests", async () => {
-    const query = rawQuery();
-    mocks.from.mockReturnValue(query);
+  it("uses unclustered filtered reads at high zoom and caches equivalent requests", async () => {
+    mocks.rpc.mockResolvedValue(rpcResult());
     const queryString = "zoom=8&minLat=0&maxLat=20&minLng=10&maxLng=30&sort=hot&limit=13";
 
     const first = await GET(request(queryString));
     const second = await GET(request(queryString));
 
-    expect(mocks.from).toHaveBeenCalledTimes(1);
-    expect(query.order).toHaveBeenCalledWith("impact_score", { ascending: false, nullsFirst: false });
-    expect(query.order).not.toHaveBeenCalledWith("event_count", expect.anything());
-    expect(query.gte).toHaveBeenCalledWith("latitude", -0.00001);
-    expect(query.lte).toHaveBeenCalledWith("longitude", 30.00001);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_sort_mode: 'hot', p_min_lat: -0.00001, p_max_lng: 30.00001 }));
     await expect(first.json()).resolves.toMatchObject({ items: [expect.objectContaining({ id: eventRow.id })] });
     await expect(second.json()).resolves.toMatchObject({ meta: { clustered: false } });
   });
 
   it("uses a raw bounded-limit query when no viewport is supplied", async () => {
-    const query = rawQuery();
-    mocks.from.mockReturnValue(query);
+    mocks.rpc.mockResolvedValue(rpcResult());
 
     const response = await GET(request("zoom=2&limit=17"));
 
     expect(response.status).toBe(200);
-    expect(mocks.rpc).not.toHaveBeenCalled();
-    expect(mocks.from).toHaveBeenCalledWith("events");
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_cluster: false, p_limit: 17 }));
     await expect(response.json()).resolves.toMatchObject({
       items: [expect.objectContaining({ id: eventRow.id })],
       meta: { clustered: false },
@@ -254,7 +259,7 @@ describe("GET /api/news", () => {
   });
 
   it('does not use client-supplied X-Forwarded-For for rate-limit buckets', async () => {
-    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.rpc.mockResolvedValue(rpcResult([]));
     const clientIp = '198.51.100.240';
 
     for (let index = 0; index < 5; index++) {
@@ -269,7 +274,7 @@ describe("GET /api/news", () => {
   });
 
   it('enforces both network and authenticated-subject buckets', async () => {
-    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.rpc.mockResolvedValue(rpcResult([]));
     mocks.resolveEntitlements.mockResolvedValue({
       tier: 'analyst',
       entitlements: { eventLimit: 1000 },
@@ -286,7 +291,7 @@ describe("GET /api/news", () => {
   });
 
   it('enforces the local hard ceiling when Redis is unavailable', async () => {
-    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.rpc.mockResolvedValue(rpcResult([]));
     mocks.rateLimit.mockRejectedValue(new Error('redis unavailable'));
     const clientIp = '198.51.100.245';
 
@@ -301,10 +306,10 @@ describe("GET /api/news", () => {
 
   it('enforces the Free cap and rejects unavailable history before querying data', async () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'free', entitlements: { eventLimit: 50 } });
-    mocks.rpc.mockResolvedValue({ data: [], error: null });
+    mocks.rpc.mockResolvedValue(rpcResult([]));
 
     const capped = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=999&time_range=1d'));
-    expect(mocks.rpc).toHaveBeenCalledWith('get_clustered_events', expect.objectContaining({ p_limit: 50 }));
+    expect(mocks.rpc).toHaveBeenCalledWith('query_news_v2', expect.objectContaining({ p_limit: 50 }));
     expect((await capped.json()).meta).toMatchObject({ appliedLimit: 50 });
 
     const historical = await GET(request('zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&time_range=1w'));

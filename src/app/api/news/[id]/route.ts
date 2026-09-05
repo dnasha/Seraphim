@@ -151,7 +151,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
         .from('events')
-        .select('id, title, description, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at')
+        .select('id, title, description, description_provenance, independent_publisher_count, url, source, source_type, category, image_url, published_at, latitude, longitude, location_name, impact_score, credibility_tier, event_count, sources, primary_discovered_at')
         .eq('id', id)
         .single<DbEvent>();
 

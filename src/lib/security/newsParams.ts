@@ -1,10 +1,15 @@
 import { normalizeSortMode } from "@/lib/utils/ranking";
+import { NEWS_SOURCES, NEWS_CATEGORIES } from '@/lib/utils/newsFilterParams';
 
 export const NEWS_DEFAULT_LIMIT = 1000;
 export const NEWS_MAX_LIMIT = 1000;
 export const NEWS_MAX_SEARCH_LENGTH = 160;
 
 export interface ValidatedNewsParams {
+  sources: string[];
+  categories: string[];
+  credibilityTiers: number[];
+  minVolume: number;
   forceRefresh: boolean;
   viewMode: "map" | "sidebar";
   scopeMode: "viewport" | "global";
@@ -151,10 +156,23 @@ export function validateNewsSearchParams(searchParams: URLSearchParams):
   if (!['1d', '3d', '1w', '1m', 'custom'].includes(rawTimeRange)) {
     return { ok: false, error: 'time_range is invalid' };
   }
+  const sources = [...new Set((searchParams.get('sources') ?? NEWS_SOURCES.join(',')).split(',').filter(Boolean))].sort();
+  const categories = [...new Set((searchParams.get('categories') ?? 'all').split(',').filter(Boolean))].sort();
+  const credibility = (searchParams.get('credibility') ?? '1,2,3').split(',').filter(Boolean);
+  if (sources.some(value => !(NEWS_SOURCES as readonly string[]).includes(value)) ||
+      categories.some(value => !(NEWS_CATEGORIES as readonly string[]).includes(value)) ||
+      credibility.some(value => !['1', '2', '3'].includes(value))) {
+    return { ok: false, error: 'Invalid news filter' };
+  }
+  const minVolume = Number(searchParams.get('min_reports') ?? '1');
+  if (!Number.isInteger(minVolume) || minVolume < 1 || minVolume > 100000) {
+    return { ok: false, error: 'min_reports must be an integer from 1 to 100000' };
+  }
 
   return {
     ok: true,
     params: {
+      sources, categories, credibilityTiers: [...new Set(credibility.map(Number))].sort(), minVolume,
       forceRefresh: searchParams.get("refresh") === "true",
       viewMode,
       scopeMode,

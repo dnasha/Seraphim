@@ -21,6 +21,8 @@ const VECTOR_CANDIDATE_LIMIT = 12;
 const DETAIL_QUERY_CHUNK_SIZE = 100;
 
 interface CandidateDetail {
+  description_provenance?: DbEvent['description_provenance'];
+  primary_discovered_at?: string | null;
   id: string;
   sources: DbEventSource[];
   latitude?: number;
@@ -59,6 +61,8 @@ export interface ImageEnrichmentTarget {
 }
 
 export interface StoryMerge {
+  description_provenance?: DbEvent['description_provenance'];
+  independent_publisher_count?: number;
   sources: DbEventSource[];
   title?: string;
   description?: string;
@@ -144,7 +148,7 @@ async function fetchCandidateDetails(
     const chunk = ids.slice(offset, offset + DETAIL_QUERY_CHUNK_SIZE);
     const { data, error } = await db
       .from("events")
-      .select("id, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at")
+      .select("id, sources, latitude, longitude, location_name, title, description, description_provenance, primary_discovered_at, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at")
       .in("id", chunk);
 
     if (error) {
@@ -160,6 +164,8 @@ async function fetchCandidateDetails(
         location_name: row.location_name == null ? undefined : String(row.location_name),
         title: String(row.title ?? ""),
         description: row.description == null ? undefined : String(row.description),
+        description_provenance: row.description_provenance as DbEvent['description_provenance'],
+        primary_discovered_at: row.primary_discovered_at == null ? null : String(row.primary_discovered_at),
         credibility_tier: Number(row.credibility_tier) || 3,
         impact_score: Number(row.impact_score) || 0,
         event_count: Number(row.event_count) || 1,
@@ -186,7 +192,7 @@ async function fetchCandidateDetails(
 export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<FallbackCandidate[]> {
   const since = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
   const data = await readRecentEventPages(db,
-    'id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at',
+    'id, embedding, sources, latitude, longitude, location_name, title, description, description_provenance, primary_discovered_at, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at',
     since, true);
 
   return ((data ?? []) as Array<Record<string, unknown>>)
@@ -205,6 +211,8 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<Fallbac
         title,
         fingerprint: normalizeTitleFingerprint(title),
         description: row.description == null ? undefined : String(row.description),
+        description_provenance: row.description_provenance as DbEvent['description_provenance'],
+        primary_discovered_at: row.primary_discovered_at == null ? null : String(row.primary_discovered_at),
         credibility_tier: Number(row.credibility_tier) || 3,
         impact_score: Number(row.impact_score) || 0,
         event_count: Number(row.event_count) || 1,
@@ -260,6 +268,14 @@ export async function resolveStoryMerges(
   const merges = new Map<string, StoryMerge>();
   const imageTargets = new Map<string, ImageEnrichmentTarget>();
 
+  for (const event of dbEvents) {
+    event.primary_discovered_at ??= event.published_at;
+    event.independent_publisher_count ??= 1;
+    if (event.description?.trim()) event.description_provenance ??= {
+      name: event.source, url: event.url, published_at: event.primary_discovered_at,
+      tier: event.credibility_tier ?? 3,
+    };
+  }
   if (dbEvents.length === 0) return { newEvents, merges, imageTargets: [] };
 
   const since = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
@@ -519,6 +535,8 @@ export async function resolveStoryMerges(
         id: `pending-${pendingIndex}`,
         title: pending.title,
         description: pending.description,
+        description_provenance: pending.description_provenance,
+        primary_discovered_at: pending.primary_discovered_at,
         source: pending.source,
         source_type: pending.source_type,
         url: pending.url,

@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { newsFilterKey, appendNewsFilters, type NewsFilters } from '@/lib/utils/newsFilterParams';
 import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
 import { snapBBox } from "@/lib/utils/geo";
 import { canonicalNewsId, matchesNewsId, normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
@@ -35,6 +36,7 @@ const DETAIL_TTL_MS = 60_000;
 const MAX_DETAIL_ENTRIES = 200;
 
 type NewsRequestScope = {
+    filterKey?: string;
     bbox: BBox | null;
     sortMode?: string;
     query?: string;
@@ -67,10 +69,11 @@ function isSameRequestScope(current: NewsRequestScope, previous: NewsRequestScop
         current.sortMode === previous.sortMode &&
         current.query === previous.query &&
         current.timeRange === previous.timeRange &&
-        current.limit === previous.limit;
+        current.limit === previous.limit && current.filterKey === previous.filterKey;
 }
 
 export function useNewsData({
+    filters = {},
     timeRange,
     searchQuery,
     customStartDate,
@@ -81,6 +84,7 @@ export function useNewsData({
     resetKey,
     pinnedEventId = null
 }: {
+    filters?: NewsFilters;
     timeRange: string;
     searchQuery?: string;
     customStartDate?: string;
@@ -91,6 +95,7 @@ export function useNewsData({
     resetKey?: string;
     pinnedEventId?: string | null;
 }) {
+    const filterKey = newsFilterKey(filters);
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -103,7 +108,7 @@ export function useNewsData({
     const activeRequestParamsRef = useRef<NewsRequestScope | null>(null);
     const isFirstMount = useRef(true);
 
-    const detailCache = useRef<Map<string, { timestamp: number; description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
+    const detailCache = useRef<Map<string, { timestamp: number; description: string; descriptionProvenance?: NewsItem['descriptionProvenance']; headlinePublishedAt?: string; independentPublisherCount?: number; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
     const detailGenerationRef = useRef(0);
     const detailFetcherRef = useRef<((id: string, force?: boolean) => Promise<void>) | null>(null);
     const freshDetail = useCallback((id: string) => {
@@ -139,6 +144,9 @@ export function useNewsData({
                     // Detail/timeline fields are entitlement-sensitive. Preserve
                     // the visual pin, then reload these under the new auth scope.
                     description: undefined,
+                    descriptionProvenance: undefined,
+                    headlinePublishedAt: undefined,
+                    independentPublisherCount: undefined,
                     sources: undefined,
                     timelineRestricted: undefined,
                     totalSources: undefined,
@@ -273,6 +281,9 @@ export function useNewsData({
             const cached = freshDetail(key);
             if (cached) {
                 merged.description = cached.description;
+                merged.descriptionProvenance = cached.descriptionProvenance;
+                merged.headlinePublishedAt = cached.headlinePublishedAt;
+                merged.independentPublisherCount = cached.independentPublisherCount;
                 merged.sources = cached.sources;
                 if (cached.latitude !== undefined) merged.latitude = cached.latitude;
                 if (cached.longitude !== undefined) merged.longitude = cached.longitude;
@@ -309,6 +320,7 @@ export function useNewsData({
     }) => {
         const { isRefresh, bbox, limit: requestedLimit, signal, view = 'map', scope = 'viewport', globalTopN } = options;
         const params = new URLSearchParams();
+        appendNewsFilters(params, filterKey);
         if (isRefresh) params.append('refresh', 'true');
         if (sortMode) params.append('sort', sortMode);
         params.append('time_range', timeRange);
@@ -396,7 +408,7 @@ export function useNewsData({
         } finally {
             if (inFlightFetches.get(requestKey) === fetchPromise) inFlightFetches.delete(requestKey);
         }
-    }, [searchQuery, sortMode, timeRange, customStartDate, customEndDate, resetKey, freshDetail]);
+    }, [filterKey, searchQuery, sortMode, timeRange, customStartDate, customEndDate, resetKey, freshDetail]);
 
     /**
      * Orchestrates the data loading sequence. It handles bounding box 
@@ -452,6 +464,7 @@ export function useNewsData({
         }
 
         const requestScope: NewsRequestScope = {
+            filterKey,
             bbox,
             sortMode: sortMode || undefined,
             query: searchQuery || undefined,
@@ -481,6 +494,7 @@ export function useNewsData({
         } : undefined;
 
         const params = new URLSearchParams();
+        appendNewsFilters(params, filterKey);
         if (sortMode) params.append('sort', sortMode);
         params.append('time_range', timeRange);
         params.append('view', 'map');
@@ -580,7 +594,7 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [filterKey, timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
         if (!enabled) return;
@@ -611,7 +625,7 @@ export function useNewsData({
         
         coordinateLoad();
         return;
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, coordinateLoad]);
+    }, [filterKey, timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, coordinateLoad]);
 
     /**
      * Lazy-loads heavy event details (description, sources) for a specific item.
@@ -664,6 +678,9 @@ export function useNewsData({
                 detailCache.current.set(targetId, {
                     timestamp: Date.now(),
                     description: descriptionValue,
+                    descriptionProvenance: event?.descriptionProvenance,
+                    headlinePublishedAt: event?.headlinePublishedAt,
+                    independentPublisherCount: event?.independentPublisherCount,
                     sources: mappedSources,
                     latitude,
                     longitude,
@@ -678,6 +695,9 @@ export function useNewsData({
                     const hydratedEvent: NewsItem = {
                         ...event,
                         description: descriptionValue,
+                        descriptionProvenance: event.descriptionProvenance,
+                        headlinePublishedAt: event.headlinePublishedAt,
+                        independentPublisherCount: event.independentPublisherCount,
                         sources: mappedSources ?? event.sources,
                         latitude: latitude !== undefined ? latitude : event.latitude,
                         longitude: longitude !== undefined ? longitude : event.longitude,
@@ -693,6 +713,9 @@ export function useNewsData({
                         entitiesRef.current.set(entityId, {
                             ...entity,
                             description: descriptionValue,
+                            descriptionProvenance: event?.descriptionProvenance,
+                            headlinePublishedAt: event?.headlinePublishedAt,
+                            independentPublisherCount: event?.independentPublisherCount,
                             sources: mappedSources ?? entity.sources,
                             latitude: latitude !== undefined ? latitude : entity.latitude,
                             longitude: longitude !== undefined ? longitude : entity.longitude,

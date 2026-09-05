@@ -125,11 +125,14 @@ describe('useNewsData request deduplication', () => {
       longitude: 127.77,
     };
     const detailRequests: string[] = [];
+    let releaseReauthorized: (() => void) | undefined;
+    const reauthorized = new Promise<void>(resolve => { releaseReauthorized = resolve; });
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === `/api/news/${eventId}`) {
         detailRequests.push(url);
+        if (detailRequests.length > 1) await reauthorized;
         return new Response(JSON.stringify({
           description: sharedEvent.description,
           latitude: sharedEvent.latitude,
@@ -166,9 +169,10 @@ describe('useNewsData request deduplication', () => {
     await waitFor(() => expect(result.current.news).toEqual([
       expect.objectContaining({ id: eventId, latitude: 35.91, longitude: 127.77 }),
     ]));
-    expect(result.current.news[0].description).toBeUndefined();
+    await waitFor(() => expect(result.current.news[0].description).toBeUndefined());
 
     await act(async () => {
+      releaseReauthorized?.();
       await result.current.fetchEventDetails(eventId);
     });
     // A new auth scope re-authorizes timeline details while the pin remains.

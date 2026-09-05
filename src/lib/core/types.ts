@@ -26,6 +26,9 @@ export interface NewsItem {
   id: string;
   title: string;
   description?: string;
+  descriptionProvenance?: { name: string; url: string; published_at: string; tier: number } | null;
+  headlinePublishedAt?: string;
+  independentPublisherCount?: number;
   /** Canonical freshness timestamp reflecting the latest source update. */
   latestActivityAt?: string;
   url: string;

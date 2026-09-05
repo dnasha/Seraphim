@@ -12,6 +12,7 @@ import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sens
 import { recordIncident, recordMetric } from '@/lib/server/operations';
 import { retireCheckoutReservation } from '@/lib/server/checkoutReservations';
 import { safeRelativePath } from '@/lib/security/redirects';
+import { isTrialEligible } from '@/lib/server/trialEligibility';
 
 type PriceKey = keyof typeof STRIPE_PRICES;
 type IntentReservation = {
@@ -39,6 +40,7 @@ function checkoutError(code: string, status = RESPONSE_STATUS[code] ?? 409) {
     angel_already_owned: 'Angel access has already been purchased for this account.',
     angel_payment_review: 'Billing is unavailable while the Angel payment is under review.',
     angel_sold_out: 'Angel access is currently sold out.',
+    deletion_pending: 'Billing is unavailable while account deletion is in progress.',
   };
   return NextResponse.json({ code, error: messages[code] ?? 'Unable to start checkout.' }, { status });
 }
@@ -236,6 +238,8 @@ export async function POST(request: NextRequest) {
 
   const intentId = reservation.intent_id;
   const correlationId = reservation.correlation_id;
+  let sessionRequestStarted = false;
+  let createdSessionId: string | null = null;
 
   try {
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -265,6 +269,7 @@ export async function POST(request: NextRequest) {
       checkout_intent_id: intentId,
       correlation_id: correlationId,
     };
+    const trialEligible = !isAngel && await isTrialEligible(user.id, customerId, intentId);
     const promotionCodesEnabled = process.env.STRIPE_PROMOTION_CODES_ENABLED === 'true';
     const separator = returnTo.includes('?') ? '&' : '?';
     const checkoutPlan = isAngel ? 'angel' : priceKey.startsWith('analyst_') ? 'analyst' : 'pro';
@@ -297,15 +302,23 @@ export async function POST(request: NextRequest) {
         ? { payment_intent_data: { metadata: commonMetadata } }
         : {
             subscription_data: {
-              trial_period_days: SUBSCRIPTION_TRIAL_DAYS,
+              ...(trialEligible ? { trial_period_days: SUBSCRIPTION_TRIAL_DAYS } : {}),
               metadata: commonMetadata,
             },
           }),
     };
 
+    // Customer/history reads can take time after reservation. Keep an uncertain
+    // create reserved beyond this exact Stripe expiry, not the earlier RPC time.
+    const { error: expiryError } = await supabaseAdmin.from('billing_checkout_intents')
+      .update({ expires_at: new Date((sessionParams.expires_at! + 60) * 1000).toISOString() })
+      .eq('id', intentId).eq('status', 'creating');
+    if (expiryError) throw expiryError;
+    sessionRequestStarted = true;
     const session = await stripe.checkout.sessions.create(sessionParams, {
       idempotencyKey: `checkout-intent-${intentId}`,
     });
+    createdSessionId = session.id;
     if (!session.url) throw new Error('checkout_url_missing');
 
     const { error: intentUpdateError } = await supabaseAdmin
@@ -324,10 +337,21 @@ export async function POST(request: NextRequest) {
     await recordMetric({ kind: 'conversion', service: 'billing', name: `checkout_started.${priceKey}` });
     return NextResponse.json({ url: session.url, intentId });
   } catch {
-    await supabaseAdmin
-      .from('billing_checkout_intents')
-      .update({ status: 'failed', failure_code: 'checkout_creation_failed', updated_at: new Date().toISOString() })
-      .eq('id', intentId);
+    // An uncertain create response may still have produced a live checkout.
+    // Release only after confirmed expiry; otherwise keep the reservation until
+    // its matching Stripe expiry so a second trial/payment cannot be created.
+    let safeToRetire = !sessionRequestStarted;
+    if (createdSessionId) {
+      try {
+        const expired = await stripe.checkout.sessions.expire(createdSessionId);
+        safeToRetire = expired.status === 'expired';
+      } catch { /* The expiry webhook or reservation timeout can release it. */ }
+    }
+    if (safeToRetire) {
+      await supabaseAdmin.from('billing_checkout_intents')
+        .update({ status: 'failed', failure_code: 'checkout_creation_failed', updated_at: new Date().toISOString() })
+        .eq('id', intentId).eq('status', 'creating');
+    }
     await recordIncident({
       dedupKey: 'billing:checkout-creation',
       service: 'billing',

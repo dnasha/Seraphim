@@ -20,12 +20,12 @@ import { resolveLocation } from './engine';
 export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsItem[]> {
     const enriched: NewsItem[] = [];
     for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
         if (item.latitude != null && item.longitude != null) {
             enriched.push(item);
             continue;
         }
 
-        if (!item || typeof item !== 'object') continue;
         const toStr = (v: unknown) => {
             if (v === null || v === undefined) return '';
             if (typeof v === 'string') return v;

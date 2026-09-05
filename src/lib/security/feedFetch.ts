@@ -36,6 +36,7 @@ export class FeedFetchError extends Error {
 export interface FeedValidator {
   etag?: string | null;
   lastModified?: string | null;
+  latestItemAt?: string | null;
 }
 
 export interface BoundedFeedResult extends FeedValidator {

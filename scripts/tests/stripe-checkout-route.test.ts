@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  trialEligible: vi.fn(),
   checkoutEnabled: true,
   angelEnabled: true,
   sameOrigin: true,
@@ -26,6 +27,7 @@ vi.mock('@/lib/security/sensitiveRequest', () => ({
   hasValidSameOrigin: () => mocks.sameOrigin,
   checkSensitiveRateLimit: async () => mocks.rateLimit,
 }));
+vi.mock('@/lib/server/trialEligibility', () => ({ isTrialEligible: mocks.trialEligible }));
 vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 vi.mock('@/lib/stripe', () => ({
   ANGEL_MAX_QUANTITY: 100,
@@ -72,6 +74,7 @@ const reservation = (code = 'created') => ({
 describe('POST /api/stripe/checkout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.trialEligible.mockResolvedValue(true);
     mocks.checkoutEnabled = true;
     mocks.angelEnabled = true;
     mocks.sameOrigin = true;
@@ -85,6 +88,34 @@ describe('POST /api/stripe/checkout', () => {
     process.env.STRIPE_MANAGED_PAYMENTS_ENABLED = 'false';
     process.env.STRIPE_AUTOMATIC_TAX_ENABLED = 'false';
     delete process.env.STRIPE_PROMOTION_CODES_ENABLED;
+  });
+
+  it('omits the trial for a returning customer', async () => {
+    mocks.trialEligible.mockResolvedValue(false);
+    expect((await POST(request('pro_monthly'))).status).toBe(200);
+    expect(mocks.sessionCreate.mock.calls[0][0].subscription_data).not.toHaveProperty('trial_period_days');
+  });
+
+  it('keeps an uncertain remote create reserved past the requested Stripe expiry', async () => {
+    const intents = query();
+    mocks.from.mockImplementation((table: string) => table === 'billing_checkout_intents'
+      ? intents : query({ stripe_customer_id: 'cus-1' }));
+    mocks.sessionCreate.mockRejectedValueOnce(new Error('response lost after remote create'));
+    expect((await POST(request('pro_monthly'))).status).toBe(503);
+    const requestedExpiry = mocks.sessionCreate.mock.calls[0][0].expires_at;
+    expect(intents.update).toHaveBeenCalledWith({ expires_at: new Date((requestedExpiry + 60) * 1000).toISOString() });
+    expect(intents.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+  });
+
+  it('stops before remote create when extending its reservation fails', async () => {
+    const intents = query();
+    let updating = false;
+    intents.update = vi.fn(() => { updating = true; return intents; });
+    intents.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: updating ? { message: 'database unavailable' } : null }).then(resolve);
+    mocks.from.mockImplementation((table: string) => table === 'billing_checkout_intents'
+      ? intents : query({ stripe_customer_id: 'cus-1' }));
+    expect((await POST(request('pro_monthly'))).status).toBe(503);
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
   });
 
   it('checks the plan-specific kill switch before auth or Stripe', async () => {
