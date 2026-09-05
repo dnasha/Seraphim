@@ -204,7 +204,8 @@
   display: flex;
   flex-direction: column;
   width: 500px;
-  max-height: min(720px, calc(100dvh - 32px));
+  /* Include the popup border and tip in the 16px viewport gutters. */
+  max-height: min(720px, calc(100dvh - 44px));
   background: var(--surface);
   position: relative;
 }
