@@ -82,6 +82,7 @@ const activeRunStats: RunStats = {
 };
 
 async function startIngestionRun() {
+  if (DRY_RUN) return;
   activeRunStartedAt = Date.now();
   const { data, error } = await db
     .from('ingestion_runs')
@@ -177,7 +178,6 @@ async function run(): Promise<void> {
     ]).then((results) =>
       results.map((r) => (r.status === "fulfilled" ? r.value : [])),
     )) as [NewsItem[], NewsItem[], NewsItem[], NewsItem[]];
-  await persistFeedValidators(db, updatedFeedValidators);
 
   const rawItems: NewsItem[] = [
     ...rssItems,
@@ -189,8 +189,10 @@ async function run(): Promise<void> {
 
   const sourceAttempts = completeSourceHealthCollection();
   activeSourceFailures = sourceAttempts.filter((attempt) =>
-    ['rate_limited', 'provider_error', 'parse_error', 'disabled'].includes(attempt.outcome),
+    ['rate_limited', 'provider_error', 'parse_error', 'disabled', 'stale'].includes(attempt.outcome),
   ).length;
+  // Cooling-down sources are still unavailable, even when this run skips them.
+  activeSourceFailures += openCircuits.size;
   if (activeRunId && sourceAttempts.length > 0) {
     const { error } = await db.from('ingestion_source_attempts').insert(
       sourceAttempts.map((attempt) => ({ ...attempt, run_id: activeRunId })),
@@ -260,6 +262,13 @@ async function run(): Promise<void> {
     EMERGENCY_MODE ? EMERGENCY_COUNT_MULTIPLIER : 1,
   );
   const cappedCount = Object.values(cappedBySource).reduce((sum, count) => sum + count, 0);
+  const commitFeedCheckpoints = async () => {
+    // Replay unchanged feeds after a failure or cap instead of silently losing
+    // their unprocessed items. URL deduplication makes successful replay cheap.
+    if (!DRY_RUN && cappedCount === 0) {
+      await persistFeedValidators(db, updatedFeedValidators);
+    }
+  };
   if (cappedCount > 0) {
     console.warn(`[scraper] Adaptive source safety cap deferred ${cappedCount} item(s):`, cappedBySource);
   }
@@ -267,6 +276,7 @@ async function run(): Promise<void> {
 
   if (newItems.length === 0) {
     console.log("[scraper] No new items. Exiting.");
+    await commitFeedCheckpoints();
     await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
     return;
   }
@@ -294,6 +304,7 @@ async function run(): Promise<void> {
 
   if (mappedItems.length === 0) {
     console.log("[scraper] No mapped items to ingest. Exiting.");
+    await commitFeedCheckpoints();
     await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
     return;
   }
@@ -316,7 +327,7 @@ async function run(): Promise<void> {
       `fills=${imageStats.fills} refreshes=${imageStats.refreshes} ` +
       `failures=${imageStats.failures} duration_ms=${imageStats.durationMs}`,
     );
-    await Promise.all([
+    if (!DRY_RUN) await Promise.all([
       recordMetric({
         kind: 'operational',
         service: 'ingestion',
@@ -468,13 +479,14 @@ async function run(): Promise<void> {
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
   activeRunStats.inserted_count = upserted_count;
   activeRunStats.merged_count = merged_count;
+  await commitFeedCheckpoints();
   await finalizeIngestionRun(activeSourceFailures > 0 ? 'degraded' : 'healthy');
   console.log(
     `[scraper] Finished in ${elapsed}s. Upserted: ${upserted_count}, Merged: ${merged_count}`,
   );
 }
 
-run()
+export const ingestionCompletion = run()
   .catch(async (err) => {
     completeSourceHealthCollection();
     await finalizeIngestionRun('failed', 'pipeline_failure');

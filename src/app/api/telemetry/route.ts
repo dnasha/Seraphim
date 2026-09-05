@@ -3,25 +3,19 @@ import { recordMetric } from '@/lib/server/operations';
 import { hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
 import { getConfiguredSiteUrl } from '@/lib/security/payments';
 import { getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { createLocalFixedWindowLimiter } from '@/lib/security/localRateLimit';
 
 const OPTIONAL_METRICS = new Set(['account_view', 'pricing_view', 'checkout_click', 'activation', 'map_interaction']);
 const OPTIONAL_PLANS = new Set(['pro', 'analyst', 'angel']);
 const OPTIONAL_INTERVALS = new Set(['month', 'year', 'lifetime']);
 const OPTIONAL_SOURCES = new Set(['direct', 'pricing', 'feature_gate']);
 const OPTIONAL_MILESTONES = new Set(['historical_monitoring', 'custom_window']);
-const localBuckets = new Map<string, { count: number; resetAt: number }>();
+const metricLimiter = createLocalFixedWindowLimiter({ limit: 30, windowMs: 60_000 });
 
 function acceptMetric(request: NextRequest) {
   const key = getTrustedClientIp(request.headers) ?? (process.env.NODE_ENV === 'development' ? 'local' : null);
   if (!key) return false;
-  const now = Date.now();
-  const bucket = localBuckets.get(key);
-  if (!bucket || now >= bucket.resetAt) {
-    localBuckets.set(key, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  bucket.count += 1;
-  return bucket.count <= 30;
+  return metricLimiter.check([key]).success;
 }
 
 export async function POST(request: NextRequest) {

@@ -23,6 +23,16 @@ interface OverlayCacheOptions<T> {
 
 const memoryCache = new Map<string, CacheEntry<unknown>>();
 const inFlightLoads = new Map<string, Promise<unknown>>();
+const MAX_MEMORY_ENTRIES = 250;
+
+function pruneMemoryCache(now: number) {
+  for (const [key, entry] of memoryCache) {
+    if (entry.staleUntil <= now) memoryCache.delete(key);
+  }
+  while (memoryCache.size > MAX_MEMORY_ENTRIES) {
+    memoryCache.delete(memoryCache.keys().next().value!);
+  }
+}
 
 function isCacheEntry<T>(value: unknown): value is CacheEntry<T> {
   if (!value || typeof value !== 'object') return false;
@@ -76,6 +86,7 @@ export async function getCachedOverlayData<T>({
   maxSharedBytes = 512 * 1024,
 }: OverlayCacheOptions<T>): Promise<T> {
   const startedAt = now();
+  pruneMemoryCache(startedAt);
   let entry = memoryCache.get(key) as CacheEntry<T> | undefined;
   if (entry && entry.staleUntil <= startedAt) {
     memoryCache.delete(key);
@@ -87,6 +98,7 @@ export async function getCachedOverlayData<T>({
   if (shared && shared.staleUntil > startedAt) {
     entry = shared;
     memoryCache.set(key, shared);
+    pruneMemoryCache(startedAt);
     if (shared.freshUntil > startedAt) return shared.data;
   }
 
@@ -109,6 +121,7 @@ export async function getCachedOverlayData<T>({
       staleUntil: loadedAt + staleForMs,
     };
     memoryCache.set(key, next);
+    pruneMemoryCache(loadedAt);
     await writeSharedEntry(key, next, staleForMs, maxSharedBytes, store);
     return data;
   })();

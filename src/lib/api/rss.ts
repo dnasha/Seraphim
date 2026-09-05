@@ -116,11 +116,6 @@ export async function fetchSingleFeed(
           });
           return [];
         }
-        options.onValidator?.(sourceUrl, {
-          etag: fetched.etag ?? null,
-          lastModified: fetched.lastModified ?? null,
-        });
-
         const feed = await parser.parseString(fetched.text!);
 
         // Map feed items to internal NewsItem format. IDs are generated using a 
@@ -163,6 +158,12 @@ export async function fetchSingleFeed(
         if (urlIndex > 0) {
           console.log(`[RSS] ${source.name}: fallback feed responded (${items.length} recent item(s))`);
         }
+        // Stage validators only after the whole feed has parsed successfully.
+        // The ingestion coordinator commits them after durable processing.
+        options.onValidator?.(sourceUrl, {
+          etag: fetched.etag ?? null,
+          lastModified: fetched.lastModified ?? null,
+        });
         return items;
       } catch (error) {
         lastError = error;

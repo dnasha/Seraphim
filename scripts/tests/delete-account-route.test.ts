@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
+  getClaims: vi.fn(),
   deleteUser: vi.fn(),
   from: vi.fn(),
   deleteCustomer: vi.fn(),
   profile: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser, getClaims: mocks.getClaims } }) }));
 vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, auth: { admin: { deleteUser: mocks.deleteUser } } } }));
 vi.mock('@/lib/stripe', () => ({ stripe: { customers: { del: mocks.deleteCustomer } } }));
 vi.mock('@/lib/server/effectiveProfile', () => ({ resolveEffectiveProfile: mocks.profile }));
@@ -44,6 +45,7 @@ describe('POST /api/auth/delete-account', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', last_sign_in_at: new Date().toISOString() } }, error: null });
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'user-1', session_id: 'session-1', amr: [{ method: 'otp', timestamp: Math.floor(Date.now() / 1000) }] } }, error: null });
     mocks.deleteUser.mockResolvedValue({ error: null });
     mocks.deleteCustomer.mockResolvedValue({ deleted: true });
     mocks.profile.mockResolvedValue({ stripeCustomerId: 'cus-1', stripeSubscriptionId: 'sub-1' });
@@ -58,7 +60,7 @@ describe('POST /api/auth/delete-account', () => {
   it('requires authentication and recent email verification', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
     expect((await POST(req())).status).toBe(401);
-    mocks.getUser.mockResolvedValueOnce({ data: { user: { id: 'user-1', last_sign_in_at: '2020-01-01T00:00:00Z' } }, error: null });
+    mocks.getClaims.mockResolvedValueOnce({ data: { claims: { sub: 'user-1', session_id: 'old-session', amr: [{ method: 'otp', timestamp: 1 }] } }, error: null });
     expect((await POST(req())).status).toBe(403);
   });
 
@@ -77,5 +79,19 @@ describe('POST /api/auth/delete-account', () => {
     const response = await POST(req());
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ code: 'deletion_failed', reference: 'job-1' });
+  });
+
+  it('does not return success when finalization fails after Auth deletion', async () => {
+    let calls = 0;
+    mocks.from.mockImplementation((table: string) => {
+      const result = query(table);
+      if (table === 'account_deletion_jobs' && ++calls === 4) {
+        result.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ error: { message: 'database unavailable' } }).then(resolve);
+      }
+      return result;
+    });
+    const response = await POST(req());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ reference: 'job-1', error: expect.stringContaining('Your account was deleted') });
   });
 });

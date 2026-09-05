@@ -36,6 +36,15 @@ const incoming = (overrides: Partial<DbEvent> = {}): DbEvent => ({
 });
 
 describe("indexed scraper candidate matching", () => {
+  it('merges matching vectors within the incoming batch without requiring an existing row', async () => {
+    const query = { select: vi.fn().mockReturnThis(), gte: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), range: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    const db = { from: () => query, rpc: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    const result = await resolveStoryMerges([
+      incoming(), incoming({ title: 'Overnight strike damages Example City port facility', url: 'https://second.example/story', source: 'Second' }),
+    ], db as never);
+    expect(result.newEvents).toHaveLength(1);
+    expect(result.newEvents[0].event_count).toBe(2);
+  });
   beforeEach(() => {
     vectorMocks.generateEmbeddings.mockClear();
   });
@@ -44,7 +53,8 @@ describe("indexed scraper candidate matching", () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
     const detailQuery = {
       select: vi.fn().mockReturnThis(),
@@ -106,7 +116,8 @@ describe("indexed scraper candidate matching", () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
     const from = vi.fn().mockReturnValueOnce(titleQuery);
     const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
@@ -138,7 +149,8 @@ describe("indexed scraper candidate matching", () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockResolvedValue({
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
         data: [{ id: existingId, title: incoming().title, published_at: "2026-07-12T11:00:00.000Z" }],
         error: null,
       }),
@@ -172,7 +184,8 @@ describe("indexed scraper candidate matching", () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockResolvedValue({
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({
         data: [{ id: vanishedId, title: incoming().title, published_at: "2026-07-12T11:00:00.000Z" }],
         error: null,
       }),
@@ -218,7 +231,8 @@ describe("indexed scraper candidate matching", () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
     const detailQuery = {
       select: vi.fn().mockReturnThis(),

@@ -21,7 +21,31 @@ afterEach(() => {
 });
 
 describe("useViewState", () => {
+  it('retains externally navigated filters on the next viewport update', () => {
+    vi.useFakeTimers(); navigation.params = 'q=old'; navigation.pathname = '/';
+    const { result, rerender } = renderHook(() => useViewState());
+    navigation.params = 'q=new'; rerender();
+    act(() => { result.current.updateURL({ lat: 10 }); vi.advanceTimersByTime(300); });
+    expect(new URLSearchParams(window.location.search).get('q')).toBe('new');
+  });
+
+  it('rejects malformed and out-of-range camera input', () => {
+    navigation.params = 'lat=999&lng=NaN&zoom=Infinity';
+    const { result } = renderHook(() => useViewState());
+    expect(result.current.initialState.lat).toBeUndefined();
+    expect(result.current.initialState.lng).toBeUndefined();
+    expect(result.current.initialState.zoom).toBeUndefined();
+  });
+  it('preserves shared instants through an ambiguous daylight-saving hour', () => {
+    vi.useFakeTimers();
+    navigation.params = 't=custom&from=2026-11-01T09%3A30%3A00.000Z&to=2026-11-01T10%3A30%3A00.000Z';
+    const { result } = renderHook(() => useViewState());
+    expect(result.current.initialState.from).toBe('2026-11-01T09:30:00.000Z');
+    act(() => { result.current.updateURL({ lat: 10 }); vi.advanceTimersByTime(300); });
+    expect(new URLSearchParams(window.location.search).get('from')).toBe('2026-11-01T09:30:00.000Z');
+  });
   it("reads the initial URL state", () => {
+    navigation.params = 'lat=37.7749&lng=-122.4194&zoom=5.5&q=Kyiv&t=custom&from=2026-07-01T12%3A00&to=2026-07-02T12%3A00&src=news%2Creddit&cat=world&s=new&eventId=event-1';
     const { result } = renderHook(() => useViewState());
 
     expect(result.current.initialState).toEqual({
@@ -110,7 +134,7 @@ describe("useViewState", () => {
       result.current.updateURL({ t: 'custom', from: '2026-07-01T12:00', to: '2026-07-02T12:00' });
       vi.advanceTimersByTime(300);
     });
-    expect(window.location.search).toContain('from=2026-07-01T12%3A00');
+    expect(new URLSearchParams(window.location.search).get('from')).toBe(new Date('2026-07-01T12:00').toISOString());
 
     act(() => {
       result.current.updateURL({ t: '1d' });

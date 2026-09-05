@@ -25,7 +25,7 @@ describe("request entitlement performance", () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
-  it("coalesces repeated profile-tier lookups after verified authentication", async () => {
+  it("revalidates profile tiers on subsequent requests", async () => {
     const client = {
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "performance-user" } } }) },
     };
@@ -36,11 +36,12 @@ describe("request entitlement performance", () => {
     mocks.resolveEffectiveProfile.mockResolvedValue({ effectiveTier: 'pro' });
 
     const first = await resolveRequestEntitlements();
+    mocks.resolveEffectiveProfile.mockResolvedValue({ effectiveTier: 'free' });
     const second = await resolveRequestEntitlements();
 
     expect(first.tier).toBe("pro");
-    expect(second.tier).toBe("pro");
+    expect(second.tier).toBe("free");
     expect(client.auth.getUser).toHaveBeenCalledTimes(2);
-    expect(mocks.resolveEffectiveProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.resolveEffectiveProfile).toHaveBeenCalledTimes(2);
   });
 });

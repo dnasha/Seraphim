@@ -9,8 +9,7 @@ import { getConfiguredSiteUrl } from '@/lib/security/payments';
 import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
 import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
 import { recordIncident, recordMetric } from '@/lib/server/operations';
-
-const REAUTH_WINDOW_MS = 10 * 60 * 1000;
+import { hasRecentAuthentication } from '@/lib/security/recentAuthentication';
 
 function hashUserId(userId: string) {
   const key = process.env.ACCOUNT_DELETION_HASH_KEY || process.env.STRIPE_WEBHOOK_SECRET;
@@ -30,8 +29,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: 'unauthorized', error: 'Unauthorized.' }, { status: 401 });
   }
 
-  const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0;
-  if (!lastSignIn || Date.now() - lastSignIn > REAUTH_WINDOW_MS) {
+  const { data: verified, error: claimsError } = await supabase.auth.getClaims();
+  if (claimsError || !hasRecentAuthentication(verified?.claims, user.id)) {
     return NextResponse.json({
       code: 'reauth_required',
       error: 'Your session is too old for account deletion. Re-authenticate by email and try again within 10 minutes.',
@@ -47,15 +46,17 @@ export async function POST(request: Request) {
   }
 
   let jobId: string | null = null;
+  let authDeleted = false;
   try {
     const profile = await resolveEffectiveProfile(user.id);
     const userIdHash = hashUserId(user.id);
-    const { data: existingJob } = await supabaseAdmin
+    const { data: existingJob, error: existingJobError } = await supabaseAdmin
       .from('account_deletion_jobs')
       .select('id, status')
       .eq('user_id', user.id)
       .neq('status', 'completed')
       .maybeSingle();
+    if (existingJobError) throw existingJobError;
 
     if (existingJob) {
       jobId = existingJob.id;
@@ -112,8 +113,9 @@ export async function POST(request: Request) {
 
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
     if (deleteError) throw deleteError;
+    authDeleted = true;
 
-    await supabaseAdmin
+    const { error: completionError } = await supabaseAdmin
       .from('account_deletion_jobs')
       .update({
         user_id: null,
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
         failure_code: null,
       })
       .eq('id', jobId);
+    if (completionError) throw completionError;
 
     await recordMetric({ kind: 'operational', service: 'account', name: 'account_deleted' });
     return NextResponse.json({ success: true, reference: jobId });
@@ -142,7 +145,9 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({
       code: 'deletion_failed',
-      error: 'Account deletion could not be completed. Please retry or contact support.',
+      error: authDeleted
+        ? 'Your account was deleted, but final cleanup needs support. Contact support with this reference.'
+        : 'Account deletion could not be completed. Please retry or contact support.',
       reference: jobId,
     }, { status: 503 });
   }

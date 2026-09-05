@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geocoding';
+import { resolveLocation, ensureInitialized } from '@/lib/geocoding';
 
 const ACCURACY_THRESHOLD = 80;
 const MAX_FALSE_PINS = 8;
@@ -58,8 +58,7 @@ describe('geocoding accuracy regression', () => {
         let falsePins = 0;
 
         for (const item of reviewedCases) {
-            const extracted = extractLocation(item.title, item.description || '');
-            const actual = extracted.match ? await geocodeLocation(extracted.match) : null;
+            const actual = await resolveLocation(item.title, item.description || '');
             const expected = normalize(item.expected.displayName);
             const received = normalize(actual?.displayName);
             const passes = expected === received;
@@ -74,7 +73,7 @@ describe('geocoding accuracy regression', () => {
         console.log(`  Cases:       ${reviewedCases.length} (${cases.length - reviewedCases.length} unsure excluded)`);
         console.log(`  Accuracy:    ${correct}/${reviewedCases.length} (${accuracy.toFixed(1)}%)`);
         console.log(`  Misses:      ${misses}`);
-        console.log(`  Wrong place: ${wrong}`);
+        console.log(`  Different non-null label: ${wrong} (includes more specific place names)`);
         console.log(`  False pins:  ${falsePins}\n`);
 
         expect(accuracy).toBeGreaterThanOrEqual(ACCURACY_THRESHOLD);

@@ -21,7 +21,7 @@ type CachedDetail = {
 };
 
 const detailCache = new Map<string, CachedDetail>();
-const DETAIL_CACHE_TTL = 30 * 60 * 1000;
+const DETAIL_CACHE_TTL = 60 * 1000;
 const DETAIL_CACHE_MAX_ENTRIES = 250;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRIVATE_HEADERS = {
@@ -144,7 +144,8 @@ export async function GET(
     }
 
     const cached = detailCache.get(id);
-    if (cached && now - cached.timestamp < DETAIL_CACHE_TTL) {
+    const forceRefresh = new URL(request.url).searchParams.get('refresh') === 'true';
+    if (!forceRefresh && cached && now - cached.timestamp < DETAIL_CACHE_TTL) {
         return NextResponse.json(responseForRow(cached.row, access.entitlements.timelineSourceLimit), { headers: PRIVATE_HEADERS });
     }
 
@@ -154,8 +155,11 @@ export async function GET(
         .eq('id', id)
         .single<DbEvent>();
 
-    if (error || !data) {
+    if (error && error.code !== 'PGRST116') {
         console.error('[api/news/[id]] Supabase query failed:', error?.message);
+        return NextResponse.json({ error: 'Event temporarily unavailable' }, { status: 503, headers: PRIVATE_HEADERS });
+    }
+    if (!data) {
         return NextResponse.json({ error: 'Event not found' }, { status: 404, headers: PRIVATE_HEADERS });
     }
 

@@ -251,7 +251,7 @@ export async function GET(request: Request) {
       }
     }
 
-    let result: { data: NewsItem[]; isCapped: boolean };
+    let result: { data: NewsItem[]; isCapped: boolean; timestamp: number; stale?: boolean };
     const cached = sourceCache.get(cacheKey);
 
     if (
@@ -260,7 +260,7 @@ export async function GET(request: Request) {
       cached &&
       now - cached.timestamp < cacheTtlMs
     ) {
-      result = { data: cached.data, isCapped: cached.isCapped };
+      result = { ...cached };
     } else {
       result = await sourceSingleFlight.run(cacheKey, async () => {
         let rows: unknown[] | null = null;
@@ -292,10 +292,10 @@ export async function GET(request: Request) {
         } else if (searchQuery) {
           const response = await supabaseAdmin.rpc("search_events", {
             p_search_query: searchQuery,
-            p_min_lat: hasBBox ? minLat! - EPSILON : null,
-            p_max_lat: hasBBox ? maxLat! + EPSILON : null,
-            p_min_lng: hasBBox ? minLng! - EPSILON : null,
-            p_max_lng: hasBBox ? maxLng! + EPSILON : null,
+            p_min_lat: !ignoreBBox && hasBBox ? minLat! - EPSILON : null,
+            p_max_lat: !ignoreBBox && hasBBox ? maxLat! + EPSILON : null,
+            p_min_lng: !ignoreBBox && hasBBox ? minLng! - EPSILON : null,
+            p_max_lng: !ignoreBBox && hasBBox ? maxLng! + EPSILON : null,
             p_since: normalizedSince,
             p_until: untilStr,
             p_sort_mode: sort,
@@ -314,7 +314,7 @@ export async function GET(request: Request) {
           query = query.limit(effectiveLimit);
           if (normalizedSince) query = query.gte("published_at", normalizedSince);
           if (untilStr) query = query.lte("published_at", untilStr);
-          if (hasBBox) {
+          if (!ignoreBBox && hasBBox) {
             const latMin = minLat! - EPSILON;
             const latMax = maxLat! + EPSILON;
             const lngMin = minLng! - EPSILON;
@@ -337,19 +337,19 @@ export async function GET(request: Request) {
           const stale = sourceCache.get(cacheKey);
           if (stale?.data.length) {
             console.warn("[api/news] Serving stale cache for fail-open stability.");
-            return { data: stale.data, isCapped: stale.isCapped };
+            return { ...stale, stale: true };
           }
-          return { data: [], isCapped: false };
+          throw new Error('news_query_unavailable');
         }
 
         const safeRows = (rows || []) as DbEvent[];
         const totalRawCount = isClusteredQuery
           ? safeRows.reduce((count, row) => count + (Number(row.story_count) || 1), 0)
           : safeRows.length;
-        const isCapped = totalRawCount >= effectiveLimit - 5;
+        const isCapped = totalRawCount >= effectiveLimit;
         let data = safeRows.map((row) => {
           const item = dbEventToNewsItem(row);
-          if (isClusteredQuery && item.clusterId && (item.storyCount ?? 1) > 1) {
+          if (isClusteredQuery && item.clusterId != null && (item.storyCount ?? 1) > 1) {
             const zLabel = zoom !== null ? Math.floor(zoom) : "global";
             item.originalId = item.id;
             item.id = `cluster-z${zLabel}-${item.latitude?.toFixed(4)}-${item.longitude?.toFixed(4)}-${item.storyCount}`;
@@ -358,7 +358,7 @@ export async function GET(request: Request) {
         });
         if (!isClusteredQuery) data = sortNewsItems(data, sort).slice(0, effectiveLimit);
 
-        const loaded = { data, isCapped };
+        const loaded = { data, isCapped, timestamp: Date.now() };
         if (canUseCache) {
           sourceCache.set(cacheKey, { ...loaded, timestamp: Date.now() });
           pruneSourceCache();
@@ -369,7 +369,7 @@ export async function GET(request: Request) {
 
     const response: NewsResponse = {
       items: result.data,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: new Date(result.timestamp).toISOString(),
       meta: {
         sort,
         view: viewMode,
@@ -378,11 +378,13 @@ export async function GET(request: Request) {
         zoomBucket: zoom !== null ? Math.floor(zoom) : null,
         isCapped: result.isCapped,
         appliedLimit: effectiveLimit,
+        stale: result.stale ?? false,
       },
       sources: {
-        gnews: true,
-        rss: true,
-        social: true,
+        // This database read cannot establish upstream provider availability.
+        gnews: null,
+        rss: null,
+        social: null,
       },
     };
 
@@ -393,7 +395,7 @@ export async function GET(request: Request) {
     console.error("[api/news] Unhandled error:", error);
     return NextResponse.json(
       { error: "Failed to fetch news" },
-      { status: 500 },
+      { status: error instanceof Error && error.message === 'news_query_unavailable' ? 503 : 500 },
     );
   }
 }

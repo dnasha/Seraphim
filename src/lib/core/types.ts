@@ -75,11 +75,13 @@ export interface NewsResponse {
     globalTopN?: number;
     isCapped?: boolean;
     appliedLimit?: number;
+    stale?: boolean;
   };
   sources: {
-    gnews: boolean;
-    rss: boolean;
-    social: boolean;
+    /** null means provider availability was not checked by this request. */
+    gnews: boolean | null;
+    rss: boolean | null;
+    social: boolean | null;
   };
 }
 

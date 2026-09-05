@@ -11,37 +11,19 @@ export interface RequestEntitlements {
   userId: string | null;
 }
 
-const PROFILE_TIER_TTL_MS = 60_000;
-const PROFILE_TIER_CACHE_MAX = 1_000;
-const profileTierCache = new Map<string, { tier: UserTier; expiresAt: number }>();
 const profileTierRequests = new Map<string, Promise<UserTier>>();
-
-function pruneProfileTierCache(now: number) {
-  for (const [userId, cached] of profileTierCache) {
-    if (cached.expiresAt <= now) profileTierCache.delete(userId);
-  }
-  while (profileTierCache.size > PROFILE_TIER_CACHE_MAX) {
-    const oldest = profileTierCache.keys().next().value as string | undefined;
-    if (!oldest) break;
-    profileTierCache.delete(oldest);
-  }
-}
 
 async function resolveProfileTier(
   userId: string,
 ): Promise<UserTier> {
-  const now = Date.now();
-  pruneProfileTierCache(now);
-  const cached = profileTierCache.get(userId);
-  if (cached && cached.expiresAt > now) return cached.tier;
-
+  // Coalesce concurrent reads, but never retain a resolved authorization result
+  // across requests: billing and overrides can change on another instance.
   const inFlight = profileTierRequests.get(userId);
   if (inFlight) return inFlight;
 
   const request = (async () => {
     const profile = await resolveEffectiveProfile(userId);
     const tier = normalizeUserTier(profile.effectiveTier, true);
-    profileTierCache.set(userId, { tier, expiresAt: Date.now() + PROFILE_TIER_TTL_MS });
     return tier;
   })();
 

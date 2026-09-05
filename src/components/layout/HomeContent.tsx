@@ -141,7 +141,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     const effectiveCustomEndDate = isGuestUser ? '' : debouncedCustomEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
-    const newsResetKey = isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous';
+    const newsResetKey = `${isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous'}:${effectiveUserTier}`;
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);

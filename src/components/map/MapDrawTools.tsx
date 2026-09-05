@@ -24,6 +24,7 @@ import { GatedButton } from '@/components/ui/FeatureGate';
 import { DragFriendlyFreehandLineStringMode } from './draw/DragFriendlyFreehandLineStringMode';
 import { tessellateFreehandCoordinates, type FreehandCoordinate } from './draw/freehandGeometry';
 import { TextMarker } from './draw/TextMarker';
+import { MAX_IMPORT_BYTES, MAX_IMPORT_FEATURES, validateImportedFeatures } from './draw/importValidation';
 import {
   type TextAnnotation,
   readPersistedDrawState,
@@ -117,6 +118,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   const [activeFillOpacity, setActiveFillOpacity] = useState<number>(40);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
   const [hasPickedCustomColor, setHasPickedCustomColor] = useState(false);
   const [customPickerColor, setCustomPickerColor] = useState<string>('#8b5cf6');
   const colorRef = useRef(activeColor);
@@ -945,26 +947,35 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   const handleImport = () => {
     if (!hasFeature(userTier, 'geoJsonTransfer')) return;
+    setImportError(null);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.geojson,application/json';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (file.size > MAX_IMPORT_BYTES) {
+        setImportError('Choose a GeoJSON file smaller than 2 MB.');
+        return;
+      }
       const reader = new FileReader();
+      reader.onerror = () => setImportError('The file could not be read. Please try again.');
       reader.onload = (event) => {
         try {
-          const geojson = JSON.parse(event.target?.result as string);
+          const features = validateImportedFeatures(JSON.parse(event.target?.result as string));
+          if (features.length + persistentFeaturesRef.current.length + textAnnotationsRef.current.length > MAX_IMPORT_FEATURES) {
+            throw new Error('The map can hold up to 1,000 imported features. Remove some drawings first.');
+          }
+          const geojson = { type: 'FeatureCollection', features };
           if (geojson.type === 'FeatureCollection' && drawRef.current) {
-            const drawFeatures = geojson.features.filter((f: { properties?: { isText?: boolean } }) => !f.properties?.isText);
+            const drawFeatures = geojson.features.filter(f => !f.properties?.isText);
             const importedText = geojson.features
-              .filter((f: { properties?: { isText?: boolean } }) => f.properties?.isText)
-              .map((f: { geometry: { coordinates: [number, number] }, properties: { text: string, initialZoom?: number } }) => ({
+              .flatMap(f => f.geometry.type === 'Point' && f.properties?.isText ? [{
                 id: Math.random().toString(36).substr(2, 9),
-                lngLat: f.geometry.coordinates,
-                text: f.properties.text,
-                initialZoom: f.properties.initialZoom || (mapRef.current ? mapRef.current.getZoom() : 10)
-              }));
+                lngLat: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [number, number],
+                text: String(f.properties.text),
+                initialZoom: Number(f.properties.initialZoom ?? (mapRef.current ? mapRef.current.getZoom() : 10)),
+              }] : []);
             
             drawRef.current.addFeatures(drawFeatures as SnapshotFeatures);
             persistentFeaturesRef.current = drawRef.current.getSnapshot();
@@ -979,6 +990,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
           }
         } catch (err) {
           console.error("Failed to import GeoJSON:", err);
+          setImportError(err instanceof Error && !(err instanceof SyntaxError) ? err.message : 'The file is not valid GeoJSON.');
         }
       };
       reader.readAsText(file);
@@ -1103,6 +1115,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
             {!isCollapsed && (
               <div className={styles.panelContent}>
+                {importError && <p role="alert">{importError}</p>}
                 {/* Section 1: Measurement */}
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Measure</div>

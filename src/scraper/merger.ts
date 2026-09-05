@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils/vectorize";
 import { canonicalizeEventUrl, isRecurringTemplatePair, normalizeTitleFingerprint } from "./utils/content";
 import { publisherKey } from "@/lib/utils/corroboration";
+import { readRecentEventPages } from './recentEvents';
 
 const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
 const VECTOR_QUERY_CHUNK_SIZE = 100;
@@ -96,17 +97,7 @@ async function fetchRecentTitles(
   db: SupabaseClient,
   since: string,
 ): Promise<Array<{ id: string; title: string; published_at: string }>> {
-  const { data, error } = await db
-    .from("events")
-    .select("id, title, published_at")
-    .gte("published_at", since)
-    .order("published_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Recent title lookup failed: ${error.message}`);
-  }
-
-  return (data ?? []) as Array<{ id: string; title: string; published_at: string }>;
+  return await readRecentEventPages(db, 'id, title, published_at', since) as Array<{ id: string; title: string; published_at: string }>;
 }
 
 async function fetchIndexedVectorCandidates(
@@ -194,16 +185,9 @@ async function fetchCandidateDetails(
 /** Compatibility fallback while older database deployments lack the batch matcher. */
 export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<FallbackCandidate[]> {
   const since = new Date(Date.now() - RECENT_WINDOW_MS).toISOString();
-  const { data, error } = await db
-    .from("events")
-    .select("id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at")
-    .not("embedding", "is", null)
-    .gte("published_at", since);
-
-  if (error) {
-    console.error("[scraper] Failed to fetch fallback embeddings:", error.message);
-    return [];
-  }
+  const data = await readRecentEventPages(db,
+    'id, embedding, sources, latitude, longitude, location_name, title, description, credibility_tier, impact_score, event_count, source, source_type, url, image_url, image_source_url, image_source_published_at, image_origin, image_updated_at, image_last_checked_at, created_at, published_at',
+    since, true);
 
   return ((data ?? []) as Array<Record<string, unknown>>)
     .filter((row) => row.embedding)
@@ -426,6 +410,7 @@ export async function resolveStoryMerges(
 
   let mergeCount = 0;
   const pendingExactTitles = new Map<string, number>();
+  const pendingEmbeddings = new Map<number, number[]>();
 
   for (let index = 0; index < dbEvents.length; index++) {
     const event = dbEvents[index];
@@ -509,7 +494,25 @@ export async function resolveStoryMerges(
     }
 
     const fingerprint = eventFingerprints[index];
-    const pendingIndex = fingerprint.length >= 24 ? pendingExactTitles.get(fingerprint) : undefined;
+    let pendingIndex = fingerprint.length >= 24 ? pendingExactTitles.get(fingerprint) : undefined;
+    const embedding = embeddings[index];
+    if (pendingIndex === undefined && embedding) {
+      let highestSimilarity = -1;
+      for (const [candidateIndex, candidateEmbedding] of pendingEmbeddings) {
+        const candidate = newEvents[candidateIndex];
+        const samePublisher = publisherKey({ name: event.source, url: event.url, source_type: event.source_type }) ===
+          publisherKey({ name: candidate.source, url: candidate.url, source_type: candidate.source_type });
+        if (samePublisher && isRecurringTemplatePair(event.title, candidate.title)) continue;
+        const similarity = cosineSimilarity(embedding, candidateEmbedding);
+        if (similarity > highestSimilarity && candidatePassesMergeThreshold(event, {
+          similarity, latitude: candidate.latitude ?? null, longitude: candidate.longitude ?? null,
+          location_name: candidate.location_name ?? null,
+        })) {
+          pendingIndex = candidateIndex;
+          highestSimilarity = similarity;
+        }
+      }
+    }
     if (pendingIndex !== undefined) {
       const pending = newEvents[pendingIndex];
       const mergedResult = calculateMergedStory({
@@ -532,9 +535,11 @@ export async function resolveStoryMerges(
       const mergedPending = { ...mergedResult };
       delete (mergedPending as { id?: string }).id;
       newEvents[pendingIndex] = { ...pending, ...mergedPending };
+      if (fingerprint.length >= 24) pendingExactTitles.set(fingerprint, pendingIndex);
       mergeCount++;
     } else {
       const newIndex = newEvents.push(event) - 1;
+      if (embedding) pendingEmbeddings.set(newIndex, embedding);
       if (fingerprint.length >= 24) pendingExactTitles.set(fingerprint, newIndex);
     }
   }

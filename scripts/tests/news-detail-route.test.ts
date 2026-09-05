@@ -82,7 +82,7 @@ describe("GET /api/news/[id]", () => {
   });
 
   it("returns 404 when the event cannot be found", async () => {
-    mocks.from.mockReturnValue(detailQuery(null, { message: "not found" }));
+    mocks.from.mockReturnValue(detailQuery(null, { code: 'PGRST116', message: "not found" }));
     const id = "22222222-2222-4222-8222-222222222222";
 
     const response = await GET(request(id), params(id));
@@ -115,6 +115,12 @@ describe("GET /api/news/[id]", () => {
       sources: [expect.objectContaining({ name: 'Primary' }), expect.objectContaining({ name: 'Latest' })],
       event: expect.objectContaining({ description: 'Story' }),
     });
+  });
+
+  it('distinguishes a database outage from a missing event', async () => {
+    mocks.from.mockReturnValue(detailQuery(null, { code: '57014', message: 'statement timeout' }));
+    const id = '22222222-2222-4222-8222-222222222229';
+    expect((await GET(request(id), params(id))).status).toBe(503);
   });
 
   it('applies each recipient entitlement when the same shared event is cached', async () => {

@@ -89,7 +89,7 @@ describe("GET /api/news", () => {
 
   it("uses the clustering RPC at low zoom and preserves a canonical detail id", async () => {
     mocks.rpc.mockResolvedValue({
-      data: [{ ...eventRow, cluster_id: 7, story_count: 4, center_lat: 11, center_lng: 21 }],
+      data: [{ ...eventRow, cluster_id: 0, story_count: 4, center_lat: 11, center_lng: 21 }],
       error: null,
     });
 
@@ -126,6 +126,24 @@ describe("GET /api/news", () => {
       p_unmapped_only: false,
     }));
     expect(body.meta).toMatchObject({ clustered: false, scope: "viewport", sort: "hot" });
+  });
+
+  it('does not mark an empty small-limit response as capped', async () => {
+    mocks.from.mockReturnValue(rawQuery([]));
+    const body = await (await GET(request('zoom=9&limit=1&time_range=3d'))).json();
+    expect(body.meta.isCapped).toBe(false);
+  });
+
+  it('ignores boxes consistently for globally cached raw and search requests', async () => {
+    const query = rawQuery(); mocks.from.mockReturnValue(query);
+    const base = 'scope=global&zoom=9&limit=73&time_range=1w';
+    await GET(request(base + '&minLat=0&maxLat=20&minLng=10&maxLng=30'));
+    await GET(request(base + '&minLat=40&maxLat=60&minLng=100&maxLng=120'));
+    expect(query.gte).not.toHaveBeenCalledWith('latitude', expect.anything());
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    mocks.rpc.mockResolvedValue({ data: [eventRow], error: null });
+    await GET(request(base + '&query=global-audit&minLat=0&maxLat=20&minLng=10&maxLng=30'));
+    expect(mocks.rpc).toHaveBeenCalledWith('search_events', expect.objectContaining({ p_min_lat: null, p_max_lat: null, p_min_lng: null, p_max_lng: null }));
   });
 
   it('rejects guest search before cache or database work', async () => {
@@ -217,14 +235,14 @@ describe("GET /api/news", () => {
     });
   });
 
-  it("fails open with an empty feed for database timeouts", async () => {
+  it("reports unavailability instead of an authoritative empty feed on timeout", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { message: "statement timeout" } });
 
     const response = await GET(request("zoom=2&minLat=0&maxLat=20&minLng=10&maxLng=30&limit=17"));
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({ items: [], meta: { clustered: true } });
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ error: 'Failed to fetch news' });
   });
 
   it('rejects requests without Vercel client identity before database work', async () => {
