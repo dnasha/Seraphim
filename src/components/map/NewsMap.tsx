@@ -27,6 +27,7 @@ import { applyClientJitter, selectedJitterAnchor } from "./utils";
 import { useMapLayers } from "./useMapLayers";
 import { useMapCamera } from "./useMapCamera";
 import { startVisiblePolling } from "./overlayPolling";
+import { applyMapProjection } from "./mapProjection";
 import { buildNewsFeatureCollection } from "./newsGeoJson";
 import { createHotStoryPulseController } from "./pulseController";
 import {
@@ -1047,30 +1048,22 @@ export default function NewsMap({
 
   // Handle runtime toggling of 3D Globe and atmospheric fog.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !mapRef.current.isStyleLoaded()) return;
+    if (!mapReady || !mapRef.current) return;
     const map = mapRef.current as ExtendedMap;
+    const applyProjection = () => {
+      if (mapRef.current !== map) return;
+      applyMapProjection(map, isGlobe, currentStyle);
+    };
 
-    if (map.setProjection) {
-      map.setProjection({ type: isGlobe ? "globe" : "mercator" });
-    }
+    // isStyleLoaded() also becomes false while annotation GeoJSON sources are
+    // updating. Projection changes remain valid then, so try immediately. A
+    // genuine base-style replacement throws and is retried on style.load.
+    if (applyMapProjection(map, isGlobe, currentStyle)) return;
 
-    if (map.setFog) {
-      if (isGlobe) {
-        map.setFog({
-          range: [-1, 2],
-          color: currentStyle === "dark" ? "#000b1e" : "#ffffff",
-          "horizon-blend": 0.1,
-        });
-      } else {
-        map.setFog(null);
-      }
-    }
-
-    if (!isGlobe) {
-      map.jumpTo({ pitch: 0, bearing: 0 });
-    }
-
-    map.resize();
+    map.once("style.load", applyProjection);
+    return () => {
+      map.off("style.load", applyProjection);
+    };
   }, [isGlobe, mapReady, currentStyle]);
 
   return (

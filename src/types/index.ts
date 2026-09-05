@@ -29,6 +29,8 @@ export interface DbEventSource {
  * and spatial data (PostGIS).
  */
 export interface DbEvent {
+  description_provenance?: { name: string; url: string; published_at: string; tier: number } | null;
+  independent_publisher_count?: number | null;
   id?: string;                
   title: string;
   description?: string;
@@ -85,6 +87,9 @@ export function dbEventToNewsItem(row: DbEvent): NewsItem {
         title: row.title,
         // Only include description if explicitly fetched (to save egress)
         ...(row.description !== undefined ? { description: row.description } : {}),
+        ...(row.description_provenance !== undefined ? { descriptionProvenance: row.description_provenance } : {}),
+        headlinePublishedAt: row.primary_discovered_at ?? undefined,
+        independentPublisherCount: row.independent_publisher_count ?? undefined,
         url: row.url,
         source: row.source,
         sourceType: row.source_type,

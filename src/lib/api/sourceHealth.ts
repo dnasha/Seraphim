@@ -50,6 +50,15 @@ export function latestItemAt(items: Array<{ publishedAt: string }>) {
   return latest > 0 ? new Date(latest).toISOString() : null;
 }
 
+/** Transport success does not imply the provider returned current reporting. */
+export function contentFreshness(items: Array<{ publishedAt: string }>, maxAgeMs: number): SourceOutcome {
+  if (!items.length) return 'empty';
+  const latest = latestItemAt(items);
+  if (!latest) return 'stale';
+  const age = Date.now() - Date.parse(latest);
+  return age >= -5 * 60_000 && age <= maxAgeMs ? 'healthy' : 'stale';
+}
+
 export function safeSourceErrorCode(error: unknown): string {
   const structuredCode = error && typeof error === 'object' &&
     'sourceErrorCode' in error && typeof error.sourceErrorCode === 'string'

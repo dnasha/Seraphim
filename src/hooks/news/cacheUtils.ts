@@ -3,8 +3,8 @@ import { NewsItem } from "@/lib/core/types";
 export const LOCAL_RESPONSE_TTL_MS = 60_000;
 export const MAX_RESPONSE_CACHE_ENTRIES = 200;
 
-export const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; appliedLimit?: number; timestamp: number }>();
-export const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean; appliedLimit?: number }>>();
+export const responseCache = new Map<string, { data: NewsItem[]; isCapped: boolean; appliedLimit?: number; timestamp: number; lastUpdated?: string }>();
+export const inFlightFetches = new Map<string, Promise<{ items: NewsItem[]; isCapped: boolean; appliedLimit?: number; lastUpdated?: string }>>();
 
 export function pruneResponseCache(now = Date.now()) {
     for (const [key, cached] of responseCache.entries()) {

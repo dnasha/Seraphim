@@ -11,6 +11,7 @@ import styles from './FilterBar.module.css';
 import { CATEGORY_COLORS, getSourceStyle, CATEGORY_ICONS } from '@/lib/styles/colors';
 import { canUseTimeRange, hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from './FeatureGate';
+import { dateTimeInputValue } from '@/lib/utils/dateTimeInput';
 
 interface FilterBarProps {
     sources: string[];
@@ -374,9 +375,9 @@ export default function FilterBar({
                                                     <input
                                                         type="datetime-local"
                                                         className={styles.dateInput}
-                                                        value={customStartDate || ''}
+                                                        value={dateTimeInputValue(customStartDate)}
                                                         min="2026-04-11T00:00"
-                                                        max={customEndDate || nowStr}
+                                                        max={dateTimeInputValue(customEndDate) || nowStr}
                                                         onChange={(e) => onCustomStartDateChange?.(e.target.value)}
                                                         title="Set the beginning of the custom date range"
                                                     />
@@ -386,8 +387,8 @@ export default function FilterBar({
                                                     <input
                                                         type="datetime-local"
                                                         className={styles.dateInput}
-                                                        value={customEndDate || ''}
-                                                        min={customStartDate || "2026-04-11T00:00"}
+                                                        value={dateTimeInputValue(customEndDate)}
+                                                        min={dateTimeInputValue(customStartDate) || "2026-04-11T00:00"}
                                                         max={nowStr}
                                                         onChange={(e) => onCustomEndDateChange?.(e.target.value)}
                                                         title="Set the end of the custom date range"

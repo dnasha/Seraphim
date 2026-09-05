@@ -10,12 +10,12 @@ import { NewsItem } from '@/lib/core/types';
 import { RSSSource, RedditSource, RSS_SOURCES, REDDIT_SOURCES } from '@/data/sources';
 import { ensureIsoDate } from '@/lib/utils/date';
 import {
-    BASE_POLL_INTERVAL_MS,
     expandedItemLimit,
     itemLimitForTier,
     rssPollTier,
     selectDueSources,
     selectRecentFeedItems,
+    TIER_MAX_AGE_MS,
 } from './sourcePolling';
 import { latestItemAt, recordSourceAttempt, safeSourceErrorCode } from './sourceHealth';
 import { applyImageCandidate, extractFeedImageCandidate } from './imageCandidates';
@@ -28,7 +28,8 @@ import { isSourceCircuitOpen } from './sourceCircuit';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 10;
-const REDDIT_CONCURRENCY = 3;
+const REDDIT_CONCURRENCY = 1;
+let redditRetryAt = 0;
 
 interface ParsedFeedItem {
     title?: string;
@@ -109,18 +110,18 @@ export async function fetchSingleFeed(
           maxAttempts: 2,
         });
         if (fetched.notModified) {
+          const watermark = options.validators?.get(sourceUrl)?.latestItemAt ?? null;
+          const knownFresh = watermark && Number.isFinite(Date.parse(watermark))
+            && startedAt - Date.parse(watermark) <= TIER_MAX_AGE_MS[tier];
           recordSourceAttempt({
             source_name: source.name, source_type: 'rss', poll_tier: String(tier),
-            outcome: 'healthy', fetched_count: 0, accepted_count: 0, rejected_count: 0,
-            duration_ms: Date.now() - startedAt, error_code: null,
+            outcome: knownFresh ? 'healthy' : watermark ? 'stale' : 'empty',
+            fetched_count: 0, accepted_count: 0, rejected_count: 0,
+            latest_usable_item_at: watermark,
+            duration_ms: Date.now() - startedAt, error_code: watermark ? null : 'freshness_unknown',
           });
           return [];
         }
-        options.onValidator?.(sourceUrl, {
-          etag: fetched.etag ?? null,
-          lastModified: fetched.lastModified ?? null,
-        });
-
         const feed = await parser.parseString(fetched.text!);
 
         // Map feed items to internal NewsItem format. IDs are generated using a 
@@ -163,6 +164,13 @@ export async function fetchSingleFeed(
         if (urlIndex > 0) {
           console.log(`[RSS] ${source.name}: fallback feed responded (${items.length} recent item(s))`);
         }
+        // Stage validators only after the whole feed has parsed successfully.
+        // The ingestion coordinator commits them after durable processing.
+        options.onValidator?.(sourceUrl, {
+          etag: fetched.etag ?? null,
+          lastModified: fetched.lastModified ?? null,
+          latestItemAt: latestItemAt(items) ?? options.validators?.get(sourceUrl)?.latestItemAt ?? null,
+        });
         return items;
       } catch (error) {
         lastError = error;
@@ -194,15 +202,21 @@ export async function fetchRedditFeed(
     emergency = false,
 ): Promise<NewsItem[]> {
     const startedAt = Date.now();
+    if (startedAt < redditRetryAt) {
+        recordSourceAttempt({ source_name: source.name, source_type: 'reddit', poll_tier: 'normal',
+            outcome: 'rate_limited', fetched_count: 0, accepted_count: 0, rejected_count: 0,
+            duration_ms: 0, error_code: 'host_retry_after' });
+        return [];
+    }
     try {
-        const url = `https://www.reddit.com/r/${source.subreddit}/.rss`;
+        const url = `https://www.reddit.com/r/${source.subreddit}/new/.rss?limit=25`;
         const fetched = await fetchBoundedFeed(url, {
             headers: {
                 'User-Agent': process.env.FEED_USER_AGENT || 'server:seraphim:v1.0 (feed reader; contact: https://github.com/dnasha/Seraphim)',
-                'Accept': 'application/rss+xml, application/xml, text/xml',
+                'Accept': 'application/atom+xml, application/rss+xml, application/xml, text/xml',
             },
             timeoutMs,
-            maxAttempts: 2,
+            maxAttempts: 1,
         });
         const feed = await parser.parseString(fetched.text!);
 
@@ -243,6 +257,10 @@ export async function fetchRedditFeed(
         return items;
     } catch (error) {
         const errorCode = safeSourceErrorCode(error);
+        if (errorCode === 'http_429') {
+            const retryAfterMs = error && typeof error === 'object' && 'retryAfterMs' in error ? Number(error.retryAfterMs) : 0;
+            redditRetryAt = Date.now() + Math.max(15 * 60_000, Number.isFinite(retryAfterMs) ? retryAfterMs : 0);
+        }
         recordSourceAttempt({
             source_name: source.name, source_type: 'reddit', poll_tier: null,
             outcome: errorCode === 'http_429' ? 'rate_limited' : 'provider_error', fetched_count: 0, accepted_count: 0, rejected_count: 0,
@@ -289,7 +307,7 @@ export async function fetchAllRedditFeeds(
     emergency = false,
     openCircuits?: ReadonlySet<string>,
 ): Promise<NewsItem[]> {
-    const scheduledSources = emergency || Math.floor(now / BASE_POLL_INTERVAL_MS) % 2 === 0 ? REDDIT_SOURCES : [];
+    const scheduledSources = selectDueSources(REDDIT_SOURCES, () => 'normal', now, emergency);
     const dueSources = scheduledSources.filter((source) =>
       !isSourceCircuitOpen(openCircuits, 'reddit', source.name)
     );

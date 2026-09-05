@@ -919,8 +919,8 @@ Includes card expansion details and responsive mobile layouts.
 .sortToggleRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   padding: 5px 16px 5px;
 }
 
@@ -932,7 +932,7 @@ Includes card expansion details and responsive mobile layouts.
 .toolbarActionGroup {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -1329,7 +1329,7 @@ Includes card expansion details and responsive mobile layouts.
 
 @container sidebar (max-width: 520px) {
   .sortToggleRow {
-    gap: 8px;
+    gap: 6px;
     padding-inline: 12px;
   }
 
@@ -1339,7 +1339,7 @@ Includes card expansion details and responsive mobile layouts.
   }
 
   .toolbarActionGroup {
-    gap: 4px;
+    gap: 6px;
   }
 
   .updatedLabel {
@@ -1348,6 +1348,45 @@ Includes card expansion details and responsive mobile layouts.
 
   .liveStatusWrapper {
     gap: 4px;
+  }
+}
+
+@media (max-width: 860px) {
+  .sortToggleRow {
+    flex-wrap: nowrap;
+  }
+
+  .randomEventBtn {
+    gap: 0;
+    padding-inline: 8px;
+    font-size: 0;
+  }
+
+  .liveStatusWrapper {
+    flex-basis: auto;
+    justify-content: flex-end;
+    margin-left: auto;
+    min-width: max-content;
+  }
+}
+
+@media (max-width: 340px) {
+  .sortToggleRow {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .sortToggleBtn,
+  .filterToggleBtn {
+    padding-inline: 6px;
+  }
+
+  .toolbarActionGroup {
+    gap: 4px;
+  }
+
+  .pulseDot {
+    display: none;
   }
 }
 

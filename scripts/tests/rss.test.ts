@@ -11,6 +11,7 @@ vi.mock("rss-parser", () => ({
 vi.mock("@/lib/security/feedFetch", () => ({
   fetchBoundedFeed: async (url: string, options: { headers?: HeadersInit }) => {
     const response = await fetch(url, { headers: options.headers });
+    if (response.status === 304) return { notModified: true, text: null };
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = (await response.text()).trim();
     if (!text.startsWith("<")) throw new Error("Invalid XML response");
@@ -32,7 +33,9 @@ vi.mock("@/lib/security/feedFetch", () => ({
 
 import { fetchAllRedditFeeds, fetchRedditFeed, fetchSingleFeed } from "@/lib/api/rss";
 import { REDDIT_SOURCES, RSS_SOURCES } from '@/data/sources';
+import { selectDueSources } from '@/lib/api/sourcePolling';
 import { sourceCircuitKey } from '@/lib/api/sourceCircuit';
+import { beginSourceHealthCollection, completeSourceHealthCollection } from '@/lib/api/sourceHealth';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -41,6 +44,21 @@ afterEach(() => {
 });
 
 describe("RSS adapters", () => {
+  it('preserves content age across unchanged feeds and distinguishes stale from unknown', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-05T00:00:00Z'));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(null, { status: 304 }))));
+    const source = { name: 'Example', url: 'https://feed.example/rss', category: 'world', credibility_tier: 1 as const };
+    for (const [latestItemAt, expected] of [
+      ['2026-09-04T23:00:00Z', 'healthy'], ['2026-09-01T00:00:00Z', 'stale'], [null, 'empty'],
+    ] as const) {
+      beginSourceHealthCollection();
+      await expect(fetchSingleFeed(source, 1000, { validators: new Map([[source.url, { etag: 'v1', latestItemAt }]]) })).resolves.toEqual([]);
+      expect(completeSourceHealthCollection()).toEqual([expect.objectContaining({ outcome: expected, latest_usable_item_at: latestItemAt })]);
+    }
+    expect(mocks.parseString).not.toHaveBeenCalled();
+  });
+
   it('configures every publisher feed with HTTPS', () => {
     expect(RSS_SOURCES.every((source) => new URL(source.url).protocol === 'https:')).toBe(true);
   });
@@ -137,8 +155,8 @@ describe("RSS adapters", () => {
 
     await fetchAllRedditFeeds(0);
 
-    expect(fetchMock).toHaveBeenCalledTimes(15);
-    expect(maxActive).toBeLessThanOrEqual(3);
+    expect(fetchMock).toHaveBeenCalledTimes(selectDueSources(REDDIT_SOURCES, () => 'normal', 0).length);
+    expect(maxActive).toBe(1);
   });
 
   it('suppresses Reddit requests while source circuits are cooling down', async () => {

@@ -23,6 +23,17 @@ afterEach(() => {
 });
 
 describe("GNews adapter", () => {
+  it('reports stale content even when the provider returns HTTP 200', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-03T04:05:06Z'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ articles: [article] }))));
+    const { searchGNews } = await loadGNews();
+    const { beginSourceHealthCollection, completeSourceHealthCollection } = await import('@/lib/api/sourceHealth');
+    beginSourceHealthCollection();
+    await searchGNews('outbreak');
+    expect(completeSourceHealthCollection()).toEqual([expect.objectContaining({ outcome: 'stale', latest_usable_item_at: article.publishedAt })]);
+  });
+
   it("does not make requests without an API key", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

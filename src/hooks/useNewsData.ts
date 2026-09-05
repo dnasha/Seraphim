@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { newsFilterKey, appendNewsFilters, type NewsFilters } from '@/lib/utils/newsFilterParams';
 import { NewsItem, NewsResponse, BBox } from "@/lib/core/types";
 import { snapBBox } from "@/lib/utils/geo";
 import { canonicalNewsId, matchesNewsId, normalizeSortMode, sortNewsItems } from '@/lib/utils/ranking';
@@ -31,7 +32,11 @@ import {
     mergeNewsItem,
 } from './news/newsStore';
 
+const DETAIL_TTL_MS = 60_000;
+const MAX_DETAIL_ENTRIES = 200;
+
 type NewsRequestScope = {
+    filterKey?: string;
     bbox: BBox | null;
     sortMode?: string;
     query?: string;
@@ -64,10 +69,11 @@ function isSameRequestScope(current: NewsRequestScope, previous: NewsRequestScop
         current.sortMode === previous.sortMode &&
         current.query === previous.query &&
         current.timeRange === previous.timeRange &&
-        current.limit === previous.limit;
+        current.limit === previous.limit && current.filterKey === previous.filterKey;
 }
 
 export function useNewsData({
+    filters = {},
     timeRange,
     searchQuery,
     customStartDate,
@@ -78,6 +84,7 @@ export function useNewsData({
     resetKey,
     pinnedEventId = null
 }: {
+    filters?: NewsFilters;
     timeRange: string;
     searchQuery?: string;
     customStartDate?: string;
@@ -88,6 +95,7 @@ export function useNewsData({
     resetKey?: string;
     pinnedEventId?: string | null;
 }) {
+    const filterKey = newsFilterKey(filters);
     const [news, setNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -100,7 +108,15 @@ export function useNewsData({
     const activeRequestParamsRef = useRef<NewsRequestScope | null>(null);
     const isFirstMount = useRef(true);
 
-    const detailCache = useRef<Map<string, { description: string; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
+    const detailCache = useRef<Map<string, { timestamp: number; description: string; descriptionProvenance?: NewsItem['descriptionProvenance']; headlinePublishedAt?: string; independentPublisherCount?: number; sources: NewsItem['sources']; latitude?: number; longitude?: number; timelineRestricted?: boolean; totalSources?: number }>>(new Map());
+    const detailGenerationRef = useRef(0);
+    const detailFetcherRef = useRef<((id: string, force?: boolean) => Promise<void>) | null>(null);
+    const freshDetail = useCallback((id: string) => {
+        const cached = detailCache.current.get(id);
+        if (cached && Date.now() - cached.timestamp < DETAIL_TTL_MS) return cached;
+        detailCache.current.delete(id);
+        return undefined;
+    }, []);
     const fetchingDetailsRef = useRef<Set<string>>(new Set());
     const detailInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
@@ -128,6 +144,9 @@ export function useNewsData({
                     // Detail/timeline fields are entitlement-sensitive. Preserve
                     // the visual pin, then reload these under the new auth scope.
                     description: undefined,
+                    descriptionProvenance: undefined,
+                    headlinePublishedAt: undefined,
+                    independentPublisherCount: undefined,
                     sources: undefined,
                     timelineRestricted: undefined,
                     totalSources: undefined,
@@ -135,6 +154,9 @@ export function useNewsData({
             : [];
 
         requestVersionRef.current += 1;
+        detailGenerationRef.current += 1;
+        responseCache.clear();
+        inFlightFetches.clear();
 
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -174,7 +196,10 @@ export function useNewsData({
             setLastUpdated(null);
         }, 0);
 
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            detailGenerationRef.current += 1;
+        };
     }, [resetKey]);
 
     /**
@@ -253,9 +278,12 @@ export function useNewsData({
             
             const merged = mergeNewsItem(existing, item);
             
-            const cached = detailCache.current.get(key);
+            const cached = freshDetail(key);
             if (cached) {
                 merged.description = cached.description;
+                merged.descriptionProvenance = cached.descriptionProvenance;
+                merged.headlinePublishedAt = cached.headlinePublishedAt;
+                merged.independentPublisherCount = cached.independentPublisherCount;
                 merged.sources = cached.sources;
                 if (cached.latitude !== undefined) merged.latitude = cached.latitude;
                 if (cached.longitude !== undefined) merged.longitude = cached.longitude;
@@ -273,7 +301,7 @@ export function useNewsData({
         }
 
         pruneEntityStore();
-    }, [pruneEntityStore]);
+    }, [pruneEntityStore, freshDetail]);
 
     useEffect(() => { newsRef.current = news; }, [news]);
 
@@ -292,6 +320,7 @@ export function useNewsData({
     }) => {
         const { isRefresh, bbox, limit: requestedLimit, signal, view = 'map', scope = 'viewport', globalTopN } = options;
         const params = new URLSearchParams();
+        appendNewsFilters(params, filterKey);
         if (isRefresh) params.append('refresh', 'true');
         if (sortMode) params.append('sort', sortMode);
         params.append('time_range', timeRange);
@@ -321,7 +350,8 @@ export function useNewsData({
 
         if (requestedLimit) params.append('limit', String(requestedLimit));
 
-        const requestKey = params.toString();
+        const requestKey = JSON.stringify([resetKey ?? 'anonymous', params.toString()]);
+        const generation = detailGenerationRef.current;
         const now = Date.now();
         pruneResponseCache(now);
         const cached = responseCache.get(requestKey);
@@ -329,7 +359,7 @@ export function useNewsData({
             return {
                 items: cached.data.map(item => {
                     const cacheKey = item.originalId || item.id;
-                    const cachedDetail = detailCache.current.get(cacheKey);
+                    const cachedDetail = freshDetail(cacheKey);
                     return cachedDetail ? { 
                         ...item, 
                         ...cachedDetail,
@@ -338,6 +368,7 @@ export function useNewsData({
                     } : item;
                 }),
                 isCapped: cached.isCapped,
+                lastUpdated: cached.lastUpdated ?? new Date(cached.timestamp).toISOString(),
                 appliedLimit: cached.appliedLimit
             };
         }
@@ -351,7 +382,7 @@ export function useNewsData({
             const data: NewsResponse = await res.json();
             const hydrated = data.items.map(item => {
                 const cacheKey = item.originalId || item.id;
-                const cachedDetail = detailCache.current.get(cacheKey);
+                const cachedDetail = freshDetail(cacheKey);
                 return cachedDetail ? { 
                     ...item, 
                     ...cachedDetail,
@@ -362,18 +393,22 @@ export function useNewsData({
             const apiCapped = data.meta?.isCapped || false;
             const isCapped = apiCapped;
             const appliedLimit = data.meta?.appliedLimit;
-            responseCache.set(requestKey, { data: hydrated, isCapped, appliedLimit, timestamp: Date.now() });
+            const lastUpdated = data.lastUpdated ?? new Date().toISOString();
+            if (generation === detailGenerationRef.current && !signal?.aborted) {
+                // Shared list caches never contain hydrated detail/timeline data.
+                responseCache.set(requestKey, { data: data.items, isCapped, appliedLimit, timestamp: Date.now(), lastUpdated });
+            }
             pruneResponseCache();
-            return { items: hydrated, isCapped, appliedLimit };
+            return { items: hydrated, isCapped, appliedLimit, lastUpdated };
         })();
 
         inFlightFetches.set(requestKey, fetchPromise);
         try {
             return await fetchPromise;
         } finally {
-            inFlightFetches.delete(requestKey);
+            if (inFlightFetches.get(requestKey) === fetchPromise) inFlightFetches.delete(requestKey);
         }
-    }, [searchQuery, sortMode, timeRange, customStartDate, customEndDate]);
+    }, [filterKey, searchQuery, sortMode, timeRange, customStartDate, customEndDate, resetKey, freshDetail]);
 
     /**
      * Orchestrates the data loading sequence. It handles bounding box 
@@ -398,14 +433,14 @@ export function useNewsData({
 
         if (isRefresh) {
             responseCache.clear();
-            // Exact-event details are fetched outside the current viewport/time
-            // scope. Retain them while refreshing the feed so a shared event is
-            // not downgraded to (or replaced by) a partial cluster shell.
+            detailCache.current.clear();
+            detailInFlightRef.current.clear();
+            detailGenerationRef.current += 1;
         }
 
         const prev = lastFetchParamsRef.current;
         const pendingBBox = pendingBBoxRef.current;
-        const bboxSource = rawBBox ?? pendingBBox ?? undefined;
+        const bboxSource = rawBBox ?? pendingBBox ?? lastKnownBBoxRef.current ?? undefined;
         if (bboxSource === pendingBBox) {
             pendingBBoxRef.current = null;
         }
@@ -429,6 +464,7 @@ export function useNewsData({
         }
 
         const requestScope: NewsRequestScope = {
+            filterKey,
             bbox,
             sortMode: sortMode || undefined,
             query: searchQuery || undefined,
@@ -458,6 +494,7 @@ export function useNewsData({
         } : undefined;
 
         const params = new URLSearchParams();
+        appendNewsFilters(params, filterKey);
         if (sortMode) params.append('sort', sortMode);
         params.append('time_range', timeRange);
         params.append('view', 'map');
@@ -481,7 +518,7 @@ export function useNewsData({
             if (searchQuery) params.append('query', searchQuery);
             if (limit !== undefined) params.append('force_raw', 'true');
         }
-        const requestKey = params.toString();
+        const requestKey = JSON.stringify([resetKey ?? 'anonymous', params.toString()]);
         const now = Date.now();
         pruneResponseCache(now);
         const cached = responseCache.get(requestKey);
@@ -509,7 +546,7 @@ export function useNewsData({
             setIsCapped(cached.isCapped);
             setAppliedLimit(cached.appliedLimit);
             setIsLoading(false);
-            setLastUpdated(new Date(cached.timestamp).toISOString());
+            setLastUpdated(cached.lastUpdated ?? new Date(cached.timestamp).toISOString());
             lastFetchParamsRef.current = requestScope;
             needsScopeReloadRef.current = false;
             activeRequestParamsRef.current = null;
@@ -521,7 +558,7 @@ export function useNewsData({
         setError(null);
         setIsLoading(true);
         try {
-            const { items: mapResults, isCapped: resultCapped, appliedLimit: fetchLimit } = await _performFetch({
+            const { items: mapResults, isCapped: resultCapped, appliedLimit: fetchLimit, lastUpdated: fetchUpdated } = await _performFetch({
                 isRefresh,
                 bbox: enrichedBBox,
                 signal: abortController.signal,
@@ -540,9 +577,12 @@ export function useNewsData({
             syncNewsFromStore(sortMode);
             setIsCapped(resultCapped);
             setAppliedLimit(fetchLimit);
-            setLastUpdated(new Date().toISOString());
+            setLastUpdated(fetchUpdated ?? new Date().toISOString());
             lastFetchParamsRef.current = requestScope;
             needsScopeReloadRef.current = false;
+            if (isRefresh && pinnedEventIdRef.current) {
+                await detailFetcherRef.current?.(pinnedEventIdRef.current, true);
+            }
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
             if (requestVersion !== requestVersionRef.current) return;
@@ -554,7 +594,7 @@ export function useNewsData({
                 setIsLoading(false);
             }
         }
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
+    }, [filterKey, timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, _performFetch, mergeItemsIntoStore, syncNewsFromStore]);
 
     useEffect(() => {
         if (!enabled) return;
@@ -585,13 +625,13 @@ export function useNewsData({
         
         coordinateLoad();
         return;
-    }, [timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, coordinateLoad]);
+    }, [filterKey, timeRange, searchQuery, customStartDate, customEndDate, sortMode, limit, enabled, resetKey, coordinateLoad]);
 
     /**
      * Lazy-loads heavy event details (description, sources) for a specific item.
      * Updates the entity store and triggers a UI sync upon completion.
      */
-    const fetchEventDetails = useCallback(async (id: string) => {
+    const fetchEventDetails = useCallback(async (id: string, force = false) => {
         if (!id) return;
         
         let targetId = id;
@@ -604,17 +644,17 @@ export function useNewsData({
             }
         }
 
-        const existingDetail = detailCache.current.get(targetId);
-        if (existingDetail) return;
+        if (!force && freshDetail(targetId)) return;
 
         const existingInFlight = detailInFlightRef.current.get(targetId);
         if (existingInFlight) return existingInFlight;
 
         fetchingDetailsRef.current.add(targetId);
+        const generation = detailGenerationRef.current;
 
         const detailPromise = (async () => {
             try {
-                const res = await fetch(`/api/news/${targetId}`);
+                const res = await fetch(`/api/news/${targetId}${force ? '?refresh=true' : ''}`);
                 if (!res.ok) return;
                 const { description, sources, latitude, longitude, timelineRestricted, totalSources, event } = await res.json() as {
                     description?: string;
@@ -625,6 +665,7 @@ export function useNewsData({
                     totalSources?: number;
                     event?: NewsItem;
                 };
+                if (generation !== detailGenerationRef.current) return;
                 const descriptionValue = typeof description === 'string' ? description : '';
                 const mappedSources = Array.isArray(sources)
                     ? sources.map((s) => ({
@@ -635,18 +676,28 @@ export function useNewsData({
                     }))
                     : undefined;
                 detailCache.current.set(targetId, {
+                    timestamp: Date.now(),
                     description: descriptionValue,
+                    descriptionProvenance: event?.descriptionProvenance,
+                    headlinePublishedAt: event?.headlinePublishedAt,
+                    independentPublisherCount: event?.independentPublisherCount,
                     sources: mappedSources,
                     latitude,
                     longitude,
                     timelineRestricted,
                     totalSources,
                 });
+                while (detailCache.current.size > MAX_DETAIL_ENTRIES) {
+                    detailCache.current.delete(detailCache.current.keys().next().value!);
+                }
 
                 if (event) {
                     const hydratedEvent: NewsItem = {
                         ...event,
                         description: descriptionValue,
+                        descriptionProvenance: event.descriptionProvenance,
+                        headlinePublishedAt: event.headlinePublishedAt,
+                        independentPublisherCount: event.independentPublisherCount,
                         sources: mappedSources ?? event.sources,
                         latitude: latitude !== undefined ? latitude : event.latitude,
                         longitude: longitude !== undefined ? longitude : event.longitude,
@@ -662,6 +713,9 @@ export function useNewsData({
                         entitiesRef.current.set(entityId, {
                             ...entity,
                             description: descriptionValue,
+                            descriptionProvenance: event?.descriptionProvenance,
+                            headlinePublishedAt: event?.headlinePublishedAt,
+                            independentPublisherCount: event?.independentPublisherCount,
                             sources: mappedSources ?? entity.sources,
                             latitude: latitude !== undefined ? latitude : entity.latitude,
                             longitude: longitude !== undefined ? longitude : entity.longitude,
@@ -676,14 +730,18 @@ export function useNewsData({
             } catch (err) {
                 console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
             } finally {
-                fetchingDetailsRef.current.delete(targetId);
-                detailInFlightRef.current.delete(targetId);
+                if (generation === detailGenerationRef.current) {
+                    fetchingDetailsRef.current.delete(targetId);
+                    detailInFlightRef.current.delete(targetId);
+                }
             }
         })();
 
         detailInFlightRef.current.set(targetId, detailPromise);
         return detailPromise;
-    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore]);
+    }, [mergeItemsIntoStore, sortMode, syncNewsFromStore, freshDetail]);
+
+    useEffect(() => { detailFetcherRef.current = fetchEventDetails; }, [fetchEventDetails]);
 
     const onBoundsChange = useCallback((bbox: BBox) => {
         return coordinateLoad(false, bbox);

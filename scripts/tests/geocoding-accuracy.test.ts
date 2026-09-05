@@ -7,10 +7,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { extractLocation, geocodeLocation, ensureInitialized } from '@/lib/geocoding';
+import { resolveLocation, ensureInitialized } from '@/lib/geocoding';
 
-const ACCURACY_THRESHOLD = 80;
-const MAX_FALSE_PINS = 8;
+const ACCURACY_THRESHOLD = 95;
+const MAX_FALSE_PINS = 0;
 const GOLDEN_PATH = path.resolve(__dirname, '../fixtures/geocoding-golden.v1.json');
 
 interface GoldenCase {
@@ -40,6 +40,25 @@ beforeAll(() => {
 });
 
 describe('geocoding accuracy regression', () => {
+    it('places qualified labels in their expected regions without changing the golden labels', async () => {
+        const regions = [
+            { id: 34, lat: [25, 26], lon: [-101, -99] },
+            { id: 63, lat: [33, 35], lon: [-120, -117] },
+            { id: 130, lat: [33, 34], lon: [-88, -86] },
+            { id: 146, lat: [24, 31], lon: [-88, -80] },
+            { id: 150, lat: [48, 50], lon: [-124, -122] },
+        ];
+        for (const region of regions) {
+            const item = cases.find(item => item.id === region.id)!;
+            const actual = await resolveLocation(item.title, item.description || '');
+            expect(actual, `case ${region.id}`).not.toBeNull();
+            expect(actual!.lat).toBeGreaterThanOrEqual(region.lat[0]);
+            expect(actual!.lat).toBeLessThanOrEqual(region.lat[1]);
+            expect(actual!.lon).toBeGreaterThanOrEqual(region.lon[0]);
+            expect(actual!.lon).toBeLessThanOrEqual(region.lon[1]);
+        }
+    });
+
     it('uses a populated, explicit human-reviewed 100–200 case fixture', () => {
         expect(fs.existsSync(GOLDEN_PATH)).toBe(true);
         expect(cases.length).toBeGreaterThanOrEqual(100);
@@ -58,8 +77,7 @@ describe('geocoding accuracy regression', () => {
         let falsePins = 0;
 
         for (const item of reviewedCases) {
-            const extracted = extractLocation(item.title, item.description || '');
-            const actual = extracted.match ? await geocodeLocation(extracted.match) : null;
+            const actual = await resolveLocation(item.title, item.description || '');
             const expected = normalize(item.expected.displayName);
             const received = normalize(actual?.displayName);
             const passes = expected === received;
@@ -74,7 +92,7 @@ describe('geocoding accuracy regression', () => {
         console.log(`  Cases:       ${reviewedCases.length} (${cases.length - reviewedCases.length} unsure excluded)`);
         console.log(`  Accuracy:    ${correct}/${reviewedCases.length} (${accuracy.toFixed(1)}%)`);
         console.log(`  Misses:      ${misses}`);
-        console.log(`  Wrong place: ${wrong}`);
+        console.log(`  Different non-null label: ${wrong} (includes more specific place names)`);
         console.log(`  False pins:  ${falsePins}\n`);
 
         expect(accuracy).toBeGreaterThanOrEqual(ACCURACY_THRESHOLD);

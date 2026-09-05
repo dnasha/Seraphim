@@ -7,6 +7,12 @@ const mocks = vi.hoisted(() => ({
   recordMetric: vi.fn(), recordIncident: vi.fn(), recoverIncident: vi.fn(),
 }));
 
+vi.mock('@/lib/server/recoveryJobs', () => ({
+  enqueueRecoveryJob: async () => mocks.claimError?.code === '23505' ? 'completed' : 'pending',
+  claimRecoveryJob: async () => ({ job_key: 'evt', kind: 'stripe_webhook', claim_token: 'token', payload: mocks.constructEvent.mock.results.at(-1)?.value }),
+  completeRecoveryJob: vi.fn(),
+  failRecoveryJob: mocks.released,
+}));
 vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: { from: mocks.from, rpc: mocks.rpc } }));
 vi.mock('@/lib/server/operations', () => ({
   recordMetric: mocks.recordMetric,
@@ -40,7 +46,7 @@ function tableQuery(table: string) {
   query.select = vi.fn(() => query);
   query.eq = vi.fn(() => query);
   query.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
-  query.single = vi.fn(async () => ({ data: table === 'user_profiles' ? mocks.profile : null, error: null }));
+  query.single = vi.fn(async () => ({ data: table === 'user_profiles' ? mocks.profile : table === 'angel_purchases' ? { replaced_subscription_id: mocks.profile.stripe_subscription_id } : null, error: null }));
   query.update = vi.fn((payload: Record<string, unknown>) => { mocks.updates.push({ table, payload }); return query; });
   query.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
   return query;
@@ -68,7 +74,7 @@ describe('POST /api/stripe/webhook', () => {
     expect((await POST(webhookRequest('bad'))).status).toBe(400);
   });
 
-  it('acknowledges an already claimed Stripe event without processing it', async () => {
+  it('acknowledges an completed Stripe event without processing it', async () => {
     mocks.claimError = { code: '23505' };
     mocks.constructEvent.mockReturnValue({ id: 'evt-duplicate', type: 'invoice.payment_succeeded', data: { object: {} } });
     expect(await (await POST(webhookRequest('valid'))).json()).toEqual({ received: true, duplicate: true });
@@ -93,14 +99,7 @@ describe('POST /api/stripe/webhook', () => {
 
     expect((await POST(webhookRequest('valid'))).status).toBe(200);
     expect(mocks.cancelSubscription).toHaveBeenCalledWith('sub-replaced');
-    expect(mocks.updates).toContainEqual(expect.objectContaining({
-      table: 'user_profiles',
-      payload: expect.objectContaining({
-        stripe_subscription_id: null,
-        subscription_status: 'active',
-        billing_interval: 'lifetime',
-      }),
-    }));
+    expect(mocks.updates).not.toContainEqual(expect.objectContaining({ table: 'user_profiles' }));
   });
 
   it('keeps active, trialing, and past-due subscriptions entitled', async () => {
@@ -252,7 +251,7 @@ describe('POST /api/stripe/webhook', () => {
     expect(mocks.updates).toContainEqual(expect.objectContaining({ table: 'user_profiles', payload: expect.objectContaining({ tier: 'free', subscription_status: 'incomplete' }) }));
   });
 
-  it('releases the idempotency claim when processing fails', async () => {
+  it('schedules a durable retry when processing fails', async () => {
     mocks.retrieveSubscription.mockRejectedValue(new Error('unavailable'));
     mocks.constructEvent.mockReturnValue({ id: 'evt-failure', type: 'checkout.session.completed', data: { object: {
       id: 'cs-failure', mode: 'subscription', subscription: 'sub-failure', metadata: { supabase_user_id: 'user-1', price_key: 'pro_monthly' },

@@ -9,7 +9,7 @@ if (
 
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { Agent, buildConnector } from 'undici';
+import { Agent, buildConnector, fetch as pinnedFetch } from 'undici';
 
 const MAX_OG_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
@@ -327,16 +327,16 @@ async function fetchPinnedHop(
     signal?.removeEventListener('abort', abortFromCaller);
   };
   try {
-    // `dispatcher` is supported by Node's undici fetch but is absent from the DOM RequestInit type.
-    const response = await fetch(url, {
+    // Bun's native fetch ignores Undici's dispatcher. Use Undici explicitly so
+    // DNS validation and the pinned TLS connection remain the same operation.
+    const response = await pinnedFetch(url, {
       signal: controller.signal,
       redirect: 'manual',
-      headers: headers ?? { 'User-Agent': 'Seraphim/1.0 (OG image fetcher)' },
-      // @ts-expect-error undici dispatcher extension
+      headers: Object.fromEntries(new Headers(headers ?? { 'User-Agent': 'Seraphim/1.0 (OG image fetcher)' })),
       dispatcher,
     });
     return {
-      response,
+      response: response as unknown as Response,
       close: releaseRequest,
     };
   } catch (error) {

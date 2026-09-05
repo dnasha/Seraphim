@@ -34,12 +34,11 @@ const parser = new Parser({
 type XFeed = Awaited<ReturnType<typeof parser.parseURL>>;
 
 /**
- * Verified Nitter instances for X/Twitter fallback.
+ * Best-effort community mirrors; availability is checked at request time.
  */
 const NITTER_INSTANCES = [
     'https://nitter.privacydev.net',
     'https://nitter.poast.org',
-    'https://nitter.net',
     'https://xcancel.com',
     'https://nitter.cz',
 ];
@@ -277,6 +276,7 @@ async function trySyndicationFeed(username: string): Promise<ReturnType<typeof p
  * Remembers the 'best' instance to optimize subsequent requests.
  */
 let bestNitterInstance: string | null = null;
+let nitterUnavailableUntil = 0;
 type InstanceDiscovery = { instance: string; username: string; feed: XFeed };
 let nitterDiscovery: Promise<InstanceDiscovery | null> | null = null;
 function feedHasRecentItems(feed: XFeed, now = Date.now()): boolean {
@@ -290,6 +290,7 @@ function feedHasRecentItems(feed: XFeed, now = Date.now()): boolean {
 }
 
 async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
+    if (Date.now() < nitterUnavailableUntil) return null;
     try {
         if (bestNitterInstance) {
             const preferred = bestNitterInstance;
@@ -323,7 +324,10 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
         }
         const discovered = await nitterDiscovery;
         nitterDiscovery = null;
-        if (!discovered) return null;
+        if (!discovered) {
+            nitterUnavailableUntil = Date.now() + 15 * 60_000;
+            return null;
+        }
         if (discovered.username === username) return discovered.feed;
         const feed = await fetchInstanceTimeout(`${discovered.instance}/${username}/rss`);
         return feedHasRecentItems(feed) ? feed : null;
@@ -337,8 +341,10 @@ async function tryNitterFeed(username: string): Promise<ReturnType<typeof parser
  * Similar to Nitter, utilizes community-hosted RSSHub instances as a secondary fallback.
  */
 let bestRSSHubInstance: string | null = null;
+let rssHubUnavailableUntil = 0;
 let rssHubDiscovery: Promise<InstanceDiscovery | null> | null = null;
 async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser.parseURL> | null> {
+    if (Date.now() < rssHubUnavailableUntil) return null;
     try {
         if (bestRSSHubInstance) {
             const preferred = bestRSSHubInstance;
@@ -372,7 +378,10 @@ async function tryRSSHubFeed(username: string): Promise<ReturnType<typeof parser
         }
         const discovered = await rssHubDiscovery;
         rssHubDiscovery = null;
-        if (!discovered) return null;
+        if (!discovered) {
+            rssHubUnavailableUntil = Date.now() + 15 * 60_000;
+            return null;
+        }
         if (discovered.username === username) return discovered.feed;
         const feed = await fetchInstanceTimeout(`${discovered.instance}/twitter/user/${username}`);
         return feedHasRecentItems(feed) ? feed : null;

@@ -108,7 +108,11 @@ async function writeUpdates(db: SupabaseClient, updates: ImageBackfillUpdate[]) 
   }
   for (let offset = 0; offset < refreshUpdates.length; offset += IMAGE_WRITE_CHUNK_SIZE) {
     const chunk = refreshUpdates.slice(offset, offset + IMAGE_WRITE_CHUNK_SIZE)
-      .map(({ replace_existing: _replaceExisting, ...update }) => update);
+      .map((update) => {
+        const payload = { ...update };
+        delete payload.replace_existing;
+        return payload;
+      });
     const { data, error } = await db.rpc('bulk_ingest_events', {
       p_new_events: [],
       p_merges: chunk,

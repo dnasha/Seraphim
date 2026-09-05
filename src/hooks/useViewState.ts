@@ -25,7 +25,7 @@ export interface ViewState {
     cat?: string;
     /** Sort mode ('new' or 'hot') */
     s?: string;
-    /** Custom time-window bounds (local datetime strings). */
+    /** Custom time-window bounds; shared links preserve UTC instants. */
     from?: string;
     to?: string;
     /** Selected event ID */
@@ -34,6 +34,21 @@ export interface ViewState {
 
 const DEFAULT_SOURCES = ['news', 'reddit', 'x', 'telegram', 'extra'];
 const DEFAULT_CATEGORIES = ['all'];
+
+function cameraNumber(value: string | null, min: number, max: number): number | undefined {
+    if (!value?.trim()) return undefined;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= min && number <= max ? number : undefined;
+}
+
+function dateBound(value: string | null): string | undefined {
+    if (!value || value.length > 32) return undefined;
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return undefined;
+    // Preserve the offset internally, including ambiguous daylight-saving hours.
+    // Only the datetime-local form converts instants into wall-clock values.
+    return value;
+}
 
 /**
  * Reads the initial view state from URL search parameters on hook initialization.
@@ -53,16 +68,16 @@ function parseInitialState(params: URLSearchParams): ViewState {
     const to = params.get('to');
     const eventId = params.get('eventId');
 
-    if (lat) state.lat = parseFloat(lat);
-    if (lng) state.lng = parseFloat(lng);
-    if (zoom) state.zoom = parseFloat(zoom);
+    state.lat = cameraNumber(lat, -90, 90);
+    state.lng = cameraNumber(lng, -180, 180);
+    state.zoom = cameraNumber(zoom, 0, 18);
     if (q) state.q = q;
     if (t) state.t = t;
     if (src) state.src = src;
     if (cat) state.cat = cat;
     if (s) state.s = s;
-    if (from && from.length <= 32 && Number.isFinite(new Date(from).getTime())) state.from = from;
-    if (to && to.length <= 32 && Number.isFinite(new Date(to).getTime())) state.to = to;
+    state.from = dateBound(from);
+    state.to = dateBound(to);
     if (eventId) state.eventId = eventId;
 
     return state;
@@ -71,13 +86,19 @@ function parseInitialState(params: URLSearchParams): ViewState {
 export function useViewState() {
     const searchParams = useSearchParams();
     const pathname = usePathname();
+    const search = searchParams.toString();
 
     const initialState = useMemo(() => {
-        return parseInitialState(new URLSearchParams(searchParams.toString()));
-    }, [searchParams]);
+        return parseInitialState(new URLSearchParams(search));
+    }, [search]);
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const currentState = useRef<ViewState>({ ...initialState });
+
+    useEffect(() => {
+        currentState.current = { ...initialState };
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+    }, [initialState]);
 
     /**
      * Updates the URL search parameters to reflect the current application state.
@@ -119,8 +140,12 @@ export function useViewState() {
             }
             if (s.s && s.s !== 'hot') params.set('s', s.s);
             if (s.t === 'custom' && s.from && s.to) {
-                params.set('from', s.from);
-                params.set('to', s.to);
+                const fromDate = new Date(s.from);
+                const toDate = new Date(s.to);
+                if (Number.isFinite(fromDate.getTime()) && Number.isFinite(toDate.getTime())) {
+                    params.set('from', fromDate.toISOString());
+                    params.set('to', toDate.toISOString());
+                }
             }
             if (s.eventId) params.set('eventId', s.eventId);
 

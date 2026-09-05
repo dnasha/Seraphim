@@ -21,8 +21,10 @@ import {
 import styles from './MapDrawTools.module.css';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from '@/components/ui/FeatureGate';
-import { DragFriendlyFreehandLineStringMode, type FreehandPointerEvent } from './draw/DragFriendlyFreehandLineStringMode';
+import { DragFriendlyFreehandLineStringMode } from './draw/DragFriendlyFreehandLineStringMode';
+import { tessellateFreehandCoordinates, type FreehandCoordinate } from './draw/freehandGeometry';
 import { TextMarker } from './draw/TextMarker';
+import { MAX_IMPORT_BYTES, MAX_IMPORT_FEATURES, validateImportedFeatures } from './draw/importValidation';
 import {
   type TextAnnotation,
   readPersistedDrawState,
@@ -104,14 +106,11 @@ const stopTerraDrawSafely = (draw: TerraDraw, map: maplibregl.Map) => {
   }
 };
 
-// Modes that require touch gesture suppression and direct touch-to-draw bridging.
+// Modes that own drag gestures while active instead of allowing the map to pan.
 const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle', 'eraser']);
 
 export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
-  const freehandModeRef = useRef<DragFriendlyFreehandLineStringMode | null>(null);
-  const rectangleModeRef = useRef<TerraDrawRectangleMode | null>(null);
-  const circleModeRef = useRef<TerraDrawCircleMode | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
@@ -119,6 +118,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   const [activeFillOpacity, setActiveFillOpacity] = useState<number>(40);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
   const [hasPickedCustomColor, setHasPickedCustomColor] = useState(false);
   const [customPickerColor, setCustomPickerColor] = useState<string>('#8b5cf6');
   const colorRef = useRef(activeColor);
@@ -273,18 +273,36 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       calculateMeasurementRef.current();
     }
 
-    if (mapRef.current) {
-      if (TOUCH_DRAW_MODES.has(activeMode)) {
-        mapRef.current.dragPan.disable();
-        mapRef.current.touchZoomRotate.disable();
-        if (mapRef.current.touchPitch) mapRef.current.touchPitch.disable();
-      } else {
-        mapRef.current.dragPan.enable();
-        mapRef.current.touchZoomRotate.enable();
-        if (mapRef.current.touchPitch) mapRef.current.touchPitch.enable();
-      }
+    const map = mapRef.current;
+    if (!map) return;
+
+    const canvas = map.getCanvas();
+    const previousTouchAction = canvas.style.touchAction;
+    const ownsDragGesture = isOpen && TOUCH_DRAW_MODES.has(activeMode);
+
+    if (ownsDragGesture) {
+      map.dragPan.disable();
+      map.touchZoomRotate.disable();
+      if (map.touchPitch) map.touchPitch.disable();
+      // Prevent the browser from cancelling the PointerEvent stream to begin a
+      // page/map gesture. Terra Draw can then handle mouse, pen and touch alike.
+      canvas.style.touchAction = 'none';
+    } else {
+      map.dragPan.enable();
+      map.touchZoomRotate.enable();
+      if (map.touchPitch) map.touchPitch.enable();
+      canvas.style.touchAction = previousTouchAction;
     }
-  }, [activeMode, mapRef]);
+
+    return () => {
+      canvas.style.touchAction = previousTouchAction;
+      if (ownsDragGesture) {
+        map.dragPan.enable();
+        map.touchZoomRotate.enable();
+        if (map.touchPitch) map.touchPitch.enable();
+      }
+    };
+  }, [activeMode, isOpen, mapRef]);
   
   useEffect(() => {
     if (userTier === 'guest') {
@@ -417,9 +435,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         }),
         new TerraDrawPolygonMode({ styles: polygonStyles }),
         new TerraDrawLineStringMode({ styles: rulerStyles }),
-        (() => { const m = new TerraDrawRectangleMode({ styles: polygonStyles }); rectangleModeRef.current = m; return m; })(),
-        (() => { const m = new TerraDrawCircleMode({ styles: polygonStyles }); circleModeRef.current = m; return m; })(),
-        (() => { const m = new DragFriendlyFreehandLineStringMode({ styles: sketchStyles, minDistance: 2 }); freehandModeRef.current = m; return m; })(),
+        new TerraDrawRectangleMode({ styles: polygonStyles, drawInteraction: 'click-move-or-drag' }),
+        new TerraDrawCircleMode({ styles: polygonStyles, drawInteraction: 'click-move-or-drag' }),
+        new DragFriendlyFreehandLineStringMode({ styles: sketchStyles, minDistance: 2 }),
         new TerraDrawPointMode({ styles: pointStyles }),
       ],
     });
@@ -446,10 +464,22 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     
     drawRef.current = draw;
 
+    const nativeLineLayerId = `${adapterPrefixId}-linestring`;
+    if (map.getLayer(nativeLineLayerId)) {
+      // Terra Draw remains the source of truth, but its shared LineString layer
+      // must not also paint freehand features underneath the smoothed overlay.
+      map.setFilter(nativeLineLayerId, [
+        '!=',
+        ['get', 'mode'],
+        'freehand-linestring',
+      ] as maplibregl.FilterSpecification);
+    }
+
     const ensureFreehandOverlay = () => {
       if (!map.getSource(FREEHAND_OVERLAY_SOURCE_ID)) {
         map.addSource(FREEHAND_OVERLAY_SOURCE_ID, {
           type: 'geojson',
+          tolerance: 0,
           data: {
             type: 'FeatureCollection',
             features: [],
@@ -475,48 +505,60 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       }
     };
 
+    let overlayFrameId: number | null = null;
+    let measurementTimer: ReturnType<typeof setTimeout> | null = null;
+    let persistenceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const syncFreehandOverlay = () => {
+      overlayFrameId = null;
       ensureFreehandOverlay();
       const source = map.getSource(FREEHAND_OVERLAY_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
       if (!source) return;
 
-      const freehandFeatures = draw.getSnapshot()
-        .filter((feature) => {
-          return feature.geometry.type === 'LineString'
-            && (feature.properties as { mode?: string } | undefined)?.mode === 'freehand-linestring';
-        })
-        .map((feature) => {
-          const props = feature.properties as { color?: string; size?: number } | undefined;
-          return {
-            ...feature,
-            properties: {
-              ...feature.properties,
-              __drawColor: props?.color || colorRef.current,
-              __drawWidth: props?.size || sizeRef.current,
-            },
-          };
-        });
+      const zoom = map.getZoom();
+      const freehandFeatures: GeoJSON.Feature[] = [];
+      for (const feature of draw.getSnapshot()) {
+        if (
+          feature.geometry.type !== 'LineString'
+          || (feature.properties as { mode?: string } | undefined)?.mode !== 'freehand-linestring'
+        ) continue;
+
+        const coordinates = tessellateFreehandCoordinates(
+          feature.geometry.coordinates as unknown as FreehandCoordinate[],
+          { zoom },
+        );
+        // Terra Draw initially creates a duplicate two-coordinate LineString.
+        // Wait for real pointer movement before sending geometry to MapLibre.
+        if (coordinates.length < 2) continue;
+
+        const props = feature.properties as { color?: string; size?: number } | undefined;
+        freehandFeatures.push({
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates,
+          },
+          properties: {
+            ...feature.properties,
+            __drawColor: props?.color || colorRef.current,
+            __drawWidth: props?.size || sizeRef.current,
+          },
+        } as GeoJSON.Feature);
+      }
 
       source.setData({
         type: 'FeatureCollection',
-        features: freehandFeatures as GeoJSON.Feature[],
+        features: freehandFeatures,
       });
     };
 
-    syncFreehandOverlay();
-
-    const handleChange = () => {
-      if (drawRef.current) {
-        persistentFeaturesRef.current = drawRef.current.getSnapshot();
-      }
-      if (userTier !== 'guest') {
-        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
-      }
-      syncFreehandOverlay();
-      calculateMeasurement();
+    const scheduleFreehandOverlay = () => {
+      if (overlayFrameId !== null) return;
+      overlayFrameId = requestAnimationFrame(syncFreehandOverlay);
     };
 
     const calculateMeasurement = () => {
+      measurementTimer = null;
       const snapshot = draw.getSnapshot();
       let totalArea = 0;
       let totalDistance = 0;
@@ -559,7 +601,45 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       }
     };
 
-    calculateMeasurementRef.current = calculateMeasurement;
+    const scheduleMeasurement = () => {
+      if (measurementTimer !== null) return;
+      measurementTimer = setTimeout(calculateMeasurement, 100);
+    };
+
+    const flushMeasurement = () => {
+      if (measurementTimer !== null) {
+        clearTimeout(measurementTimer);
+        measurementTimer = null;
+      }
+      calculateMeasurement();
+    };
+
+    const flushPersistence = () => {
+      if (persistenceTimer !== null) {
+        clearTimeout(persistenceTimer);
+        persistenceTimer = null;
+      }
+      persistentFeaturesRef.current = draw.getSnapshot();
+      if (userTier !== 'guest') {
+        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
+      }
+    };
+
+    const schedulePersistence = () => {
+      if (userTier === 'guest') return;
+      if (persistenceTimer !== null) clearTimeout(persistenceTimer);
+      persistenceTimer = setTimeout(flushPersistence, 250);
+    };
+
+    const handleChange = () => {
+      scheduleFreehandOverlay();
+      scheduleMeasurement();
+      schedulePersistence();
+    };
+
+    calculateMeasurementRef.current = flushMeasurement;
+    syncFreehandOverlay();
+    map.on('zoomend', scheduleFreehandOverlay);
 
     draw.on('finish', (id) => {
       draw.updateFeatureProperties(id as string, { 
@@ -568,13 +648,9 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         fill: fillRef.current,
         fillOpacity: fillRef.current ? (fillOpacityRef.current / 100) : 0
       });
-      if (drawRef.current) {
-        persistentFeaturesRef.current = drawRef.current.getSnapshot();
-        if (userTier !== 'guest') {
-          persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
-        }
-      }
-      syncFreehandOverlay();
+      flushPersistence();
+      scheduleFreehandOverlay();
+      flushMeasurement();
     });
 
     draw.on('change', handleChange);
@@ -594,12 +670,10 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         }
       }
 
-      if (userTier === 'guest') return;
       handleChange();
     });
     draw.on('deselect', () => {
       setSelectedFeatureId(null);
-      if (userTier === 'guest') return;
       handleChange();
     });
 
@@ -608,6 +682,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       if (!instance) return;
 
       try {
+        instance.off('zoomend', scheduleFreehandOverlay);
+        if (overlayFrameId !== null) cancelAnimationFrame(overlayFrameId);
+        if (measurementTimer !== null) clearTimeout(measurementTimer);
+        if (persistenceTimer !== null) flushPersistence();
+        calculateMeasurementRef.current = null;
         if (drawRef.current) {
           stopTerraDrawSafely(drawRef.current, instance);
           drawRef.current = null;
@@ -618,110 +697,6 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       }
     };
   }, [mapReady, mapRef, userTier]);
-
-  // Mobile touch-to-draw bridge for drag-draw modes (freehand, rectangle, circle).
-  // On mobile, MapLibre's touch gesture handlers consume touch events before they
-  // reach TerraDraw's pointer event pipeline. Additionally, touch-drag produces a
-  // pointerdown→pointermove→pointerup sequence that TerraDraw interprets as a
-  // "drag" rather than the click-move-click lifecycle these modes expect.
-  //
-  // This effect:
-  //  1. Intercepts raw touch events and calls mode methods directly.
-  //  2. Blocks touch-originated PointerEvents (capture phase) so TerraDraw's
-  //     adapter doesn't double-process the same gesture.
-  useEffect(() => {
-    if (!TOUCH_DRAW_MODES.has(activeMode) || activeMode === 'eraser' || !mapReady || !mapRef.current) return;
-    if (typeof window === 'undefined') return;
-
-    const map = mapRef.current;
-    const canvas = map.getCanvas();
-
-    // Resolve the active mode instance for direct method calls.
-    const getMode = (): { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null => {
-      switch (activeMode) {
-        case 'freehand-linestring': return freehandModeRef.current;
-        case 'rectangle': return rectangleModeRef.current as unknown as { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null;
-        case 'circle': return circleModeRef.current as unknown as { onClick: (e: FreehandPointerEvent & { isContextMenu: boolean }) => void; onMouseMove: (e: FreehandPointerEvent) => void } | null;
-        default: return null;
-      }
-    };
-
-    const mode = getMode();
-    if (!mode) return;
-
-    let isTouchDrawing = false;
-
-    const toTerraDrawEvent = (touch: Touch): FreehandPointerEvent => {
-      const rect = canvas.getBoundingClientRect();
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      const lngLat = map.unproject([x, y]);
-      return {
-        lng: lngLat.lng,
-        lat: lngLat.lat,
-        containerX: x,
-        containerY: y,
-        button: 'left' as const,
-        heldKeys: [] as string[],
-        isContextMenu: false,
-      };
-    };
-
-    // --- Touch handlers (primary drawing driver) ---
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      e.preventDefault();
-      isTouchDrawing = true;
-      const ev = toTerraDrawEvent(e.touches[0]);
-      mode.onClick({ ...ev, isContextMenu: false });
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isTouchDrawing || e.touches.length !== 1) return;
-      e.preventDefault();
-      const ev = toTerraDrawEvent(e.touches[0]);
-      mode.onMouseMove(ev);
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!isTouchDrawing) return;
-      e.preventDefault();
-      if (e.changedTouches.length > 0) {
-        const ev = toTerraDrawEvent(e.changedTouches[0]);
-        mode.onMouseMove(ev);
-        mode.onClick({ ...ev, isContextMenu: false });
-      }
-      isTouchDrawing = false;
-    };
-
-    // --- Pointer event blocker ---
-    // Prevent touch-originated pointer events from reaching TerraDraw's adapter
-    // so we don't get double-processed gestures (our touch handler + TD's pointer handler).
-    const blockTouchPointer = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') {
-        e.stopImmediatePropagation();
-      }
-    };
-
-    // Touch handlers drive drawing; capture phase ensures we run first.
-    canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false } as AddEventListenerOptions);
-    canvas.addEventListener('touchmove', onTouchMove, { capture: true, passive: false } as AddEventListenerOptions);
-    canvas.addEventListener('touchend', onTouchEnd, { capture: true, passive: false } as AddEventListenerOptions);
-
-    // Block pointer events that originate from touch so TerraDraw doesn't double-fire.
-    canvas.addEventListener('pointerdown', blockTouchPointer, true);
-    canvas.addEventListener('pointermove', blockTouchPointer, true);
-    canvas.addEventListener('pointerup', blockTouchPointer, true);
-
-    return () => {
-      canvas.removeEventListener('touchstart', onTouchStart, true);
-      canvas.removeEventListener('touchmove', onTouchMove, true);
-      canvas.removeEventListener('touchend', onTouchEnd, true);
-      canvas.removeEventListener('pointerdown', blockTouchPointer, true);
-      canvas.removeEventListener('pointermove', blockTouchPointer, true);
-      canvas.removeEventListener('pointerup', blockTouchPointer, true);
-    };
-  }, [activeMode, mapReady, mapRef]);
 
   // Unified Pointer-based Eraser handler for drag-to-erase (desktop and mobile)
   useEffect(() => {
@@ -972,26 +947,35 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   const handleImport = () => {
     if (!hasFeature(userTier, 'geoJsonTransfer')) return;
+    setImportError(null);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.geojson,application/json';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (file.size > MAX_IMPORT_BYTES) {
+        setImportError('Choose a GeoJSON file smaller than 2 MB.');
+        return;
+      }
       const reader = new FileReader();
+      reader.onerror = () => setImportError('The file could not be read. Please try again.');
       reader.onload = (event) => {
         try {
-          const geojson = JSON.parse(event.target?.result as string);
+          const features = validateImportedFeatures(JSON.parse(event.target?.result as string));
+          if (features.length + persistentFeaturesRef.current.length + textAnnotationsRef.current.length > MAX_IMPORT_FEATURES) {
+            throw new Error('The map can hold up to 1,000 imported features. Remove some drawings first.');
+          }
+          const geojson = { type: 'FeatureCollection', features };
           if (geojson.type === 'FeatureCollection' && drawRef.current) {
-            const drawFeatures = geojson.features.filter((f: { properties?: { isText?: boolean } }) => !f.properties?.isText);
+            const drawFeatures = geojson.features.filter(f => !f.properties?.isText);
             const importedText = geojson.features
-              .filter((f: { properties?: { isText?: boolean } }) => f.properties?.isText)
-              .map((f: { geometry: { coordinates: [number, number] }, properties: { text: string, initialZoom?: number } }) => ({
+              .flatMap(f => f.geometry.type === 'Point' && f.properties?.isText ? [{
                 id: Math.random().toString(36).substr(2, 9),
-                lngLat: f.geometry.coordinates,
-                text: f.properties.text,
-                initialZoom: f.properties.initialZoom || (mapRef.current ? mapRef.current.getZoom() : 10)
-              }));
+                lngLat: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [number, number],
+                text: String(f.properties.text),
+                initialZoom: Number(f.properties.initialZoom ?? (mapRef.current ? mapRef.current.getZoom() : 10)),
+              }] : []);
             
             drawRef.current.addFeatures(drawFeatures as SnapshotFeatures);
             persistentFeaturesRef.current = drawRef.current.getSnapshot();
@@ -1006,6 +990,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
           }
         } catch (err) {
           console.error("Failed to import GeoJSON:", err);
+          setImportError(err instanceof Error && !(err instanceof SyntaxError) ? err.message : 'The file is not valid GeoJSON.');
         }
       };
       reader.readAsText(file);
@@ -1130,6 +1115,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
             {!isCollapsed && (
               <div className={styles.panelContent}>
+                {importError && <p role="alert">{importError}</p>}
                 {/* Section 1: Measurement */}
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Measure</div>

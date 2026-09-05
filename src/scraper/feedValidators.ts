@@ -5,6 +5,7 @@ type ValidatorRow = {
   source_url: string;
   etag: string | null;
   last_modified: string | null;
+  latest_usable_item_at: string | null;
 };
 
 function validatorStoreUnavailable(error: { code?: string; message?: string } | null) {
@@ -16,7 +17,7 @@ function validatorStoreUnavailable(error: { code?: string; message?: string } | 
 export async function loadFeedValidators(db: SupabaseClient) {
   const { data, error } = await db
     .from('source_http_validators')
-    .select('source_url, etag, last_modified');
+    .select('source_url, etag, last_modified, latest_usable_item_at');
   if (error) {
     if (validatorStoreUnavailable(error)) {
       console.warn('[rss] Conditional-request store is not deployed; continuing without validators.');
@@ -27,7 +28,7 @@ export async function loadFeedValidators(db: SupabaseClient) {
 
   return new Map(((data as ValidatorRow[] | null) ?? []).map((row) => [
     row.source_url,
-    { etag: row.etag, lastModified: row.last_modified },
+    { etag: row.etag, lastModified: row.last_modified, latestItemAt: row.latest_usable_item_at },
   ]));
 }
 
@@ -40,6 +41,7 @@ export async function persistFeedValidators(
     source_url: sourceUrl,
     etag: validator.etag ?? null,
     last_modified: validator.lastModified ?? null,
+    latest_usable_item_at: validator.latestItemAt ?? null,
     updated_at: new Date().toISOString(),
   }));
   const { error } = await db.from('source_http_validators').upsert(rows, {

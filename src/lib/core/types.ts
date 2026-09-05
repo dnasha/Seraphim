@@ -26,6 +26,9 @@ export interface NewsItem {
   id: string;
   title: string;
   description?: string;
+  descriptionProvenance?: { name: string; url: string; published_at: string; tier: number } | null;
+  headlinePublishedAt?: string;
+  independentPublisherCount?: number;
   /** Canonical freshness timestamp reflecting the latest source update. */
   latestActivityAt?: string;
   url: string;
@@ -75,11 +78,13 @@ export interface NewsResponse {
     globalTopN?: number;
     isCapped?: boolean;
     appliedLimit?: number;
+    stale?: boolean;
   };
   sources: {
-    gnews: boolean;
-    rss: boolean;
-    social: boolean;
+    /** null means provider availability was not checked by this request. */
+    gnews: boolean | null;
+    rss: boolean | null;
+    social: boolean | null;
   };
 }
 

@@ -6,6 +6,11 @@ permissions:
 on:
   pull_request:
     branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 12 * * 1'
 
 concurrency:
   group: seraphim-ci-${{ github.event.pull_request.number || github.ref }}
@@ -56,6 +61,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Audit dependencies
+        run: bun audit
 
       - name: Typecheck
         run: bun run typecheck

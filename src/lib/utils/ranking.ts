@@ -96,9 +96,9 @@ export function clusterStoryCount(item: Pick<NewsItem, 'storyCount'>): number {
 
 /**
  * Core comparison logic for sorting news items.
- * Hot Mode: Prioritizes impact score, then actual source count, then recency.
+ * Hot Mode: Prioritizes impact score, then recency.
  * New Mode: Prioritizes recency.
- * Tiebreaks are handled by credibility tier and unique ID stability.
+ * Unique IDs provide the same stable tie-break as the database.
  */
 export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): number {
     if (mode === 'hot') {
@@ -119,10 +119,6 @@ export function compareNewsItems(a: NewsItem, b: NewsItem, mode: SortMode): numb
     if (timeB !== timeA) return timeB - timeA;
 
     // Stable tiebreaks
-    const credA = a.credibilityTier || 3;
-    const credB = b.credibilityTier || 3;
-    if (credB !== credA) return credA - credB;
-
     return canonicalNewsId(a).localeCompare(canonicalNewsId(b));
 }
 

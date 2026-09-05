@@ -69,6 +69,10 @@ export function extractCountryAbbrev(text: string): string | null {
  * to prevent false positive location matches from source names or hashtags.
  */
 export function preprocessText(text: string): string {
+    text = text.replace(/\bL\.A\.(?=\s|$)/g, 'Los Angeles');
+    text = text.replace(/\bB\.C\.(?=\s|$)/g, 'British Columbia');
+    // Preserve both named parties in geographic compounds such as Kazakhstan-EU.
+    text = text.replace(/\b([A-Z][a-z]+)-(EU|US|UK|NATO)\b/g, '$1 $2');
     text = text.replace(SOCIAL_MEDIA_TRAILER, '');
     text = text.replace(/^GeoConfirmed\s+\w+\.?\s*/i, '');
     text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
