@@ -23,15 +23,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - run: bun install --frozen-lockfile
       - name: Recover pending billing and deletion jobs
-        run: bun --conditions=react-server scripts/maintenance/recover-billing.ts
+        run: bun scripts/maintenance/recover-billing.ts
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PRICE_PRO_MONTHLY: ${{ vars.STRIPE_PRICE_PRO_MONTHLY }}
-          STRIPE_PRICE_PRO_YEARLY: ${{ vars.STRIPE_PRICE_PRO_YEARLY }}
-          STRIPE_PRICE_ANALYST_MONTHLY: ${{ vars.STRIPE_PRICE_ANALYST_MONTHLY }}
-          STRIPE_PRICE_ANALYST_YEARLY: ${{ vars.STRIPE_PRICE_ANALYST_YEARLY }}
-          STRIPE_PRICE_ANGEL: ${{ vars.STRIPE_PRICE_ANGEL }}
+          BILLING_RECOVERY_TOKEN: ${{ secrets.BILLING_RECOVERY_TOKEN }}
