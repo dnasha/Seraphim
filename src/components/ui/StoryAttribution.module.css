@@ -1,0 +1,35 @@
+.attribution {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: 0.625rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.citation {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.citation a:hover {
+  color: var(--text-primary);
+}
+
+.count {
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}

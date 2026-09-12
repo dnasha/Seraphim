@@ -20,6 +20,7 @@ import {
 import { canonicalEventCount, canonicalNewsId } from '@/lib/utils/ranking';
 import { LuShare2 } from 'react-icons/lu';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
+import StoryAttribution from '@/components/ui/StoryAttribution';
 import TimelineGateCta from '@/components/ui/TimelineGateCta';
 import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 
@@ -99,7 +100,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                     {item.locationName && (
                         <>
                             <span className="news-popup-location">
-                                <svg className="location-icon-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                                <svg className="location-icon-svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
                                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                                 </svg>
                                 {item.locationName}
@@ -146,6 +147,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
                             <div className="popup-skeleton-line" style={{ width: '75%' }} />
                         </div>
                     )}
+                    <StoryAttribution item={item} />
                     <div className="news-popup-actions">
                         {sourceCount <= 1 && (
                             <a className="news-popup-link" href={item.url} target="_blank" rel="noopener noreferrer" title="Open the original source in a new tab">

@@ -248,33 +248,6 @@ Includes card expansion details and responsive mobile layouts.
   margin-left: auto;
 }
 
-.pulseDot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--accent);
-  border-radius: 50%;
-  position: relative;
-  box-shadow: 0 0 0 rgba(99, 102, 241, 0.4);
-  animation: pulse 2.5s infinite;
-  flex-shrink: 0;
-  margin-top: -1px; /* Aligns center of dot with uppercase text cap-height */
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.9);
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6);
-  }
-  70% {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
-  }
-  100% {
-    transform: scale(0.9);
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
-  }
-}
-
 /* Sidebar toggle buttons */
 .sidebarToggleBtn {
   background: var(--surface);
@@ -437,7 +410,6 @@ Includes card expansion details and responsive mobile layouts.
   border-radius: var(--radius-md);
   cursor: pointer;
   transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     background 0.15s,
     border-color 0.15s,
     box-shadow 0.15s;
@@ -454,7 +426,6 @@ Includes card expansion details and responsive mobile layouts.
   .eventCard:hover {
     border-color: var(--card-accent, var(--accent));
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
   }
 }
 
@@ -465,30 +436,20 @@ Includes card expansion details and responsive mobile layouts.
 
 
 
-/* category accent bar on left edge */
-.eventCardAccent {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px; /* Wider ribbon */
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  z-index: 1;
-}
-
 /* main row: thumbnail + body side by side */
 .eventCardRow {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 8px 10px 8px 12px; /* Increased left padding for ribbon breathing room */
+  position: relative;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px;
   width: 100%;
 }
 
 .eventCardThumb {
-  width: 88px;
-  height: 66px;
-  min-width: 88px;
+  width: 96px;
+  height: 72px;
+  min-width: 96px;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface-alt);
@@ -501,41 +462,16 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .eventCardBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  gap: 4px 6px;
   flex: 1;
   min-width: 0;
-  position: relative;
-}
-
-.top3PulseDot {
-  position: absolute;
-  top: 1px;
-  right: 0px;
-  width: 8px;
-  height: 8px;
-  background-color: var(--pulse-color, var(--accent));
-  border-radius: 40%;
-  box-shadow: 0 0 0 rgba(59, 130, 246, 0.4);
-  animation: pulse-top3 2s infinite ease-in-out;
-  pointer-events: none;
-  z-index: 2;
-}
-
-@keyframes pulse-top3 {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 var(--pulse-color-alpha, rgba(59, 130, 246, 0.7));
-  }
-  70% {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-  }
 }
 
 .eventCardTitle {
+  grid-column: 1 / -1;
   font-family: var(--font-news);
   font-size: 1rem; /* 16px */
   font-weight: 600;
@@ -549,7 +485,6 @@ Includes card expansion details and responsive mobile layouts.
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
-  padding-right: 14px;
 }
 
 .eventCardExpanded .eventCardTitle {
@@ -562,14 +497,14 @@ Includes card expansion details and responsive mobile layouts.
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  align-self: end;
   row-gap: 3px;
   column-gap: 6px;
-  margin-top: 4px;
-  padding-right: 38px; /* Boosted padding to prevent overlap with source count badge */
-  overflow: hidden;
 }
 
 .eventCardSource {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-ui);
   font-style: normal;
   font-weight: 500;
@@ -577,11 +512,12 @@ Includes card expansion details and responsive mobile layouts.
   color: #fff;
   padding: 1px 7px;
   border-radius: var(--radius-sm);
-  white-space: nowrap;
+  white-space: normal;
   letter-spacing: 0.01em;
 }
 
 .eventCardTime {
+  flex-shrink: 0;
   font-family: var(--font-ui);
   font-size: 0.75rem; /* 12px */
   font-weight: 500;
@@ -595,37 +531,15 @@ Includes card expansion details and responsive mobile layouts.
   font-weight: 500;
   color: var(--accent);
   display: inline-block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 80px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
   max-width: 100%;
 }
 
 .eventCardMetaSep {
   color: var(--text-muted);
   opacity: 0.5;
-}
-
-/* Expand hint for event cards */
-.eventCardExpandHint {
-  display: block;
-  font-size: 0.625rem;
-  color: var(--text-muted);
-  font-style: italic;
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height 0.2s, opacity 0.2s, margin-top 0.2s;
-  text-align: right;
-  margin-top: 0;
-  padding-right: 48px; /* Prevent overlap with source count badge (even for 3+ digits) */
-}
-
-.eventCard:hover .eventCardExpandHint {
-  max-height: 20px;
-  opacity: 1;
-  margin-top: 4px;
 }
 
 /* expanded detail panel */
@@ -1049,10 +963,10 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .sourceCountBadgeCorner {
-  position: absolute;
-  bottom: 1px;
-  right: 0px;
-  z-index: 5;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  justify-self: end;
 }
 
 @media (hover: hover) {
@@ -1385,9 +1299,6 @@ Includes card expansion details and responsive mobile layouts.
     gap: 4px;
   }
 
-  .pulseDot {
-    display: none;
-  }
 }
 
 .filterBadgeCount {
