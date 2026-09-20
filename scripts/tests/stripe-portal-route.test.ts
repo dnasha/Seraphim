@@ -17,7 +17,7 @@ vi.mock('@/lib/security/sensitiveRequest', () => ({
   hasValidSameOrigin: () => mocks.sameOrigin,
   checkSensitiveRateLimit: async () => mocks.rateLimit,
 }));
-vi.mock('@/lib/server/effectiveProfile', () => ({ resolveEffectiveProfile: mocks.profile }));
+vi.mock('@/lib/server/effectiveProfile', () => ({ resolveStripeCustomerId: mocks.profile }));
 vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 
 import { POST } from '@/app/api/stripe/portal/route';
@@ -30,7 +30,7 @@ describe('POST /api/stripe/portal', () => {
     mocks.sameOrigin = true;
     mocks.rateLimit = { allowed: true, retryAfterSeconds: 0 };
     mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
-    mocks.profile.mockResolvedValue({ stripeCustomerId: 'cus-1' });
+    mocks.profile.mockResolvedValue('cus-1');
     mocks.create.mockResolvedValue({ url: 'https://billing.stripe.example/session' });
   });
 
@@ -59,7 +59,7 @@ describe('POST /api/stripe/portal', () => {
   it('requires authentication and a linked billing customer', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
     expect((await POST()).status).toBe(401);
-    mocks.profile.mockResolvedValueOnce({ stripeCustomerId: null });
+    mocks.profile.mockResolvedValueOnce(null);
     expect((await POST()).status).toBe(404);
   });
 
@@ -67,5 +67,12 @@ describe('POST /api/stripe/portal', () => {
     const response = await POST();
     expect(await response.json()).toEqual({ url: 'https://billing.stripe.example/session' });
     expect(mocks.create).toHaveBeenCalledWith({ customer: 'cus-1', return_url: 'https://seraphim.example/account' });
+  });
+
+  it('returns a service error without creating a portal when the customer lookup fails', async () => {
+    mocks.profile.mockRejectedValueOnce(new Error('database unavailable'));
+    const response = await POST();
+    expect(response.status).toBe(503);
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

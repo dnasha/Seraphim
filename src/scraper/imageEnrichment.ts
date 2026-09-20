@@ -4,6 +4,7 @@ import type {
   StoryMerge,
 } from './merger';
 import { fetchPageImageCandidate } from '@/lib/api/pageImages';
+import { OutboundScheduler } from '@/lib/api/outboundScheduler';
 import { evaluateImageUpdate } from '@/lib/utils/merging';
 
 export const ONLINE_PAGE_LOOKUP_LIMIT = 8;
@@ -59,37 +60,10 @@ export async function mapWithHostLimit<T, R>(
   hostFor: (item: T) => string,
   worker: (item: T) => Promise<R>,
 ) {
-  const results = new Array<R>(items.length);
-  const hostTails = new Map<string, Promise<void>>();
-  let nextIndex = 0;
-
-  const runners = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (true) {
-        const index = nextIndex++;
-        if (index >= items.length) return;
-        const item = items[index];
-        const host = hostFor(item);
-        const previous = hostTails.get(host) ?? Promise.resolve();
-        let release!: () => void;
-        const current = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        const tail = previous.then(() => current);
-        hostTails.set(host, tail);
-        await previous;
-        try {
-          results[index] = await worker(item);
-        } finally {
-          release();
-          if (hostTails.get(host) === tail) hostTails.delete(host);
-        }
-      }
-    },
-  );
-  await Promise.all(runners);
-  return results;
+  const scheduler = new OutboundScheduler(concurrency, 1);
+  return Promise.all(items.map((item) =>
+    scheduler.run(hostFor(item), () => worker(item))
+  ));
 }
 
 function targetHost(target: EnrichmentTarget) {

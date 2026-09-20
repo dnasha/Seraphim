@@ -5,6 +5,7 @@
  */
 
 import { DbEvent, DbEventSource } from "@/types";
+import { reportIdentityKey } from "@/lib/utils/reportIdentity";
 import {
   calculateImpactScore,
   contentFingerprint,
@@ -267,9 +268,10 @@ export function calculateMergedStory(
   const finalPrimaryUrl = updateTitle ? incomingEvent.url : existingStory.url;
   const uniqueByUrl = new Map<string, DbEventSource>();
   for (const article of [existingPrimary, ...existingStory.sources, incomingSource]) {
-    if (!uniqueByUrl.has(article.url)) uniqueByUrl.set(article.url, article);
+    const identity = reportIdentityKey(article.url);
+    if (!uniqueByUrl.has(identity)) uniqueByUrl.set(identity, article);
   }
-  uniqueByUrl.delete(finalPrimaryUrl);
+  uniqueByUrl.delete(reportIdentityKey(finalPrimaryUrl));
   const updatedSources = [...uniqueByUrl.values()];
   const eventCount = 1 + updatedSources.length;
   const finalPrimary = updateTitle ? incomingSource : existingPrimary;

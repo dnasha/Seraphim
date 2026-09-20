@@ -213,7 +213,6 @@ export async function GET(request: Request) {
       ? `tier:${access.tier},view:${viewMode},scope:${scopeMode},bbox:${bboxKeyPart}${isClusteredQuery ? `,cluster,z:${Math.floor(zoom!)}` : ""}${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
       : `tier:${access.tier},view:${viewMode},scope:${scopeMode},events${cacheSinceKey ? `,s:${cacheSinceKey}` : ""}${untilStr ? `,u:${untilStr}` : ""}${searchQuery ? `,q:${searchQuery}` : ""}${sort !== "hot" ? `,sort:${sort}` : ""}${effectiveLimit !== RAW_LIMIT ? `,l:${effectiveLimit}` : ""}`
     );
-  const canUseCache = true;
   const cacheTtlMs = !hasBBox ? 300000 : 60000;
 
   if (forceRefresh) {
@@ -258,7 +257,6 @@ export async function GET(request: Request) {
     const cached = sourceCache.get(cacheKey);
 
     if (
-      canUseCache &&
       !forceRefresh &&
       cached &&
       now - cached.timestamp < cacheTtlMs
@@ -309,10 +307,8 @@ export async function GET(request: Request) {
         if (!isClusteredQuery) data = sortNewsItems(data, sort).slice(0, effectiveLimit);
 
         const loaded = { data, isCapped, timestamp: Date.now() };
-        if (canUseCache) {
-          sourceCache.set(cacheKey, { ...loaded, timestamp: Date.now() });
-          pruneSourceCache();
-        }
+        sourceCache.set(cacheKey, { ...loaded, timestamp: Date.now() });
+        pruneSourceCache();
         return loaded;
       });
     }

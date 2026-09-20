@@ -1,0 +1,174 @@
+{
+  "provenance": "Selected from the independently labeled, frozen September 2026 accuracy audit. Original coordinates and 25 km tolerances are preserved; names are descriptive, not country/city scoring aliases.",
+  "cases": [
+    {
+      "id": "challenge-24",
+      "title": "Storm damages homes in Saint Petersburg, Florida",
+      "description": "Local officials opened emergency shelters.",
+      "expected": {
+        "displayName": "Saint Petersburg, Florida",
+        "lat": 27.768,
+        "lon": -82.64,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-26",
+      "title": "Storm damages homes in Athens in Georgia",
+      "description": "The city is in the United States, not Greece.",
+      "expected": {
+        "displayName": "Athens, Georgia",
+        "lat": 33.951,
+        "lon": -83.357,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-28",
+      "title": "Springfield in Illinois opens flood shelters",
+      "description": "The city government issued an emergency notice.",
+      "expected": {
+        "displayName": "Springfield, Illinois",
+        "lat": 39.782,
+        "lon": -89.65,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-30",
+      "title": "Flooding damages Newcastle in New South Wales",
+      "description": "Local crews evacuated residents of the Australian city.",
+      "expected": {
+        "displayName": "Newcastle, New South Wales",
+        "lat": -32.929,
+        "lon": 151.781,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-31",
+      "title": "Protest blocks roads in Santiago de Compostela in Spain",
+      "description": "The march passed through the city center.",
+      "expected": {
+        "displayName": "Santiago de Compostela",
+        "lat": 42.878,
+        "lon": -8.545,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-32",
+      "title": "Salem in Oregon declares flood emergency",
+      "description": "Officials opened shelters for displaced residents.",
+      "expected": {
+        "displayName": "Salem, Oregon",
+        "lat": 44.942,
+        "lon": -123.035,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-33",
+      "title": "Turkey recipe wins online cooking poll",
+      "description": "The article compares roasting temperatures and cooking times.",
+      "expected": null
+    },
+    {
+      "id": "challenge-34",
+      "title": "Jordan Smith wins basketball player award",
+      "description": "The basketball player thanked teammates during an online broadcast.",
+      "expected": null
+    },
+    {
+      "id": "challenge-35",
+      "title": "Chad Brown wins online chess tournament",
+      "description": "The player accepted the prize during a video call.",
+      "expected": null
+    },
+    {
+      "id": "challenge-36",
+      "title": "Paris Hilton launches new perfume online",
+      "description": "The entertainer presented the product through her website.",
+      "expected": null
+    },
+    {
+      "id": "challenge-37",
+      "title": "Victoria Beckham announces fashion collaboration",
+      "description": "The designer revealed the collection on social media.",
+      "expected": null
+    },
+    {
+      "id": "challenge-38",
+      "title": "Amazon announces software update",
+      "description": "The company says the update fixes a storage bug for all users.",
+      "expected": null
+    },
+    {
+      "id": "challenge-39",
+      "title": "Georgia May Jagger shares new portrait online",
+      "description": "The model published the portrait on her website.",
+      "expected": null
+    },
+    {
+      "id": "challenge-40",
+      "title": "Reading improves memory, new study finds",
+      "description": "Participants completed a reading comprehension task online.",
+      "expected": null
+    },
+    {
+      "id": "challenge-51",
+      "title": "PARIS - Factory fire injures workers in Lyon",
+      "description": "Firefighters evacuated the factory in Lyon.",
+      "expected": {
+        "displayName": "Lyon",
+        "lat": 45.764,
+        "lon": 4.836,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-53",
+      "title": "BERLIN - Flooding destroys homes in Dresden",
+      "description": "The flood struck residential areas of Dresden.",
+      "expected": {
+        "displayName": "Dresden",
+        "lat": 51.051,
+        "lon": 13.738,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-55",
+      "title": "NAIROBI (AP) - Warehouse fire spreads in Dar es Salaam, Tanzania",
+      "description": "The fire occurred in the Tanzanian city.",
+      "expected": {
+        "displayName": "Dar es Salaam",
+        "lat": -6.792,
+        "lon": 39.208,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-57",
+      "title": "Incendio en Bogotá, Colombia deja varios heridos",
+      "description": "Los bomberos evacuaron el edificio.",
+      "expected": {
+        "displayName": "Bogotá",
+        "lat": 4.711,
+        "lon": -74.072,
+        "toleranceKm": 25
+      }
+    },
+    {
+      "id": "challenge-59",
+      "title": "Überschwemmungen in Köln, Deutschland",
+      "description": "Die Feuerwehr evakuiert mehrere Häuser.",
+      "expected": {
+        "displayName": "Köln / Cologne",
+        "lat": 50.938,
+        "lon": 6.96,
+        "toleranceKm": 25
+      }
+    }
+  ]
+}

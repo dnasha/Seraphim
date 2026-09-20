@@ -20,23 +20,46 @@ export interface EffectiveProfile {
   angelStatus: AngelStatus | null;
 }
 
+function findActiveOverride(userId: string) {
+  return supabaseAdmin
+    .from('user_entitlement_overrides')
+    .select('tier, expires_at')
+    .eq('user_id', userId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
+export async function resolveEffectiveTier(userId: string): Promise<UserTier> {
+  const [profileResult, overrideResult] = await Promise.all([
+    supabaseAdmin.from('user_profiles').select('tier').eq('id', userId).maybeSingle(),
+    findActiveOverride(userId),
+  ]);
+  if (profileResult.error) throw profileResult.error;
+  const override = overrideResult.error ? null : overrideResult.data;
+  return normalizeUserTier(override ? override.tier : profileResult.data?.tier, true);
+}
+
+export async function resolveStripeCustomerId(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('user_profiles')
+    .select('stripe_customer_id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.stripe_customer_id ?? null;
+}
+
 export async function resolveEffectiveProfile(userId: string): Promise<EffectiveProfile> {
-  const now = new Date().toISOString();
   const [profileResult, overrideResult, angelResult] = await Promise.all([
     supabaseAdmin
       .from('user_profiles')
       .select('tier, subscription_status, billing_interval, current_period_end, trial_ends_at, cancel_at_period_end, stripe_customer_id, stripe_subscription_id')
       .eq('id', userId)
       .maybeSingle(),
-    supabaseAdmin
-      .from('user_entitlement_overrides')
-      .select('tier, expires_at')
-      .eq('user_id', userId)
-      .is('revoked_at', null)
-      .gt('expires_at', now)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    findActiveOverride(userId),
     supabaseAdmin
       .from('angel_purchases')
       .select('status')

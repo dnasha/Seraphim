@@ -145,11 +145,6 @@ export function canUseMapStyle(tier: UserTier, style: string): boolean {
   return TIER_ENTITLEMENTS[tier].mapStyles.includes(style);
 }
 
-export function requiredTierForFeature(feature: EntitlementFeature): UserTier {
-  const tiers: UserTier[] = ['free', 'pro', 'analyst'];
-  return tiers.find((tier) => TIER_ENTITLEMENTS[tier].features[feature]) ?? 'analyst';
-}
-
 export function getAccessRequirementTooltip(
   featureName: string,
   requiredTier: RequiredAccessTier,

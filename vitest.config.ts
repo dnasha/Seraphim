@@ -44,6 +44,7 @@ export default defineConfig({
                 'src/proxy.ts',
                 'src/scraper/utils/**/*.ts',
                 'src/scraper/merger.ts',
+                'src/scraper/storyMatching.ts',
                 'src/scraper/index.ts',
                 'src/scraper/recentEvents.ts',
                 'src/scraper/dbIngest.ts',
@@ -52,7 +53,6 @@ export default defineConfig({
             ],
             exclude: [
                 'src/lib/core/supabase-admin.ts',
-                'src/lib/core/supabase.ts',
                 'src/lib/supabase/**/*.ts',
                 'src/lib/stripe.ts',
             ],

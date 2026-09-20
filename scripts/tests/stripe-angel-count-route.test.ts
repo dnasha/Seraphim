@@ -54,4 +54,32 @@ describe('GET /api/stripe/angel-count', () => {
     await expect(response.json()).resolves.toEqual({ remaining: 85, total: 100 });
     expect(response.status).toBe(200);
   });
+
+  it('starts both inventory counts while Stripe metadata and the other count are pending', async () => {
+    let releaseMetadata!: (value: unknown) => void;
+    let releasePurchases!: (value: unknown) => void;
+    let releaseReservations!: (value: unknown) => void;
+    mocks.retrieve.mockReturnValue(new Promise((resolve) => { releaseMetadata = resolve; }));
+    const purchases = countQuery(0);
+    const reservations = countQuery(0);
+    const pendingPurchases = new Promise((resolve) => { releasePurchases = resolve; });
+    const pendingReservations = new Promise((resolve) => { releaseReservations = resolve; });
+    purchases.in = vi.fn(() => purchases);
+    reservations.in = vi.fn(() => reservations);
+    // PostgREST starts requests when the query is awaited, not when its filters are built.
+    purchases.then = vi.fn(pendingPurchases.then.bind(pendingPurchases));
+    reservations.then = vi.fn(pendingReservations.then.bind(pendingReservations));
+    mocks.from.mockImplementation((table: string) => table === 'angel_purchases' ? purchases : reservations);
+
+    const responsePromise = GET();
+    await Promise.resolve();
+    expect(mocks.retrieve).toHaveBeenCalledOnce();
+    expect(purchases.then).toHaveBeenCalledOnce();
+    expect(reservations.then).toHaveBeenCalledOnce();
+
+    releaseMetadata({ product: { metadata: { inventory: '80' } } });
+    releasePurchases({ count: 12 });
+    releaseReservations({ count: 3 });
+    await expect((await responsePromise).json()).resolves.toEqual({ remaining: 65, total: 80 });
+  });
 });

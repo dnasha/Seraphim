@@ -47,11 +47,6 @@ export function socialPollTier(source: Pick<SocialSource, "name" | "platform">):
   return "normal";
 }
 
-export function isPollDue(tier: PollTier, now = Date.now()): boolean {
-  const slot = Math.floor(now / BASE_POLL_INTERVAL_MS);
-  return slot % TIER_DIVISOR[tier] === 0;
-}
-
 function stableSourceHash(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index++) {

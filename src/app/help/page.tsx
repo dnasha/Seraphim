@@ -1,4 +1,3 @@
-import React from "react";
 import Link from "next/link";
 import { LuHeart, LuCoffee, LuMail } from "react-icons/lu";
 import { FaGithub, FaYoutube, FaDiscord } from "react-icons/fa";

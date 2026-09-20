@@ -42,18 +42,7 @@ export default function MapPopup({ item, userTier = 'guest' }: MapPopupProps) {
     const showTimelineGap = hiddenSourceCount > 0 && visibleSources.length > 1;
     const popupImage = getNewsImagePresentation(item, 960);
 
-    /**
-     * Source sorting:
-     * Identifies the most recent update within a clustered event by sorting 
-     * its contributing sources by their discovery timestamp.
-     */
-    const latestSource = item.sources?.length
-        ? [...item.sources].sort(
-            (a, b) =>
-                new Date(b.discoveredAt).getTime() -
-                new Date(a.discoveredAt).getTime(),
-        )[0]
-        : null;
+    const latestSource = visibleSources[0];
     
     /**
      * Date selection logic:

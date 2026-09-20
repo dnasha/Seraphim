@@ -8,6 +8,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { resolveLocation, ensureInitialized } from '@/lib/geocoding';
+import { scoreGeocoding } from '../diagnostics/geocoding-score.mjs';
+import { applyReviewedGeocodingPolicy } from '../diagnostics/reviewed-geocoding-policy.mjs';
 
 const ACCURACY_THRESHOLD = 95;
 const MAX_FALSE_PINS = 0;
@@ -21,29 +23,23 @@ interface GoldenCase {
     expected: { displayName: string | null };
 }
 
-const aliases: Record<string, string> = {
-    uk: 'united kingdom', usa: 'united states', 'u.s.': 'united states',
-    america: 'united states', britain: 'united kingdom',
-};
-
-function normalize(value: unknown): string | null {
-    if (value == null || (typeof value === 'string' && value.toLowerCase() === 'null')) return null;
-    const normalized = String(value).toLowerCase().trim();
-    return aliases[normalized] || normalized;
-}
-
 let cases: GoldenCase[] = [];
 
 beforeAll(() => {
     ensureInitialized();
-    cases = JSON.parse(fs.readFileSync(GOLDEN_PATH, 'utf8'));
+    cases = applyReviewedGeocodingPolicy(JSON.parse(fs.readFileSync(GOLDEN_PATH, 'utf8')), GOLDEN_PATH);
 });
 
 describe('geocoding accuracy regression', () => {
     it('places qualified labels in their expected regions without changing the golden labels', async () => {
         const regions = [
+            { id: 19, lat: [30, 35], lon: [-86, -80] },
+            { id: 23, lat: [45, 50], lon: [-125, -116] },
             { id: 34, lat: [25, 26], lon: [-101, -99] },
+            { id: 42, lat: [38.7, 39.1], lon: [-77.3, -76.8] },
+            { id: 46, lat: [38.7, 39.1], lon: [-77.3, -76.8] },
             { id: 63, lat: [33, 35], lon: [-120, -117] },
+            { id: 116, lat: [40.7, 40.9], lon: [-74, -73.7] },
             { id: 130, lat: [33, 34], lon: [-88, -86] },
             { id: 146, lat: [24, 31], lon: [-88, -80] },
             { id: 150, lat: [48, 50], lon: [-124, -122] },
@@ -78,12 +74,10 @@ describe('geocoding accuracy regression', () => {
 
         for (const item of reviewedCases) {
             const actual = await resolveLocation(item.title, item.description || '');
-            const expected = normalize(item.expected.displayName);
-            const received = normalize(actual?.displayName);
-            const passes = expected === received;
-            if (passes) correct++;
-            else if (expected === null) falsePins++;
-            else if (received === null) misses++;
+            const score = scoreGeocoding(item.expected, actual);
+            if (score.correct) correct++;
+            else if (score.kind === 'false-pin') falsePins++;
+            else if (score.kind === 'miss') misses++;
             else wrong++;
         }
 

@@ -453,33 +453,28 @@ function normalizeXFeed(
         .slice(0, expandedItemLimit(10, emergency));
 }
 
-function bestXCandidate(candidates: Array<{ strategy: string; items: NewsItem[] }>): { strategy: string; items: NewsItem[] } | null {
-    return candidates.filter(({ items }) => items.length > 0).sort((a, b) => {
-        const freshness = new Date(b.items[0].publishedAt).getTime() - new Date(a.items[0].publishedAt).getTime();
-        return freshness || b.items.length - a.items.length;
-    })[0] ?? null;
-}
-
 /**
  * Multi-strategy X/Twitter feed fetcher.
- * Compares credential-free direct account timelines by freshness. RSSHub is a
- * last resort. Google News is not an account timeline and is intentionally
- * excluded to prevent false/stale attribution.
+ * Uses syndication first, then Nitter, with RSSHub as a last resort.
+ * Each strategy must return recent posts. Google News is not an account timeline
+ * and is intentionally excluded to prevent false/stale attribution.
  */
 export async function fetchXFeed(source: SocialSource, emergency = false): Promise<NewsItem[]> {
     const startedAt = Date.now();
     const username = source.url;
     const syndication = await trySyndicationFeed(username);
-    let directCandidate = bestXCandidate([
-        { strategy: 'syndication', items: syndication ? normalizeXFeed(source, syndication, Date.now(), emergency) : [] },
-    ]);
-    if (!directCandidate) {
+    let directCandidate = {
+        strategy: 'syndication',
+        items: syndication ? normalizeXFeed(source, syndication, Date.now(), emergency) : [],
+    };
+    if (directCandidate.items.length === 0) {
         const nitter = await tryNitterFeed(username);
-        directCandidate = bestXCandidate([
-            { strategy: 'nitter', items: nitter ? normalizeXFeed(source, nitter, Date.now(), emergency) : [] },
-        ]);
+        directCandidate = {
+            strategy: 'nitter',
+            items: nitter ? normalizeXFeed(source, nitter, Date.now(), emergency) : [],
+        };
     }
-    if (directCandidate) {
+    if (directCandidate.items.length > 0) {
         recordSourceAttempt({ source_name: source.name, source_type: 'x', poll_tier: String(socialPollTier(source)), outcome: 'healthy', fetched_count: directCandidate.items.length, accepted_count: directCandidate.items.length, rejected_count: 0, latest_usable_item_at: latestItemAt(directCandidate.items), duration_ms: Date.now() - startedAt, error_code: null });
         console.log(`[X] ${source.name}: ${directCandidate.strategy} (${directCandidate.items.length} fresh items)`);
         return directCandidate.items;

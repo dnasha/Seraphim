@@ -1,0 +1,83 @@
+{
+  "note": "Reviewed additions to cities5000/admin1 coverage. City aliases must also occur in the cached GeoNames alternate-name field; the builder validates them. Regional coordinates are representative points, not precise event locations.",
+  "broadLandmarkNote": "Explicit scope metadata for existing LANDMARKS entries whose stored coordinates represent a sea, strait, canal, island, territory, or broad region. Coordinates and aliases remain in the existing constants; this list does not classify point landmarks by a name-suffix heuristic.",
+  "broadLandmarks": [
+    "west bank", "sicily", "crimea", "donbas",
+    "mediterranean", "mediterranean sea", "caspian sea",
+    "darfur", "north darfur", "kurdistan", "falkland islands", "falklands", "siberia",
+    "middle east", "west asia", "strait of hormuz", "hormuz", "suez canal", "bab el-mandeb",
+    "taiwan strait", "strait of malacca", "south china sea", "black sea", "red sea", "baltic sea",
+    "persian gulf", "gulf of oman", "amazon rainforest", "golan heights",
+    "arctic", "antarctic", "antarctica", "southeast asia", "west coast", "east coast",
+    "northern israel", "southern israel", "central israel", "northern gaza", "southern gaza",
+    "negev", "bashkortostan", "sahel", "bermuda"
+  ],
+  "cityAliases": {
+    "2886242": ["Cologne", "Köln", "Koeln", "Keulen", "Colonia"],
+    "1275004": ["Calcutta", "Calcuta", "Kalkutta"],
+    "1275339": ["Bombay"],
+    "703448": ["Kiev", "Kiew"],
+    "2867714": ["München"],
+    "2761369": ["Wien"],
+    "3067696": ["Praha"],
+    "3169070": ["Roma"],
+    "3176959": ["Firenze"]
+  },
+  "cities": [
+    {
+      "id": 5117472,
+      "name": "Flushing",
+      "lat": 40.76538,
+      "lon": -73.81736,
+      "pop": 0,
+      "cc": "US",
+      "a1": "NY",
+      "aliases": ["Flushing, Queens"],
+      "sources": ["https://www.geonames.org/5117472/flushing.html", "https://www.geonames.org/search.html?country=US&q=New+York", "https://www.nyc.gov/site/queenscb7/about/neighborhoods.page"],
+      "note": "Populated-place section omitted by cities5000; unknown population remains zero. The Michigan city is retained as a separate candidate."
+    }
+  ],
+  "regions": [
+    {
+      "id": "region:caribbean",
+      "name": "Caribbean",
+      "type": "region",
+      "lat": 15.31,
+      "lon": -74.68,
+      "aliases": ["Caribbean region"],
+      "sources": ["https://marineregions.org/gazetteer.php?id=4287&p=details"],
+      "note": "Broad regional fallback using the Caribbean Sea representative point; does not assert a country or a landfall."
+    },
+    {
+      "id": "marineregions:4287",
+      "name": "Caribbean Sea",
+      "type": "region",
+      "lat": 15.31,
+      "lon": -74.68,
+      "aliases": [],
+      "sources": ["https://marineregions.org/gazetteer.php?id=4287&p=details"]
+    },
+    {
+      "id": "geonames:1699597",
+      "name": "Mindanao",
+      "type": "region",
+      "lat": 7.66,
+      "lon": 125.13,
+      "cc": "PH",
+      "aliases": [],
+      "sources": ["https://www.geonames.org/1699597/mindanao.html", "https://www.geonames.org/advanced-search.html?country=PH"]
+    },
+    {
+      "id": "geonames:13308207",
+      "name": "Maguindanao del Sur",
+      "type": "region",
+      "lat": 6.92,
+      "lon": 124.54,
+      "cc": "PH",
+      "admin1Code": "PH.14",
+      "aliases": ["Province of Maguindanao del Sur"],
+      "sources": ["https://psa.gov.ph/classification/psgc/citimuni/1908800000", "https://mapcarta.com/38962092"],
+      "note": "Second-order province: retained as a coarse region instead of treating all cities in PH.14 as its children. GeoNames ID and representative point from the cited gazetteer mirror."
+    }
+  ]
+}

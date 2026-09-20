@@ -19,11 +19,13 @@ export const METADATA_COUNTRY_REGEX = /\bCountry:\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a
  * Common comma-separated pairs (e.g., "Kyiv, Ukraine").
  * Used to resolve ambiguous city names via their parent region.
  */
-export const COMMA_PAIR_PATTERN = /([A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+)*),\s*([A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F]+)*)/g;
-
-// Unicode-aware letter class for robust location capture
+// Internal connectors belong to the place name (Santiago de Compostela,
+// Dar es Salaam), rather than terminating it at a more ambiguous fragment.
 const L = '[a-zA-Z\u00C0-\u024F]';
-const LOC = `[A-Z\u00C0-\u024F]${L}+(?:\\s+[A-Z\u00C0-\u024F]${L}+){0,3}`;
+const WORD = `(?:[A-Z](?:\\.[A-Z]){1,3}\\.?|St\\.|[A-Z\u00C0-\u024F]${L}+)`;
+export const LOCATION_NAME_PATTERN = `${WORD}(?:\\s+(?:(?:de|del|la|las|los|es|el|van|von|der|den|du|des|of|the)\\s+){0,2}${WORD}){0,5}`;
+const LOC = LOCATION_NAME_PATTERN;
+export const COMMA_PAIR_PATTERN = new RegExp(`(${LOC}),\\s*(${LOC})`, 'g');
 
 /**
  * General spatial context patterns (e.g., "in [Location]", "near [Location]").
@@ -36,10 +38,16 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ff]rom\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Nn]ear\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]round\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:[Ll]ocated|[Ss]ituated)\\s+(?:at|in|near)\\s+(?:the\\s+)?(${LOC})`, 'g'),
+    new RegExp(`\\b(?:[Nn]orth(?:east|west)?|[Ss]outh(?:east|west)?|[Ee]ast|[Ww]est)\\s+of\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]cross\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Oo]ff\\s+(?:[Tt]he\\s+[Cc]oast\\s+[Oo]f\\s+)?(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]o\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]t\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b(?:[Pp]rotecting|[Dd]efending)\\s+(?:the\\s+)?(${LOC})`, 'g'),
+    new RegExp(`\\b(?:told|testified before|testified at|addressed)\\s+(?:the\\s+)?(${LOC})\\s+(?:(?:special|criminal|civil|district|high|supreme)\\s+){0,2}court\\b`, 'g'),
+    new RegExp(`\\b(?:[Oo]n|[Nn]ear|[Aa]long|[Aa]cross|[Aa]t)\\s+(${LOC})(?:['’]s)?\\s+border\\b`, 'g'),
+    new RegExp(`\\b(?:[Cc]apital|[Cc]ity|[Tt]own|[Pp]ort|[Vv]illage),\\s*(${LOC})`, 'g'),
     new RegExp(`\\b[Tt]owards?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Ww]ith\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Oo]n\\s+(${LOC})`, 'g'),
@@ -89,7 +97,7 @@ export const LOCATION_PATTERNS = [
     new RegExp(`\\b[Ii]ntercepts?\\s+(?:\\w+\\s+)?(?:over|in|near)\\s+(${LOC})`, 'g'),
 
     new RegExp(`\\b[Aa]ttacking\\s+(${LOC})`, 'g'),
-    new RegExp(`\\b[Vv]isits?\\s+(${LOC})`, 'g'),
+    new RegExp(`\\b[Vv]isit(?:s|ed)?\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Aa]rrives?\\s+in\\s+(${LOC})`, 'g'),
     new RegExp(`\\b[Mm]eets?\\s+(?:with\\s+)?(?:[A-Z]\\w+\\s+)?in\\s+(${LOC})`, 'g'),
 

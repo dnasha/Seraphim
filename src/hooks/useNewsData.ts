@@ -117,13 +117,11 @@ export function useNewsData({
         detailCache.current.delete(id);
         return undefined;
     }, []);
-    const fetchingDetailsRef = useRef<Set<string>>(new Set());
     const detailInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
     const entitiesRef = useRef<Map<string, NewsItem>>(new Map());
     const entityTouchedAtRef = useRef<Map<string, number>>(new Map());
     const visibleMapIdsRef = useRef<Set<string>>(new Set());
-    const visibleSidebarIdsRef = useRef<Set<string>>(new Set());
     const requestVersionRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
     const pendingBBoxRef = useRef<BBox | null>(null);
@@ -171,9 +169,7 @@ export function useNewsData({
         entitiesRef.current.clear();
         entityTouchedAtRef.current.clear();
         visibleMapIdsRef.current.clear();
-        visibleSidebarIdsRef.current.clear();
         detailCache.current.clear();
-        fetchingDetailsRef.current.clear();
         detailInFlightRef.current.clear();
 
         // Authentication and entitlement resolution changes the feed scope, but
@@ -238,10 +234,7 @@ export function useNewsData({
         const store = entitiesRef.current;
         if (store.size <= MAX_ENTITY_COUNT) return;
 
-        const protectedIds = new Set<string>([
-            ...visibleMapIdsRef.current,
-            ...visibleSidebarIdsRef.current,
-        ]);
+        const protectedIds = new Set(visibleMapIdsRef.current);
         const pinnedId = pinnedEventIdRef.current;
         if (pinnedId) {
             protectedIds.add(pinnedId);
@@ -539,7 +532,6 @@ export function useNewsData({
         if (!isRefresh && cached && (now - cached.timestamp) < LOCAL_RESPONSE_TTL_MS) {
             const visibleIds = new Set(cached.data.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
-            visibleSidebarIdsRef.current = new Set(visibleIds);
 
             mergeItemsIntoStore(cached.data);
             syncNewsFromStore(sortMode);
@@ -571,7 +563,6 @@ export function useNewsData({
 
             const visibleIds = new Set(mapResults.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
-            visibleSidebarIdsRef.current = new Set(visibleIds);
 
             mergeItemsIntoStore(mapResults);
             syncNewsFromStore(sortMode);
@@ -649,7 +640,6 @@ export function useNewsData({
         const existingInFlight = detailInFlightRef.current.get(targetId);
         if (existingInFlight) return existingInFlight;
 
-        fetchingDetailsRef.current.add(targetId);
         const generation = detailGenerationRef.current;
 
         const detailPromise = (async () => {
@@ -731,7 +721,6 @@ export function useNewsData({
                 console.error(`[useNewsData] Error fetching event details for ${targetId}:`, err);
             } finally {
                 if (generation === detailGenerationRef.current) {
-                    fetchingDetailsRef.current.delete(targetId);
                     detailInFlightRef.current.delete(targetId);
                 }
             }

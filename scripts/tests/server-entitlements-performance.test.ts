@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   cookies: vi.fn(),
   createClient: vi.fn(),
-  resolveEffectiveProfile: vi.fn(),
+  resolveEffectiveTier: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ cookies: mocks.cookies }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
-vi.mock("@/lib/server/effectiveProfile", () => ({ resolveEffectiveProfile: mocks.resolveEffectiveProfile }));
+vi.mock("@/lib/server/effectiveProfile", () => ({ resolveEffectiveTier: mocks.resolveEffectiveTier }));
 
 import { resolveRequestEntitlements } from "@/lib/server/entitlements";
 
@@ -33,15 +33,15 @@ describe("request entitlement performance", () => {
       getAll: () => [{ name: "sb-project-auth-token", value: "token" }],
     });
     mocks.createClient.mockResolvedValue(client);
-    mocks.resolveEffectiveProfile.mockResolvedValue({ effectiveTier: 'pro' });
+    mocks.resolveEffectiveTier.mockResolvedValue('pro');
 
     const first = await resolveRequestEntitlements();
-    mocks.resolveEffectiveProfile.mockResolvedValue({ effectiveTier: 'free' });
+    mocks.resolveEffectiveTier.mockResolvedValue('free');
     const second = await resolveRequestEntitlements();
 
     expect(first.tier).toBe("pro");
     expect(second.tier).toBe("free");
     expect(client.auth.getUser).toHaveBeenCalledTimes(2);
-    expect(mocks.resolveEffectiveProfile).toHaveBeenCalledTimes(2);
+    expect(mocks.resolveEffectiveTier).toHaveBeenCalledTimes(2);
   });
 });

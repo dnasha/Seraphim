@@ -10,31 +10,22 @@
 */
 
 import { supabaseAdmin as supabase } from '@/lib/core/supabase-admin';
-import { 
-    calculateDistance, 
-    SIMILARITY_THRESHOLD_STRICT, 
-    SIMILARITY_THRESHOLD_PLACE_ANCHORED,
-    SIMILARITY_THRESHOLD_PROXIMITY, 
-    MAX_MERGE_DISTANCE_KM 
-} from '@/lib/utils/vectorize';
+import { SIMILARITY_THRESHOLD_PROXIMITY } from '@/lib/utils/vectorize';
+import { hasConflictingStoryEvidence, passesSemanticThreshold } from '@/scraper/storyMatching';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DbEventSource } from '@/types';
 import dotenv from 'dotenv';
 import { calculateMergedStory } from '@/lib/utils/merging';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 dotenv.config();
 
 // Default to false unless explicitly set to 'true'.
 const DRY_RUN = String(process.env.DRY_RUN).toLowerCase() === 'true';
 
-if (!supabase) {
-    console.error('Missing environment variables (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY).');
-    process.exit(1);
-}
-
-const db = supabase!;
-
-async function reClusterHistoricalData() {
-    console.log(`[re-cluster] Initializing historical story consolidation (DRY_RUN=${DRY_RUN})`);
+export async function reClusterHistoricalData(db: SupabaseClient, dryRun = DRY_RUN) {
+    console.log(`[re-cluster] Initializing historical story consolidation (DRY_RUN=${dryRun})`);
 
     const startTime = Date.now();
     
@@ -44,8 +35,7 @@ async function reClusterHistoricalData() {
         .select('*', { count: 'exact', head: true });
 
     if (countErr) {
-        console.error('[re-cluster] Failed to fetch total event count:', countErr.message);
-        process.exit(1);
+        throw new Error(`[re-cluster] Failed to fetch total event count: ${countErr.message}`);
     }
 
     console.log(`[re-cluster] Total events to analyze: ${totalEvents?.toLocaleString()}`);
@@ -71,8 +61,7 @@ async function reClusterHistoricalData() {
             .limit(500);
 
         if (fetchError) {
-            console.error('[re-cluster] Fetch error:', fetchError);
-            break;
+            throw new Error(`[re-cluster] Fetch error: ${fetchError.message}`);
         }
 
         if (!events || events.length === 0) {
@@ -98,6 +87,7 @@ async function reClusterHistoricalData() {
         
         interface MasterUpdate {
             id: string;
+            deleteIds: string[];
             data: {
                 sources: DbEventSource[];
                 title: string;
@@ -174,6 +164,7 @@ async function reClusterHistoricalData() {
                 if (processedIds.has(event.id)) continue;
 
                 let changed = false;
+                const mergedIds: string[] = [];
                 const currentSources: DbEventSource[] = event.sources ? [...event.sources] : [{
                     name: event.source,
                     url: event.url,
@@ -195,8 +186,6 @@ async function reClusterHistoricalData() {
                     const matchedEvent = eventMap.get(match.id);
                     if (!matchedEvent) continue;
 
-                    let shouldMerge = false;
-
                     const eventTime = new Date(event.published_at).getTime();
                     const matchTime = new Date(matchedEvent.published_at).getTime();
                     const sevenDays = 7 * 24 * 60 * 60 * 1000;
@@ -206,29 +195,20 @@ async function reClusterHistoricalData() {
                         continue;
                     }
 
-                    // Multi-tiered merge decision logic.
-                    if (match.similarity >= SIMILARITY_THRESHOLD_STRICT) {
-                        shouldMerge = true;
-                    } else if (match.similarity >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
-                               event.location_name && matchedEvent.location_name &&
-                               event.location_name === matchedEvent.location_name) {
-                        shouldMerge = true;
-                    } else if (match.similarity >= SIMILARITY_THRESHOLD_PROXIMITY && 
-                               event.latitude !== null && event.longitude !== null && 
-                               matchedEvent.latitude !== null && matchedEvent.longitude !== null) {
-                        const dist = calculateDistance(event.latitude, event.longitude, matchedEvent.latitude, matchedEvent.longitude);
-                        if (dist <= MAX_MERGE_DISTANCE_KM) {
-                            shouldMerge = true;
-                        }
-                    }
+                    const shouldMerge = passesSemanticThreshold(event, matchedEvent, match.similarity)
+                        && !hasConflictingStoryEvidence(event, matchedEvent);
 
                     if (shouldMerge) {
                         console.log(`[re-cluster] MERGE: "${event.title.slice(0, 40)}..." <- "${matchedEvent.title.slice(0, 40)}..." (Sim: ${match.similarity.toFixed(2)})`);
                         
-                        const mergedResult = calculateMergedStory(event, matchedEvent);
+                        const mergedResult = calculateMergedStory({
+                            ...event,
+                            sources: [...(event.sources ?? []), ...(matchedEvent.sources ?? [])],
+                        }, matchedEvent);
                         Object.assign(event, mergedResult);
 
                         idsToDelete.push(matchedEvent.id);
+                        mergedIds.push(matchedEvent.id);
                         processedIds.add(matchedEvent.id);
                         totalMerges++;
                         totalDeletes++;
@@ -239,8 +219,9 @@ async function reClusterHistoricalData() {
                 if (changed) {
                     masterUpdates.push({
                         id: event.id,
+                        deleteIds: mergedIds,
                         data: {
-                            sources: currentSources,
+                            sources: event.sources ?? currentSources,
                             title: event.title,
                             description: event.description,
                             source: event.source,
@@ -257,24 +238,19 @@ async function reClusterHistoricalData() {
         }
 
         // Apply updates and deletions in bounded set-based transactions.
-        if (DRY_RUN) {
+        if (dryRun) {
             if (idsToDelete.length > 0) console.log(`[re-cluster] Action (Dry Run): Would delete ${idsToDelete.length} merged items.`);
             if (masterUpdates.length > 0) console.log(`[re-cluster] Action (Dry Run): Would update ${masterUpdates.length} master stories.`);
         } else {
             const WRITE_BATCH_SIZE = 100;
-            const writeBatches = Math.max(
-                Math.ceil(idsToDelete.length / WRITE_BATCH_SIZE),
-                Math.ceil(masterUpdates.length / WRITE_BATCH_SIZE),
-            );
+            const writeBatches = Math.ceil(masterUpdates.length / WRITE_BATCH_SIZE);
             for (let offset = 0; offset < writeBatches; offset++) {
+                const updates = masterUpdates.slice(offset * WRITE_BATCH_SIZE, (offset + 1) * WRITE_BATCH_SIZE);
                 const { error: writeError } = await db.rpc('apply_recluster_batch', {
-                    p_updates: masterUpdates
-                        .slice(offset * WRITE_BATCH_SIZE, (offset + 1) * WRITE_BATCH_SIZE)
-                        .map((update) => ({ id: update.id, ...update.data })),
-                    p_delete_ids: idsToDelete.slice(
-                        offset * WRITE_BATCH_SIZE,
-                        (offset + 1) * WRITE_BATCH_SIZE,
-                    ),
+                    p_updates: updates.map((update) => ({ id: update.id, ...update.data })),
+                    // A source row is deleted in the same transaction that saves
+                    // its destination, even when clusters have different sizes.
+                    p_delete_ids: updates.flatMap(update => update.deleteIds),
                 });
                 if (writeError) throw new Error(`[re-cluster] Batch write failed: ${writeError.message}`);
             }
@@ -291,5 +267,15 @@ async function reClusterHistoricalData() {
     console.log(`[re-cluster] Total Deletes: ${totalDeletes.toLocaleString()}`);
 }
 
-reClusterHistoricalData();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    if (!supabase) {
+        console.error('Missing environment variables (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY).');
+        process.exitCode = 1;
+    } else {
+        reClusterHistoricalData(supabase).catch(error => {
+            console.error(error instanceof Error ? error.message : error);
+            process.exitCode = 1;
+        });
+    }
+}
 

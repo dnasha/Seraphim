@@ -2,8 +2,8 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import { getEntitlements, normalizeUserTier, type TierEntitlements, type UserTier } from '@/lib/entitlements';
-import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
+import { getEntitlements, type TierEntitlements, type UserTier } from '@/lib/entitlements';
+import { resolveEffectiveTier } from '@/lib/server/effectiveProfile';
 
 export interface RequestEntitlements {
   tier: UserTier;
@@ -21,11 +21,7 @@ async function resolveProfileTier(
   const inFlight = profileTierRequests.get(userId);
   if (inFlight) return inFlight;
 
-  const request = (async () => {
-    const profile = await resolveEffectiveProfile(userId);
-    const tier = normalizeUserTier(profile.effectiveTier, true);
-    return tier;
-  })();
+  const request = resolveEffectiveTier(userId);
 
   profileTierRequests.set(userId, request);
   try {

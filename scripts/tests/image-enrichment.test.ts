@@ -99,4 +99,28 @@ describe('resolved image enrichment', () => {
     );
     expect(maxActive).toBe(1);
   });
+
+  it('starts other hosts while same-host jobs are queued and preserves result order', async () => {
+    let releaseHost!: () => void;
+    const hostGate = new Promise<void>((resolve) => { releaseHost = resolve; });
+    const started: string[] = [];
+    const jobs = [
+      { id: 'a1', host: 'a.example' },
+      { id: 'a2', host: 'a.example' },
+      { id: 'a3', host: 'a.example' },
+      { id: 'b1', host: 'b.example' },
+    ];
+    const results = mapWithHostLimit(jobs, 3, (job) => job.host, async (job) => {
+      started.push(job.id);
+      if (job.host === 'a.example') await hostGate;
+      return job.id;
+    });
+
+    try {
+      await vi.waitFor(() => expect(started).toEqual(['a1', 'b1']));
+    } finally {
+      releaseHost();
+    }
+    expect(await results).toEqual(['a1', 'a2', 'a3', 'b1']);
+  });
 });

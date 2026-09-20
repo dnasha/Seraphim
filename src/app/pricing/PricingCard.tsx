@@ -1,4 +1,3 @@
-import React from 'react';
 import styles from './PricingPage.module.css';
 import { TierConfig } from './pricingConstants';
 

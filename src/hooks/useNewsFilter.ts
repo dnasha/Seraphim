@@ -57,27 +57,8 @@ export function useNewsFilter(
      */
     const effectiveSortMode = (appliedSortMode as SortMode) || sortMode;
 
-    const filteredNews = useMemo(() => {
-        return applyNewsFilters(news, {
-            sources,
-            categories,
-            minVolume,
-            credibilityTiers,
-            timeRange,
-            customStartDate,
-            customEndDate,
-            // Search was applied by SQL; do not reject concatenated title/location matches.
-            searchQuery: '',
-            now,
-            sortMode: effectiveSortMode,
-            bbox: currentBBox || undefined,
-            respectBBox: sidebarRespectBBox,
-            pinnedItemId,
-        });
-    }, [news, sources, categories, minVolume, credibilityTiers, timeRange, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, pinnedItemId]);
-
-    const mapNews = useMemo(() => {
-        return applyNewsFilters(news, {
+    const { filteredNews, mapNews } = useMemo(() => {
+        const options = {
             sources,
             categories,
             minVolume,
@@ -92,8 +73,16 @@ export function useNewsFilter(
             bbox: currentBBox || undefined,
             respectBBox: true,
             pinnedItemId,
-        });
-    }, [news, sources, categories, minVolume, credibilityTiers, timeRange, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, pinnedItemId]);
+        };
+        const mapNews = applyNewsFilters(news, options);
+
+        return {
+            mapNews,
+            filteredNews: sidebarRespectBBox
+                ? mapNews
+                : applyNewsFilters(news, { ...options, respectBBox: false }),
+        };
+    }, [news, sources, categories, minVolume, credibilityTiers, timeRange, now, customStartDate, customEndDate, effectiveSortMode, currentBBox, sidebarRespectBBox, pinnedItemId]);
 
     return {
         sources, setSources,

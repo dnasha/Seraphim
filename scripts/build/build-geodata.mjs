@@ -15,8 +15,8 @@
 */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join, dirname, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', 'data');
@@ -56,9 +56,9 @@ const COUNTRY_DATA = {
     'BY': [['belarus', 53.71, 27.95]],
     'BZ': [['belize', 17.19, -88.50]],
     'CA': [['canada', 56.13, -106.35]],
-    'CD': [['democratic republic of the congo', -4.04, 21.76], ['congo', -4.04, 21.76], ['drc', -4.04, 21.76]],
+    'CD': [['democratic republic of the congo', -4.04, 21.76], ['democratic republic of congo', -4.04, 21.76], ['congo', -4.04, 21.76], ['drc', -4.04, 21.76], ['dr congo', -4.04, 21.76]],
     'CF': [['central african republic', 6.61, 20.94]],
-    'CG': [['republic of the congo', -0.23, 15.83]],
+    'CG': [['republic of the congo', -0.23, 15.83], ['republic of congo', -0.23, 15.83]],
     'CH': [['switzerland', 46.82, 8.23]],
     'CI': [['ivory coast', 7.54, -5.55], ['cote d\'ivoire', 7.54, -5.55]],
     'CL': [['chile', -35.68, -71.54]],
@@ -90,6 +90,9 @@ const COUNTRY_DATA = {
     'GD': [['grenada', 12.12, -61.68]],
     'GE': [['georgia', 42.32, 43.36]],
     'GH': [['ghana', 7.95, -1.02]],
+    // GeoNames 3425505: dependent territory with its own ISO code, not the
+    // homonymous settlement in Barbados. https://www.geonames.org/3425505
+    'GL': [['greenland', 72, -40], ['kalaallit nunaat', 72, -40]],
     'GM': [['gambia', 13.44, -15.31]],
     'GN': [['guinea', 9.95, -9.70]],
     'GQ': [['equatorial guinea', 1.65, 10.27]],
@@ -229,248 +232,165 @@ const COUNTRY_DATA = {
     'GZ': [['gaza', 31.35, 34.31]],
 };
 
-/**
- * Processing Stage 1: Parse City Data
- * We use cities5000.txt which filters for settlements with >5000 inhabitants.
- * If multiple cities share a name, the more populous one is selected.
- */
-console.log('Reading cities5000.txt...');
-const citiesRaw = readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8');
-const citiesLines = citiesRaw.split('\n').filter(l => l.trim());
-
-const cityMap = new Map();
-const cityCandidateMap = new Map();
-const admin1Centroids = new Map();
-
-for (const line of citiesLines) {
-    const cols = line.split('\t');
-    if (cols.length < 15) continue;
-
-    const geonameId = parseInt(cols[0], 10);
-    const name = (cols[1] || '').trim();
-    const asciiName = (cols[2] || '').trim();
-    const lat = parseFloat(cols[4]);
-    const lon = parseFloat(cols[5]);
-    const countryCode = (cols[8] || '').trim();
-    const admin1Code = (cols[10] || '').trim();
-    const population = parseInt(cols[14], 10) || 0;
-
-    if (!name || name.length <= 2 || isNaN(lat) || isNaN(lon)) continue;
-
-    const key = (asciiName || name).toLowerCase();
-    const city = {
-        id: Number.isFinite(geonameId) ? geonameId : undefined,
-        name,
-        lat,
-        lon,
-        pop: population,
-        cc: countryCode,
-        a1: admin1Code,
-    };
-
-    const registerCandidate = (candidateKey) => {
-        const candidates = cityCandidateMap.get(candidateKey) || [];
-        if (!candidates.some(candidate => candidate.id === city.id)) {
-            candidates.push(city);
-            cityCandidateMap.set(candidateKey, candidates);
-        }
-    };
-    registerCandidate(key);
-
-    // Priority Selection: Keep the city with the highest population if names collide.
-    const existing = cityMap.get(key);
-    if (!existing || population > existing.pop) {
-        cityMap.set(key, city);
-    }
-
-    const nameKey = name.toLowerCase();
-    if (nameKey !== key) {
-        registerCandidate(nameKey);
-        const existingName = cityMap.get(nameKey);
-        if (!existingName || population > existingName.pop) {
-            cityMap.set(nameKey, city);
-        }
-    }
-
-    /**
-     * Regional Fallbacks: Track the most populous city in each administrative
-     * region to use as a fallback centroid if a city name is missing.
-     */
-    if (admin1Code) {
-        const a1key = `${countryCode}.${admin1Code}`;
-        const existA1 = admin1Centroids.get(a1key);
-        if (!existA1 || population > existA1.pop) {
-            admin1Centroids.set(a1key, { lat, lon, pop: population });
-        }
-    }
+/** The runtime uses the same accent/case normalization for every lookup. */
+export function normalizeLocationKey(value) {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
-console.log(`  Parsed ${cityMap.size} unique city names`);
+/** Generate only orthographic Saint abbreviations, not translations/guesses. */
+export function locationAliases(name) {
+    const aliases = new Set([normalizeLocationKey(name)]);
+    const saint = /\b(?:saint|st\.)[ -]+/gi;
+    if (saint.test(name)) {
+        aliases.add(normalizeLocationKey(name.replace(saint, 'saint ')));
+        aliases.add(normalizeLocationKey(name.replace(saint, 'st. ')));
+        aliases.add(normalizeLocationKey(name.replace(saint, 'st ')));
+    }
+    return [...aliases].filter(key => key.length > 2);
+}
+
+const roundCoordinate = value => Math.round(value * 100) / 100;
+const displayNameFromKey = key => key.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+function register(map, key, entry) {
+    const candidates = map.get(key) || [];
+    if (!candidates.some(candidate => candidate.id === entry.id)) {
+        candidates.push(entry);
+        map.set(key, candidates);
+    }
+}
 
 /**
- * Processing Stage 2: Parse Administrative Regions
- * Maps state/province codes to names and associates them with the regional
- * centroids calculated in Stage 1.
+ * Pure builder for both the CLI and fixture tests. Alternate-name dumps contain
+ * airport codes, historical names and unlabelled translations; only reviewed
+ * aliases from the supplements are imported, and only when the raw record
+ * confirms the alias. Every alias retains all homonymous geographic entities.
  */
-console.log('Reading admin1CodesASCII.txt...');
-const admin1Raw = readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8');
-const admin1Lines = admin1Raw.split('\n').filter(l => l.trim());
+export function buildGeodata(citiesRaw, admin1Raw, supplements = {}) {
+    const cityCandidateMap = new Map();
+    const admin1Centroids = new Map();
 
-const admin1Map = new Map();
-const admin1CandidateMap = new Map();
+    for (const line of citiesRaw.split('\n')) {
+        const cols = line.split('\t');
+        if (cols.length < 15) continue;
+        const id = Number(cols[0]);
+        const name = (cols[1] || '').trim();
+        const lat = Number(cols[4]);
+        const lon = Number(cols[5]);
+        if (!Number.isInteger(id) || id <= 0 || name.length <= 2 || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
 
-for (const line of admin1Lines) {
-    const cols = line.split('\t');
-    if (cols.length < 3) continue;
-
-    const code = (cols[0] || '').trim();
-    const name = (cols[1] || '').trim();
-    const asciiName = (cols[2] || '').trim();
-    const geonameId = parseInt(cols[3], 10);
-
-    if (!code || !name) continue;
-
-    const countryCode = code.split('.')[0];
-    const centroid = admin1Centroids.get(code);
-    if (!centroid) continue;
-
-    const key = (asciiName || name).toLowerCase();
-
-    /**
-     * Collision Strategy: Prioritize major world cities (>500k) over regional
-     * names to ensure "Paris" refers to the city and not a minor region.
-     */
-    const existingCity = cityMap.get(key);
-    if (existingCity && existingCity.pop > 500000) continue;
-
-    const region = {
-        id: Number.isFinite(geonameId) ? geonameId : undefined,
-        name,
-        code,
-        lat: centroid.lat,
-        lon: centroid.lon,
-        cc: countryCode,
-    };
-    const registerAdmin1Candidate = (candidateKey) => {
-        const candidates = admin1CandidateMap.get(candidateKey) || [];
-        if (!candidates.some(candidate => candidate.code === region.code)) {
-            candidates.push(region);
-            admin1CandidateMap.set(candidateKey, candidates);
+        const city = { id, name, lat, lon, pop: Number(cols[14]) || 0, cc: cols[8].trim(), a1: cols[10].trim() };
+        const aliases = new Set([...locationAliases(name), ...locationAliases(cols[2] || name)]);
+        const rawAliases = new Set((cols[3] || '').split(',').map(normalizeLocationKey));
+        for (const alias of supplements.cityAliases?.[id] || []) {
+            if (!rawAliases.has(normalizeLocationKey(alias))) {
+                throw new Error(`Unverified alias ${alias} for GeoNames ${id}`);
+            }
+            for (const key of locationAliases(alias)) aliases.add(key);
         }
-    };
+        for (const key of aliases) register(cityCandidateMap, key, city);
 
-    registerAdmin1Candidate(key);
-    admin1Map.set(key, region);
-
-    const nameKey = name.toLowerCase();
-    if (nameKey !== key) {
-        registerAdmin1Candidate(nameKey);
-        const existingCity2 = cityMap.get(nameKey);
-        if (!existingCity2 || existingCity2.pop <= 500000) {
-            admin1Map.set(nameKey, region);
+        // Existing regional coordinates use the largest settlement as their
+        // representative point. Retain that convention during this data repair.
+        if (city.a1) {
+            const code = `${city.cc}.${city.a1}`;
+            const existing = admin1Centroids.get(code);
+            if (!existing || city.pop > existing.pop) admin1Centroids.set(code, city);
         }
     }
-}
 
-console.log(`  Parsed ${admin1Map.size} admin1 regions`);
-
-/**
- * Processing Stage 3: Build Country Data
- * Compiles the canonical country list into the final format.
- */
-console.log('Building country data...');
-const countriesOut = {};
-let countryCount = 0;
-
-for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
-    for (const [name, lat, lon] of entries) {
-        if (name.length <= 2) continue;
-        /** Round coordinates to 2 decimal places to minimize payload size */
-        countriesOut[name] = { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100, cc };
-        countryCount++;
+    // A small, sourced supplement covers populated-place sections omitted by
+    // the cities5000 population filter. These remain ordinary candidates, not
+    // global overrides of homonymous cities in other regions.
+    for (const supplemental of supplements.cities || []) {
+        const { aliases, id, name: displayName, lat, lon, pop, cc, a1 } = supplemental;
+        const city = { id, name: displayName, lat, lon, pop, cc, a1 };
+        for (const name of [city.name, ...aliases]) {
+            for (const key of locationAliases(name)) register(cityCandidateMap, key, city);
+        }
     }
+
+    const admin1CandidateMap = new Map();
+    for (const line of admin1Raw.split('\n')) {
+        const [code, name, asciiName, rawId] = line.trim().split('\t');
+        const id = Number(rawId);
+        const centroid = admin1Centroids.get(code);
+        if (!code || !name || !centroid || !Number.isInteger(id) || id <= 0) continue;
+        const region = { id, name, code, lat: centroid.lat, lon: centroid.lon, cc: code.split('.')[0] };
+        // A major city and its homonymous region are distinct entities. Keeping
+        // both lets the resolver apply an explicit parent instead of losing it.
+        for (const key of new Set([...locationAliases(name), ...locationAliases(asciiName || name)])) {
+            register(admin1CandidateMap, key, region);
+        }
+    }
+
+    const cities = Object.create(null);
+    const cityCandidates = Object.create(null);
+    const cityCandidateNames = Object.create(null);
+    for (const [key, candidates] of cityCandidateMap) {
+        const values = candidates.sort((a, b) => b.pop - a.pop || a.id - b.id);
+        const val = values[0];
+        cities[key] = { lat: roundCoordinate(val.lat), lon: roundCoordinate(val.lon), pop: val.pop, cc: val.cc, id: val.id, a1: val.a1 };
+        for (const entry of values) {
+            // The runtime can derive ordinary title case without another copy
+            // of the name; retain native spelling and alias display differences.
+            if (displayNameFromKey(key) !== entry.name) cityCandidateNames[entry.id.toString(36)] = entry.name;
+        }
+        if (values.length > 1) {
+            cityCandidates[key] = values.map(entry => [entry.id.toString(36), roundCoordinate(entry.lat), roundCoordinate(entry.lon), entry.pop.toString(36), entry.cc, entry.a1].join(',')).join('|');
+        }
+    }
+
+    const admin1 = Object.create(null);
+    const admin1Meta = Object.create(null);
+    const admin1Candidates = Object.create(null);
+    const admin1CandidateNames = Object.create(null);
+    for (const [key, values] of admin1CandidateMap) {
+        const val = values[values.length - 1];
+        admin1[key] = { lat: roundCoordinate(val.lat), lon: roundCoordinate(val.lon), cc: val.cc, id: val.id };
+        admin1Meta[key] = val.code;
+        for (const entry of values) {
+            if (displayNameFromKey(key) !== entry.name) admin1CandidateNames[entry.id.toString(36)] = entry.name;
+        }
+        if (values.length > 1) {
+            admin1Candidates[key] = values.map(entry => [entry.id.toString(36), roundCoordinate(entry.lat), roundCoordinate(entry.lon), entry.cc, entry.code].join(',')).join('|');
+        }
+    }
+
+    const countries = Object.create(null);
+    for (const [cc, entries] of Object.entries(COUNTRY_DATA)) {
+        const canonicalName = entries[0][0];
+        for (const [name, lat, lon] of entries) {
+            for (const key of locationAliases(name)) countries[key] = { lat: roundCoordinate(lat), lon: roundCoordinate(lon), cc, name: canonicalName };
+        }
+    }
+
+    const regions = Object.create(null);
+    for (const region of supplements.regions || []) {
+        const { aliases, id, name: displayName, type, lat, lon, cc, admin1Code } = region;
+        const entry = { id, name: displayName, type, lat, lon, cc, admin1Code };
+        for (const name of [entry.name, ...aliases]) {
+            for (const key of locationAliases(name)) {
+                const candidates = regions[key] || [];
+                if (!candidates.some(candidate => candidate.id === entry.id)) candidates.push(entry);
+                regions[key] = candidates;
+            }
+        }
+    }
+
+    const broadLandmarks = [...new Set((supplements.broadLandmarks || []).map(normalizeLocationKey))];
+    return { cities, cityCandidates, cityCandidateNames, admin1, admin1Meta, admin1Candidates, admin1CandidateNames, countries, regions, broadLandmarks };
 }
 
-console.log(`  ${countryCount} country name entries`);
-
-/**
- * Processing Stage 4: Assemble and Export
- * Flattens the maps into a single JSON structure and writes to disk.
- */
-const cities = {};
-for (const [key, val] of cityMap.entries()) {
-    if (key.length <= 2) continue;
-    cities[key] = {
-        lat: Math.round(val.lat * 100) / 100,
-        lon: Math.round(val.lon * 100) / 100,
-        pop: val.pop,
-        cc: val.cc,
-    };
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+    const output = buildGeodata(
+        readFileSync(join(DATA_DIR, 'cities5000.txt'), 'utf-8'),
+        readFileSync(join(DATA_DIR, 'admin1CodesASCII.txt'), 'utf-8'),
+        JSON.parse(readFileSync(join(DATA_DIR, 'geodata-supplements.json'), 'utf-8')),
+    );
+    const serialized = JSON.stringify(output);
+    const outPath = join(DATA_DIR, 'geonames.json');
+    writeFileSync(outPath, serialized);
+    console.log(`Wrote ${outPath} (${Math.round(Buffer.byteLength(serialized) / 1024)} KB)`);
+    console.log(`${Object.keys(output.cities).length} city names, ${Object.keys(output.admin1).length} admin1 names, ${Object.keys(output.countries).length} country names, ${Object.keys(output.regions).length} regional names`);
 }
-
-const admin1 = {};
-const admin1Meta = {};
-for (const [key, val] of admin1Map.entries()) {
-    if (key.length <= 2) continue;
-    admin1[key] = {
-        lat: Math.round(val.lat * 100) / 100,
-        lon: Math.round(val.lon * 100) / 100,
-        cc: val.cc,
-    };
-    admin1Meta[key] = val.code;
-}
-
-const cityCandidates = {};
-const cityCandidateNames = {};
-for (const [key, values] of cityCandidateMap.entries()) {
-    if (key.length <= 2 || values.length <= 1) continue;
-    cityCandidates[key] = values
-        .sort((a, b) => b.pop - a.pop)
-        .map(val => {
-            const id = val.id.toString(36);
-            if (val.name.toLowerCase() !== key) cityCandidateNames[id] = val.name;
-            return [
-                id,
-                Math.round(val.lat * 100) / 100,
-                Math.round(val.lon * 100) / 100,
-                val.pop.toString(36),
-                val.cc,
-                val.a1,
-            ].join(',');
-        })
-        .join('|');
-}
-
-const admin1Candidates = {};
-const admin1CandidateNames = {};
-for (const [key, values] of admin1CandidateMap.entries()) {
-    if (key.length <= 2 || values.length <= 1) continue;
-    admin1Candidates[key] = values.map(val => {
-        const id = val.id.toString(36);
-        if (val.name.toLowerCase() !== key) admin1CandidateNames[id] = val.name;
-        return [
-            id,
-            Math.round(val.lat * 100) / 100,
-            Math.round(val.lon * 100) / 100,
-            val.cc,
-            val.code,
-        ].join(',');
-    }).join('|');
-}
-
-const output = {
-    cities,
-    cityCandidates,
-    cityCandidateNames,
-    admin1,
-    admin1Meta,
-    admin1Candidates,
-    admin1CandidateNames,
-    countries: countriesOut,
-};
-const outPath = join(DATA_DIR, 'geonames.json');
-writeFileSync(outPath, JSON.stringify(output));
-
-const sizeKB = Math.round(readFileSync(outPath).length / 1024);
-console.log(`\nWrote ${outPath} (${sizeKB} KB)`);
-console.log(`  ${Object.keys(cities).length} city names (${Object.keys(cityCandidates).length} ambiguous), ${Object.keys(admin1).length} admin1 regions (${Object.keys(admin1Candidates).length} ambiguous), ${Object.keys(countriesOut).length} country names`);
