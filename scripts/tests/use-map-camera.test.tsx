@@ -90,7 +90,7 @@ describe("useMapCamera", () => {
     vi.useRealTimers();
   });
 
-  it("cancels the landing correction when the selection closes", () => {
+  it("cancels an unfinished flight when the selection closes", () => {
     const canvas = document.createElement("canvas");
     const moveendHandlers: Array<() => void> = [];
     const flyTo = vi.fn();
@@ -136,16 +136,12 @@ describe("useMapCamera", () => {
     );
 
     expect(flyTo).toHaveBeenCalledTimes(1);
-    act(() => moveendHandlers[0]());
-    expect(easeTo).toHaveBeenCalledTimes(1);
-    expect(moveendHandlers).toHaveLength(2);
-
     act(() => rerender({ selectedItemId: null }));
     expect(stop).toHaveBeenCalledTimes(1);
 
     // A moveend emitted by stop must not revive the cancelled correction.
-    act(() => moveendHandlers[1]());
-    expect(easeTo).toHaveBeenCalledTimes(1);
+    act(() => moveendHandlers[0]());
+    expect(easeTo).not.toHaveBeenCalled();
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
 

@@ -7,8 +7,8 @@ export type PulsePaintMap = {
   getLayer: (id: string) => unknown;
   setPaintProperty: (
     layerId: string,
-    property: string,
-    value: unknown,
+    property: 'circle-radius' | 'circle-opacity' | 'circle-radius-transition' | 'circle-opacity-transition',
+    value: number | { duration: number; delay: number },
   ) => unknown;
 };
 

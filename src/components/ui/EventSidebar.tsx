@@ -107,7 +107,6 @@ export default function EventSidebar({
   sortMode,
   onSortModeChange,
   filterVersion = 0,
-  animatedEffects = false,
   isCapped = false,
   appliedLimit,
   disabled = false,
@@ -145,12 +144,6 @@ export default function EventSidebar({
       .filter((t) => !isNaN(t));
     return times.length > 0 ? Math.max(...times) : null;
   }, [items]);
-
-  /* Identify the top 3 IDs for pulsing indicators (matches map logic) */
-  const top3Ids = useMemo(() => {
-    if (!animatedEffects) return new Set<string>();
-    return new Set(items.slice(0, 3).map((item) => canonicalNewsId(item)));
-  }, [items, animatedEffects]);
 
   const displayItems = useMemo(() => {
     if (!selectedItemId) return items;
@@ -316,7 +309,6 @@ export default function EventSidebar({
       const targetId = canonicalNewsId(item);
       const isSelected = matchesNewsId(item, selectedItemId);
       const isExpanded = expandedId === targetId || isSelected;
-      const isTop3 = top3Ids.has(targetId);
       return (
         <EventCard
           key={item.id}
@@ -324,13 +316,12 @@ export default function EventSidebar({
           index={index}
           isSelected={isSelected}
           isExpanded={isExpanded}
-          isTop3={isTop3}
           onCardClick={handleCardClick}
           userTier={userTier as EntitlementTier}
         />
       );
     },
-    [selectedItemId, expandedId, handleCardClick, top3Ids, userTier],
+    [selectedItemId, expandedId, handleCardClick, userTier],
   );
 
   return (
@@ -567,7 +558,6 @@ export default function EventSidebar({
         {/* Prevents hydration mismatch for time strings */}
         {(newestEventTime || isLoading) && (
           <div className={styles.liveStatusWrapper}>
-            <span className={styles.pulseDot} />
             <span className={styles.lastUpdated} suppressHydrationWarning>
               <span className={styles.updatedLabel}>UPDATED</span>
               <span>

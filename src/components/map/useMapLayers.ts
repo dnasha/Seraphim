@@ -6,7 +6,7 @@
  */
 
 import { useCallback } from "react";
-import maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { CLUSTER_MAX_ZOOM } from "./utils";
 import { loadMapIcons } from "./layers/mapIcons";
 import {

@@ -9,8 +9,8 @@ import styles from "./page.module.css";
 export default function HelpPage() {
   return (
     <div className={styles.pageWrapper}>
+      <PublicPageHeader />
       <div className={styles.container}>
-        <PublicPageHeader />
 
         <div className={styles.welcomeHero}>
           <h2 className={styles.title}>Welcome to Seraphim</h2>

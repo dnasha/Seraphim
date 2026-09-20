@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { createPortal } from 'react-dom';
 import { TextAnnotation } from './drawPersistence';
 import styles from '../MapDrawTools.module.css';

@@ -14,6 +14,7 @@ import React from "react";
 import Image from "next/image";
 import { getNewsImagePresentation } from "@/lib/utils/newsImages";
 import { hasFeature, type UserTier } from '@/lib/entitlements';
+import StoryAttribution from "./StoryAttribution";
 import TimelineGateCta from './TimelineGateCta';
 import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 
@@ -22,7 +23,6 @@ interface EventCardProps {
   index: number;
   isSelected: boolean;
   isExpanded: boolean;
-  isTop3: boolean;
   onCardClick: (item: NewsItem) => void;
   userTier: UserTier;
 }
@@ -32,7 +32,6 @@ export default function EventCard({
   index,
   isSelected,
   isExpanded,
-  isTop3,
   onCardClick,
   userTier,
 }: EventCardProps) {
@@ -40,9 +39,8 @@ export default function EventCard({
   const credStyle = getCredibilityStyle(item.credibilityTier);
   const sourceCount = canonicalEventCount(item);
   const isTier1 = item.credibilityTier === 1;
-  const thumbnailImage = getNewsImagePresentation(item, 176);
+  const thumbnailImage = getNewsImagePresentation(item, 192);
   const detailImage = getNewsImagePresentation(item, 640);
-  const descriptionSourceUrl = safeExternalHttpUrl(item.descriptionProvenance?.url);
 
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>, proxied: boolean) => {
     const image = event.currentTarget;
@@ -137,12 +135,6 @@ export default function EventCard({
           }
         }}
       >
-        {/** Category accent bar on the left edge */}
-        <div
-          className={styles.eventCardAccent}
-          style={{ backgroundColor: catColor }}
-        />
-
         {/** Main layout: thumbnail and textual content */}
         <div className={styles.eventCardRow}>
           {thumbnailImage && (
@@ -152,7 +144,7 @@ export default function EventCard({
                 alt=""
                 fill
                 unoptimized={thumbnailImage.unoptimized}
-                sizes="88px"
+                sizes="96px"
                 style={{ objectFit: 'cover' }}
                 /** Prevents 403 Forbidden errors from sources that block external hotlinking */
                 referrerPolicy="no-referrer"
@@ -190,8 +182,8 @@ export default function EventCard({
                   <svg
                     className={styles.locationIconSvg}
                     viewBox="0 0 24 24"
-                    width="12"
-                    height="12"
+                    width="15"
+                    height="15"
                     fill="currentColor"
                     style={{
                       display: "inline-block",
@@ -206,11 +198,6 @@ export default function EventCard({
                 </span>
               )}
             </div>
-            {!isExpanded && (
-              <span className={styles.eventCardExpandHint}>
-                Click to expand
-              </span>
-            )}
             {sourceCount > 1 && (
               <span
                 className={`${styles.sourceCountBadge} ${styles.sourceCountBadgeCorner}`}
@@ -221,17 +208,6 @@ export default function EventCard({
                 </svg>
                 {sourceCount}
               </span>
-            )}
-            {isTop3 && (
-              <span
-                className={styles.top3PulseDot}
-                style={
-                  {
-                    "--pulse-color": catColor,
-                    "--pulse-color-alpha": `${catColor}b3`, // ~70% opacity
-                  } as React.CSSProperties
-                }
-              />
             )}
           </div>
         </div>
@@ -255,11 +231,6 @@ export default function EventCard({
               </div>
             )}
             {/** Renders skeleton placeholders during lazy-fetch or the description text if available */}
-            {item.headlinePublishedAt && (
-              <p className={styles.timelinePreview}>
-                Headline: {item.source} · <time dateTime={item.headlinePublishedAt} title={item.headlinePublishedAt}>{formatTimeAgo(item.headlinePublishedAt)}</time>
-              </p>
-            )}
             {item.description != null ? (
               item.description ? (
                 <p className={styles.eventCardDetailDesc}>
@@ -280,19 +251,7 @@ export default function EventCard({
               </div>
             )}
 
-            {item.description && (
-              <p className={styles.timelinePreview}>
-                {item.descriptionProvenance ? <>
-                  Description: {descriptionSourceUrl
-                    ? <a href={descriptionSourceUrl.href} target="_blank" rel="noopener noreferrer" title={`Open description source: ${item.descriptionProvenance.name}`}>{item.descriptionProvenance.name}</a>
-                    : item.descriptionProvenance.name}
-                  {' · '}<time dateTime={item.descriptionProvenance.published_at} title={item.descriptionProvenance.published_at}>{formatTimeAgo(item.descriptionProvenance.published_at)}</time>
-                </> : 'Description attribution unavailable for this older story.'}
-              </p>
-            )}
-            {item.independentPublisherCount != null && (
-              <p className={styles.timelinePreview}>{item.independentPublisherCount} independent reporting {item.independentPublisherCount === 1 ? 'source' : 'sources'}</p>
-            )}
+            <StoryAttribution item={item} />
 
             {/** Fallback link for single-source events */}
             {sourceCount <= 1 && (

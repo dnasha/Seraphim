@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import {
   TerraDraw,
   TerraDrawSelectMode,
