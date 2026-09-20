@@ -23,12 +23,10 @@ const EMBEDDING_DIM = 384;
 
 /**
  * Similarity thresholds for story clustering.
- * Strict: High confidence, merge regardless of distance.
- * Place Anchored: Moderate confidence, merge if locations match exactly.
- * Proximity: Lower confidence, merge only if geographically close.
+ * Strict: High semantic confidence, subject to incident conflict checks.
+ * Proximity: Lower confidence, requiring compatible precise local places.
  */
 export const SIMILARITY_THRESHOLD_STRICT = 0.85;
-export const SIMILARITY_THRESHOLD_PLACE_ANCHORED = 0.75;
 export const SIMILARITY_THRESHOLD_PROXIMITY = 0.60;
 export const MAX_MERGE_DISTANCE_KM = 50;
 

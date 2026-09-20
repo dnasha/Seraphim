@@ -85,6 +85,55 @@ describe('enrichItemsWithLocation - source-default suppression', () => {
         expect(result[0].latitude).toBeUndefined();
         expect(result[0].longitude).toBeUndefined();
     });
+
+    it('uses a configured domestic feed scope to disambiguate a named place', async () => {
+        const [result] = await enrichItemsWithLocation([makeItem({
+            title: 'Tax relief or public danger? Florida voters weigh tax cuts against firefighter funding',
+            description: 'Florida voters will decide whether to cut property taxes that support local firefighters.',
+            source: 'NPR US',
+            sourceCountryCode: 'US',
+        })]);
+        expect(result.latitude).toBeGreaterThan(24);
+        expect(result.latitude).toBeLessThan(31);
+        expect(result.longitude).toBeGreaterThan(-88);
+        expect(result.longitude).toBeLessThan(-80);
+    });
+
+    it('never overrides an explicit foreign parent with the feed country', async () => {
+        const [result] = await enrichItemsWithLocation([makeItem({
+            title: 'Flooding damages homes in Florida, Uruguay',
+            description: 'Emergency crews in Uruguay evacuated homes after the river flooded.',
+            source: 'NPR US',
+            sourceCountryCode: 'US',
+        })]);
+        expect(result.latitude).toBeGreaterThan(-36);
+        expect(result.latitude).toBeLessThan(-30);
+        expect(result.longitude).toBeGreaterThan(-59);
+        expect(result.longitude).toBeLessThan(-52);
+    });
+
+    it('does not invent a location from a domestic feed scope', async () => {
+        const [result] = await enrichItemsWithLocation([makeItem({
+            title: 'Scientists develop new quantum algorithm',
+            description: 'The method could speed up future computing tasks.',
+            source: 'NPR US',
+            sourceCountryCode: 'US',
+        })]);
+        expect(result.latitude).toBeUndefined();
+        expect(result.longitude).toBeUndefined();
+    });
+
+    it('removes publisher attribution without moving a maritime incident to its country', async () => {
+        const [result] = await enrichItemsWithLocation([makeItem({
+            title: 'US says it killed four people in strike on vessel in Caribbean - The Times of Israel',
+            description: 'US says it killed four people in strike on vessel in Caribbean The Times of Israel',
+            source: 'Times of Israel',
+        })]);
+        expect(result.latitude).toBeGreaterThan(8);
+        expect(result.latitude).toBeLessThan(25);
+        expect(result.longitude).toBeGreaterThan(-90);
+        expect(result.longitude).toBeLessThan(-60);
+    });
 });
 
 /*

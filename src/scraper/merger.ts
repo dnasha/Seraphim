@@ -5,19 +5,16 @@ import {
   generateEmbeddings,
   buildEmbeddingText,
   cosineSimilarity,
-  calculateDistance,
-  SIMILARITY_THRESHOLD_STRICT,
-  SIMILARITY_THRESHOLD_PLACE_ANCHORED,
-  SIMILARITY_THRESHOLD_PROXIMITY,
-  MAX_MERGE_DISTANCE_KM,
 } from "@/lib/utils/vectorize";
-import { canonicalizeEventUrl, isRecurringTemplatePair, normalizeTitleFingerprint } from "./utils/content";
-import { publisherKey } from "@/lib/utils/corroboration";
+import { normalizeTitleFingerprint } from "./utils/content";
+import { reportIdentityKey } from "@/lib/utils/reportIdentity";
+import { hasConflictingStoryEvidence, passesSemanticThreshold } from './storyMatching';
 import { readRecentEventPages } from './recentEvents';
 
 const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
 const VECTOR_QUERY_CHUNK_SIZE = 100;
 const VECTOR_CANDIDATE_LIMIT = 12;
+const EXPANDED_VECTOR_CANDIDATE_LIMIT = 50;
 const DETAIL_QUERY_CHUNK_SIZE = 100;
 
 interface CandidateDetail {
@@ -108,6 +105,7 @@ async function fetchIndexedVectorCandidates(
   db: SupabaseClient,
   embeddings: Array<number[] | null>,
   since: string,
+  limit = VECTOR_CANDIDATE_LIMIT,
 ): Promise<Map<number, VectorCandidateRow[]>> {
   const result = new Map<number, VectorCandidateRow[]>();
   const queries = embeddings
@@ -121,7 +119,7 @@ async function fetchIndexedVectorCandidates(
     const { data, error } = await db.rpc("match_recent_event_candidates", {
       p_queries: chunk,
       p_since: since,
-      p_limit: VECTOR_CANDIDATE_LIMIT,
+      p_limit: limit,
     });
 
     if (error) {
@@ -231,31 +229,6 @@ export async function fetchRecentEmbeddings(db: SupabaseClient): Promise<Fallbac
     });
 }
 
-function candidatePassesMergeThreshold(
-  event: DbEvent,
-  candidate: Pick<VectorCandidateRow, "similarity" | "latitude" | "longitude" | "location_name">,
-): boolean {
-  if (candidate.similarity >= SIMILARITY_THRESHOLD_STRICT) return true;
-  if (
-    candidate.similarity >= SIMILARITY_THRESHOLD_PLACE_ANCHORED &&
-    event.location_name && candidate.location_name &&
-    event.location_name === candidate.location_name
-  ) return true;
-  if (
-    candidate.similarity >= SIMILARITY_THRESHOLD_PROXIMITY &&
-    event.latitude != null && event.longitude != null &&
-    candidate.latitude != null && candidate.longitude != null
-  ) {
-    return calculateDistance(
-      event.latitude,
-      event.longitude,
-      candidate.latitude,
-      candidate.longitude,
-    ) <= MAX_MERGE_DISTANCE_KM;
-  }
-  return false;
-}
-
 export async function resolveStoryMerges(
   dbEvents: DbEvent[],
   db: SupabaseClient,
@@ -287,20 +260,31 @@ export async function resolveStoryMerges(
     console.warn("[vectorize] Recent title lookup unavailable:", error instanceof Error ? error.message : error);
   }
 
-  const exactTitleIds = new Map<string, string>();
+  const exactTitleIds = new Map<string, string[]>();
   for (const row of titleRows) {
     const fingerprint = normalizeTitleFingerprint(row.title);
-    if (fingerprint.length >= 24 && !exactTitleIds.has(fingerprint)) {
-      exactTitleIds.set(fingerprint, row.id);
+    if (fingerprint.length >= 24) {
+      const ids = exactTitleIds.get(fingerprint) ?? [];
+      ids.push(row.id);
+      exactTitleIds.set(fingerprint, ids);
     }
   }
 
-  const bestMatchIds: Array<string | null> = dbEvents.map((_, index) => {
-    const fingerprint = eventFingerprints[index];
-    return fingerprint.length >= 24 ? exactTitleIds.get(fingerprint) ?? null : null;
+  // Exact titles still need their geography and incident details checked. Keep
+  // all exact candidates, since identical generic headlines can describe different places.
+  const requestedExactIds = [...new Set(eventFingerprints.flatMap(fingerprint => exactTitleIds.get(fingerprint) ?? []))];
+  const candidateDetails = await fetchCandidateDetails(db, requestedExactIds);
+  const candidateOptions: Array<Array<{ id: string; score: number }>> = dbEvents.map((event, index) => {
+    return (exactTitleIds.get(eventFingerprints[index]) ?? [])
+      .filter(id => {
+        const detail = candidateDetails.get(id);
+        return detail && !hasConflictingStoryEvidence(event, detail);
+      })
+      .map(id => ({ id, score: 2 }));
   });
 
   const embeddings: Array<number[] | null> = dbEvents.map(() => null);
+  const embeddingsByText = new Map<string, number[]>();
   const embedIndices = async (indices: number[]) => {
     if (indices.length === 0) return true;
     console.log(`[vectorize] Generating embeddings for ${indices.length}/${dbEvents.length} items...`);
@@ -315,6 +299,7 @@ export async function resolveStoryMerges(
         const index = indices[offset];
         const embedding = generated[offset];
         embeddings[index] = embedding;
+        embeddingsByText.set(texts[offset], embedding);
         dbEvents[index].embedding = `[${embedding.join(",")}]`;
       }
       console.log(`[vectorize] Embeddings generated in ${((Date.now() - startMs) / 1000).toFixed(1)}s`);
@@ -325,8 +310,8 @@ export async function resolveStoryMerges(
     }
   };
 
-  const unmatchedIndices = bestMatchIds
-    .map((matchId, index) => matchId ? null : index)
+  const unmatchedIndices = candidateOptions
+    .map((options, index) => options.length ? null : index)
     .filter((index): index is number => index !== null);
   await embedIndices(unmatchedIndices);
 
@@ -344,114 +329,86 @@ export async function resolveStoryMerges(
     console.log(`[vectorize] ${fallbackCandidates.length} fallback candidates loaded`);
   }
 
-  const assignSemanticMatches = (indices: number[]) => {
-    for (const index of indices) {
-      if (bestMatchIds[index]) continue;
-      const event = dbEvents[index];
-      const embedding = embeddings[index];
-      if (!embedding) continue;
-
-      if (indexedCandidates) {
-        let best: VectorCandidateRow | null = null;
-        for (const candidate of indexedCandidates.get(index) ?? []) {
-          if (!candidatePassesMergeThreshold(event, candidate)) continue;
-          if (!best || candidate.similarity > best.similarity) best = candidate;
-        }
-        bestMatchIds[index] = best?.event_id ?? null;
-        continue;
-      }
-
-      let bestId: string | null = null;
-      let highestSimilarity = -1;
-      for (const candidate of fallbackCandidates ?? []) {
-        const isExactTitle = eventFingerprints[index].length >= 24 &&
-          eventFingerprints[index] === candidate.fingerprint;
-        const similarity = cosineSimilarity(embedding, candidate.embedding);
-        const passes = isExactTitle || candidatePassesMergeThreshold(event, {
-          similarity,
-          latitude: candidate.latitude ?? null,
-          longitude: candidate.longitude ?? null,
-          location_name: candidate.location_name ?? null,
-        });
-        const score = isExactTitle ? 2 : similarity;
-        if (passes && score > highestSimilarity) {
-          highestSimilarity = score;
-          bestId = candidate.id;
-        }
-      }
-      bestMatchIds[index] = bestId;
-    }
-  };
-
-  assignSemanticMatches(unmatchedIndices);
-
-  let candidateDetails: Map<string, CandidateDetail>;
-  if (fallbackCandidates) {
-    candidateDetails = new Map(fallbackCandidates.map((candidate) => [candidate.id, candidate]));
-  } else {
-    const matchedIds = [...new Set(bestMatchIds.filter((id): id is string => id !== null))];
-    candidateDetails = await fetchCandidateDetails(db, matchedIds);
-  }
-
-  // An exact-title row can be deleted between the lightweight title lookup and
-  // the detail query. Preserve the old behavior by embedding only those raced
-  // items on demand and giving semantic matching one chance before insertion.
-  const racedExactIndices = bestMatchIds
-    .map((matchId, index) => matchId && !candidateDetails.has(matchId) ? index : null)
-    .filter((index): index is number => index !== null);
-  if (racedExactIndices.length > 0) {
-    for (const index of racedExactIndices) bestMatchIds[index] = null;
-    await embedIndices(racedExactIndices);
+  for (const index of unmatchedIndices) {
+    const event = dbEvents[index];
+    const embedding = embeddings[index];
+    if (!embedding) continue;
     if (indexedCandidates) {
-      const racedEmbeddings = embeddings.map((embedding, index) =>
-        racedExactIndices.includes(index) ? embedding : null
-      );
-      const racedCandidates = await fetchIndexedVectorCandidates(db, racedEmbeddings, since);
-      for (const [index, candidates] of racedCandidates) {
-        indexedCandidates.set(index, candidates);
+      for (const candidate of indexedCandidates.get(index) ?? []) {
+        if (passesSemanticThreshold(event, candidate, candidate.similarity)) {
+          candidateOptions[index].push({ id: candidate.event_id, score: candidate.similarity });
+        }
+      }
+    } else {
+      for (const candidate of fallbackCandidates ?? []) {
+        candidateDetails.set(candidate.id, candidate);
+        const exact = eventFingerprints[index].length >= 24 && eventFingerprints[index] === candidate.fingerprint;
+        const similarity = cosineSimilarity(embedding, candidate.embedding);
+        if (exact || passesSemanticThreshold(event, candidate, similarity)) {
+          candidateOptions[index].push({ id: candidate.id, score: exact ? 2 : similarity });
+        }
       }
     }
-    assignSemanticMatches(racedExactIndices);
+    candidateOptions[index].sort((a, b) => b.score - a.score);
+  }
+  if (indexedCandidates) {
+    const missingIds = [...new Set(candidateOptions.flatMap(options => options.map(option => option.id)))]
+      .filter(id => !candidateDetails.has(id));
+    for (const [id, detail] of await fetchCandidateDetails(db, missingIds)) candidateDetails.set(id, detail);
 
-    if (!fallbackCandidates) {
-      const racedMatchIds = [...new Set(
-        racedExactIndices
-          .map((index) => bestMatchIds[index])
-          .filter((id): id is string => id !== null),
-      )];
-      const racedDetails = await fetchCandidateDetails(db, racedMatchIds);
-      for (const [id, detail] of racedDetails) candidateDetails.set(id, detail);
+    // The database ranks by vector only. If a full page contains no eligible
+    // incident, a nearby/compatible story may be just beyond the first twelve.
+    const blockedIndices = unmatchedIndices.filter(index =>
+      (indexedCandidates!.get(index)?.length ?? 0) >= VECTOR_CANDIDATE_LIMIT &&
+      !candidateOptions[index].some(option => {
+        const detail = candidateDetails.get(option.id);
+        return detail && !hasConflictingStoryEvidence(dbEvents[index], detail);
+      }),
+    );
+    if (blockedIndices.length > 0) {
+      try {
+        const blocked = new Set(blockedIndices);
+        const expanded = await fetchIndexedVectorCandidates(db,
+          embeddings.map((embedding, index) => blocked.has(index) ? embedding : null), since, EXPANDED_VECTOR_CANDIDATE_LIMIT);
+        for (const [index, rows] of expanded) {
+          candidateOptions[index] = rows
+            .filter(candidate => passesSemanticThreshold(dbEvents[index], candidate, candidate.similarity))
+            .map(candidate => ({ id: candidate.event_id, score: candidate.similarity }))
+            .sort((a, b) => b.score - a.score);
+        }
+        const expandedIds = [...new Set(blockedIndices.flatMap(index => candidateOptions[index].map(option => option.id)))]
+          .filter(id => !candidateDetails.has(id));
+        for (const [id, detail] of await fetchCandidateDetails(db, expandedIds)) candidateDetails.set(id, detail);
+      } catch (error) {
+        // The bounded recall retry is optional; the original candidates remain usable.
+        console.warn('[vectorize] Expanded candidate lookup unavailable:', error instanceof Error ? error.message : error);
+      }
     }
   }
 
   let mergeCount = 0;
-  const pendingExactTitles = new Map<string, number>();
+  const pendingExactTitles = new Map<string, number[]>();
+  const pendingReportIdentities = new Map<string, number>();
   const pendingEmbeddings = new Map<number, number[]>();
 
   for (let index = 0; index < dbEvents.length; index++) {
     const event = dbEvents[index];
-    const bestMatchId = bestMatchIds[index];
+    // Validate each candidate before selecting it, including changes accumulated
+    // earlier in this batch. A rejected top hit must not hide an eligible runner-up.
+    const bestMatchId = candidateOptions[index].find(option => {
+      const candidate = candidateDetails.get(option.id);
+      const state = candidate && { ...candidate, ...merges.get(option.id) };
+      return state && !hasConflictingStoryEvidence(event, state);
+    })?.id;
     const matchedCandidate = bestMatchId ? candidateDetails.get(bestMatchId) : undefined;
 
-    const samePublisherRecurringTemplate = matchedCandidate
-      ? publisherKey({
-          name: event.source,
-          url: event.url,
-          source_type: event.source_type,
-        }) === publisherKey({
-          name: matchedCandidate.source,
-          url: matchedCandidate.url,
-          source_type: matchedCandidate.source_type,
-        }) && isRecurringTemplatePair(event.title, matchedCandidate.title)
-      : false;
-
-    if (bestMatchId && matchedCandidate && !samePublisherRecurringTemplate) {
+    if (bestMatchId && matchedCandidate) {
       const existingMerge = merges.get(bestMatchId);
       const storyState = existingMerge ? { ...matchedCandidate, ...existingMerge } : matchedCandidate;
       const sourceExists =
-        canonicalizeEventUrl(matchedCandidate.url) === event.url ||
-        canonicalizeEventUrl(storyState.url) === event.url ||
-        storyState.sources.some((source) => canonicalizeEventUrl(source.url) === event.url);
+        reportIdentityKey(matchedCandidate.url) === reportIdentityKey(event.url) ||
+        reportIdentityKey(storyState.url) === reportIdentityKey(event.url) ||
+        storyState.sources.some((source) => reportIdentityKey(source.url) === reportIdentityKey(event.url));
 
       if (!sourceExists) {
         const mergedResult = calculateMergedStory(storyState, event);
@@ -510,20 +467,16 @@ export async function resolveStoryMerges(
     }
 
     const fingerprint = eventFingerprints[index];
-    let pendingIndex = fingerprint.length >= 24 ? pendingExactTitles.get(fingerprint) : undefined;
+    let pendingIndex = pendingReportIdentities.get(reportIdentityKey(event.url)) ?? (pendingExactTitles.get(fingerprint) ?? [])
+      .find(candidateIndex => !hasConflictingStoryEvidence(event, newEvents[candidateIndex]));
     const embedding = embeddings[index];
     if (pendingIndex === undefined && embedding) {
       let highestSimilarity = -1;
       for (const [candidateIndex, candidateEmbedding] of pendingEmbeddings) {
         const candidate = newEvents[candidateIndex];
-        const samePublisher = publisherKey({ name: event.source, url: event.url, source_type: event.source_type }) ===
-          publisherKey({ name: candidate.source, url: candidate.url, source_type: candidate.source_type });
-        if (samePublisher && isRecurringTemplatePair(event.title, candidate.title)) continue;
+        if (hasConflictingStoryEvidence(event, candidate)) continue;
         const similarity = cosineSimilarity(embedding, candidateEmbedding);
-        if (similarity > highestSimilarity && candidatePassesMergeThreshold(event, {
-          similarity, latitude: candidate.latitude ?? null, longitude: candidate.longitude ?? null,
-          location_name: candidate.location_name ?? null,
-        })) {
+        if (similarity > highestSimilarity && passesSemanticThreshold(event, candidate, similarity)) {
           pendingIndex = candidateIndex;
           highestSimilarity = similarity;
         }
@@ -553,12 +506,48 @@ export async function resolveStoryMerges(
       const mergedPending = { ...mergedResult };
       delete (mergedPending as { id?: string }).id;
       newEvents[pendingIndex] = { ...pending, ...mergedPending };
-      if (fingerprint.length >= 24) pendingExactTitles.set(fingerprint, pendingIndex);
+      if (mergedResult.title !== undefined) {
+        newEvents[pendingIndex].latitude = event.latitude ?? null;
+        newEvents[pendingIndex].longitude = event.longitude ?? null;
+        newEvents[pendingIndex].location_name = event.location_name ?? null;
+      }
+      const representativeText = buildEmbeddingText(newEvents[pendingIndex].title, newEvents[pendingIndex].description);
+      if (representativeText !== buildEmbeddingText(pending.title, pending.description)) {
+        // These rows have not been persisted yet. Keep their search vector and
+        // the next in-batch comparison aligned with the final representative.
+        let representativeVector = embeddingsByText.get(representativeText);
+        if (!representativeVector) {
+          try {
+            [representativeVector] = await generateEmbeddings([representativeText]);
+            if (representativeVector) embeddingsByText.set(representativeText, representativeVector);
+          } catch {
+            console.warn('[vectorize] Could not embed updated pending representative; omitting its stale vector.');
+          }
+        }
+        if (representativeVector) {
+          pendingEmbeddings.set(pendingIndex, representativeVector);
+          newEvents[pendingIndex].embedding = `[${representativeVector.join(',')}]`;
+        } else {
+          pendingEmbeddings.delete(pendingIndex);
+          delete newEvents[pendingIndex].embedding;
+        }
+      }
+      pendingReportIdentities.set(reportIdentityKey(event.url), pendingIndex);
+      if (fingerprint.length >= 24) {
+        const indices = pendingExactTitles.get(fingerprint) ?? [];
+        if (!indices.includes(pendingIndex)) indices.push(pendingIndex);
+        pendingExactTitles.set(fingerprint, indices);
+      }
       mergeCount++;
     } else {
       const newIndex = newEvents.push(event) - 1;
+      pendingReportIdentities.set(reportIdentityKey(event.url), newIndex);
       if (embedding) pendingEmbeddings.set(newIndex, embedding);
-      if (fingerprint.length >= 24) pendingExactTitles.set(fingerprint, newIndex);
+      if (fingerprint.length >= 24) {
+        const indices = pendingExactTitles.get(fingerprint) ?? [];
+        indices.push(newIndex);
+        pendingExactTitles.set(fingerprint, indices);
+      }
     }
   }
 

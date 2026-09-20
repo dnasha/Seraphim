@@ -10,7 +10,7 @@ export interface LocationEntry {
     lat: number;
     lon: number;
     pop: number;
-    type: 'city' | 'admin1' | 'country' | 'landmark';
+    type: 'city' | 'admin1' | 'country' | 'landmark' | 'region';
     cc?: string;
     id?: string;
     name?: string;
@@ -18,8 +18,8 @@ export interface LocationEntry {
     manual?: boolean;
 }
 
-interface GeoCity { lat: number; lon: number; pop: number; cc: string }
-interface GeoRegion { lat: number; lon: number; cc: string }
+interface GeoCity { lat: number; lon: number; pop: number; cc: string; id?: number; a1?: string }
+interface GeoRegion { lat: number; lon: number; cc: string; id?: number; name?: string }
 interface GeoDataShape {
     cities: Record<string, GeoCity>;
     cityCandidates?: Record<string, string>;
@@ -29,12 +29,15 @@ interface GeoDataShape {
     admin1Candidates?: Record<string, string>;
     admin1CandidateNames?: Record<string, string>;
     countries?: Record<string, GeoRegion>;
+    regions?: Record<string, Omit<LocationEntry, 'pop'>[]>;
+    broadLandmarks?: string[];
 }
 
 const rawGeoData = geoData as unknown as GeoDataShape;
 const geoCities = rawGeoData.cities;
 const geoAdmin1 = rawGeoData.admin1;
 const geoCountries = rawGeoData.countries || {};
+const broadManualLocations = new Set(rawGeoData.broadLandmarks || []);
 
 let isInitialized = false;
 // Location names come from untrusted article text. A normal object inherits keys
@@ -52,9 +55,6 @@ function displayNameFromKey(key: string): string {
 }
 
 function candidateIdentity(entry: LocationEntry): string {
-    if (entry.id?.startsWith('city:')) {
-        return `city:${entry.cc || ''}:${entry.lat}:${entry.lon}`;
-    }
     return entry.id || `${entry.type}:${entry.cc || ''}:${entry.admin1Code || ''}:${entry.lat}:${entry.lon}`;
 }
 
@@ -62,11 +62,19 @@ function registerCandidate(key: string, entry: LocationEntry, prepend = false) {
     const normalizedKey = normalizeAccents(key.toLowerCase().trim());
     const candidates = LOCATION_CANDIDATES[normalizedKey] || [];
     const identity = candidateIdentity(entry);
-    if (!candidates.some(candidate => candidateIdentity(candidate) === identity)) {
+    const existingIndex = candidates.findIndex(candidate => candidateIdentity(candidate) === identity);
+    if (existingIndex >= 0) {
+        // A reviewed coordinate override updates the same geographic entity;
+        // it must not create a second competing copy of that entity.
+        if (prepend) {
+            candidates.splice(existingIndex, 1);
+            candidates.unshift(entry);
+        }
+    } else {
         if (prepend) candidates.unshift(entry);
         else candidates.push(entry);
-        LOCATION_CANDIDATES[normalizedKey] = candidates;
     }
+    LOCATION_CANDIDATES[normalizedKey] = candidates;
 }
 
 function parseCityCandidates(key: string): LocationEntry[] {
@@ -75,8 +83,9 @@ function parseCityCandidates(key: string): LocationEntry[] {
         const city = geoCities[key];
         return city ? [{
             ...city,
-            id: `city:${key}`,
-            name: displayNameFromKey(key),
+            id: city.id ? `geonames:${city.id}` : `city:${key}`,
+            name: (city.id && rawGeoData.cityCandidateNames?.[city.id.toString(36)]) || displayNameFromKey(key),
+            admin1Code: city.a1 ? `${city.cc}.${city.a1}` : undefined,
             type: 'city',
         }] : [];
     }
@@ -119,12 +128,32 @@ function parseAdmin1Candidates(key: string): LocationEntry[] {
     const code = rawGeoData.admin1Meta?.[key];
     return [{
         ...region,
-        id: code ? `admin1:${code}` : `admin1:${key}`,
-        name: displayNameFromKey(key),
+        id: region.id ? `geonames:${region.id}` : code ? `admin1:${code}` : `admin1:${key}`,
+        name: (region.id && rawGeoData.admin1CandidateNames?.[region.id.toString(36)]) || displayNameFromKey(key),
         admin1Code: code,
         pop: 0,
         type: 'admin1',
     }];
+}
+
+function canonicalManualEntry(name: string, coords: { lat: number; lon: number }, preferredType: LocationEntry['type']): LocationEntry | undefined {
+    const candidates = LOCATION_CANDIDATES[normalizeAccents(name.toLowerCase().trim())] || [];
+    // Full country names retain their broad geographic identity, including when
+    // an old manual landmark lists a nearby but different representative point.
+    const country = candidates.find(candidate => candidate.type === 'country');
+    if (country) return country;
+    if (preferredType === 'admin1') {
+        const regions = candidates.filter(candidate => candidate.type === 'admin1');
+        // Manual regional representative points can differ from the generated
+        // largest-settlement point without changing the region's identity.
+        if (regions.length === 1) return regions[0];
+    }
+    const nearby = candidates.filter(candidate =>
+        Math.abs(candidate.lat - coords.lat) < 0.1 && Math.abs(candidate.lon - coords.lon) < 0.1,
+    );
+    const preferred = nearby.filter(candidate => candidate.type === preferredType);
+    if (preferred.length === 1) return preferred[0];
+    return nearby.length === 1 ? nearby[0] : undefined;
 }
 
 /**
@@ -169,7 +198,7 @@ export function ensureInitialized() {
         const entry: LocationEntry = {
             ...data,
             id: `country:${data.cc}`,
-            name: displayNameFromKey(name),
+            name: displayNameFromKey(data.name || name),
             pop: 0,
             type: 'country',
         };
@@ -177,12 +206,22 @@ export function ensureInitialized() {
         KNOWN_LOCATIONS[name] = entry;
     }
 
+    for (const [name, regions] of Object.entries(rawGeoData.regions || {})) {
+        for (const region of regions) {
+            const entry: LocationEntry = { ...region, pop: 0 };
+            registerCandidate(name, entry);
+            if (!KNOWN_LOCATIONS[name]) KNOWN_LOCATIONS[name] = entry;
+        }
+    }
+
     for (const [name, data] of Object.entries(OVERRIDE_LOCATIONS)) {
+        const canonical = canonicalManualEntry(name, data, data.type);
         const entry: LocationEntry = {
+            ...canonical,
             ...data,
-            id: `override:${name}`,
-            name: displayNameFromKey(name),
-            pop: 0,
+            id: canonical?.id || `override:${name}`,
+            name: canonical?.name || displayNameFromKey(name),
+            pop: canonical?.pop || 0,
             manual: true,
         };
         registerCandidate(name, entry, true);
@@ -191,12 +230,18 @@ export function ensureInitialized() {
 
     const REGION_SUFFIX = /\b(oblast|region|province|department|krai|raion|governorate)$/i;
     for (const [name, coords] of Object.entries(LANDMARKS)) {
-        const entryType = REGION_SUFFIX.test(name) ? 'admin1' : 'landmark';
+        const broad = broadManualLocations.has(name);
+        const administrative = REGION_SUFFIX.test(name);
+        const canonical = canonicalManualEntry(name, coords, administrative || broad ? 'admin1' : 'city');
+        const entryType = canonical?.type === 'country' ? 'country'
+            : administrative || (broad && canonical?.type === 'admin1') ? 'admin1'
+                : broad ? 'region' : 'landmark';
         const entry: LocationEntry = {
-            ...coords,
-            id: `landmark:${name}`,
-            name: displayNameFromKey(name),
-            pop: 0,
+            ...canonical,
+            ...(entryType === 'country' ? { lat: canonical!.lat, lon: canonical!.lon } : coords),
+            id: canonical?.id || `landmark:${name}`,
+            name: canonical?.name || displayNameFromKey(name),
+            pop: canonical?.pop || 0,
             type: entryType,
             manual: true,
         };
@@ -210,7 +255,7 @@ export function ensureInitialized() {
             id: `region:${name}`,
             name: displayNameFromKey(name),
             pop: 0,
-            type: 'landmark',
+            type: 'region',
             manual: true,
         };
         registerCandidate(name, entry, true);
@@ -279,6 +324,7 @@ export function locationPriority(key: string): number {
         case 'city': return entry.pop > 1000000 ? 2 : 4;
         case 'country': return 6;
         case 'admin1': return 8;
+        case 'region': return 10;
         default: return 99;
     }
 }

@@ -34,6 +34,8 @@ export interface NewsItem {
   url: string;
   source: string;
   sourceType: 'gnews' | 'rss' | 'social';
+  /** Internal weak geocoding prior for a feed with an explicitly configured country scope. */
+  sourceCountryCode?: string;
   category?: string;
   publishedAt: string;
   imageUrl?: string;

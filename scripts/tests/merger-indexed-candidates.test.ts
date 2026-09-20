@@ -49,7 +49,7 @@ describe("indexed scraper candidate matching", () => {
     vectorMocks.generateEmbeddings.mockClear();
   });
 
-  it("uses the batch matcher and fetches full details only for the selected event", async () => {
+  it("uses the batch matcher and fetches full details for threshold-eligible candidates", async () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),

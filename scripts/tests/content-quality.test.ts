@@ -4,6 +4,7 @@ import {
   cleanAndCapTitle,
   cleanAndCapDescription,
   lowSignalExpiry,
+  isRecurringTemplatePair,
   normalizeTitleFingerprint,
   prepareIncomingItems,
   shouldExpireLowSignalEvent,
@@ -94,6 +95,41 @@ describe("lean ingestion content normalization", () => {
   it("normalizes conservative exact-title fingerprints", () => {
     expect(normalizeTitleFingerprint("Café blast — officials respond"))
       .toBe("café blast officials respond");
+  });
+
+  it('preserves identical generic headlines with different incident descriptions and URLs', () => {
+    expect(prepareIncomingItems([
+      item({ title: 'Three people killed in motorway crash', description: 'A crash on the M1 near Leeds.', url: 'https://example.com/leeds' }),
+      item({ title: 'Three people killed in motorway crash', description: 'A crash on the M6 near Birmingham.', url: 'https://example.com/birmingham' }),
+    ])).toHaveLength(2);
+  });
+
+  it('deduplicates known X mirror status identities while retaining the richer original URL', () => {
+    const url = 'https://xcancel.com/account/status/123456789';
+    const result = prepareIncomingItems([
+      item({ url: 'https://nitter.poast.org/account/status/123456789', description: 'Short.' }),
+      item({ url, description: 'A longer report on the same status.' }),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].url).toBe(url);
+  });
+
+  it.each([
+    ['Russian Offensive Campaign Assessment, September 18, 2026', 'Russian Offensive Campaign Assessment, September 19, 2026'],
+    ['Campaign assessment - 2026-09-18', 'Campaign assessment - 2026-09-19'],
+    ['Campaign assessment, 18 September 2026', 'Campaign assessment, 19 September 2026'],
+    ['São Paulo Nightlife Tonight — August 14, 2026', 'São Paulo Nightlife Tonight — August 15, 2026'],
+  ])('recognizes calendar editions: %s / %s', (a, b) => {
+    expect(isRecurringTemplatePair(a, b)).toBe(true);
+  });
+
+  it.each([
+    ['Factory explosion kills 12 workers', 'Factory explosion kills 13 workers'],
+    ['Factory explosion kills 100 workers', 'Factory explosion kills 101 workers'],
+    ['Monday factory explosion kills 12 workers', 'Monday factory explosion kills 13 workers'],
+    ['Korea wins volleyball final 3-1', 'Korea wins volleyball final 3-2'],
+  ])('keeps incident quantities in the identity: %s / %s', (a, b) => {
+    expect(isRecurringTemplatePair(a, b)).toBe(false);
   });
 
   it("expires only low-signal tier-three social commentary", () => {

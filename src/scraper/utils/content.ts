@@ -1,5 +1,6 @@
 import type { NewsItem } from "@/lib/core/types";
 import { contentFingerprint } from "@/lib/utils/corroboration";
+import { reportIdentityKey } from "@/lib/utils/reportIdentity";
 
 export const MAX_STORED_DESCRIPTION_CHARS = 2_000;
 export const MAX_STORED_TITLE_CHARS = 500;
@@ -42,8 +43,12 @@ const RECURRING_EDITORIAL_TITLE_PATTERNS = [
   /\bwhat(?:'|’)s on\b.*\b(?:today|tonight|week|weekend)\b/i,
 ];
 
-const TEMPORAL_TITLE_MARKER = /\b(?:today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|20\d{2}|\d{1,2}(?:st|nd|rd|th)?)\b/i;
-const TEMPORAL_TEMPLATE_PARTS = /\b(?:today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|20\d{2}|\d{1,2}(?:st|nd|rd|th)?)\b/gi;
+const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+// Strip complete calendar expressions, never arbitrary casualty counts or scores.
+const CALENDAR_DATE = `(?:${MONTH}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?|\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH}\\.?(?:,?\\s+20\\d{2})?|20\\d{2}[-/]\\d{1,2}[-/]\\d{1,2})`;
+const TEMPORAL_PART = `\\b(?:${CALENDAR_DATE}|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b`;
+const TEMPORAL_TITLE_MARKER = new RegExp(TEMPORAL_PART, 'i');
+const TEMPORAL_TEMPLATE_PARTS = new RegExp(TEMPORAL_PART, 'gi');
 
 const LOW_SIGNAL_ARCHIVE_PATTERNS = /\b(?:analysis|commentary|opinion|interview|explainer|podcast|newsletter|thread|what to know|five things|takeaways?)\b/i;
 
@@ -196,8 +201,8 @@ export function prepareIncomingItems(items: NewsItem[]): NewsItem[] {
 
     const item = { ...original, url, title, description };
     const fingerprint = normalizeTitleFingerprint(title);
-    const identity = fingerprint.length >= 24
-      ? `${item.source}\u0000${fingerprint}`
+    const identity = fingerprint.length >= 24 && description
+      ? `${item.source}\u0000${fingerprint}\u0000${contentFingerprint(description)}`
       : `${item.source}\u0000${url}`;
     const existing = byIdentity.get(identity);
 
@@ -208,9 +213,10 @@ export function prepareIncomingItems(items: NewsItem[]): NewsItem[] {
 
   const byUrl = new Map<string, NewsItem>();
   for (const item of byIdentity.values()) {
-    const existing = byUrl.get(item.url);
+    const identity = reportIdentityKey(item.url);
+    const existing = byUrl.get(identity);
     if (!existing || (item.description?.length ?? 0) > (existing.description?.length ?? 0)) {
-      byUrl.set(item.url, item);
+      byUrl.set(identity, item);
     }
   }
 

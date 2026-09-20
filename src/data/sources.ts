@@ -15,6 +15,8 @@ export interface RSSSource {
     category: string;
     credibility_tier: 1 | 2 | 3;
     region?: string;
+    /** ISO country scope of this specific feed, not the publisher's headquarters. */
+    countryCode?: string;
 }
 
 export interface RedditSource {
@@ -87,7 +89,7 @@ export const RSS_SOURCES: RSSSource[] = [
     { name: 'Bellingcat', url: 'https://www.bellingcat.com/feed/', category: 'world', credibility_tier: 2, region: 'global' },
 
     // NATIONAL NEWS
-    { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', credibility_tier: 1, region: 'north_america' },
+    { name: 'NPR US', url: 'https://feeds.npr.org/1003/rss.xml', category: 'nation', credibility_tier: 1, region: 'north_america', countryCode: 'US' },
     { name: 'ABC Australia', url: 'https://www.abc.net.au/news/feed/51120/rss.xml', category: 'nation', credibility_tier: 1, region: 'oceania' },
     { name: 'NDTV India', url: 'https://feeds.feedburner.com/ndtvnews-top-stories', category: 'nation', credibility_tier: 1, region: 'asia' },
     { name: 'DW Germany', url: 'https://rss.dw.com/rdf/rss-en-top', category: 'nation', credibility_tier: 1, region: 'europe' },

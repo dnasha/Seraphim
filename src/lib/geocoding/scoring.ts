@@ -4,6 +4,7 @@ import {
     ADMIN_SUFFIX_PATTERN,
     SUPERPOWER_KEYS,
     CONTINENT_NAMES,
+    COUNTRY_ABBREV_MAP,
 } from './constants';
 import {
     KNOWN_LOCATIONS,
@@ -18,8 +19,11 @@ import {
 
 export interface Candidate {
     name: string;
-    source: 'dateline' | 'comma_pair' | 'regex' | 'direct_scan' | 'nlp' | 'demonym' | 'abbrev' | 'action_target' | 'compound_scan' | 'title_subject' | 'possessive_focus';
+    source: 'dateline' | 'comma_pair' | 'regex' | 'venue' | 'origin' | 'direct_scan' | 'nlp' | 'demonym' | 'abbrev' | 'action_target' | 'compound_scan' | 'title_subject' | 'possessive_focus';
     placement: 'title' | 'description';
+    eventContext?: boolean;
+    leadVenue?: boolean;
+    contextPenalty?: number;
 }
 
 export interface ScoredCandidate {
@@ -29,6 +33,7 @@ export interface ScoredCandidate {
     placement: 'title' | 'description';
     score: number;
     cc?: string;
+    leadVenue?: boolean;
 }
 
 /**
@@ -42,8 +47,12 @@ export function computeScored(
 ): ScoredCandidate[] {
     const scored: ScoredCandidate[] = [];
 
-    for (const { name: raw, source, placement } of candidateList) {
-        const candidate = cleanCandidate(raw);
+    for (const { name: raw, source: rawSource, placement, eventContext, leadVenue, contextPenalty = 0 } of candidateList) {
+        let source = rawSource;
+        const cleaned = cleanCandidate(raw);
+        const abbreviation = COUNTRY_ABBREV_MAP[cleaned.toLowerCase()] || COUNTRY_ABBREV_MAP[`${cleaned.toLowerCase()}.`];
+        const candidate = source === 'venue' && cleaned.replace(/\./g, '').length <= 3 && typeof abbreviation === 'string'
+            ? abbreviation : cleaned;
 
         if (!candidate || candidate.length <= 2) continue;
         if (STOP_WORDS.has(candidate.toLowerCase())) continue;
@@ -129,6 +138,7 @@ export function computeScored(
         // in multi-nation geopolitical articles.
         let wSource = 0;
         const isCountryLevel = finalEntry?.type === 'country' || finalEntry?.type === 'admin1';
+        if (source === 'venue' && isCountryLevel && !eventContext) source = 'regex';
         switch(source) {
             case 'possessive_focus': wSource = -15; break;
             case 'action_target': wSource = isCountryLevel ? -5 : -20; break;
@@ -137,6 +147,8 @@ export function computeScored(
             case 'compound_scan': wSource = 0; break;
             case 'comma_pair': wSource = 0; break;
             case 'regex': wSource = -12; break;
+            case 'venue': wSource = -12; break;
+            case 'origin': wSource = -2; break;
             case 'demonym': case 'abbrev': wSource = placement === 'title' ? 8 : 14; break;
             case 'direct_scan': wSource = placement === 'title' ? 6 : 12; break;
             case 'nlp': wSource = 15; break;
@@ -147,12 +159,15 @@ export function computeScored(
         
         // Regional and entity-type penalties
         const continentPenalty = CONTINENT_NAMES.has(key) ? 40 : 0;
-        const regionPenalty = (key === 'middle east' || key === 'west asia' || key === 'southeast asia') ? 25 : 0;
+        // These broad regions already receive a specificity penalty as region
+        // entities; do not add the former landmark correction twice.
+        const regionPenalty = (key === 'middle east' || key === 'west asia' || key === 'southeast asia')
+            ? (finalEntry?.type === 'region' ? 15 : 25) : 0;
         // Apply superpower penalty to all sources including action_target when country-level.
         // Only exempt action_target for city/landmark targets (e.g., "missile hits Kyiv").
-        const superpowerPenalty = (SUPERPOWER_KEYS.has(key) && !(source === 'action_target' && !isCountryLevel)) ? 20 : 0;
+        const superpowerPenalty = (SUPERPOWER_KEYS.has(key) && source !== 'venue' && !(source === 'action_target' && !isCountryLevel)) ? 20 : 0;
 
-        const finalScore = wPlacement + wSource + wType + continentPenalty + regionPenalty + superpowerPenalty;
+        const finalScore = wPlacement + wSource + wType + continentPenalty + regionPenalty + superpowerPenalty + contextPenalty;
 
         scored.push({
             name: displayName,
@@ -160,8 +175,17 @@ export function computeScored(
             source,
             placement,
             score: finalScore,
-            cc: finalEntry?.cc
+            cc: finalEntry?.cc,
+            leadVenue,
         });
+    }
+
+    // A reporting dateline is a useful fallback, but not the event venue when
+    // the article explicitly locates the incident elsewhere.
+    for (const candidate of scored) {
+        if (candidate.source === 'dateline' && scored.some(other =>
+            other.source === 'venue' && other.leadVenue && other.key !== candidate.key
+        )) candidate.score += 20;
     }
 
     // Hierarchical Boosting: cities/landmarks within a mentioned country/region get priority

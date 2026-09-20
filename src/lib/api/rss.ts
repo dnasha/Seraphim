@@ -25,6 +25,7 @@ import {
 } from '@/lib/security/feedFetch';
 import { scheduleOutboundSource, sourceHost } from './outboundScheduler';
 import { isSourceCircuitOpen } from './sourceCircuit';
+import { load } from 'cheerio';
 
 const DEFAULT_TIMEOUT = 15000;
 const RSS_CONCURRENCY = 10;
@@ -38,6 +39,18 @@ interface ParsedFeedItem {
     link?: string;
     pubDate?: string;
     isoDate?: string;
+}
+
+function feedDescription(item: ParsedFeedItem): string {
+    // rss-parser removes tags but can retain CSS/script text in contentSnippet.
+    if (item.content && (!item.contentSnippet || /<(?:style|script|noscript|template)\b/i.test(item.content))) {
+        const $ = load(item.content);
+        $('style, script, noscript, template').remove();
+        $('br').replaceWith(' ');
+        $('p, div, li, h1, h2, h3, section, article').append(' ');
+        return $.root().text().replace(/\s+/g, ' ').trim();
+    }
+    return item.contentSnippet || '';
 }
 
 export interface RSSFetchOptions {
@@ -138,10 +151,11 @@ export async function fetchSingleFeed(
             const newsItem: NewsItem = {
                 id: `rss-${source.name.replace(/\s+/g, '-').toLowerCase()}-${index}-${Date.now()}`,
                 title: item.title || 'No title',
-                description: item.contentSnippet || item.content || '',
+                description: feedDescription(item),
                 url: articleUrl,
                 source: source.name,
                 sourceType: 'rss',
+                ...(source.countryCode ? { sourceCountryCode: source.countryCode } : {}),
                 category: source.category,
                 publishedAt,
             };

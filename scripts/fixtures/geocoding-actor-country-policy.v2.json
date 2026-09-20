@@ -1,0 +1,39 @@
+{
+  "policy": "Use the main actor's country when no event location is available. Explicit event locations take precedence; publisher geography and personal-name homonyms do not establish actor nationality.",
+  "reviewedOn": "2026-09-20",
+  "reviewBasis": "User explicitly selected actor-country fallback during the geoparsing accuracy fixes. Original v1 fixture labels remain unchanged for historical comparison.",
+  "golden": [
+    {
+      "id": 68,
+      "previousExpected": { "displayName": "White House" },
+      "expected": { "displayName": "United States", "gazetteerId": "country:US" },
+      "reason": "US presidential quantum-policy orders have national scope. 'White House says' is attribution, not evidence of a signing venue."
+    },
+    {
+      "id": 85,
+      "previousExpected": { "displayName": null },
+      "expected": { "displayName": "Russia", "gazetteerId": "country:RU" },
+      "reason": "Russian Defence Ministry is the explicit principal actor; use a coarse Russian country anchor when the briefing's incident venues remain unresolved."
+    },
+    {
+      "id": 143,
+      "previousExpected": { "displayName": null },
+      "expected": { "displayName": "United States", "gazetteerId": "country:US" },
+      "reason": "Federal ruling on the Trump administration's voter-verification system has an identifiable US institutional actor and national scope."
+    },
+    {
+      "id": 144,
+      "previousExpected": { "displayName": null },
+      "expected": { "displayName": "United States", "gazetteerId": "country:US" },
+      "reason": "Trump administration/Department of Justice national policy supports the US country even without a physical venue."
+    }
+  ],
+  "stratified": [
+    {
+      "db_id": "9267eb5d-c4c6-4d9e-b9db-3dd4699d1386",
+      "previousExpected": null,
+      "expected": { "displayName": "China", "lat": 35.86, "lon": 104.2 },
+      "reason": "China is the explicit principal actor in a policy article; contextual White House and US mentions do not move it to Washington."
+    }
+  ]
+}

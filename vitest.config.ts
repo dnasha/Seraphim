@@ -44,6 +44,7 @@ export default defineConfig({
                 'src/proxy.ts',
                 'src/scraper/utils/**/*.ts',
                 'src/scraper/merger.ts',
+                'src/scraper/storyMatching.ts',
                 'src/scraper/index.ts',
                 'src/scraper/recentEvents.ts',
                 'src/scraper/dbIngest.ts',

@@ -33,7 +33,10 @@ export async function enrichItemsWithLocation(items: NewsItem[]): Promise<NewsIt
         };
         const title = toStr(item.title);
         const description = toStr(item.description);
-        const resolution = await resolveLocation(title, description);
+        const resolution = await resolveLocation(title, description, {
+            sourceName: toStr(item.source),
+            countryCode: item.sourceCountryCode,
+        });
         const candidates = resolution?.candidates
             .map(candidate => candidate.displayName)
             .filter(Boolean) ?? [];

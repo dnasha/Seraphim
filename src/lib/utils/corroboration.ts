@@ -1,3 +1,5 @@
+import { reportIdentityKey } from './reportIdentity';
+
 export interface PublisherReport {
   name?: string | null;
   url?: string | null;
@@ -87,9 +89,15 @@ export function countIndependentSources(
 ): number {
   const publishers = new Set<string>();
   const fingerprints = new Set<string>();
+  const reports = new Set<string>();
   let independentCount = 0;
 
   for (const report of [primary, ...corroborators]) {
+    if (report.url) {
+      const identity = reportIdentityKey(report.url);
+      if (reports.has(identity)) continue;
+      reports.add(identity);
+    }
     const publisher = publisherKey(report);
     if (publisher === "unknown" || publishers.has(publisher)) continue;
     publishers.add(publisher);

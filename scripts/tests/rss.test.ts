@@ -88,6 +88,27 @@ describe("RSS adapters", () => {
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('user-agent')).toMatch(/^server:seraphim:/);
   });
 
+  it('carries explicit feed-country scope without inferring it from a broad region', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('<rss></rss>', { status: 200 }))));
+    mocks.parseString.mockResolvedValue({ items: [{ title: 'Florida voters consider tax policy', link: 'https://example.com/policy', pubDate: new Date().toISOString() }] });
+    const npr = RSS_SOURCES.find(source => source.name === 'NPR US')!;
+    const [domestic] = await fetchSingleFeed(npr);
+    expect(domestic.sourceCountryCode).toBe('US');
+    const [regional] = await fetchSingleFeed({ ...npr, countryCode: undefined, name: 'Regional Wire' });
+    expect(regional.sourceCountryCode).toBeUndefined();
+  });
+
+  it('excludes styles and scripts from the article text used for geocoding', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<rss></rss>', { status: 200 })));
+    mocks.parseString.mockResolvedValue({ items: [{
+      title: 'Summit opens', link: 'https://example.com/summit', pubDate: new Date().toISOString(),
+      contentSnippet: '.Paris { display: block; } Jakarta hosts the summit.',
+      content: '<style>.Paris { display: block; }</style><script>var country="Oman";</script><p>Jakarta hosts the summit.</p><p>Delegates arrived today.</p>',
+    }] });
+    const [result] = await fetchSingleFeed({ name: 'Example', url: 'https://feed.example/rss', category: 'world', credibility_tier: 1 });
+    expect(result.description).toBe('Jakarta hosts the summit. Delegates arrived today.');
+  });
+
   it('recovers a blocked primary publisher through its configured fallback feed', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response('blocked', { status: 403 }))

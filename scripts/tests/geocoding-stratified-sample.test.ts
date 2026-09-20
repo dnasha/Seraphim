@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ensureInitialized, resolveLocation } from '@/lib/geocoding';
+import { applyReviewedGeocodingPolicy } from '../diagnostics/reviewed-geocoding-policy.mjs';
 
 const SAMPLE_PATH = path.resolve(
   __dirname,
@@ -34,11 +35,10 @@ interface ReviewedSample {
   review_note: string;
 }
 
-let samples: ReviewedSample[] = [];
+const samples: ReviewedSample[] = applyReviewedGeocodingPolicy(JSON.parse(readFileSync(SAMPLE_PATH, 'utf8')), SAMPLE_PATH);
 
 beforeAll(() => {
   ensureInitialized();
-  samples = JSON.parse(readFileSync(SAMPLE_PATH, 'utf8'));
 });
 
 describe('reviewed uncorroborated-event sample', () => {
@@ -51,19 +51,16 @@ describe('reviewed uncorroborated-event sample', () => {
     }
   });
 
-  it.each(REQUIRED_STRATA)('matches the reviewed %s outcome', async stratum => {
-    const sample = samples.find(item => item.stratum === stratum);
-    expect(sample).toBeDefined();
-
-    const result = await resolveLocation(sample!.title, sample!.description);
-    if (sample!.expected === null) {
+  it.each(samples)('matches the reviewed $stratum outcome ($db_id)', async sample => {
+    const result = await resolveLocation(sample.title, sample.description);
+    if (sample.expected === null) {
       expect(result).toBeNull();
       return;
     }
 
     expect(result).not.toBeNull();
-    expect(result!.displayName).toBe(sample!.expected.displayName);
-    expect(result!.lat).toBeCloseTo(sample!.expected.lat, 4);
-    expect(result!.lon).toBeCloseTo(sample!.expected.lon, 4);
+    expect(result!.displayName).toBe(sample.expected.displayName);
+    expect(result!.lat).toBeCloseTo(sample.expected.lat, 4);
+    expect(result!.lon).toBeCloseTo(sample.expected.lon, 4);
   });
 });
