@@ -288,50 +288,46 @@ export function extractLocation(title: string, description: string): { match: st
     scanLandmarks(title, 'title');
     scanLandmarks(description, 'description');
 
-    // Compromise occasionally labels a hyphenated non-English preposition as a
-    // place (for example Albanian "para-"). Do not turn such fragments into pins.
-    const viableCandidates = candidates.filter(candidate =>
-        candidate.source !== 'nlp' || !/^para-$/i.test(candidate.name.trim())
-    );
-    let bestCandidates = computeScored(viableCandidates, titleLeadingKey);
+    let bestCandidates = computeScored(candidates, titleLeadingKey);
 
     // Only invoke the heavier person-name pass when the current winner came
     // from an unstructured description scan. This catches collisions such as
     // Angel Velez and Kara Young without weakening structured/dateline matches.
-    const leadingDescriptionCandidate = cleanCandidate(bestCandidates[0]?.name || '');
-    const escapedDescriptionCandidate = leadingDescriptionCandidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const hasPersonPairContext = escapedDescriptionCandidate.length > 0 && new RegExp(
-        `(?:[A-Z][A-Za-z\\u00C0-\\u024F'’-]+\\s+${escapedDescriptionCandidate}\\b|\\b${escapedDescriptionCandidate}\\s+[A-Z][A-Za-z\\u00C0-\\u024F'’-]+)`
-    ).test(description);
     if (
         bestCandidates[0]?.placement === 'description' &&
-        ['direct_scan', 'regex', 'compound_scan'].includes(bestCandidates[0].source) &&
-        hasPersonPairContext
+        ['direct_scan', 'regex', 'compound_scan'].includes(bestCandidates[0].source)
     ) {
-        const personLocationKeys = new Set<string>();
-        for (const person of nlp(description).people().out('array') as string[]) {
-            const words = person
-                .split(/\s+/)
-                .map(word => normalizeAccents(cleanCandidate(word).toLowerCase()))
-                .filter(Boolean);
-            if (words.length < 2) continue;
-            const fullName = words.join(' ');
-            if (KNOWN_LOCATIONS[fullName] || fullName.startsWith('saint paul')) continue;
-            for (let start = 0; start < words.length; start++) {
-                for (let len = Math.min(3, words.length - start); len >= 1; len--) {
-                    const key = words.slice(start, start + len).join(' ');
-                    if (KNOWN_LOCATIONS[key]) personLocationKeys.add(key);
+        const leadingDescriptionCandidate = cleanCandidate(bestCandidates[0].name);
+        const escapedDescriptionCandidate = leadingDescriptionCandidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const hasPersonPairContext = escapedDescriptionCandidate.length > 0 && new RegExp(
+            `(?:[A-Z][A-Za-z\\u00C0-\\u024F'’-]+\\s+${escapedDescriptionCandidate}\\b|\\b${escapedDescriptionCandidate}\\s+[A-Z][A-Za-z\\u00C0-\\u024F'’-]+)`
+        ).test(description);
+        if (hasPersonPairContext) {
+            const personLocationKeys = new Set<string>();
+            for (const person of nlp(description).people().out('array') as string[]) {
+                const words = person
+                    .split(/\s+/)
+                    .map(word => normalizeAccents(cleanCandidate(word).toLowerCase()))
+                    .filter(Boolean);
+                if (words.length < 2) continue;
+                const fullName = words.join(' ');
+                if (KNOWN_LOCATIONS[fullName] || fullName.startsWith('saint paul')) continue;
+                for (let start = 0; start < words.length; start++) {
+                    for (let len = Math.min(3, words.length - start); len >= 1; len--) {
+                        const key = words.slice(start, start + len).join(' ');
+                        if (KNOWN_LOCATIONS[key]) personLocationKeys.add(key);
+                    }
                 }
             }
-        }
-        if (personLocationKeys.size > 0) {
-            const withoutPersonCollisions = viableCandidates.filter(candidate => {
-                if (candidate.placement !== 'description') return true;
-                const key = normalizeAccents(cleanCandidate(candidate.name).toLowerCase());
-                return !personLocationKeys.has(key);
-            });
-            if (withoutPersonCollisions.length !== viableCandidates.length) {
-                bestCandidates = computeScored(withoutPersonCollisions, titleLeadingKey);
+            if (personLocationKeys.size > 0) {
+                const withoutPersonCollisions = candidates.filter(candidate => {
+                    if (candidate.placement !== 'description') return true;
+                    const key = normalizeAccents(cleanCandidate(candidate.name).toLowerCase());
+                    return !personLocationKeys.has(key);
+                });
+                if (withoutPersonCollisions.length !== candidates.length) {
+                    bestCandidates = computeScored(withoutPersonCollisions, titleLeadingKey);
+                }
             }
         }
     }
@@ -363,6 +359,8 @@ export function extractLocation(title: string, description: string): { match: st
                     candidates.push({ name: place, source: 'nlp', placement: 'title' });
                 }
             }
+            // Compromise can label non-English prepositions such as "para-"
+            // as places. Filter these fragments once NLP candidates exist.
             bestCandidates = computeScored(candidates.filter(candidate =>
                 candidate.source !== 'nlp' || !/^para-$/i.test(candidate.name.trim())
             ), titleLeadingKey);

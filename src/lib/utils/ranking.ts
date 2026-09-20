@@ -80,21 +80,6 @@ export function canonicalEventCount(item: NewsItem | Pick<NewsItem, 'sourcesCoun
 }
 
 /**
- * Alias for canonicalEventCount representing the reporting strength of a story.
- */
-export function eventStrength(item: Pick<NewsItem, 'sourcesCount' | 'sources'>): number {
-    return canonicalEventCount(item);
-}
-
-/**
- * Extracts the number of stories within a map cluster.
- */
-export function clusterStoryCount(item: Pick<NewsItem, 'storyCount'>): number {
-    const count = Number(item.storyCount);
-    return (Number.isFinite(count) && count > 0) ? count : 1;
-}
-
-/**
  * Core comparison logic for sorting news items.
  * Hot Mode: Prioritizes impact score, then recency.
  * New Mode: Prioritizes recency.

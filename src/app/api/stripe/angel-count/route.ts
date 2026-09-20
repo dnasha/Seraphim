@@ -63,18 +63,20 @@ export async function GET() {
             return NextResponse.json({ error: 'Payments are currently disabled' }, { status: 503 });
         }
 
-        const maxQuantity = await getAngelMaxQuantity();
-
-        const { count, error: purchaseCountError } = await supabaseAdmin
+        const [maxQuantity, purchaseResult, reservationResult] = await Promise.all([
+            getAngelMaxQuantity(),
+            supabaseAdmin
             .from('angel_purchases')
             .select('*', { count: 'exact', head: true })
-            .in('status', ['active', 'dispute_pending']);
-
-        const { count: reservedCount, error: reservationCountError } = await supabaseAdmin
+            .in('status', ['active', 'dispute_pending']),
+            supabaseAdmin
             .from('billing_checkout_intents')
             .select('*', { count: 'exact', head: true })
             .eq('price_key', 'angel')
-            .in('status', ['creating', 'open', 'pending_payment']);
+            .in('status', ['creating', 'open', 'pending_payment']),
+        ]);
+        const { count, error: purchaseCountError } = purchaseResult;
+        const { count: reservedCount, error: reservationCountError } = reservationResult;
         if (purchaseCountError || reservationCountError) throw new Error('inventory_count_unavailable');
 
         const remaining = Math.max(0, maxQuantity - (count ?? 0) - (reservedCount ?? 0));

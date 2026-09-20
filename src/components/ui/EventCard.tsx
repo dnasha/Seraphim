@@ -53,19 +53,22 @@ export default function EventCard({
     if (image.parentElement) image.parentElement.style.display = "none";
   };
 
+  // Share one chronological ordering between the activity date and timeline.
+  const visibleSources = (item.sources ?? [])
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.discoveredAt).getTime() -
+        new Date(a.discoveredAt).getTime(),
+    );
+
   let timeAgo = "";
   try {
     /**
      * Determines the most relevant timestamp for display.
      * Prefers the most recent source's discovery time to reflect activity.
      */
-    const latestSource = item.sources?.length
-      ? [...item.sources].sort(
-          (a, b) =>
-            new Date(b.discoveredAt).getTime() -
-            new Date(a.discoveredAt).getTime(),
-        )[0]
-      : null;
+    const latestSource = visibleSources[0];
     const displayDate = latestSource
       ? latestSource.discoveredAt
       : item.latestActivityAt || item.publishedAt;
@@ -75,18 +78,6 @@ export default function EventCard({
     timeAgo = "";
   }
 
-  /**
-   * Sorts sources chronologically by discovery time.
-   * Limits visible items unless the user explicitly expands the timeline.
-   */
-  const sortedSources = (item.sources ?? [])
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.discoveredAt).getTime() -
-        new Date(a.discoveredAt).getTime(),
-    );
-  const visibleSources = sortedSources;
   const timelineLocked = sourceCount > 1 && !hasFeature(userTier, 'fullTimeline');
   const hiddenSourceCount = item.timelineRestricted
     ? Math.max(0, (item.totalSources ?? sourceCount) - visibleSources.length)

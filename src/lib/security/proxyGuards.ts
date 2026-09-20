@@ -1,10 +1,3 @@
-export const PROXY_CACHE_HEADERS = {
-  flights: "public, max-age=5, stale-while-revalidate=5",
-  safecast: "public, max-age=3600, stale-while-revalidate=600",
-  wildfires: "public, max-age=1800, stale-while-revalidate=300",
-  eonet: "public, max-age=3600, stale-while-revalidate=600",
-} as const;
-
 const toInteger = (value: string | undefined) => {
   if (!value || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);

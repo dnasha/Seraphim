@@ -52,7 +52,6 @@ export default defineConfig({
             ],
             exclude: [
                 'src/lib/core/supabase-admin.ts',
-                'src/lib/core/supabase.ts',
                 'src/lib/supabase/**/*.ts',
                 'src/lib/stripe.ts',
             ],

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
 import { getConfiguredSiteUrl, isBillingPortalEnabled } from '@/lib/security/payments';
 import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sensitiveRequest';
-import { resolveEffectiveProfile } from '@/lib/server/effectiveProfile';
+import { resolveStripeCustomerId } from '@/lib/server/effectiveProfile';
 import { recordIncident, recordMetric } from '@/lib/server/operations';
 
 export async function POST(request: Request = new Request('http://localhost', { method: 'POST' })) {
@@ -30,12 +30,12 @@ export async function POST(request: Request = new Request('http://localhost', { 
   }
 
   try {
-    const profile = await resolveEffectiveProfile(user.id);
-    if (!profile.stripeCustomerId) {
+    const stripeCustomerId = await resolveStripeCustomerId(user.id);
+    if (!stripeCustomerId) {
       return NextResponse.json({ code: 'billing_account_missing', error: 'No billing account found.' }, { status: 404 });
     }
     const session = await stripe.billingPortal.sessions.create({
-      customer: profile.stripeCustomerId,
+      customer: stripeCustomerId,
       return_url: `${origin}/account`,
     });
     await recordMetric({ kind: 'operational', service: 'billing', name: 'portal_opened' });

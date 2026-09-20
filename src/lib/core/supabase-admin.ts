@@ -33,15 +33,3 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KE
         autoRefreshToken: false 
     },
 });
-
-/**
- * Validates the existence of administrative configuration.
- * Throws an error if the service role key is missing, ensuring 
- * that administrative tasks do not fail silently.
- */
-export function validateServiceRoleConfig() {
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable.');
-    }
-    return { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
-}

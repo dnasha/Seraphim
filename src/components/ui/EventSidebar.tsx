@@ -120,7 +120,6 @@ export default function EventSidebar({
   const randomCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isRandomCoolingDown, setIsRandomCoolingDown] = useState(false);
   const { setShowAuthModal } = useAuth();
@@ -160,7 +159,7 @@ export default function EventSidebar({
     ];
   }, [items, selectedItemId]);
 
-  /* Reset scroll and expansion when filters change explicitly */
+  /* Reset scroll when filters change explicitly */
   useEffect(() => {
     if (virtuosoRef.current) {
       if (disabled) {
@@ -169,10 +168,6 @@ export default function EventSidebar({
         virtuosoRef.current.scrollToIndex({ index: 0 });
       }
     }
-    // Use requestAnimationFrame to avoid synchronous cascading renders
-    requestAnimationFrame(() => {
-      setExpandedId(null);
-    });
   }, [filterVersion, disabled]);
 
   /* Scroll to top once on initial load */
@@ -221,7 +216,6 @@ export default function EventSidebar({
 
       onSelectItem(isSelected ? null : targetId);
       if (!isSelected) {
-        setExpandedId(null);
         if (isMobile()) {
           onToggleSidebar();
         }
@@ -276,7 +270,6 @@ export default function EventSidebar({
     }
 
     seenIds.add(targetId);
-    setExpandedId(null);
     onSelectItem(targetId);
 
     setIsRandomCoolingDown(true);
@@ -306,22 +299,20 @@ export default function EventSidebar({
 
   const renderItem = useCallback(
     (index: number, item: NewsItem) => {
-      const targetId = canonicalNewsId(item);
       const isSelected = matchesNewsId(item, selectedItemId);
-      const isExpanded = expandedId === targetId || isSelected;
       return (
         <EventCard
           key={item.id}
           item={item}
           index={index}
           isSelected={isSelected}
-          isExpanded={isExpanded}
+          isExpanded={isSelected}
           onCardClick={handleCardClick}
           userTier={userTier as EntitlementTier}
         />
       );
     },
-    [selectedItemId, expandedId, handleCardClick, userTier],
+    [selectedItemId, handleCardClick, userTier],
   );
 
   return (

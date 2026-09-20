@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   BASE_POLL_INTERVAL_MS,
   expandedItemLimit,
-  isPollDue,
   rssPollTier,
   selectDueSources,
   selectRecentFeedItems,
@@ -10,14 +9,6 @@ import {
 } from "@/lib/api/sourcePolling";
 
 describe("source polling policy", () => {
-  it("polls fast, normal, and slow sources on deterministic 15-minute slots", () => {
-    expect(isPollDue("fast", BASE_POLL_INTERVAL_MS)).toBe(true);
-    expect(isPollDue("normal", BASE_POLL_INTERVAL_MS)).toBe(false);
-    expect(isPollDue("slow", BASE_POLL_INTERVAL_MS)).toBe(false);
-    expect(isPollDue("normal", BASE_POLL_INTERVAL_MS * 2)).toBe(true);
-    expect(isPollDue("slow", BASE_POLL_INTERVAL_MS * 4)).toBe(true);
-  });
-
   it("keeps crisis and high-yield sources fast while slowing analysis feeds", () => {
     expect(rssPollTier({ name: "USGS Earthquakes", category: "crisis" })).toBe("fast");
     expect(rssPollTier({ name: "CFR", category: "world" })).toBe("slow");

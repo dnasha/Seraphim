@@ -323,19 +323,3 @@ export async function fetchAllRedditFeeds(
     );
     return results.flat();
 }
-
-/**
- * Fetches RSS feeds for a specific category with date sorting.
- */
-export async function fetchRSSByCategory(category: string): Promise<NewsItem[]> {
-    const sources = RSS_SOURCES.filter(s => s.category === category);
-
-    const results = await mapWithConcurrency(sources, RSS_CONCURRENCY, (source) =>
-      scheduleOutboundSource(sourceHost(source.url, `rss:${source.name}`), () => fetchSingleFeed(source))
-    );
-    const allItems = results.flat();
-
-    return allItems.sort((a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-}

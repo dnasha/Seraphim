@@ -72,14 +72,6 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 }
 
 /**
- * Convenience wrapper for a single text embedding.
- */
-export async function generateEmbedding(text: string): Promise<number[]> {
-    const [embedding] = await generateEmbeddings([text]);
-    return embedding;
-}
-
-/**
  * Computes cosine similarity between two normalized vectors.
  * Since both vectors are L2-normalized, cosine similarity is equivalent to the dot product.
  * This operation is O(384) and highly efficient for batch comparisons.

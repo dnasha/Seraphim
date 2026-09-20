@@ -74,6 +74,12 @@ const PREMIUM_PROXY_SERVICES: Record<string, string> = {
 
 const PRIVATE_CACHE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
+class OverlayProviderHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
+
 async function checkProxyRateLimit(clientIp: string, userId?: string | null) {
   const now = Date.now();
   const rateLimitKeys = getRateLimitKeys(clientIp, userId);
@@ -238,57 +244,62 @@ export async function GET(
   }
   if (service === "wildfires") {
     try {
-      const res = await fetchWithTimeout("https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv", {}, 8000);
-      if (!res.ok) {
-        await markOverlayFailure('wildfires', `http_${res.status}`);
-        return NextResponse.json({ error: "Failed to fetch active fires from FIRMS" }, { status: res.status });
-      }
-      const text = await res.text();
-      const lines = text.split('\n');
-      
-      const features = [];
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const cols = line.split(',');
-        if (cols.length < 13) continue;
-        
-        const lat = parseFloat(cols[0]);
-        const lon = parseFloat(cols[1]);
-        const confidence = cols[8];
-        const frp = parseFloat(cols[11]) || 0;
-        
-        if (confidence === 'low' || frp < 10) continue;
-        
-        features.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [lon, lat]
-          },
-          properties: {
-            confidence,
-            frp,
-            acq_date: cols[5],
-            acq_time: cols[6],
-            satellite: cols[7]
+      const geojson = await getCachedOverlayData({
+        key: 'seraphim:overlay-cache:v1:wildfires',
+        freshForMs: 60_000,
+        staleForMs: 5 * 60_000,
+        store: overlayStore,
+        load: async () => {
+          try {
+            const res = await fetchWithTimeout("https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv", {}, 8000);
+            if (!res.ok) {
+              throw new OverlayProviderHttpError(res.status, "Failed to fetch active fires from FIRMS");
+            }
+            const text = await res.text();
+            const lines = text.split('\n');
+            const features = [];
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+              const cols = line.split(',');
+              if (cols.length < 13) continue;
+
+              const lat = parseFloat(cols[0]);
+              const lon = parseFloat(cols[1]);
+              const confidence = cols[8];
+              const frp = parseFloat(cols[11]) || 0;
+              if (confidence === 'low' || frp < 10) continue;
+
+              features.push({
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [lon, lat]
+                },
+                properties: {
+                  confidence,
+                  frp,
+                  acq_date: cols[5],
+                  acq_time: cols[6],
+                  satellite: cols[7]
+                }
+              });
+            }
+            await markOverlayHealthy('wildfires');
+            return { type: "FeatureCollection", features };
+          } catch (error) {
+            await markOverlayFailure('wildfires', error instanceof OverlayProviderHttpError ? `http_${error.status}` : 'request_failed');
+            throw error;
           }
-        });
-      }
-      
-      const geojson = {
-        type: "FeatureCollection",
-        features
-      };
-      await markOverlayHealthy('wildfires');
-      
-      return NextResponse.json(geojson, {
-        headers: {
-          ...PRIVATE_CACHE_HEADERS
-        }
+        },
       });
-    } catch {
-      await markOverlayFailure('wildfires', 'request_failed');
+      return NextResponse.json(geojson, {
+        headers: PRIVATE_CACHE_HEADERS,
+      });
+    } catch (error) {
+      if (error instanceof OverlayProviderHttpError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
       serverDiagnostic('overlay_wildfires_failed');
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
@@ -296,29 +307,42 @@ export async function GET(
 
   if (service === "eonet") {
     try {
-      const res = await fetchWithTimeout("https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods", {}, 8000);
-      if (!res.ok) {
-        await markOverlayFailure('eonet', `http_${res.status}`);
-        return NextResponse.json({ error: "Failed to fetch active events from EONET" }, { status: res.status });
-      }
-      await markOverlayHealthy('eonet');
-      const data = await res.json();
-      if (data && Array.isArray(data.features)) {
-        for (const f of data.features) {
-          if (f.properties && Array.isArray(f.properties.categories) && f.properties.categories.length > 0) {
-            f.properties.category = f.properties.categories[0].id;
-          } else {
-            f.properties.category = "unknown";
+      const data = await getCachedOverlayData({
+        key: 'seraphim:overlay-cache:v1:eonet',
+        freshForMs: 60_000,
+        staleForMs: 5 * 60_000,
+        store: overlayStore,
+        load: async () => {
+          try {
+            const res = await fetchWithTimeout("https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&days=30&category=wildfires,volcanoes,severeStorms,floods", {}, 8000);
+            if (!res.ok) {
+              throw new OverlayProviderHttpError(res.status, "Failed to fetch active events from EONET");
+            }
+            const providerData = await res.json();
+            if (providerData && Array.isArray(providerData.features)) {
+              for (const f of providerData.features) {
+                if (f.properties && Array.isArray(f.properties.categories) && f.properties.categories.length > 0) {
+                  f.properties.category = f.properties.categories[0].id;
+                } else {
+                  f.properties.category = "unknown";
+                }
+              }
+            }
+            await markOverlayHealthy('eonet');
+            return providerData;
+          } catch (error) {
+            await markOverlayFailure('eonet', error instanceof OverlayProviderHttpError ? `http_${error.status}` : 'request_failed');
+            throw error;
           }
-        }
-      }
-      return NextResponse.json(data, {
-        headers: {
-          ...PRIVATE_CACHE_HEADERS
-        }
+        },
       });
-    } catch {
-      await markOverlayFailure('eonet', 'request_failed');
+      return NextResponse.json(data, {
+        headers: PRIVATE_CACHE_HEADERS,
+      });
+    } catch (error) {
+      if (error instanceof OverlayProviderHttpError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
       serverDiagnostic('overlay_eonet_failed');
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
