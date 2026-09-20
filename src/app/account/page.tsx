@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuArrowLeft, LuArrowUpRight, LuChevronDown, LuCreditCard, LuMail, LuShieldCheck, LuTriangleAlert, LuCopy, LuCheck, LuUserRound } from 'react-icons/lu';
+import { LuArrowUpRight, LuChevronDown, LuCreditCard, LuMail, LuShieldCheck, LuTriangleAlert, LuCopy, LuCheck, LuUserRound } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import TierBadge from '@/components/ui/TierBadge';
 import AuthModal from '@/components/auth/AuthModal';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import styles from './AccountPage.module.css';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import { getSubscriptionStatusLabel } from './billingPresentation';
@@ -403,18 +403,8 @@ export default function AccountPage() {
 function AccountShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={styles.container}>
+      <PublicPageHeader />
       <div className={styles.content}>
-        <header className={styles.header}>
-          <Link href="/" className={styles.backLink}><LuArrowLeft size={16} aria-hidden="true" /> Back to map</Link>
-          <Link href="/" className={styles.brand} aria-label="Seraphim home">
-            <svg width="40" height="40" viewBox="35 5 130 190" fill="none" aria-hidden="true">
-              <path d="M100 20L150 73V127L100 180L50 127V73L100 20Z" stroke="currentColor" strokeWidth="12" />
-              <path d="M100 111L125 84H75L100 111Z" fill="currentColor" stroke="currentColor" strokeWidth="12" />
-            </svg>
-            <span>Seraphim</span>
-          </Link>
-          <div className={styles.themeControl}><ThemeToggle /></div>
-        </header>
         <main className={styles.main}>
           <div className={styles.pageHeading}><h1>Your account</h1><p>Profile, plan, and sign-in settings. All in one place.</p></div>
           {children}

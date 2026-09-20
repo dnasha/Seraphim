@@ -1,10 +1,30 @@
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding-top: env(safe-area-inset-top, 0px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+@supports (backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px)) {
+  .header {
+    background: color-mix(in srgb, var(--surface-alt) 85%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+}
+
+.inner {
   display: grid;
   grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
   align-items: center;
-  padding: 20px 0;
-  margin-bottom: 40px;
-  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  width: 100%;
+  max-width: 1120px;
+  height: 80px;
+  margin: 0 auto;
+  padding: 0 28px;
 }
 
 .backLink {
@@ -18,13 +38,13 @@
   background: var(--surface);
   color: var(--text-primary);
   text-decoration: none;
-  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .brandLink {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   min-width: 0;
   color: var(--text-primary);
   text-decoration: none;
@@ -32,8 +52,8 @@
 }
 
 .logo {
-  width: auto;
-  height: 3.4rem;
+  width: 32px;
+  height: 44px;
   flex-shrink: 0;
 }
 
@@ -47,15 +67,12 @@
 }
 
 .brandName {
-  margin-left: 14px;
-  overflow: hidden;
   font-family: var(--font-logo);
-  font-size: 2.05rem;
+  font-size: 1.625rem;
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -74,26 +91,31 @@
 @media (hover: hover) {
   .backLink:hover {
     background: var(--surface-hover);
-    transform: scale(1.05);
-  }
-
-  .brandLink:hover .logo {
-    transform: scale(1.03);
   }
 }
 
-@media (max-width: 480px) {
-  .header {
-    padding: 16px 0;
-    margin-bottom: 24px;
+@media (max-width: 520px) {
+  .inner {
+    padding: 0 18px;
+    gap: 8px;
+  }
+
+  .brandLink {
+    gap: 8px;
   }
 
   .logo {
-    height: 2.5rem;
+    width: 26px;
+    height: 36px;
   }
 
   .brandName {
-    margin-left: 10px;
-    font-size: 1.25rem;
+    font-size: 1.125rem;
+  }
+}
+
+@media print {
+  .header {
+    display: none;
   }
 }

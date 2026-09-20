@@ -160,8 +160,8 @@ export function PricingPageClient({
 
     return (
         <div className={styles.container}>
+            <PublicPageHeader backHref={returnTo} backTitle="Return to the previous page" />
             <div className={styles.content}>
-                <PublicPageHeader backHref={returnTo} backTitle="Return to the previous page" />
 
                 {/* Hero */}
                 <section className={styles.hero}>
