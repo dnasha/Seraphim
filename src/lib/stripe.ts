@@ -12,8 +12,8 @@ import Stripe from 'stripe';
 
 let _stripe: Stripe | null = null;
 
-/** Keep API calls and SDK response types on the version proven in Test mode. */
-export const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2026-06-24.dahlia';
+/** Preserve the tested API contract when updating the SDK's transport/security fixes. */
+export const STRIPE_API_VERSION = '2026-06-24.dahlia';
 
 /** Lazily initialized Stripe client — throws at call time (not import time) if key is missing */
 export function getStripe(): Stripe {
@@ -23,7 +23,9 @@ export function getStripe(): Stripe {
             throw new Error('Missing STRIPE_SECRET_KEY environment variable');
         }
         _stripe = new Stripe(key, {
-            apiVersion: STRIPE_API_VERSION,
+            // Stripe only types its newest API version. Keep this explicit pin
+            // until a separate API upgrade validates new response contracts.
+            apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion,
             typescript: true,
         });
     }

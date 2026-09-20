@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { NewsItem, BBox } from "@/lib/core/types";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import MapPopup from "./MapPopup";
@@ -250,7 +250,7 @@ export default function NewsMap({
       : CLUSTERS_CIRCLE_PAINT;
     if (!paint) return;
     for (const [property, value] of Object.entries(paint)) {
-      map.setPaintProperty("clusters-circle", property, value);
+      map.setPaintProperty("clusters-circle", property as keyof NonNullable<maplibregl.CircleLayerSpecification['paint']>, value);
     }
   }, [mapReady, mutedClusters]);
 
@@ -441,6 +441,7 @@ export default function NewsMap({
 
       const isMobileLocal = typeof window !== "undefined" && window.innerWidth <= 860;
 
+      maplibregl.setWorkerUrl(`/maplibre/${maplibregl.getVersion()}/maplibre-gl-worker.mjs`);
       map = new maplibregl.Map({
         container: containerRef.current as HTMLElement,
         style: getMapLibreStyle(currentStyle),
@@ -450,6 +451,7 @@ export default function NewsMap({
         maxZoom: 18,
         attributionControl: false,
         trackResize: false,
+        zoomLevelsToOverscale: undefined,
         transformRequest: (url, resourceType) => {
           if (resourceType === 'Glyphs' && (url.includes('basemaps-assets/fonts/') || url.includes('tiles.openstreetmap.us/fonts/'))) {
             const match = url.match(/\/fonts\/([^/]+)\/([^/]+)$/);
@@ -479,6 +481,10 @@ export default function NewsMap({
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
+      if (err instanceof maplibregl.GPUInitializationError) {
+        setTimeout(() => setMapError("The map requires WebGL2. Enable hardware acceleration or try a browser or device with WebGL2 support. You can still browse stories in the sidebar."), 0);
+        return;
+      }
       setTimeout(() => scheduleMapRecovery("initialization failure"), 0);
       return;
     }

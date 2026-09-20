@@ -14,15 +14,7 @@ import { createBrowserClient } from '@supabase/ssr';
 export function createClient() {
     return createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        // Current Supabase clients coordinate refreshes without navigator.locks.
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            auth: {
-                // Custom no-op lock to completely bypass navigator.locks deadlocks
-                // in multi-tab and Fast Refresh environments.
-                lock: async <T>(_name: string, _acquireTimeout: number, fn: () => Promise<T>): Promise<T> => {
-                    return await fn();
-                },
-            },
-        }
     );
 }

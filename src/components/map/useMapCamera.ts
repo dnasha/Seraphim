@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useCallback, useRef } from "react";
-import maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { NewsItem } from "@/lib/core/types";
 import { matchesNewsId } from "@/lib/utils/ranking";
 import { CLUSTER_MAX_ZOOM } from "./utils";

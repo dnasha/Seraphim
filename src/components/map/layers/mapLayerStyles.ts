@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 type CirclePaint = Extract<maplibregl.LayerSpecification, { type: "circle" }>["paint"];
 type SymbolLayout = Extract<maplibregl.LayerSpecification, { type: "symbol" }>["layout"];

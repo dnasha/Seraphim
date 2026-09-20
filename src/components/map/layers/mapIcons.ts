@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { generateCategoryIcon } from "../MapConstants";
 import { CATEGORIES } from "../utils";
 
