@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuArrowLeft, LuTriangleAlert, LuCopy, LuCheck } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowUpRight, LuChevronDown, LuCreditCard, LuMail, LuShieldCheck, LuTriangleAlert, LuCopy, LuCheck, LuUserRound } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import TierBadge from '@/components/ui/TierBadge';
+import AuthModal from '@/components/auth/AuthModal';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import styles from './AccountPage.module.css';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
@@ -47,7 +48,7 @@ const ProviderIcon = ({ provider }: { provider: string }) => {
 
 export default function AccountPage() {
   useEffect(() => { void trackOptionalMetric('account_view'); }, []);
-  const { user, isLoading, supabase, signOut } = useAuth();
+  const { user, isLoading, supabase, signOut, setShowAuthModal } = useAuth();
   const router = useRouter();
 
   const [emailMsg, setEmailMsg] = useState<{ type: 'error' | 'success', text: string } | null>(null);
@@ -58,7 +59,7 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState('');
-  
+
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -66,32 +67,47 @@ export default function AccountPage() {
   const [requiresDeletionReauth, setRequiresDeletionReauth] = useState(false);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const deletionRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (user && new URLSearchParams(window.location.search).get('reauth') === 'delete') {
+      deletionRef.current?.setAttribute('open', '');
+    }
+  }, [user]);
 
   const handleCopyUserId = async () => {
     if (!user?.id) return;
+    setCopyError(false);
     try {
       await navigator.clipboard.writeText(user.id);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy user ID:', err);
+    } catch {
+      setCopyError(true);
     }
   };
 
-  const { tier: userTier, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd, angelStatus } = useUserTier();
+  const { tier: userTier, isLoading: tierLoading, subscriptionStatus, billingInterval, currentPeriodEnd, trialEndsAt, cancelAtPeriodEnd, angelStatus } = useUserTier();
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/');
-    }
-  }, [user, isLoading, router]);
+  if (isLoading) {
+    return <AccountShell><div className={styles.loading} role="status"><span className={styles.spinner} /> Loading your account…</div></AccountShell>;
+  }
 
-  if (isLoading || !user) {
+  if (!user) {
     return (
-      <div className={styles.container}>
-        <div style={{ margin: 'auto' }}><span className={styles.spinner} style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent', width: '32px', height: '32px' }} /></div>
-      </div>
+      <AccountShell>
+        <section className={`${styles.section} ${styles.guestSection}`}>
+          <div className={styles.guestIcon}><LuUserRound size={28} aria-hidden="true" /></div>
+          <TierBadge tier="guest" size="md" />
+          <h2>Make yourself at home</h2>
+          <p className={styles.helperText}>You’re exploring as a guest. Sign in or create a free account to manage your profile and plan.</p>
+          <button className={styles.button} onClick={() => setShowAuthModal(true)}>Sign in or create an account <LuArrowUpRight aria-hidden="true" /></button>
+          <Link href="/" className={styles.link}>Continue exploring the map</Link>
+        </section>
+        <AuthModal />
+      </AccountShell>
     );
   }
 
@@ -194,360 +210,219 @@ export default function AccountPage() {
     }
   };
 
+
+  const handleManageBilling = async () => {
+    setIsManagingBilling(true);
+    setBillingError(null);
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error || 'Unable to open billing. Please try again.');
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      setBillingError(err instanceof Error ? err.message : 'Unable to open billing. Please try again.');
+    } finally {
+      setIsManagingBilling(false);
+    }
+  };
+
   const avatarUrl = user.user_metadata?.avatar_url;
   const displayName = user.user_metadata?.full_name || user.user_metadata?.name;
   const provider = user.app_metadata?.provider || 'email';
+  const providerName = ({ email: 'Email and password', google: 'Google', github: 'GitHub', discord: 'Discord' } as Record<string, string>)[provider] || provider;
   const subscriptionStatusLabel = getSubscriptionStatusLabel(userTier, subscriptionStatus);
+  const isLifetime = userTier === 'angel';
+  const passwordMismatch = !!confirmPassword && newPassword !== confirmPassword;
 
   return (
-    <div className={styles.container}>
-      <div className={styles.content}>
-        
-        <header className={styles.header}>
-          <div className={styles.headerLeft}>
-            <button onClick={() => router.back()} className={styles.backBtn} aria-label="Go back" title="Return to the previous page">
-              <LuArrowLeft size={24} />
-            </button>
+    <AccountShell>
+      <section className={`${styles.section} ${styles.profileSection}`} aria-label="Your profile">
+        <div className={styles.profileRow}>
+          <div className={styles.avatar}>
+            {avatarUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={avatarUrl} alt="" referrerPolicy="no-referrer" />
+            ) : <LuUserRound size={26} aria-hidden="true" />}
           </div>
-
-          <div className={styles.headerCenter}>
-            <svg
-              className={styles.logoImg}
-              width="200"
-              height="200"
-              viewBox="0 0 200 200"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ height: "2.5rem", width: "auto" }}
-            >
-              <path
-                className={styles.logoFill}
-                d="M100 110.528L125 83.5281H75L100 110.528Z"
-              />
-              <path
-                className={styles.logoStroke}
-                d="M99.2662 19.3206C99.662 18.8931 100.338 18.8931 100.734 19.3206L149.734 72.2406C149.905 72.4254 150 72.6681 150 72.92V126.136C150 126.388 149.905 126.631 149.734 126.816L100.734 179.736C100.338 180.163 99.662 180.163 99.2662 179.736L50.2662 126.816C50.0951 126.631 50 126.388 50 126.136V72.92C50 72.6681 50.0951 72.4254 50.2662 72.2406L99.2662 19.3206Z"
-                strokeWidth="12"
-              />
-              <path
-                className={styles.logoStroke}
-                d="M100 110.528L125 83.5281H75L100 110.528Z"
-                strokeWidth="12"
-              />
-            </svg>
-            <h1 className={styles.logoTitle}>Seraphim - Account</h1>
+          <div className={styles.profileInfo}>
+            <h2 className={styles.profileName}>{displayName || user.email}</h2>
+            {displayName && <p className={styles.profileEmail}>{user.email}</p>}
+            <span className={styles.profileProvider}><ProviderIcon provider={provider} /> {providerName}</span>
           </div>
+        </div>
+        {!tierLoading && <TierBadge tier={userTier} size="md" />}
+      </section>
 
-          <div className={styles.headerRight}>
-            <ThemeToggle />
+      <div className={styles.accountGrid}>
+        <section className={`${styles.section} ${styles.planSection}`} aria-labelledby="plan-title">
+          <div className={styles.sectionHeading}>
+            <LuCreditCard size={19} aria-hidden="true" />
+            <h2 id="plan-title" className={styles.sectionTitle}>Your plan</h2>
           </div>
-        </header>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Profile Information</h2>
-          <div className={styles.profileRow}>
-            <div className={styles.avatar}>
-              {avatarUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={avatarUrl} alt="Avatar" referrerPolicy="no-referrer" />
-              ) : (
-                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                </svg>
-              )}
-            </div>
-            <div className={styles.profileInfo}>
-              <span className={styles.profileEmail}>{displayName || user.email}</span>
-              <div className={styles.profileProvider}>
-                <ProviderIcon provider={provider} />
-                <span>Signed in via {provider}</span>
+          {tierLoading ? <p className={styles.helperText} role="status">Loading your plan…</p> : (
+            <>
+              <div>
+                <div className={styles.planTitleRow}>
+                  <h3 className={styles.planName} data-tier={userTier}>{userTier === 'angel' ? 'Angel' : userTier === 'analyst' ? 'Analyst' : userTier === 'pro' ? 'Pro' : 'Free'}</h3>
+                  {subscriptionStatusLabel && <span className={styles.statusBadge}>{subscriptionStatusLabel}</span>}
+                </div>
+                <p className={styles.helperText}>
+                  {userTier === 'angel' ? 'Thank you for being a founding supporter.' : userTier === 'free' ? 'Your everyday view of the global signal.' : 'More tools to follow the stories that matter.'}
+                </p>
               </div>
-              <div className={styles.userIdRow}>
-                <span className={styles.userIdText}>User ID: {user.id}</span>
-                <button
-                  onClick={handleCopyUserId}
-                  className={styles.copyBtn}
-                  title="Copy User ID"
-                  aria-label="Copy User ID"
-                >
-                  {copied ? (
-                    <span className={styles.copiedState}>
-                      <LuCheck size={12} className={styles.copiedIcon} />
-                      <span className={styles.copiedTooltip}>Copied!</span>
-                    </span>
-                  ) : (
-                    <LuCopy size={12} />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Subscription</h2>
-          <div className={styles.profileRow}>
-            <div className={styles.profileInfo} style={{ gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <TierBadge tier={userTier} size="md" />
-                {subscriptionStatusLabel && (
-                  <span className={styles.label} style={{ textTransform: 'capitalize', fontSize: '0.8125rem' }}>
-                    {subscriptionStatusLabel}
-                  </span>
+              <dl className={styles.planFacts}>
+                <div><dt>Access</dt><dd>{isLifetime ? 'Lifetime access' : userTier === 'free' ? 'Free account' : 'Subscription'}</dd></div>
+                <div><dt>Billing</dt><dd>{isLifetime ? 'One-time payment · no renewals' : userTier === 'free' ? 'No subscription' : billingInterval === 'year' ? 'Yearly' : billingInterval === 'month' ? 'Monthly' : 'See billing portal'}</dd></div>
+                {!isLifetime && trialEndsAt && subscriptionStatus === 'trialing' && <div><dt>Trial ends</dt><dd>{new Date(trialEndsAt).toLocaleDateString()}</dd></div>}
+                {!isLifetime && currentPeriodEnd && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') && (
+                  <div><dt>{cancelAtPeriodEnd ? 'Access ends' : 'Next renewal'}</dt><dd>{new Date(currentPeriodEnd).toLocaleDateString()}</dd></div>
+                )}
+              </dl>
+              {angelStatus === 'dispute_pending' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access is suspended while the payment is under review. <a href="mailto:support@seraphi.me">Contact support</a> for help.</p>}
+              {angelStatus === 'revoked' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access ended after a refund or payment dispute. <a href="mailto:support@seraphi.me">Contact support</a> with questions.</p>}
+              <div className={styles.buttonGroup}>
+                {userTier === 'free' ? (
+                  <Link className={styles.button} href="/pricing?returnTo=%2Faccount">Explore plans <LuArrowUpRight aria-hidden="true" /></Link>
+                ) : (
+                  <>
+                    <button className={`${styles.button} ${styles.buttonSecondary}`} disabled={isManagingBilling} onClick={handleManageBilling}>
+                      {isManagingBilling && <span className={styles.spinner} aria-hidden="true" />}
+                      {isManagingBilling ? 'Opening billing…' : isLifetime ? 'View billing history' : 'Manage billing'}
+                      {!isManagingBilling && <LuArrowUpRight aria-hidden="true" />}
+                    </button>
+                    {!isLifetime && <Link className={styles.link} href="/pricing?returnTo=%2Faccount">Compare plans</Link>}
+                  </>
                 )}
               </div>
-              {billingInterval && billingInterval !== 'month' && billingInterval !== 'lifetime' && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Billed {billingInterval}ly
-                </span>
-              )}
-              {billingInterval === 'lifetime' && (
-                <span style={{ fontSize: '0.75rem', color: '#10b981' }}>
-                  Lifetime Access
-                </span>
-              )}
+              {billingError && <p className={`${styles.message} ${styles.error}`} role="alert">{billingError}</p>}
               {userTier === 'angel' && (
-                <p className={styles.helperText} style={{ margin: 0 }}>
-                  Angel Founder Discord role: join the community, then email support@seraphi.me from this account email for manual role fulfillment.
-                </p>
+                <div className={styles.founderNote}>
+                  <h3>Claim your Founder role</h3>
+                  <p className={styles.helperText}>Join our Discord, then email support from your account address to get your Angel Founder role.</p>
+                  <div className={styles.buttonGroup}>
+                    <a className={styles.link} href="https://discord.gg/rqaBsXkFmY" target="_blank" rel="noopener noreferrer">Join Discord <LuArrowUpRight aria-hidden="true" /></a>
+                    <a className={styles.link} href="mailto:support@seraphi.me">Email support <LuArrowUpRight aria-hidden="true" /></a>
+                  </div>
+                </div>
               )}
-              {angelStatus === 'dispute_pending' && (
-                <p className={styles.helperText} style={{ margin: 0, color: '#f59e0b' }}>
-                  Angel access is suspended while the payment is under review. Contact <a href="mailto:support@seraphi.me" title="Email Seraphim support">support@seraphi.me</a> for help.
-                </p>
-              )}
-              {angelStatus === 'revoked' && (
-                <p className={styles.helperText} style={{ margin: 0, color: '#ef4444' }}>
-                  Angel access ended after a refund or payment dispute. Contact <a href="mailto:support@seraphi.me" title="Email Seraphim support">support@seraphi.me</a> with questions.
-                </p>
-              )}
-              {trialEndsAt && subscriptionStatus === 'trialing' && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Trial ends {new Date(trialEndsAt).toLocaleDateString()}
-                </span>
-              )}
-              {currentPeriodEnd && subscriptionStatus === 'active' && billingInterval !== 'lifetime' && (
-                <span style={{ fontSize: '0.75rem', color: cancelAtPeriodEnd ? '#ef4444' : 'var(--text-muted)' }}>
-                  {cancelAtPeriodEnd ? 'Ends' : 'Renews'} {new Date(currentPeriodEnd).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className={styles.buttonGroup}>
-            {userTier === 'free' ? (
-              <button
-                className={styles.button}
-                onClick={() => router.push('/pricing?returnTo=%2Faccount')}
-                style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}
-                title="View paid plans and upgrade your account"
-              >
-                Upgrade Plan
-              </button>
-            ) : userTier !== 'angel' ? (
-              <>
-                <button
-                  className={styles.button}
-                  disabled={isManagingBilling}
-                  title={isManagingBilling ? 'Opening the billing portal' : 'Manage payment methods, invoices, and subscription billing'}
-                  onClick={async () => {
-                    setIsManagingBilling(true);
-                    try {
-                      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-                      const data = await res.json() as { url?: string; error?: string };
-                      if (data.url) {
-                        window.location.href = data.url;
-                      } else {
-                        alert(data.error || 'Failed to open billing portal');
-                      }
-                    } catch {
-                      alert('Network error');
-                    } finally {
-                      setIsManagingBilling(false);
-                    }
-                  }}
-                >
-                  {isManagingBilling ? <span className={styles.spinner} /> : 'Manage Billing'}
-                </button>
-                <button
-                  className={`${styles.button} ${styles.buttonSecondary}`}
-                  onClick={() => router.push('/pricing?returnTo=%2Faccount')}
-                  title="Compare plans and upgrade your subscription"
-                >
-                  Upgrade Plan
-                </button>
-              </>
-            ) : (
-              <button
-                className={styles.button}
-                disabled={isManagingBilling}
-                title={isManagingBilling ? 'Opening the billing portal' : 'Manage payment methods and billing history'}
-                onClick={async () => {
-                  setIsManagingBilling(true);
-                  try {
-                    const res = await fetch('/api/stripe/portal', { method: 'POST' });
-                    const data = await res.json() as { url?: string; error?: string };
-                    if (data.url) {
-                      window.location.href = data.url;
-                    } else {
-                      alert(data.error || 'Failed to open billing portal');
-                    }
-                  } catch {
-                    alert('Network error');
-                  } finally {
-                    setIsManagingBilling(false);
-                  }
-                }}
-              >
-                {isManagingBilling ? <span className={styles.spinner} /> : 'Manage Billing'}
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Update Email</h2>
-            {provider !== 'email' && (
-              <p className={styles.helperText}>
-                Your email address is managed by your sign-in provider ({provider}) and cannot be changed here.
-              </p>
-            )}
-          </div>
-          {provider === 'email' && (
-            <form onSubmit={handleUpdateEmail} className={styles.formGroup}>
-              <div className={styles.field}>
-                <label className={styles.label}>New Email Address</label>
-                <input 
-                  type="email" 
-                  className={styles.input} 
-                  value={newEmail} 
-                  onChange={(e) => setNewEmail(e.target.value)} 
-                  required 
-                  placeholder="Enter new email"
-                  disabled={isUpdatingEmail}
-                  title="Enter the new email address for this account"
-                />
-              </div>
-              {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`}>{emailMsg.text}</div>}
-              <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail} title={isUpdatingEmail ? 'Updating your email address' : !newEmail ? 'Enter a new email address first' : 'Send confirmation links to update your email'}>
-                {isUpdatingEmail ? <span className={styles.spinner} /> : 'Update Email'}
-              </button>
-            </form>
+            </>
           )}
         </section>
 
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Update Password</h2>
-            {provider !== 'email' && (
-              <p className={styles.helperText}>
-                Note: Since you signed in via {provider}, setting a password will allow you to log in with your email and password in addition to your social account.
-              </p>
-            )}
+        <section className={`${styles.section} ${styles.securitySection}`} aria-labelledby="security-title">
+          <div className={styles.sectionHeading}>
+            <LuShieldCheck size={19} aria-hidden="true" />
+            <h2 id="security-title" className={styles.sectionTitle}>Sign-in & security</h2>
           </div>
-          <form onSubmit={handleUpdatePassword} className={styles.formGroup}>
-            <div className={styles.field}>
-              <label className={styles.label}>New Password</label>
-              <input 
-                type="password" 
-                className={styles.input} 
-                value={newPassword} 
-                onChange={(e) => setNewPassword(e.target.value)} 
-                required 
-                minLength={6}
-                placeholder="Enter new password"
-                disabled={isUpdatingPass}
-                title="Enter a new password with at least 6 characters"
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Confirm New Password</label>
-              <input 
-                type="password" 
-                className={styles.input} 
-                value={confirmPassword} 
-                onChange={(e) => setConfirmPassword(e.target.value)} 
-                required 
-                minLength={6}
-                placeholder="Confirm new password"
-                disabled={isUpdatingPass}
-                title="Enter the same new password again"
-              />
-            </div>
-            {passMsg && <div className={`${styles.message} ${styles[passMsg.type]}`}>{passMsg.text}</div>}
-            <button 
-              type="submit" 
-              className={styles.button} 
-              disabled={isUpdatingPass || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-              title={isUpdatingPass
-                ? 'Updating your password'
-                : !newPassword || !confirmPassword
-                  ? 'Complete both password fields first'
-                  : newPassword !== confirmPassword
-                    ? 'The passwords must match'
-                    : 'Save the new account password'}
-            >
-              {isUpdatingPass ? <span className={styles.spinner} /> : 'Update Password'}
-            </button>
-          </form>
-        </section>
-
-        <section className={`${styles.section} ${styles.dangerSection}`}>
-          <div className={styles.sectionHeader}>
-            <h2 className={`${styles.sectionTitle} ${styles.dangerTitle}`}>
-              <LuTriangleAlert size={18} />
-              Danger Zone
-            </h2>
-            <p className={styles.dangerText}>
-              Permanently delete your account and application data. Active billing is canceled immediately without an automatic refund; legally required financial records remain with Stripe.
-            </p>
-          </div>
-          <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
-            {requiresDeletionReauth && (
-              <div>
-                <p className={styles.dangerText}>
-                  For your security, confirm that you still control this account before deleting it. We will email you a one-time sign-in link.
-                </p>
-                <button
-                  type="button"
-                  className={styles.button}
-                  onClick={sendDeletionVerification}
-                  disabled={isVerifyingDeletion || isDeleting}
-                  title={isVerifyingDeletion ? 'Sending a reauthentication email' : 'Email me a one-time link to authorize account deletion'}
-                >
-                  {isVerifyingDeletion ? <span className={styles.spinner} /> : 'Re-authenticate by Email'}
+          <p className={styles.helperText}>Manage how you access your account.</p>
+          {provider === 'email' ? (
+            <details className={styles.setting}>
+              <summary className={styles.settingSummary}>
+                <span><span className={styles.settingTitle}>Email address</span><span className={styles.settingDescription}>{user.email}</span></span>
+                <LuChevronDown className={styles.chevron} aria-hidden="true" />
+              </summary>
+              <form onSubmit={handleUpdateEmail} className={styles.formGroup}>
+                <p id="email-help" className={styles.helperText}>We’ll send confirmation links to your current and new email addresses.</p>
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="account-email">New email address</label>
+                  <input id="account-email" type="email" autoComplete="email" aria-describedby="email-help" className={styles.input} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required placeholder="you@example.com" disabled={isUpdatingEmail} />
+                </div>
+                {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`} role={emailMsg.type === 'error' ? 'alert' : 'status'}>{emailMsg.text}</div>}
+                <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail.trim() || newEmail.trim() === user.email}>
+                  {isUpdatingEmail ? 'Sending confirmation…' : 'Update email'}
                 </button>
-              </div>
-            )}
-            <div className={styles.field}>
-              <label className={styles.label}>Type &quot;FAREWELL&quot; to confirm</label>
-              <input 
-                type="text" 
-                className={styles.input} 
-                value={deleteConfirm} 
-                onChange={(e) => setDeleteConfirm(e.target.value)} 
-                required 
-                placeholder="FAREWELL"
-                pattern="FAREWELL"
-                disabled={isDeleting}
-                title="Type FAREWELL exactly to confirm permanent account deletion"
-              />
+              </form>
+            </details>
+          ) : (
+            <div className={styles.setting}>
+              <div className={styles.providerSetting}><span className={styles.settingTitle}>Email address</span><span className={styles.settingDescription}>{user.email}</span></div>
+              <p className={styles.helperText}>Managed by {providerName}. Change your email in your provider’s settings.</p>
             </div>
-            {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`}>{deleteMsg.text}</div>}
-            <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'} title={isDeleting ? 'Deleting your account' : deleteConfirm !== 'FAREWELL' ? 'Type FAREWELL exactly to enable account deletion' : 'Permanently delete your account and application data'}>
-              {isDeleting ? <span className={styles.spinner} /> : 'Delete Account'}
-            </button>
-          </form>
+          )}
+          <details className={styles.setting}>
+            <summary className={styles.settingSummary}>
+              <span><span className={styles.settingTitle}>{provider === 'email' ? 'Password' : 'Add a password'}</span><span className={styles.settingDescription}>{provider === 'email' ? 'Change your account password' : 'Enable email and password sign-in'}</span></span>
+              <LuChevronDown className={styles.chevron} aria-hidden="true" />
+            </summary>
+            <form onSubmit={handleUpdatePassword} className={styles.formGroup}>
+              <p id="password-help" className={styles.helperText}>{provider === 'email' ? 'Use at least 6 characters.' : `Set a password to sign in with your email as well as ${providerName}. Use at least 6 characters.`}</p>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="account-password">New password</label>
+                <input id="account-password" type="password" autoComplete="new-password" aria-describedby="password-help" className={styles.input} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="account-password-confirm">Confirm new password</label>
+                <input id="account-password-confirm" type="password" autoComplete="new-password" aria-invalid={passwordMismatch} aria-describedby={passwordMismatch ? 'password-mismatch' : undefined} className={styles.input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
+                {passwordMismatch && <p id="password-mismatch" className={styles.validationText} role="status">Passwords don’t match yet.</p>}
+              </div>
+              {passMsg && <div className={`${styles.message} ${styles[passMsg.type]}`} role={passMsg.type === 'error' ? 'alert' : 'status'}>{passMsg.text}</div>}
+              <button type="submit" className={styles.button} disabled={isUpdatingPass || newPassword.length < 6 || !confirmPassword || passwordMismatch}>{isUpdatingPass ? 'Saving password…' : 'Save password'}</button>
+            </form>
+          </details>
+          <details className={styles.setting}>
+            <summary className={styles.settingSummary}>
+              <span><span className={styles.settingTitle}>Account ID</span><span className={styles.settingDescription}>For help from our support team</span></span>
+              <LuChevronDown className={styles.chevron} aria-hidden="true" />
+            </summary>
+            <div className={styles.userIdRow}>
+              <code>{user.id}</code>
+              <button onClick={handleCopyUserId} className={styles.copyBtn} aria-label="Copy account ID">{copied ? <LuCheck aria-hidden="true" /> : <LuCopy aria-hidden="true" />}{copied ? 'Copied' : 'Copy'}</button>
+            </div>
+            {copyError && <p className={styles.helperText} role="alert">Couldn’t copy. Select the account ID above to copy it manually.</p>}
+            <span className={styles.srOnly} role="status">{copied ? 'Account ID copied' : ''}</span>
+          </details>
         </section>
+      </div>
 
-        <footer className={styles.footer}>
-          <div className={styles.footerLinks}>
-            <Link href="/terms?from=account" className={styles.link} title="Read the Terms of Service">Terms of Service</Link>
-            <Link href="/privacy?from=account" className={styles.link} title="Read the Privacy Policy">Privacy Policy</Link>
+      <details className={`${styles.section} ${styles.dangerSection}`} ref={deletionRef}>
+        <summary className={styles.settingSummary}>
+          <span><span className={styles.settingTitle}>Delete account</span><span className={styles.settingDescription}>Permanently remove your account and application data.</span></span>
+          <LuChevronDown className={styles.chevron} aria-hidden="true" />
+        </summary>
+        <form onSubmit={handleDeleteAccount} className={styles.formGroup}>
+          <p id="delete-help" className={styles.helperText}><LuTriangleAlert className={styles.warningIcon} aria-hidden="true" /> This cannot be undone. Active billing is canceled immediately without an automatic refund; legally required financial records remain with Stripe.</p>
+          {requiresDeletionReauth && (
+            <div className={styles.formGroup}>
+              <p className={styles.helperText}>Confirm you still control this account. We’ll email you a one-time sign-in link.</p>
+              <button type="button" className={`${styles.button} ${styles.buttonSecondary}`} onClick={sendDeletionVerification} disabled={isVerifyingDeletion || isDeleting}>{isVerifyingDeletion ? 'Sending verification…' : 'Verify by email'}</button>
+            </div>
+          )}
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="account-delete">Type FAREWELL to confirm</label>
+            <input id="account-delete" type="text" autoComplete="off" aria-describedby="delete-help" className={styles.input} value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} required pattern="FAREWELL" disabled={isDeleting} />
           </div>
-          <p>&copy; {new Date().getFullYear()} Seraphim. All rights reserved.</p>
-        </footer>
+          {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`} role={deleteMsg.type === 'error' ? 'alert' : 'status'}>{deleteMsg.text}</div>}
+          <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>{isDeleting ? 'Deleting account…' : 'Permanently delete account'}</button>
+        </form>
+      </details>
+      <p className={styles.supportNote}><LuMail aria-hidden="true" /> Need a hand? <a className={styles.link} href="mailto:support@seraphi.me">Contact support</a></p>
+    </AccountShell>
+  );
+}
 
+function AccountShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className={styles.container}>
+      <div className={styles.content}>
+        <header className={styles.header}>
+          <Link href="/" className={styles.backLink}><LuArrowLeft size={16} aria-hidden="true" /> Back to map</Link>
+          <Link href="/" className={styles.brand} aria-label="Seraphim home">
+            <svg width="40" height="40" viewBox="35 5 130 190" fill="none" aria-hidden="true">
+              <path d="M100 20L150 73V127L100 180L50 127V73L100 20Z" stroke="currentColor" strokeWidth="12" />
+              <path d="M100 111L125 84H75L100 111Z" fill="currentColor" stroke="currentColor" strokeWidth="12" />
+            </svg>
+            <span>Seraphim</span>
+          </Link>
+          <div className={styles.themeControl}><ThemeToggle /></div>
+        </header>
+        <main className={styles.main}>
+          <div className={styles.pageHeading}><h1>Your account</h1><p>Profile, plan, and sign-in settings. All in one place.</p></div>
+          {children}
+        </main>
+        <footer className={styles.footer}>
+          <span>© {new Date().getFullYear()} Seraphim</span>
+          <div className={styles.footerLinks}><Link href="/terms?from=account">Terms of Service</Link><Link href="/privacy?from=account">Privacy Policy</Link></div>
+        </footer>
       </div>
     </div>
   );
