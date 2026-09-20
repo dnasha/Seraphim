@@ -103,8 +103,8 @@ export default function AccountPage() {
           <TierBadge tier="guest" size="md" />
           <h2>Make yourself at home</h2>
           <p className={styles.helperText}>You’re exploring as a guest. Sign in or create a free account to manage your profile and plan.</p>
-          <button className={styles.button} onClick={() => setShowAuthModal(true)}>Sign in or create an account <LuArrowUpRight aria-hidden="true" /></button>
-          <Link href="/" className={styles.link}>Continue exploring the map</Link>
+          <button title="Sign in or create a free account" className={styles.button} onClick={() => setShowAuthModal(true)}>Sign in or create an account <LuArrowUpRight aria-hidden="true" /></button>
+          <Link title="Return to the map" href="/" className={styles.link}>Continue exploring the map</Link>
         </section>
         <AuthModal />
       </AccountShell>
@@ -278,19 +278,19 @@ export default function AccountPage() {
                   <div><dt>{cancelAtPeriodEnd ? 'Access ends' : 'Next renewal'}</dt><dd>{new Date(currentPeriodEnd).toLocaleDateString()}</dd></div>
                 )}
               </dl>
-              {angelStatus === 'dispute_pending' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access is suspended while the payment is under review. <a href="mailto:support@seraphi.me">Contact support</a> for help.</p>}
-              {angelStatus === 'revoked' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access ended after a refund or payment dispute. <a href="mailto:support@seraphi.me">Contact support</a> with questions.</p>}
+              {angelStatus === 'dispute_pending' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access is suspended while the payment is under review. <a title="Email Seraphim support" href="mailto:support@seraphi.me">Contact support</a> for help.</p>}
+              {angelStatus === 'revoked' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access ended after a refund or payment dispute. <a title="Email Seraphim support" href="mailto:support@seraphi.me">Contact support</a> with questions.</p>}
               <div className={styles.buttonGroup}>
                 {userTier === 'free' ? (
-                  <Link className={styles.button} href="/pricing?returnTo=%2Faccount">Explore plans <LuArrowUpRight aria-hidden="true" /></Link>
+                  <Link className={styles.button} title="Compare Seraphim plans" href="/pricing?returnTo=%2Faccount">Explore plans <LuArrowUpRight aria-hidden="true" /></Link>
                 ) : (
                   <>
-                    <button className={`${styles.button} ${styles.buttonSecondary}`} disabled={isManagingBilling} onClick={handleManageBilling}>
+                    <button className={`${styles.button} ${styles.buttonSecondary}`} title="Open the billing portal" disabled={isManagingBilling} onClick={handleManageBilling}>
                       {isManagingBilling && <span className={styles.spinner} aria-hidden="true" />}
                       {isManagingBilling ? 'Opening billing…' : isLifetime ? 'View billing history' : 'Manage billing'}
                       {!isManagingBilling && <LuArrowUpRight aria-hidden="true" />}
                     </button>
-                    {!isLifetime && <Link className={styles.link} href="/pricing?returnTo=%2Faccount">Compare plans</Link>}
+                    {!isLifetime && <Link className={styles.link} title="Compare Seraphim plans" href="/pricing?returnTo=%2Faccount">Compare plans</Link>}
                   </>
                 )}
               </div>
@@ -300,8 +300,8 @@ export default function AccountPage() {
                   <h3>Claim your Founder role</h3>
                   <p className={styles.helperText}>Join our Discord, then email support from your account address to get your Angel Founder role.</p>
                   <div className={styles.buttonGroup}>
-                    <a className={styles.link} href="https://discord.gg/rqaBsXkFmY" target="_blank" rel="noopener noreferrer">Join Discord <LuArrowUpRight aria-hidden="true" /></a>
-                    <a className={styles.link} href="mailto:support@seraphi.me">Email support <LuArrowUpRight aria-hidden="true" /></a>
+                    <a className={styles.link} title="Join the Seraphim Discord community" href="https://discord.gg/rqaBsXkFmY" target="_blank" rel="noopener noreferrer">Join Discord <LuArrowUpRight aria-hidden="true" /></a>
+                    <a className={styles.link} title="Email Seraphim support" href="mailto:support@seraphi.me">Email support <LuArrowUpRight aria-hidden="true" /></a>
                   </div>
                 </div>
               )}
@@ -325,10 +325,10 @@ export default function AccountPage() {
                 <p id="email-help" className={styles.helperText}>We’ll send confirmation links to your current and new email addresses.</p>
                 <div className={styles.field}>
                   <label className={styles.label} htmlFor="account-email">New email address</label>
-                  <input id="account-email" type="email" autoComplete="email" aria-describedby="email-help" className={styles.input} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required placeholder="you@example.com" disabled={isUpdatingEmail} />
+                  <input title="Enter your new email address" id="account-email" type="email" autoComplete="email" aria-describedby="email-help" className={styles.input} value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required placeholder="you@example.com" disabled={isUpdatingEmail} />
                 </div>
                 {emailMsg && <div className={`${styles.message} ${styles[emailMsg.type]}`} role={emailMsg.type === 'error' ? 'alert' : 'status'}>{emailMsg.text}</div>}
-                <button type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail.trim() || newEmail.trim() === user.email}>
+                <button title="Send email change confirmation" type="submit" className={styles.button} disabled={isUpdatingEmail || !newEmail.trim() || newEmail.trim() === user.email}>
                   {isUpdatingEmail ? 'Sending confirmation…' : 'Update email'}
                 </button>
               </form>
@@ -348,15 +348,15 @@ export default function AccountPage() {
               <p id="password-help" className={styles.helperText}>{provider === 'email' ? 'Use at least 6 characters.' : `Set a password to sign in with your email as well as ${providerName}. Use at least 6 characters.`}</p>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="account-password">New password</label>
-                <input id="account-password" type="password" autoComplete="new-password" aria-describedby="password-help" className={styles.input} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
+                <input title="Enter a new password with at least 6 characters" id="account-password" type="password" autoComplete="new-password" aria-describedby="password-help" className={styles.input} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
               </div>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="account-password-confirm">Confirm new password</label>
-                <input id="account-password-confirm" type="password" autoComplete="new-password" aria-invalid={passwordMismatch} aria-describedby={passwordMismatch ? 'password-mismatch' : undefined} className={styles.input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
+                <input title="Enter your new password again" id="account-password-confirm" type="password" autoComplete="new-password" aria-invalid={passwordMismatch} aria-describedby={passwordMismatch ? 'password-mismatch' : undefined} className={styles.input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} disabled={isUpdatingPass} />
                 {passwordMismatch && <p id="password-mismatch" className={styles.validationText} role="status">Passwords don’t match yet.</p>}
               </div>
               {passMsg && <div className={`${styles.message} ${styles[passMsg.type]}`} role={passMsg.type === 'error' ? 'alert' : 'status'}>{passMsg.text}</div>}
-              <button type="submit" className={styles.button} disabled={isUpdatingPass || newPassword.length < 6 || !confirmPassword || passwordMismatch}>{isUpdatingPass ? 'Saving password…' : 'Save password'}</button>
+              <button title="Save your new password" type="submit" className={styles.button} disabled={isUpdatingPass || newPassword.length < 6 || !confirmPassword || passwordMismatch}>{isUpdatingPass ? 'Saving password…' : 'Save password'}</button>
             </form>
           </details>
           <details className={styles.setting}>
@@ -366,7 +366,7 @@ export default function AccountPage() {
             </summary>
             <div className={styles.userIdRow}>
               <code>{user.id}</code>
-              <button onClick={handleCopyUserId} className={styles.copyBtn} aria-label="Copy account ID">{copied ? <LuCheck aria-hidden="true" /> : <LuCopy aria-hidden="true" />}{copied ? 'Copied' : 'Copy'}</button>
+              <button title="Copy your account ID" onClick={handleCopyUserId} className={styles.copyBtn} aria-label="Copy account ID">{copied ? <LuCheck aria-hidden="true" /> : <LuCopy aria-hidden="true" />}{copied ? 'Copied' : 'Copy'}</button>
             </div>
             {copyError && <p className={styles.helperText} role="alert">Couldn’t copy. Select the account ID above to copy it manually.</p>}
             <span className={styles.srOnly} role="status">{copied ? 'Account ID copied' : ''}</span>
@@ -384,18 +384,18 @@ export default function AccountPage() {
           {requiresDeletionReauth && (
             <div className={styles.formGroup}>
               <p className={styles.helperText}>Confirm you still control this account. We’ll email you a one-time sign-in link.</p>
-              <button type="button" className={`${styles.button} ${styles.buttonSecondary}`} onClick={sendDeletionVerification} disabled={isVerifyingDeletion || isDeleting}>{isVerifyingDeletion ? 'Sending verification…' : 'Verify by email'}</button>
+              <button type="button" className={`${styles.button} ${styles.buttonSecondary}`} title="Email a one-time link to authorize account deletion" onClick={sendDeletionVerification} disabled={isVerifyingDeletion || isDeleting}>{isVerifyingDeletion ? 'Sending verification…' : 'Verify by email'}</button>
             </div>
           )}
           <div className={styles.field}>
             <label className={styles.label} htmlFor="account-delete">Type FAREWELL to confirm</label>
-            <input id="account-delete" type="text" autoComplete="off" aria-describedby="delete-help" className={styles.input} value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} required pattern="FAREWELL" disabled={isDeleting} />
+            <input title="Type FAREWELL exactly to confirm permanent account deletion" id="account-delete" type="text" autoComplete="off" aria-describedby="delete-help" className={styles.input} value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} required pattern="FAREWELL" disabled={isDeleting} />
           </div>
           {deleteMsg && <div className={`${styles.message} ${styles[deleteMsg.type]}`} role={deleteMsg.type === 'error' ? 'alert' : 'status'}>{deleteMsg.text}</div>}
-          <button type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>{isDeleting ? 'Deleting account…' : 'Permanently delete account'}</button>
+          <button title="Permanently delete your account and application data" type="submit" className={`${styles.button} ${styles.dangerButton}`} disabled={isDeleting || deleteConfirm !== 'FAREWELL'}>{isDeleting ? 'Deleting account…' : 'Permanently delete account'}</button>
         </form>
       </details>
-      <p className={styles.supportNote}><LuMail aria-hidden="true" /> Need a hand? <a className={styles.link} href="mailto:support@seraphi.me">Contact support</a></p>
+      <p className={styles.supportNote}><LuMail aria-hidden="true" /> Need a hand? <a className={styles.link} title="Email Seraphim support" href="mailto:support@seraphi.me">Contact support</a></p>
     </AccountShell>
   );
 }
@@ -411,7 +411,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
         </main>
         <footer className={styles.footer}>
           <span>© {new Date().getFullYear()} Seraphim</span>
-          <div className={styles.footerLinks}><Link href="/terms?from=account">Terms of Service</Link><Link href="/privacy?from=account">Privacy Policy</Link></div>
+          <div className={styles.footerLinks}><Link title="Read the Terms of Service" href="/terms?from=account">Terms of Service</Link><Link title="Read the Privacy Policy" href="/privacy?from=account">Privacy Policy</Link></div>
         </footer>
       </div>
     </div>

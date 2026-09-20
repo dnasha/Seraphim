@@ -26,8 +26,8 @@ export default function LegalPageLayout({
             <p className={styles.subtitle}>Effective: {effectiveDate} · Version {policyVersion}</p>
           </div>
           <nav className={styles.documentTabs} aria-label="Legal documents">
-            <Link href="/privacy" aria-current={currentPage === 'privacy' ? 'page' : undefined}>Privacy Policy</Link>
-            <Link href="/terms" aria-current={currentPage === 'terms' ? 'page' : undefined}>Terms of Service</Link>
+            <Link title="Read the Privacy Policy" href="/privacy" aria-current={currentPage === 'privacy' ? 'page' : undefined}>Privacy Policy</Link>
+            <Link title="Read the Terms of Service" href="/terms" aria-current={currentPage === 'terms' ? 'page' : undefined}>Terms of Service</Link>
           </nav>
         </header>
         <div className={styles.readingLayout}>
@@ -37,11 +37,11 @@ export default function LegalPageLayout({
           </main>
         </div>
         <footer className={styles.footer}>
-          <Link href={currentPage === 'privacy' ? '/terms' : '/privacy'}>
+          <Link title={currentPage === 'privacy' ? 'Read the Terms of Service' : 'Read the Privacy Policy'} href={currentPage === 'privacy' ? '/terms' : '/privacy'}>
             {currentPage === 'privacy' ? 'Terms of Service' : 'Privacy Policy'}
             <span aria-hidden="true"> →</span>
           </Link>
-          <a href="#legal-top">Back to top <span aria-hidden="true">↑</span></a>
+          <a title="Return to the top of this document" href="#legal-top">Back to top <span aria-hidden="true">↑</span></a>
         </footer>
       </div>
     </div>

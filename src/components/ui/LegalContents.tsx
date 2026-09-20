@@ -77,7 +77,7 @@ export default function LegalContents({ sections }: LegalContentsProps) {
     <ol className={styles.contentsList}>
       {sections.map((section) => (
         <li key={section.id}>
-          <a href={`#${section.id}`} aria-current={activeId === section.id ? 'location' : undefined}>
+          <a title={`Jump to ${section.title}`} href={`#${section.id}`} aria-current={activeId === section.id ? 'location' : undefined}>
             {section.title}
           </a>
         </li>
@@ -90,7 +90,7 @@ export default function LegalContents({ sections }: LegalContentsProps) {
       <nav className={styles.desktopContents} aria-label="On this page" ref={desktopRef}>
         <p className={styles.contentsTitle}>On this page</p>
         {contents}
-        <a className={styles.topLink} href="#legal-top">Back to top <span aria-hidden="true">↑</span></a>
+        <a title="Return to the top of this document" className={styles.topLink} href="#legal-top">Back to top <span aria-hidden="true">↑</span></a>
       </nav>
       <details className={styles.mobileContents}>
         <summary>On this page <LuChevronDown className={styles.contentsChevron} size={16} aria-hidden="true" /></summary>
