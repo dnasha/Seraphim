@@ -46,13 +46,6 @@
   box-shadow: none;
 }
 
-.disabled {
-  opacity: 0.4;
-  pointer-events: none;
-  user-select: none;
-  filter: grayscale(1);
-}
-
 .btnBadgeDot {
   position: absolute;
   top: 3px;
@@ -93,7 +86,7 @@
 .overlayMenu {
   position: absolute;
   right: 100px; /* Width of bottom row buttons (42*2 + 8) + gap */
-  width: 275px;
+  width: 304px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -137,6 +130,7 @@
 }
 
 .toggleLeft {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -262,8 +256,11 @@
     height: 44px;
   }
   .overlayMenu {
-    right: 108px; /* (44*2 + 8) + gap */
-    width: min(240px, 75vw);
+    right: 0;
+    bottom: 54px;
+    width: min(304px, calc(100vw - 24px));
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
   }
 }
 

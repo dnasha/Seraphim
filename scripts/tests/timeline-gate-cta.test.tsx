@@ -8,8 +8,8 @@ const authMocks = vi.hoisted(() => ({
     setShowAuthModal: vi.fn(),
 }));
 
-vi.mock('@/hooks/useAuth', () => ({
-    useAuth: () => ({ setShowAuthModal: authMocks.setShowAuthModal }),
+vi.mock('@/hooks/useAuthModalState', () => ({
+    setAuthModalOpen: authMocks.setShowAuthModal,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -40,7 +40,7 @@ describe('TimelineGateCta', () => {
 
         fireEvent.click(accountCta);
         expect(authMocks.setShowAuthModal).toHaveBeenCalledOnce();
-        expect(authMocks.setShowAuthModal).toHaveBeenCalledWith(true);
+        expect(authMocks.setShowAuthModal).toHaveBeenCalledWith(true, expect.objectContaining({ initialTab: 'signup', returnTo: '/' }));
     });
 
     it('keeps the Pro upgrade action for signed-in free users', () => {

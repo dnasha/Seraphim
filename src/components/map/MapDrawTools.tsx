@@ -1269,11 +1269,11 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                     Clear
                   </button>
-                  <GatedButton className={styles.actionBtn} onClick={handleImport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON import" title="Import drawings from a GeoJSON file">
+                  <GatedButton className={styles.actionBtn} onClick={handleImport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON import" featureDescription="Bring geographic boundaries and annotations from a GeoJSON file into your map." title="Import drawings from a GeoJSON file">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     Import
                   </GatedButton>
-                  <GatedButton className={styles.actionBtn} onClick={handleExport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON export" title="Export map drawings as a GeoJSON file">
+                  <GatedButton className={styles.actionBtn} onClick={handleExport} allowed={hasFeature(userTier, 'geoJsonTransfer')} requiredTier="analyst" featureName="GeoJSON export" featureDescription="Save your map drawings as GeoJSON to share or continue your work in other mapping tools." title="Export map drawings as a GeoJSON file">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                     Export
                   </GatedButton>

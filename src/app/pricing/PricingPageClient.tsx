@@ -1,35 +1,31 @@
 /**
- * Pricing Page
- *
- * Three subscription tiers plus a separate Angel founder offer,
- * Stripe Checkout integration, feature comparison, and FAQ content.
+ * Plan selection, signup, and the handoff to hosted Stripe Checkout.
  */
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { LuArrowRight, LuCheck, LuChevronDown, LuLockKeyhole, LuX } from 'react-icons/lu';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import PublicPageHeader from '@/components/ui/PublicPageHeader';
-import StateNotice from '@/components/ui/StateNotice';
 import styles from './PricingPage.module.css';
 import { TIERS, COMPARISON_SECTIONS } from './pricingConstants';
 import { PricingCard } from './PricingCard';
 import { FaqSection } from './FaqSection';
 import { trackOptionalMetric, type OptionalMetricDimensions } from '@/lib/privacyConsent';
 
-const SUBSCRIPTION_TIERS = TIERS.filter((tier) => tier.key !== 'angel');
+const AuthModal = dynamic(() => import('@/components/auth/AuthModal'), { ssr: false });
+const SUBSCRIPTION_TIERS = TIERS.filter((tier) => !tier.isLifetime);
 const ANGEL_TIER = TIERS.find((tier) => tier.key === 'angel');
+type ComparisonTier = 'free' | 'pro' | 'analyst' | 'angel';
 
 function checkoutMetricDimensions(priceKey: string): OptionalMetricDimensions {
-    if (priceKey === 'angel') return { plan: 'angel' as const, interval: 'lifetime' as const };
+    if (priceKey === 'angel') return { plan: 'angel', interval: 'lifetime' };
     const [plan, interval] = priceKey.split('_');
     if ((plan !== 'pro' && plan !== 'analyst') || (interval !== 'monthly' && interval !== 'yearly')) return {};
-    return {
-        plan: plan as 'pro' | 'analyst',
-        interval: interval === 'monthly' ? 'month' as const : 'year' as const,
-    };
+    return { plan, interval: interval === 'monthly' ? 'month' : 'year' };
 }
 
 async function requestAngelAvailability() {
@@ -42,11 +38,18 @@ async function requestAngelAvailability() {
     }
 }
 
+function ComparisonValue({ value }: { value: string }) {
+    if (value === '✓') return <LuCheck aria-label="Included" role="img" className={styles.comparisonCheck} />;
+    if (value === '—') return <span aria-label="Not included" className={styles.comparisonDash}>—</span>;
+    return <>{value}</>;
+}
+
 export interface PricingPageClientProps {
     returnTo: string;
     requestedFeature: string | null;
     recommendedTier: 'pro' | 'analyst' | null;
     cancelledCheckoutIntent: string | null;
+    initialPriceKey?: string | null;
 }
 
 export function PricingPageClient({
@@ -54,16 +57,48 @@ export function PricingPageClient({
     requestedFeature,
     recommendedTier,
     cancelledCheckoutIntent,
+    initialPriceKey = null,
 }: PricingPageClientProps) {
-    const [isYearly, setIsYearly] = useState(true); // Default to yearly for higher LTV
+    const initialTier = TIERS.find((tier) => initialPriceKey && (
+        tier.priceKeyMonthly === initialPriceKey || tier.priceKeyYearly === initialPriceKey
+    ));
+    const [isYearly, setIsYearly] = useState(!initialPriceKey?.endsWith('_monthly'));
+    const [selectedPriceKey, setSelectedPriceKey] = useState(initialPriceKey);
+    const [mobileTier, setMobileTier] = useState(initialTier && !initialTier.isLifetime ? initialTier.key : recommendedTier ?? 'pro');
     const [loadingTier, setLoadingTier] = useState<string | null>(null);
+    const [checkoutReturnCount, setCheckoutReturnCount] = useState(0);
+    const checkoutInFlight = useRef(false);
     const [angelRemaining, setAngelRemaining] = useState<number | null>(null);
-    const [angelTotal, setAngelTotal] = useState<number>(100);
+    const [angelTotal, setAngelTotal] = useState(100);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const { user, isGuest } = useAuth();
-    const { tier: currentTier } = useUserTier();
-    const router = useRouter();
-    const [comparisonTier, setComparisonTier] = useState<'free' | 'pro' | 'analyst' | 'angel'>(recommendedTier ?? 'pro');
+    const errorRef = useRef<HTMLDivElement>(null);
+    const { user, isGuest, isLoading: authLoading, showAuthModal, setShowAuthModal } = useAuth();
+    const { tier: currentTier, isLoading: tierLoading } = useUserTier();
+    const [comparisonTier, setComparisonTier] = useState<ComparisonTier>(recommendedTier ?? 'pro');
+    const selectedTier = TIERS.find((tier) => selectedPriceKey && (
+        tier.priceKeyMonthly === selectedPriceKey || tier.priceKeyYearly === selectedPriceKey
+    ));
+    const authReturnParams = new URLSearchParams({ returnTo });
+    if (selectedPriceKey) authReturnParams.set('plan', selectedPriceKey);
+    if (requestedFeature) authReturnParams.set('feature', requestedFeature);
+    if (recommendedTier) authReturnParams.set('tier', recommendedTier);
+    const authReturnTo = `/pricing?${authReturnParams.toString()}`;
+
+    useEffect(() => {
+        if (errorMsg) errorRef.current?.focus();
+    }, [errorMsg]);
+
+    useEffect(() => {
+        const handlePageShow = (event: PageTransitionEvent) => {
+            if (!event.persisted) return;
+            // Browser Back can restore the page without mounting it again.
+            checkoutInFlight.current = false;
+            setLoadingTier(null);
+            setCheckoutReturnCount((count) => count + 1);
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
+    }, []);
 
     useEffect(() => {
         void trackOptionalMetric('pricing_view', {
@@ -73,14 +108,8 @@ export function PricingPageClient({
     }, [recommendedTier, requestedFeature]);
 
     useEffect(() => {
-        // A returning Checkout cancellation refreshes availability after the
-        // Session has been expired. Avoid racing that refresh with the normal
-        // mount request and issuing the same inventory query twice.
-        if (
-            cancelledCheckoutIntent
-            || window.sessionStorage.getItem('seraphim.activeCheckoutIntent')
-        ) return;
-
+        // Cancellation refreshes inventory after the old Session is released.
+        if (cancelledCheckoutIntent || window.sessionStorage.getItem('seraphim.activeCheckoutIntent')) return;
         let active = true;
         void requestAngelAvailability().then((data) => {
             if (active && data) {
@@ -91,8 +120,6 @@ export function PricingPageClient({
         return () => { active = false; };
     }, [cancelledCheckoutIntent]);
 
-    // Release the specific Session when Stripe's cancel link or browser Back
-    // returns the customer to pricing, then refresh the reserved Angel count.
     useEffect(() => {
         if (!user || isGuest) return;
         const storedIntent = window.sessionStorage.getItem('seraphim.activeCheckoutIntent');
@@ -108,6 +135,8 @@ export function PricingPageClient({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ intentId }),
                 });
+            } catch {
+                // The reservation also expires on the server if this request fails.
             } finally {
                 const data = await requestAngelAvailability();
                 if (active && data) {
@@ -117,209 +146,199 @@ export function PricingPageClient({
             }
         })();
         return () => { active = false; };
-    }, [cancelledCheckoutIntent, isGuest, user]);
+    }, [cancelledCheckoutIntent, checkoutReturnCount, isGuest, user]);
 
     const handleCheckout = useCallback(async (priceKey: string) => {
+        if (checkoutInFlight.current || authLoading || tierLoading) return;
         void trackOptionalMetric('checkout_click', {
             ...checkoutMetricDimensions(priceKey),
             source: requestedFeature ? 'feature_gate' : 'pricing',
         });
+        setSelectedPriceKey(priceKey || null);
+        setErrorMsg(null);
         if (!user || isGuest) {
-            // Redirect to home which will show auth modal
-            router.push('/?auth=true');
+            setShowAuthModal(true);
             return;
         }
-
         if (!priceKey) return;
 
+        checkoutInFlight.current = true;
         setLoadingTier(priceKey);
-        setErrorMsg(null);
         try {
             const res = await fetch('/api/stripe/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ priceKey, returnTo }),
             });
-
             const data = await res.json() as { url?: string; intentId?: string; error?: string };
 
-            if (data.url) {
-                if (data.intentId) {
-                    window.sessionStorage.setItem('seraphim.activeCheckoutIntent', data.intentId);
-                }
+            if (res.ok && data.url) {
+                if (data.intentId) window.sessionStorage.setItem('seraphim.activeCheckoutIntent', data.intentId);
                 window.location.href = data.url;
-            } else {
-                setErrorMsg(data.error || 'Failed to start checkout');
+                return; // Keep every checkout button disabled during navigation.
             }
+            setErrorMsg(data.error || 'We couldn’t open checkout. Please try again.');
         } catch {
-            setErrorMsg('Network error. Please try again.');
-        } finally {
-            setLoadingTier(null);
+            setErrorMsg('We couldn’t connect to checkout. Check your connection and try again.');
         }
-    }, [user, isGuest, router, returnTo, requestedFeature]);
+        checkoutInFlight.current = false;
+        setLoadingTier(null);
+    }, [user, isGuest, authLoading, tierLoading, setShowAuthModal, returnTo, requestedFeature]);
+
+    function changeBilling(yearly: boolean) {
+        setIsYearly(yearly);
+        if (selectedTier && !selectedTier.isLifetime) {
+            setSelectedPriceKey(yearly ? selectedTier.priceKeyYearly : selectedTier.priceKeyMonthly);
+        }
+    }
 
     return (
         <div className={styles.container}>
             <PublicPageHeader backHref={returnTo} backTitle="Return to the previous page" />
-            <div className={styles.content}>
-
-                {/* Hero */}
-                <section className={styles.hero}>
-                    <h2 className={styles.heroTitle}>See more of the global signal</h2>
-                    <p className={styles.heroSubtitle}>
-                        Start with a useful free command center, then unlock monitoring depth and investigation tools when the signal demands it.
-                    </p>
-                </section>
-
-                <section className={styles.guestPreview}>
-                    <span className={styles.guestPreviewEyebrow}>Try before signing up</span>
-                    <p><strong>Guest mode</strong> lets anyone explore the live map and its top 10 stories from the last 24 hours. Create a Free account for 50 stories per view, filtering, and local annotations.</p>
+            <main className={styles.content}>
+                <section className={styles.hero} aria-labelledby="pricing-title">
+                    <span className={styles.eyebrow}>Plans & pricing</span>
+                    <h1 id="pricing-title">Follow the world.<br className={styles.mobileBreak} /> See the bigger picture.</h1>
+                    <p>Start free. Go deeper with more history, richer maps, and tools built for investigation.</p>
+                    <div className={styles.trialAssurance}>
+                        <span><LuCheck aria-hidden="true" /> Pro & Analyst: 14 days free</span>
+                        <span><LuCheck aria-hidden="true" /> Cancel anytime</span>
+                    </div>
                 </section>
 
                 {requestedFeature && recommendedTier && (
-                    <section className={styles.contextualUpgrade} aria-live="polite">
-                        <span>Unlock {requestedFeature}</span>
-                        <strong>{recommendedTier === 'pro' ? 'Pro' : 'Analyst'} includes this capability and a 14-day free trial.</strong>
-                    </section>
+                    <div className={styles.contextualUpgrade}>
+                        <LuCheck aria-hidden="true" />
+                        <p><strong>{recommendedTier === 'pro' ? 'Pro' : 'Analyst'} unlocks {requestedFeature}.</strong> Try it free for 14 days.</p>
+                    </div>
                 )}
 
-                {/* Error Toast */}
-                {errorMsg && (
-                    <StateNotice
-                        placement="floating"
-                        variant="error"
-                        title="Checkout unavailable"
-                        message={errorMsg}
-                        onDismiss={() => setErrorMsg(null)}
-                        dismissLabel="Dismiss checkout error"
-                    />
+                {cancelledCheckoutIntent && !errorMsg && (
+                    <p className={styles.returnNotice} role="status">Checkout wasn’t completed. Choose a plan whenever you’re ready.</p>
                 )}
 
-                {/* Billing Toggle */}
-                <div className={styles.toggleContainer}>
-                    <span className={`${styles.toggleLabel} ${!isYearly ? styles.toggleLabelActive : ''}`}>Monthly</span>
-                    <button
-                        className={`${styles.toggleTrack} ${isYearly ? styles.toggleTrackActive : ''}`}
-                        onClick={() => setIsYearly(!isYearly)}
-                        aria-label="Toggle billing period"
-                        title={`Switch to ${isYearly ? 'monthly' : 'yearly'} billing`}
-                    >
-                        <div className={styles.toggleThumb} />
-                    </button>
-                    <span className={`${styles.toggleLabel} ${isYearly ? styles.toggleLabelActive : ''}`}>
-                        Yearly
-                        <span className={styles.saveBadge}>Save 17%</span>
-                    </span>
+                {selectedTier && user && !isGuest && !errorMsg && !loadingTier && selectedTier.key !== currentTier && (
+                    <p className={styles.returnNotice} role="status">Your {selectedTier.name} selection is saved. Review the details below, then continue.</p>
+                )}
+
+                <div className={styles.billingControls}>
+                    <div className={styles.billingToggle} role="group" aria-label="Billing period">
+                        <button type="button" aria-pressed={!isYearly} onClick={() => changeBilling(false)} disabled={loadingTier !== null}>Monthly</button>
+                        <button type="button" aria-pressed={isYearly} onClick={() => changeBilling(true)} disabled={loadingTier !== null}>Yearly <span className={styles.saveBadge}>Save 17%</span></button>
+                    </div>
+                    <p>All prices in USD. {isYearly ? 'Yearly plans are billed annually.' : 'Monthly plans are billed each month.'}</p>
                 </div>
 
-                {/* Pricing Cards */}
-                <div className={styles.cardsGrid}>
+                {errorMsg && (
+                    <div className={styles.checkoutNotice} role="alert" ref={errorRef} tabIndex={-1}>
+                        <div><strong>Checkout couldn’t be opened</strong><p>{errorMsg}</p></div>
+                        <button type="button" aria-label="Dismiss checkout error" onClick={() => setErrorMsg(null)}><LuX aria-hidden="true" /></button>
+                    </div>
+                )}
+
+                <div className={styles.mobilePlanPicker} role="group" aria-label="Choose a plan">
+                    {SUBSCRIPTION_TIERS.map((tier) => (
+                        <button key={tier.key} type="button" aria-pressed={mobileTier === tier.key} aria-controls="subscription-plans" disabled={loadingTier !== null} onClick={() => setMobileTier(tier.key)}>
+                            {tier.name}
+                        </button>
+                    ))}
+                </div>
+
+                <div id="subscription-plans" className={styles.cardsGrid}>
                     {SUBSCRIPTION_TIERS.map((tier) => (
                         <PricingCard
                             key={tier.key}
                             tier={tier}
                             isYearly={isYearly}
-                            currentTier={currentTier}
+                            currentTier={!user || isGuest ? 'guest' : currentTier}
                             loadingTier={loadingTier}
                             angelRemaining={angelRemaining}
                             angelTotal={angelTotal}
-                            isRecommended={tier.key === recommendedTier}
+                            isRecommended={tier.key === (recommendedTier ?? 'pro')}
+                            isMobileSelected={tier.key === mobileTier}
+                            isAuthLoading={authLoading || tierLoading}
                             handleCheckout={handleCheckout}
                         />
                     ))}
                 </div>
 
-                {ANGEL_TIER && (
-                    <section className={styles.angelOfferSection}>
-                        <div className={styles.angelOfferCopy}>
-                            <span className={styles.guestPreviewEyebrow}>Founder offer</span>
-                            <h2>Back Seraphim for the long term</h2>
-                            <p>
-                                One payment unlocks the complete Analyst experience for the lifetime of the service. Limited to 100 founding memberships.{' '}
-                                <a href="/terms" title="Read Angel refund and lifetime terms">Refund and lifetime terms</a> apply.
-                            </p>
-                        </div>
-                        <div className={styles.angelOfferCard}>
-                            <PricingCard
-                                tier={ANGEL_TIER}
-                                isYearly={isYearly}
-                                currentTier={currentTier}
-                                loadingTier={loadingTier}
-                                angelRemaining={angelRemaining}
-                                angelTotal={angelTotal}
-                                handleCheckout={handleCheckout}
-                            />
-                        </div>
-                    </section>
-                )}
+                <div className={styles.checkoutReassurance}>
+                    <p><LuLockKeyhole aria-hidden="true" /> Secure checkout with <strong>Stripe</strong></p>
+                    <span>Card details stay with Stripe. Applicable taxes are shown at checkout.</span>
+                </div>
 
-                {/* Feature Comparison Table */}
-                <section className={styles.comparisonSection}>
-                    <h2 className={styles.comparisonTitle}>Choose the depth you need</h2>
-                    <div className={styles.comparisonMobilePicker} role="tablist" aria-label="Compare plan features">
-                        {(['free', 'pro', 'analyst', 'angel'] as const).map((tier) => (
-                            <button
-                                key={tier}
-                                role="tab"
-                                aria-selected={comparisonTier === tier}
-                                className={comparisonTier === tier ? styles.comparisonMobilePickerActive : ''}
-                                onClick={() => setComparisonTier(tier)}
-                                title={`Compare ${tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)} plan features`}
-                            >
-                                {tier === 'free' ? 'Free' : tier[0].toUpperCase() + tier.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-                    <div className={styles.comparisonMobileCards}>
-                        {COMPARISON_SECTIONS.map((section) => (
-                            <div key={section.label} className={styles.comparisonMobileGroup}>
-                                <h3>{section.label}</h3>
-                                {section.rows.map((row) => (
-                                    <div key={row.feature} className={styles.comparisonMobileRow}>
-                                        <span>{row.feature}</span><strong>{row[comparisonTier]}</strong>
-                                    </div>
+                <details className={styles.comparisonSection}>
+                    <summary><span>Compare every feature</span><LuChevronDown aria-hidden="true" /></summary>
+                    <div className={styles.comparisonContent}>
+                        <div className={styles.comparisonMobilePicker}>
+                            <label htmlFor="comparison-plan">Show features for</label>
+                            <select id="comparison-plan" value={comparisonTier} onChange={(event) => setComparisonTier(event.target.value as ComparisonTier)}>
+                                {TIERS.map((tier) => <option key={tier.key} value={tier.key}>{tier.name}</option>)}
+                            </select>
+                        </div>
+                        <div className={styles.comparisonMobileCards}>
+                            {COMPARISON_SECTIONS.map((section) => (
+                                <div key={section.label} className={styles.comparisonMobileGroup}>
+                                    <h3>{section.label}</h3>
+                                    <dl>
+                                        {section.rows.map((row) => (
+                                            <div key={row.feature}>
+                                                <dt>{row.feature}</dt><dd><ComparisonValue value={row[comparisonTier]} /></dd>
+                                            </div>
+                                        ))}
+                                    </dl>
+                                </div>
+                            ))}
+                        </div>
+                        <div className={styles.tableWrapper}>
+                            <table className={styles.comparisonTable}>
+                                <caption className={styles.srOnly}>Features included in each Seraphim plan</caption>
+                                <thead><tr><th scope="col">Feature</th>{TIERS.map((tier) => <th key={tier.key} scope="col">{tier.name}</th>)}</tr></thead>
+                                {COMPARISON_SECTIONS.map((section) => (
+                                    <tbody key={section.label}>
+                                        <tr className={styles.tableGroupRow}><th colSpan={5} scope="rowgroup">{section.label}</th></tr>
+                                        {section.rows.map((row) => (
+                                            <tr key={row.feature}>
+                                                <th scope="row">{row.feature}</th>
+                                                {(['free', 'pro', 'analyst', 'angel'] as const).map((tier) => (
+                                                    <td key={tier}><ComparisonValue value={row[tier]} /></td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
                                 ))}
-                            </div>
-                        ))}
+                            </table>
+                        </div>
                     </div>
-                    <div className={styles.tableWrapper}>
-                        <table className={styles.comparisonTable}>
-                            <thead>
-                                <tr>
-                                    <th className={styles.thFeature}>Feature</th>
-                                    <th>Free</th>
-                                    <th className={styles.thPopular}>Pro</th>
-                                    <th>Analyst</th>
-                                    <th className={styles.thAngel}>Angel</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {COMPARISON_SECTIONS.flatMap((section) => [
-                                    <tr key={section.label} className={styles.tableGroupRow}>
-                                        <th colSpan={5}>{section.label}</th>
-                                    </tr>,
-                                    ...section.rows.map((row) => (
-                                        <tr key={row.feature}>
-                                            <td className={styles.tdFeature}>{row.feature}</td>
-                                            <td className={styles.tdValue}>{row.free}</td>
-                                            <td className={`${styles.tdValue} ${styles.tdPopular}`}>{row.pro}</td>
-                                            <td className={styles.tdValue}>{row.analyst}</td>
-                                            <td className={`${styles.tdValue} ${styles.tdAngel}`}>{row.angel}</td>
-                                        </tr>
-                                    )),
-                                ])}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+                </details>
 
-                {/* FAQ */}
+                {ANGEL_TIER && <PricingCard
+                    tier={ANGEL_TIER}
+                    isYearly={isYearly}
+                    currentTier={!user || isGuest ? 'guest' : currentTier}
+                    loadingTier={loadingTier}
+                    angelRemaining={angelRemaining}
+                    angelTotal={angelTotal}
+                    isAuthLoading={authLoading || tierLoading}
+                    handleCheckout={handleCheckout}
+                />}
+
                 <FaqSection />
 
+                <div className={styles.explorePrompt}>
+                    <p>Start with a little curiosity.</p>
+                    <Link href="/">Explore the live map <LuArrowRight aria-hidden="true" /></Link>
+                </div>
                 <footer className={styles.footer}>
-                    <p>Secure checkout powered by <strong>Stripe</strong>. Seraphim never stores your card details.</p>
+                    <span>Seraphim · A clearer view of the world.</span>
+                    <nav aria-label="Pricing page links"><Link href="/help">Help</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></nav>
                 </footer>
-            </div>
+            </main>
+            {showAuthModal && <AuthModal
+                returnTo={authReturnTo}
+                initialTab="signup"
+                subtitle={selectedTier ? `Create an account to continue with ${selectedTier.name}` : 'Create your free Seraphim account'}
+            />}
         </div>
     );
 }

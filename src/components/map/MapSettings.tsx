@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { MAP_STYLES } from './MapConstants';
 import { canUseMapStyle, hasFeature, type UserTier } from '@/lib/entitlements';
 import { GatedButton } from '@/components/ui/FeatureGate';
+import TierBadge from '@/components/ui/TierBadge';
 import styles from './MapSettings.module.css';
 
 interface MapSettingsProps {
@@ -111,25 +112,33 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                         <div className={styles.settingsStyleGrid}>
                             {Object.entries(MAP_STYLES).map(([key, style]) => {
                                 const previewImg = PREVIEW_IMAGES[key] || '/map_previews/Default.webp';
+                                const requiredTier = key === 'standard' || key === 'dark' ? 'free' : 'pro';
+                                const allowed = canUseMapStyle(userTier, key);
                                 return (
                                     <GatedButton
                                         key={key}
                                         className={`${styles.settingsStyleBtn}${mapStyle === key ? ` ${styles.settingsStyleBtnActive}` : ''}`}
                                         onClick={() => onStyleChange(key)}
                                         title={`Switch to ${style.label} style`}
-                                        allowed={canUseMapStyle(userTier, key)}
-                                        requiredTier={userTier === 'guest' ? 'free' : 'pro'}
+                                        allowed={allowed}
+                                        requiredTier={requiredTier}
                                         featureName={`${style.label} map style`}
+                                        featureDescription={key === 'satellite'
+                                            ? 'Explore satellite imagery alongside live events for a closer look at the places behind the news.'
+                                            : key === 'topographic'
+                                                ? 'Add terrain and elevation context to the places and events you are investigating.'
+                                                : `Explore the map in ${style.label.toLowerCase()} style for a view that suits your workflow.`}
+                                        indicator="none"
                                     >
                                         <div className={styles.previewImgWrapper}>
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img 
                                                 src={previewImg} 
-                                                alt={style.label} 
+                                                alt=""
                                                 className={styles.previewImg} 
                                             />
                                         </div>
-                                        <span className={styles.previewLabel}>{style.label}</span>
+                                        <span className={styles.previewLabel}>{style.label}{!allowed && <TierBadge tier={requiredTier} locked />}</span>
                                     </GatedButton>
                                 );
                             })}
@@ -145,11 +154,11 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                      */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
-                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode" title={forceIndividualPins ? 'Group nearby events into clusters' : 'Show every event as an individual pin'}>
+                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode" featureDescription="Inspect each event as its own pin, even in busy regions where nearby stories would normally be grouped." indicator="none" title={forceIndividualPins ? 'Group nearby events into clusters' : 'Show every event as an individual pin'}>
                             <span className={styles.settingsToggleLabel}>Force individual pins</span>
-                            <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
+                            {hasFeature(userTier, 'individualPins') ? <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
-                            </div>
+                            </div> : <TierBadge tier="analyst" locked />}
                         </GatedButton>
                     </div>
 

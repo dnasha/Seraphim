@@ -1,43 +1,39 @@
 import Link from 'next/link';
+import { LuPlus } from 'react-icons/lu';
 import styles from './PricingPage.module.css';
 
 export function FaqSection() {
     return (
-        <section className={styles.faqSection}>
-            <h2 className={styles.faqTitle}>Frequently Asked Questions</h2>
-            <div className={styles.faqGrid}>
-                <div className={styles.faqItem}>
-                    <h3>How does the free trial work?</h3>
-                    <p>Every Pro and Analyst subscription includes a 14-day trial on monthly or annual billing. A payment method is required, but you are charged only after the trial ends and can cancel beforehand.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>What is the core difference between Free and paid?</h3>
-                    <p>Free covers the current 24-hour signal with up to 50 stories per view. Pro and above can monitor up to 1,000 stories per view and unlock more history.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>Can I switch plans?</h3>
-                    <p>Yes. You can upgrade, downgrade, or cancel from your account settings. Stripe shows the effective date and any prorated amount before you confirm a plan change.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>What happens when I cancel?</h3>
-                    <p>You keep access until the end of your current period, then your account returns to the Free tier.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>Is the Angel tier really lifetime?</h3>
-                    <p>Angel lasts for the operational lifetime of the hosted service. Refunds and payment disputes can end or suspend access; see the <Link href="/terms" title="Read the Terms of Service">Terms</Link>.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>Where do I manage billing?</h3>
-                    <p>Pro and Analyst subscriptions include a Manage Billing button in your account page for plan changes and cancellation.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>What payment methods are accepted?</h3>
-                    <p>Checkout shows the payment methods currently available through Stripe and Link for your transaction.</p>
-                </div>
-                <div className={styles.faqItem}>
-                    <h3>Is my payment information secure?</h3>
-                    <p>Yes. Payments are processed by Stripe, a PCI Level 1 certified provider, and card details are not stored by Seraphim.</p>
-                </div>
+        <section className={styles.faqSection} aria-labelledby="faq-title">
+            <div className={styles.sectionIntro}>
+                <h2 id="faq-title">A few things you might be wondering.</h2>
+                <p>Clear answers before you get started.</p>
+            </div>
+            <div className={styles.faqList}>
+                <details className={styles.faqItem}>
+                    <summary>How does the free trial work?<LuPlus aria-hidden="true" /></summary>
+                    <p>Pro and Analyst include a 14-day free trial on monthly or yearly billing. A payment method is required, but there is no charge today. After 14 days, your subscription renews at the price and billing period you selected. Cancel before the trial ends to avoid being charged.</p>
+                </details>
+                <details className={styles.faqItem}>
+                    <summary>Which plan is right for me?<LuPlus aria-hidden="true" /></summary>
+                    <p>Choose Free for daily news with 50 stories per view and 24-hour history. Pro adds up to 1,000 stories, a month of history, full source timelines, and richer maps. Analyst adds all retained history, advanced overlays, and GeoJSON import and export for deeper investigations.</p>
+                </details>
+                <details className={styles.faqItem}>
+                    <summary>Can I change plans or cancel?<LuPlus aria-hidden="true" /></summary>
+                    <p>Yes. Open <Link href="/account">your account</Link> and choose Manage billing to change or cancel a subscription. You will see the effective date and any prorated amount before confirming. When you cancel, access continues until the end of your current period, then your account returns to Free.</p>
+                </details>
+                <details className={styles.faqItem}>
+                    <summary>What does Angel lifetime access include?<LuPlus aria-hidden="true" /></summary>
+                    <p>Angel includes every current Analyst capability for one payment, plus a Founder badge and a manually assigned Discord role. Access lasts for the operational lifetime of the hosted service. Refunds and payment disputes can end or suspend access; <Link href="/terms">refund and lifetime terms</Link> apply.</p>
+                </details>
+                <details className={styles.faqItem}>
+                    <summary>How do payments work?<LuPlus aria-hidden="true" /></summary>
+                    <p>Payments are securely processed by Stripe. Checkout shows the available payment methods and any applicable taxes before you confirm. Seraphim never stores your card details.</p>
+                </details>
+                <details className={styles.faqItem}>
+                    <summary>Can I explore without an account?<LuPlus aria-hidden="true" /></summary>
+                    <p>Yes. <Link href="/">Open the live map</Link> in guest mode to explore the top 10 stories from the last 24 hours. A free account gives you 50 stories per view, search, filtering, and local map notes.</p>
+                </details>
             </div>
         </section>
     );

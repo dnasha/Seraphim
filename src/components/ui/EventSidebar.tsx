@@ -31,7 +31,8 @@ import {
 } from "@/lib/utils/ranking";
 import EventCard from "./EventCard";
 import { useResizable } from "@/hooks/useResizable";
-import { useAuth } from "@/hooks/useAuth";
+import { setAuthModalOpen } from "@/hooks/useAuthModalState";
+import { currentReturnPath } from "@/lib/upgradeNavigation";
 import styles from "./EventSidebar.module.css";
 import {
   hasFeature,
@@ -122,7 +123,6 @@ export default function EventSidebar({
   );
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isRandomCoolingDown, setIsRandomCoolingDown] = useState(false);
-  const { setShowAuthModal } = useAuth();
 
   const canSelectRandom =
     !disabled && hasFeature(userTier as EntitlementTier, "randomEvent");
@@ -626,10 +626,10 @@ export default function EventSidebar({
                     </div>
                     <button
                       className={styles.guestCtaButton}
-                      onClick={() => setShowAuthModal(true)}
-                      title="Sign in or create a free account to unlock filters and more events"
+                      onClick={() => setAuthModalOpen(true, { initialTab: 'signup', returnTo: currentReturnPath(), subtitle: 'Create a free account for more stories and map tools' })}
+                      title="Create a free account to unlock filters and more events"
                     >
-                      SIGN IN TO UNLOCK
+                      Create free account
                     </button>
                     <div className={styles.guestCtaFooter}>
                       By using Seraphim you agree to our{" "}

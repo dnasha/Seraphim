@@ -11,11 +11,13 @@
  * - Matches Seraphim's design system (indigo accent, radius tokens, dark mode)
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthModalState } from '@/hooks/useAuthModalState';
+import { safeRelativePath } from '@/lib/security/redirects';
 import styles from './AuthModal.module.css';
 
 type AuthTab = 'login' | 'signup' | 'reset';
@@ -26,10 +28,27 @@ type BackdropPress = {
 
 const MAX_BACKDROP_CLICK_MOVEMENT = 4;
 
-export default function AuthModal() {
+interface AuthModalProps {
+    returnTo?: string;
+    initialTab?: 'login' | 'signup';
+    subtitle?: string;
+}
+
+export default function AuthModal(props: AuthModalProps = {}) {
+    const { showAuthModal } = useAuth();
+    const [, , intent] = useAuthModalState();
+    if (!showAuthModal) return null;
+    return <AuthModalContent
+        returnTo={props.returnTo ?? intent?.returnTo}
+        initialTab={props.initialTab ?? intent?.initialTab}
+        subtitle={props.subtitle ?? intent?.subtitle}
+    />;
+}
+
+function AuthModalContent({ returnTo, initialTab = 'login', subtitle = 'Real-time global intelligence' }: AuthModalProps) {
     const { showAuthModal, setShowAuthModal, supabase, continueAsGuest } = useAuth();
     const { resolvedTheme } = useTheme();
-    const [activeTab, setActiveTab] = useState<AuthTab>('login');
+    const [activeTab, setActiveTab] = useState<AuthTab>(initialTab);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -38,6 +57,39 @@ export default function AuthModal() {
     const [captchaToken, setCaptchaToken] = useState<string | null>(null);
     const turnstileRef = useRef<TurnstileInstance>(null);
     const backdropPressRef = useRef<BackdropPress | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const callbackPath = returnTo
+        ? `/auth/callback?${new URLSearchParams({ next: safeRelativePath(returnTo) })}`
+        : '/auth/callback';
+
+    useEffect(() => {
+        if (!showAuthModal) return;
+        const previousFocus = document.activeElement;
+        const modal = modalRef.current;
+        modal?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                setShowAuthModal(false);
+            }
+            if (event.key !== 'Tab' || !modal) return;
+            const focusable = Array.from(modal.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], iframe, [tabindex="0"]'));
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) {
+                event.preventDefault();
+                last?.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modal)) {
+                event.preventDefault();
+                first?.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
+        };
+    }, [showAuthModal, setShowAuthModal]);
 
     const handleBackdropPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
         const startedOnBackdrop = event.target === event.currentTarget;
@@ -82,7 +134,7 @@ export default function AuthModal() {
                     email,
                     password,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/auth/callback`,
+                        emailRedirectTo: `${window.location.origin}${callbackPath}`,
                         captchaToken: captchaToken || undefined,
                     },
                 });
@@ -106,20 +158,20 @@ export default function AuthModal() {
         } finally {
             setLoading(false);
         }
-    }, [activeTab, email, password, supabase, captchaToken]);
+    }, [activeTab, email, password, supabase, captchaToken, callbackPath]);
 
     const handleOAuth = useCallback(async (provider: 'google' | 'github' | 'discord') => {
         setError(null);
         const { error: oauthError } = await supabase.auth.signInWithOAuth({
             provider,
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `${window.location.origin}${callbackPath}`,
             },
         });
         if (oauthError) {
             setError(oauthError.message);
         }
-    }, [supabase]);
+    }, [supabase, callbackPath]);
 
     if (!showAuthModal) return null;
 
@@ -133,10 +185,15 @@ export default function AuthModal() {
         >
             <div
                 className={styles.modal}
+                ref={modalRef}
+                tabIndex={-1}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Sign in or create an account"
             >
+                <button type="button" className={styles.closeButton} onClick={() => setShowAuthModal(false)} aria-label="Close sign-in">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
+                </button>
                 {/* Logo — matches sidebar header: inline icon + title */}
                 <div className={styles.logoSection}>
                     <div className={styles.logoInline}>
@@ -165,7 +222,7 @@ export default function AuthModal() {
                         </svg>
                         <h2 className={styles.logoTitle}>Seraphim</h2>
                     </div>
-                    <p className={styles.logoSubtitle}>Real-time global intelligence</p>
+                    <p className={styles.logoSubtitle}>{subtitle}</p>
                 </div>
 
                 {/* Tabs - Only show when not resetting password */}

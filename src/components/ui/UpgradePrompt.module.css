@@ -1,0 +1,42 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui), system-ui, sans-serif;
+}
+.dialog[open] { display: grid; place-items: center; }
+.dialog::backdrop { background: var(--modal-backdrop); backdrop-filter: blur(5px); }
+.prompt {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px;
+  border: 1px solid var(--tier-border);
+  border-radius: var(--modal-radius);
+  background: var(--surface);
+  box-shadow: var(--modal-shadow);
+  text-align: left;
+  letter-spacing: normal;
+  text-transform: none;
+  animation: enter 160ms ease-out;
+}
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding-right: 22px; }
+.icon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--tier-border); border-radius: 12px; color: var(--tier-ink); background: var(--tier-tint); }
+.icon svg { width: 22px; height: 22px; }
+.prompt h2 { margin: 0 0 12px; font-family: var(--font-logo), var(--font-ui), sans-serif; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.035em; line-height: 1.25; overflow-wrap: anywhere; }
+.description { margin: 0; color: var(--text-secondary); font-size: 0.875rem; line-height: 1.7; text-wrap: pretty; }
+.accessNote { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.75rem; line-height: 1.6; }
+.actions { display: grid; gap: 8px; margin-top: 24px; }
+@keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .prompt { animation: none; } }
+@media (max-width: 480px) { .prompt { padding: 24px; } }

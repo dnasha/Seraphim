@@ -7,9 +7,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--modal-backdrop);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     animation: overlayFadeIn 0.25s ease;
     padding: var(--space-md);
 }
@@ -24,18 +24,37 @@
 }
 
 .modal {
+    position: relative;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow:
-        0 24px 80px rgba(0, 0, 0, 0.35),
-        0 0 0 1px rgba(99, 102, 241, 0.08);
+    border-radius: var(--modal-radius);
+    box-shadow: var(--modal-shadow);
     width: 100%;
     max-width: 400px;
     padding: var(--space-3xl) var(--space-2xl) var(--space-xl);
     animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow-y: auto;
     max-height: 90vh;
+}
+
+.closeButton {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.closeButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -4px;
 }
 
 @keyframes modalSlideIn {
@@ -303,13 +322,14 @@
 
 /* Submit Button */
 .submitBtn {
+    composes: action primary from '../ui/UpgradeActions.module.css';
     width: 100%;
     padding: var(--space-sm) var(--space-lg);
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
     font-family: var(--font-ui);
-    color: #ffffff;
-    background: var(--accent);
+    color: var(--upgrade-on-accent);
+    background: var(--upgrade-accent);
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -317,16 +337,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    min-height: 44px;
     user-select: none;
     -webkit-user-select: none;
 }
 
 @media (hover: hover) {
-    .submitBtn:hover {
-        background: var(--accent-hover);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+    .submitBtn:hover:not(:disabled) {
+        background: var(--upgrade-accent-hover);
     }
 }
 
@@ -335,9 +353,12 @@
 }
 
 .submitBtn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
+    cursor: default;
     transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .overlay, .modal { animation: none; }
 }
 
 .btnSpinner {

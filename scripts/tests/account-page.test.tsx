@@ -42,13 +42,13 @@ describe('Account page', () => {
     mocks.tier.isLoading = true;
     render(<AccountPage />);
     expect(screen.getByText('Loading your plan…').getAttribute('role')).toBe('status');
-    expect(screen.queryByRole('link', { name: /Explore plans/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /View plans/ })).toBeNull();
   });
 
   it('shows Free access with an upgrade link that returns to account', () => {
     render(<AccountPage />);
     expect(screen.getByText('No subscription')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Explore plans/ }).getAttribute('href')).toBe('/pricing?returnTo=%2Faccount');
+    expect(screen.getByRole('link', { name: /View plans/ }).getAttribute('href')).toBe('/pricing?returnTo=%2Faccount');
   });
 
   it('keeps recurring billing dates and canceled subscription state out of Angel lifetime access', () => {

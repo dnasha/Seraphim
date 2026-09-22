@@ -1,112 +1,77 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import styles from './FeatureGate.module.css';
+import React, { useId, useState } from 'react';
+import { LuLockKeyhole } from 'react-icons/lu';
 import { getAccessRequirementTooltip, type RequiredAccessTier } from '@/lib/entitlements';
+import { currentReturnPath } from '@/lib/upgradeNavigation';
+import TierBadge from './TierBadge';
+import UpgradePrompt from './UpgradePrompt';
+import styles from './FeatureGate.module.css';
+import tierStyles from './TierBadge.module.css';
 
 interface GatedButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'title'> {
   allowed: boolean;
   requiredTier: RequiredAccessTier;
   featureName: string;
-  /** Describes the action when available; locked controls replace it with the access requirement. */
+  featureDescription: string;
+  /** A badge replaces an unavailable switch; icon suits compact controls. */
+  indicator?: 'icon' | 'badge' | 'none';
   title: string;
 }
 
-/**
- * Keeps paid capabilities discoverable without letting a disabled control hide
- * its value. Locked actions open a concise, keyboard-accessible upgrade prompt.
- */
+/** One access prompt for filters, map tools, overlays, and story timelines. */
 export function GatedButton({
-  allowed,
-  requiredTier,
-  featureName,
-  className = '',
-  children,
-  onClick,
-  title,
-  ...buttonProps
+  allowed, requiredTier, featureName, featureDescription, indicator = 'icon',
+  className = '', children, onClick, title, type = 'button', ...buttonProps
 }: GatedButtonProps) {
-  const [open, setOpen] = useState(false);
-  const dialogId = useId();
-  const pathname = usePathname();
-  const dismissRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    dismissRef.current?.focus();
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused?.focus();
-    };
-  }, [open]);
-
   if (allowed) {
-    return <button className={className} onClick={onClick} title={title} {...buttonProps}>{children}</button>;
+    return <button {...buttonProps} type={type} className={className} onClick={onClick} title={title}>{children}</button>;
   }
 
-  const tierLabel = requiredTier === 'free'
-    ? 'Free'
-    : requiredTier[0].toUpperCase() + requiredTier.slice(1);
-  const prompt = open && typeof document !== 'undefined'
-    ? createPortal(
-        <div className={styles.backdrop} role="presentation" onMouseDown={() => setOpen(false)}>
-          <section
-            id={dialogId}
-            className={styles.prompt}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${featureName} upgrade`}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className={styles.promptIcon} aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M7.75 10V7.75a4.25 4.25 0 0 1 8.5 0V10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                <rect x="5" y="10" width="14" height="10" rx="3" fill="currentColor" opacity=".14" />
-                <rect x="5" y="10" width="14" height="10" rx="3" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="15" r="1.25" fill="currentColor" />
-              </svg>
-            </div>
-            <span className={styles.promptEyebrow}>{tierLabel} feature</span>
-            <h2>Unlock {featureName.toLowerCase()}</h2>
-            <p>See every source and follow the story from the first report through the latest update.</p>
-            <div className={styles.promptActions}>
-              <button ref={dismissRef} onClick={() => setOpen(false)} className={styles.dismiss} title="Close the upgrade prompt">Maybe later</button>
-              <Link
-                href={`/pricing?feature=${encodeURIComponent(featureName)}&tier=${encodeURIComponent(requiredTier)}&returnTo=${encodeURIComponent(pathname || '/')}`}
-                className={styles.upgradeLink}
-                title={`View plans that include ${featureName}`}
-              >Explore {tierLabel}</Link>
-            </div>
-          </section>
-        </div>,
-        document.body,
-      )
-    : null;
+  return <LockedButton {...buttonProps} requiredTier={requiredTier} featureName={featureName}
+    featureDescription={featureDescription} indicator={indicator} className={className}>{children}</LockedButton>;
+}
+
+// Unmount the prompt state when access changes, so it cannot reopen on expiry.
+function LockedButton({ requiredTier, featureName, featureDescription, indicator, className, children, ...buttonProps }: Omit<GatedButtonProps, 'allowed' | 'onClick' | 'title'>) {
+  const [returnTo, setReturnTo] = useState<string | null>(null);
+  const dialogId = useId();
+  const requirement = getAccessRequirementTooltip(featureName, requiredTier);
 
   return (
     <>
       <button
         {...buttonProps}
-        className={`${className} ${styles.lockedControl}`}
-        onClick={() => setOpen(true)}
-        title={getAccessRequirementTooltip(featureName, requiredTier)}
+        type="button"
+        className={`${tierStyles.tier} ${indicator === 'badge' ? styles.badgeControl : `${className} ${styles.lockedControl}`}`}
+        data-tier={requiredTier}
+        data-access-tier={requiredTier}
+        onClick={(event) => {
+          event.stopPropagation();
+          setReturnTo(currentReturnPath());
+        }}
+        title={requirement}
+        aria-label={indicator === 'badge' ? requirement : buttonProps['aria-label']}
+        aria-describedby={[buttonProps['aria-describedby'], `${dialogId}-requirement`].filter(Boolean).join(' ')}
+        aria-pressed={undefined}
         aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={dialogId}
+        aria-expanded={returnTo !== null}
+        aria-controls={returnTo !== null ? dialogId : undefined}
       >
-        {children}
+        {indicator === 'badge' ? <TierBadge tier={requiredTier} locked /> : <>
+          {children}
+          {indicator === 'icon' && <LuLockKeyhole className={styles.lockIcon} aria-hidden="true" />}
+        </>}
       </button>
-      {prompt}
+      <span id={`${dialogId}-requirement`} className={styles.srOnly}>{requirement}</span>
+      {returnTo !== null && <UpgradePrompt
+        id={dialogId}
+        requiredTier={requiredTier}
+        featureName={featureName}
+        featureDescription={featureDescription}
+        returnTo={returnTo}
+        onDismiss={() => setReturnTo(null)}
+      />}
     </>
   );
 }
