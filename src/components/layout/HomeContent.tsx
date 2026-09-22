@@ -162,7 +162,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         return () => clearTimeout(timer);
     }, [isAuthResolving, isGuestUser, searchQuery, debouncedSearch, timeRange, sortMode, updateURL]);
 
-    const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({ 
+    const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, dismissError, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({
         filters: isGuestUser ? undefined : {
             sources: filterState.sources, categories: filterState.categories,
             ...(hasFeature(effectiveUserTier, 'advancedFilters') ? {
@@ -607,11 +607,14 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 <StateNotice
                     placement="floating"
                     variant="error"
-                    title="Couldn’t refresh stories"
-                    message={error}
-                    actionLabel="Retry"
+                    title={news.length ? 'Couldn’t refresh stories' : 'Stories unavailable'}
+                    message={news.length ? `${error} Previously loaded stories are still available.` : error}
+                    actionLabel="Try again"
                     actionTitle="Retry loading the latest stories"
+                    actionPending={dataLoading}
                     onAction={() => fetchNews(true)}
+                    onDismiss={dismissError}
+                    dismissLabel="Dismiss stories error"
                 />
             )}
         </div>

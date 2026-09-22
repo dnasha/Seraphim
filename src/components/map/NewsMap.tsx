@@ -88,6 +88,8 @@ const devWarn = (message: unknown, ...optionalParams: unknown[]) => {
 
 const MAP_RECOVERY_LIMIT = 2;
 const MAP_RECOVERY_WINDOW_MS = 60_000;
+const MAP_LOAD_TIMEOUT_MS = 15_000;
+const MAP_FAILURE_MESSAGE = 'Check your connection and try again. You can still browse stories in the sidebar.';
 
 function isRecoverableMapResourceError(errorMsg: string) {
   const msg = errorMsg.toLowerCase();
@@ -132,10 +134,10 @@ export default function NewsMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
-  const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [isRetryingMap, setIsRetryingMap] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
@@ -398,25 +400,51 @@ export default function NewsMap({
     );
 
     if (recoveryAttemptsRef.current.length >= MAP_RECOVERY_LIMIT) {
-      setMapError(
-        "The map engine is having trouble recovering. You can keep using the news feed while the map is unavailable.",
-      );
+      setMapError(MAP_FAILURE_MESSAGE);
+      setIsRetryingMap(false);
       devWarn(`Map recovery limit reached after ${reason}.`);
       return;
     }
 
     recoveryAttemptsRef.current.push(now);
     setIsChangingStyle(false);
-    setMapError(null);
+    mapReadyRef.current = false;
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
   }, []);
+
+  // Resource failures can otherwise leave a map (or style change) loading forever.
+  useEffect(() => {
+    if (mapReady || (mapError && !isRetryingMap)) return;
+    const timeout = setTimeout(() => {
+      setMapError(MAP_FAILURE_MESSAGE);
+      setIsRetryingMap(false);
+    }, MAP_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, [mapReady, mapError, isRetryingMap, retryCount, isChangingStyle]);
 
   // Core map initialization and event wiring.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     let map: maplibregl.Map;
+    let disposed = false;
+    let recoveryRequested = false;
+    // Event wiring belongs to this map instance, including after a retry.
+    let eventsWired = false;
+    const recover = (reason: string) => {
+      if (disposed || recoveryRequested) return;
+      recoveryRequested = true;
+      scheduleMapRecovery(reason);
+    };
+    const markReady = () => {
+      if (disposed || recoveryRequested) return;
+      mapReadyRef.current = true;
+      setMapError(null);
+      setIsRetryingMap(false);
+      setIsChangingStyle(false);
+      setMapReady(true);
+    };
 
     try {
       const view = getInitialViewState();
@@ -481,24 +509,31 @@ export default function NewsMap({
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
-      if (err instanceof maplibregl.GPUInitializationError) {
-        setTimeout(() => setMapError("The map requires WebGL2. Enable hardware acceleration or try a browser or device with WebGL2 support. You can still browse stories in the sidebar."), 0);
-        return;
-      }
-      setTimeout(() => scheduleMapRecovery("initialization failure"), 0);
-      return;
+      const timeout = setTimeout(() => {
+        if (err instanceof maplibregl.GPUInitializationError) {
+          setMapError('Enable hardware acceleration or try another browser. You can still browse stories in the sidebar.');
+          setIsRetryingMap(false);
+        } else {
+          recover('initialization failure');
+        }
+      }, 0);
+      return () => {
+        disposed = true;
+        clearTimeout(timeout);
+      };
     }
 
     map.on("webglcontextlost", (e) => {
       e.originalEvent.preventDefault();
       devWarn("WebGL context lost; waiting for browser restoration.");
+      mapReadyRef.current = false;
       setMapReady(false);
 
       if (contextRecoveryTimeoutRef.current) {
         clearTimeout(contextRecoveryTimeoutRef.current);
       }
       contextRecoveryTimeoutRef.current = setTimeout(() => {
-        scheduleMapRecovery("WebGL context loss");
+        recover("WebGL context loss");
       }, 3000);
     });
 
@@ -509,16 +544,12 @@ export default function NewsMap({
         contextRecoveryTimeoutRef.current = null;
       }
 
-      setMapError(null);
       map.resize();
 
       if (map.isStyleLoaded()) {
         addSourcesAndLayers(map)
-          .then(() => {
-            setIsChangingStyle(false);
-            setMapReady(true);
-          })
-          .catch(() => scheduleMapRecovery("post-restore layer rebuild"));
+          .then(markReady)
+          .catch(() => recover("post-restore layer rebuild"));
       }
     });
 
@@ -549,7 +580,7 @@ export default function NewsMap({
 
       if (e.error && !mapReadyRef.current) {
         console.error("MapLibre error event:", e.error);
-        scheduleMapRecovery("MapLibre error event");
+        recover("MapLibre error event");
       } else {
         devDebug("MapLibre runtime error suppressed:", e.error);
       }
@@ -642,8 +673,9 @@ export default function NewsMap({
       }
 
       addSourcesAndLayers(map).then(() => {
-        if (!eventsWiredRef.current) {
-          eventsWiredRef.current = true;
+        if (disposed || recoveryRequested) return;
+        if (!eventsWired) {
+          eventsWired = true;
 
           map.on("click", "unclustered-point", (e) => {
             if (e.features?.[0])
@@ -723,9 +755,8 @@ export default function NewsMap({
             }
           });
         }
-        setIsChangingStyle(false);
-        setMapReady(true);
-      });
+        markReady();
+      }).catch(() => recover('map layer initialization'));
     });
 
     mapRef.current = map;
@@ -748,6 +779,11 @@ export default function NewsMap({
     }
 
     return () => {
+      disposed = true;
+      if (boundsDebounceRef.current) {
+        clearTimeout(boundsDebounceRef.current);
+        boundsDebounceRef.current = null;
+      }
       if (resizeEndTimeoutRef.current)
         clearTimeout(resizeEndTimeoutRef.current);
       if (contextRecoveryTimeoutRef.current) {
@@ -769,8 +805,10 @@ export default function NewsMap({
   }, [retryCount]);
 
   const handleRetry = useCallback(() => {
+    recoveryAttemptsRef.current = [];
     setIsChangingStyle(false);
-    setMapError(null);
+    setIsRetryingMap(true);
+    mapReadyRef.current = false;
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
   }, []);
@@ -1074,24 +1112,17 @@ export default function NewsMap({
 
   return (
     <div className={styles.mapWrapper}>
-      {!mapReady && !mapError && (
+      {(!mapReady || mapError) && (
         <StateNotice
           placement="overlay"
-          variant="loading"
-          title={isChangingStyle ? "Updating map" : "Loading map"}
-          message={isChangingStyle
+          variant={mapError ? 'error' : 'loading'}
+          title={mapError ? 'Map unavailable' : isChangingStyle ? 'Updating map' : 'Loading map'}
+          message={mapError || (isChangingStyle
             ? "Applying the selected map style and restoring your layers."
-            : "Preparing the map and latest layers."}
-        />
-      )}
-      {mapError && (
-        <StateNotice
-          placement="overlay"
-          variant="error"
-          title="Map unavailable"
-          message={mapError}
-          actionLabel="Retry"
+            : "Preparing the map and latest layers.")}
+          actionLabel={mapError ? 'Try again' : undefined}
           actionTitle="Retry loading the map"
+          actionPending={isRetryingMap}
           onAction={handleRetry}
         />
       )}

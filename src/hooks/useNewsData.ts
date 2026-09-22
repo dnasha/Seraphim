@@ -424,13 +424,6 @@ export function useNewsData({
             return;
         }
 
-        if (isRefresh) {
-            responseCache.clear();
-            detailCache.current.clear();
-            detailInFlightRef.current.clear();
-            detailGenerationRef.current += 1;
-        }
-
         const prev = lastFetchParamsRef.current;
         const pendingBBox = pendingBBoxRef.current;
         const bboxSource = rawBBox ?? pendingBBox ?? lastKnownBBoxRef.current ?? undefined;
@@ -467,12 +460,19 @@ export function useNewsData({
             limit,
         };
 
-        if (!isRefresh && (
-            (!needsScopeReload && isSameRequestScope(requestScope, prev)) ||
+        if (
+            (!isRefresh && !needsScopeReload && !activeRequestParamsRef.current && isSameRequestScope(requestScope, prev)) ||
             isSameRequestScope(requestScope, activeRequestParamsRef.current)
-        )) {
+        ) {
             log('[useNewsData] Returning early because the effective request scope is unchanged');
             return;
+        }
+
+        if (isRefresh) {
+            responseCache.clear();
+            detailCache.current.clear();
+            detailInFlightRef.current.clear();
+            detailGenerationRef.current += 1;
         }
 
         log(`[useNewsData] Proceeding to fetch. Prev limit was: ${prev?.limit}, New limit: ${limit}`);
@@ -537,6 +537,7 @@ export function useNewsData({
             syncNewsFromStore(sortMode);
             setIsCapped(cached.isCapped);
             setAppliedLimit(cached.appliedLimit);
+            setError(null);
             setIsLoading(false);
             setLastUpdated(cached.lastUpdated ?? new Date(cached.timestamp).toISOString());
             lastFetchParamsRef.current = requestScope;
@@ -547,7 +548,6 @@ export function useNewsData({
 
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
-        setError(null);
         setIsLoading(true);
         try {
             const { items: mapResults, isCapped: resultCapped, appliedLimit: fetchLimit, lastUpdated: fetchUpdated } = await _performFetch({
@@ -561,6 +561,7 @@ export function useNewsData({
 
             if (requestVersion !== requestVersionRef.current) return;
 
+            setError(null);
             const visibleIds = new Set(mapResults.map(item => item.originalId || item.id));
             visibleMapIdsRef.current = visibleIds;
 
@@ -577,7 +578,9 @@ export function useNewsData({
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return;
             if (requestVersion !== requestVersionRef.current) return;
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            needsScopeReloadRef.current = true;
+            console.error('[useNewsData] Could not load stories:', err);
+            setError('Check your connection and try again.');
         } finally {
             if (requestVersion === requestVersionRef.current) {
                 activeRequestParamsRef.current = null;
@@ -818,5 +821,7 @@ export function useNewsData({
         };
     }, [enabled, coordinateLoad]);
 
-    return { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
+    const dismissError = useCallback(() => setError(null), []);
+
+    return { news, appliedSortMode, isLoading, isCapped, appliedLimit, error, dismissError, lastUpdated, fetchNews: coordinateLoad, onBoundsChange, fetchEventDetails };
 }

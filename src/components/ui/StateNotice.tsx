@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import styles from './StateNotice.module.css';
 
@@ -14,6 +14,8 @@ interface StateNoticeProps {
     placement?: StateNoticePlacement;
     actionLabel?: string;
     actionTitle?: string;
+    actionPending?: boolean;
+    pendingLabel?: string;
     onAction?: () => void;
     onDismiss?: () => void;
     dismissLabel?: string;
@@ -50,11 +52,15 @@ export default function StateNotice({
     placement = 'floating',
     actionLabel,
     actionTitle,
+    actionPending = false,
+    pendingLabel = 'Trying again…',
     onAction,
     onDismiss,
     dismissLabel = 'Dismiss notification',
 }: StateNoticeProps) {
+    const titleId = useId();
     const isError = variant === 'error';
+    const isBusy = variant === 'loading' || actionPending;
     const placementClass = styles[placement];
     const variantClass = styles[variant];
 
@@ -62,16 +68,24 @@ export default function StateNotice({
         <div
             className={`${styles.viewport} ${placementClass}`}
             role={isError ? 'alert' : 'status'}
-            aria-live={isError ? 'assertive' : 'polite'}
-            aria-busy={variant === 'loading' || undefined}
+            aria-live={isError && !actionPending ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            aria-labelledby={titleId}
+            aria-busy={isBusy || undefined}
+            onKeyDown={onDismiss ? (event) => {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    onDismiss();
+                }
+            } : undefined}
         >
-            <div className={`${styles.notice} ${variantClass}`}>
+            <div className={`${styles.notice} ${variantClass} ${onDismiss ? styles.dismissible : ''}`}>
                 <span className={styles.icon}>
                     <NoticeIcon variant={variant} />
                 </span>
 
                 <div className={styles.copy}>
-                    <p className={styles.title}>{title}</p>
+                    <p id={titleId} className={styles.title}>{title}</p>
                     {message && <p className={styles.message}>{message}</p>}
                 </div>
 
@@ -80,9 +94,18 @@ export default function StateNotice({
                         type="button"
                         className={styles.action}
                         onClick={onAction}
+                        disabled={isBusy}
                         title={actionTitle ?? actionLabel}
                     >
-                        {actionLabel}
+                        {actionPending ? (
+                            <span className={styles.actionSpinner} aria-hidden="true" />
+                        ) : (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M20 7v5h-5" />
+                                <path d="M19 12a7 7 0 1 0-2 5M20 12l-3-5" />
+                            </svg>
+                        )}
+                        {actionPending ? pendingLabel : actionLabel}
                     </button>
                 )}
 
