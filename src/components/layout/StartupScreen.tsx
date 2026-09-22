@@ -35,7 +35,7 @@ export default function StartupScreen({
                 {onContinue && (
                     <div className={styles.slowConnection}>
                         <p>Taking longer than usual. You can browse while loading continues.</p>
-                        <button onClick={onContinue}>Open available content</button>
+                        <button onClick={onContinue} title="Open available content while loading continues">Open available content</button>
                     </div>
                 )}
             </div>

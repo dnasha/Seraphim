@@ -191,7 +191,7 @@ function AuthModalContent({ returnTo, initialTab = 'login', subtitle = 'Real-tim
                 aria-modal="true"
                 aria-label="Sign in or create an account"
             >
-                <button type="button" className={styles.closeButton} onClick={() => setShowAuthModal(false)} aria-label="Close sign-in">
+                <button type="button" className={styles.closeButton} onClick={() => setShowAuthModal(false)} aria-label="Close sign-in" title="Close sign-in">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
                 </button>
                 {/* Logo — matches sidebar header: inline icon + title */}

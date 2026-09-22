@@ -223,8 +223,8 @@ export function PricingPageClient({
 
                 <div className={styles.billingControls}>
                     <div className={styles.billingToggle} role="group" aria-label="Billing period">
-                        <button type="button" aria-pressed={!isYearly} onClick={() => changeBilling(false)} disabled={loadingTier !== null}>Monthly</button>
-                        <button type="button" aria-pressed={isYearly} onClick={() => changeBilling(true)} disabled={loadingTier !== null}>Yearly <span className={styles.saveBadge}>Save 17%</span></button>
+                        <button type="button" title="Show monthly plan prices" aria-pressed={!isYearly} onClick={() => changeBilling(false)} disabled={loadingTier !== null}>Monthly</button>
+                        <button type="button" title="Show yearly plan prices" aria-pressed={isYearly} onClick={() => changeBilling(true)} disabled={loadingTier !== null}>Yearly <span className={styles.saveBadge}>Save 17%</span></button>
                     </div>
                     <p>All prices in USD. {isYearly ? 'Yearly plans are billed annually.' : 'Monthly plans are billed each month.'}</p>
                 </div>
@@ -232,13 +232,13 @@ export function PricingPageClient({
                 {errorMsg && (
                     <div className={styles.checkoutNotice} role="alert" ref={errorRef} tabIndex={-1}>
                         <div><strong>Checkout couldn’t be opened</strong><p>{errorMsg}</p></div>
-                        <button type="button" aria-label="Dismiss checkout error" onClick={() => setErrorMsg(null)}><LuX aria-hidden="true" /></button>
+                        <button type="button" aria-label="Dismiss checkout error" title="Dismiss checkout error" onClick={() => setErrorMsg(null)}><LuX aria-hidden="true" /></button>
                     </div>
                 )}
 
                 <div className={styles.mobilePlanPicker} role="group" aria-label="Choose a plan">
                     {SUBSCRIPTION_TIERS.map((tier) => (
-                        <button key={tier.key} type="button" aria-pressed={mobileTier === tier.key} aria-controls="subscription-plans" disabled={loadingTier !== null} onClick={() => setMobileTier(tier.key)}>
+                        <button key={tier.key} type="button" title={`Show ${tier.name} plan`} aria-pressed={mobileTier === tier.key} aria-controls="subscription-plans" disabled={loadingTier !== null} onClick={() => setMobileTier(tier.key)}>
                             {tier.name}
                         </button>
                     ))}
@@ -272,7 +272,7 @@ export function PricingPageClient({
                     <div className={styles.comparisonContent}>
                         <div className={styles.comparisonMobilePicker}>
                             <label htmlFor="comparison-plan">Show features for</label>
-                            <select id="comparison-plan" value={comparisonTier} onChange={(event) => setComparisonTier(event.target.value as ComparisonTier)}>
+                            <select id="comparison-plan" title="Choose a plan to compare features" value={comparisonTier} onChange={(event) => setComparisonTier(event.target.value as ComparisonTier)}>
                                 {TIERS.map((tier) => <option key={tier.key} value={tier.key}>{tier.name}</option>)}
                             </select>
                         </div>
@@ -327,11 +327,11 @@ export function PricingPageClient({
 
                 <div className={styles.explorePrompt}>
                     <p>Start with a little curiosity.</p>
-                    <Link href="/">Explore the live map <LuArrowRight aria-hidden="true" /></Link>
+                    <Link href="/" title="Explore the live map">Explore the live map <LuArrowRight aria-hidden="true" /></Link>
                 </div>
                 <footer className={styles.footer}>
                     <span>Seraphim · A clearer view of the world.</span>
-                    <nav aria-label="Pricing page links"><Link href="/help">Help</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></nav>
+                    <nav aria-label="Pricing page links"><Link href="/help" title="Get help">Help</Link><Link href="/terms" title="Read the Terms of Service">Terms</Link><Link href="/privacy" title="Read the Privacy Policy">Privacy</Link></nav>
                 </footer>
             </main>
             {showAuthModal && <AuthModal

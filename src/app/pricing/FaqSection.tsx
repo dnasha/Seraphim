@@ -20,11 +20,11 @@ export function FaqSection() {
                 </details>
                 <details className={styles.faqItem}>
                     <summary>Can I change plans or cancel?<LuPlus aria-hidden="true" /></summary>
-                    <p>Yes. Open <Link href="/account">your account</Link> and choose Manage billing to change or cancel a subscription. You will see the effective date and any prorated amount before confirming. When you cancel, access continues until the end of your current period, then your account returns to Free.</p>
+                    <p>Yes. Open <Link href="/account" title="Open your account settings">your account</Link> and choose Manage billing to change or cancel a subscription. You will see the effective date and any prorated amount before confirming. When you cancel, access continues until the end of your current period, then your account returns to Free.</p>
                 </details>
                 <details className={styles.faqItem}>
                     <summary>What does Angel lifetime access include?<LuPlus aria-hidden="true" /></summary>
-                    <p>Angel includes every current Analyst capability for one payment, plus a Founder badge and a manually assigned Discord role. Access lasts for the operational lifetime of the hosted service. Refunds and payment disputes can end or suspend access; <Link href="/terms">refund and lifetime terms</Link> apply.</p>
+                    <p>Angel includes every current Analyst capability for one payment, plus a Founder badge and a manually assigned Discord role. Access lasts for the operational lifetime of the hosted service. Refunds and payment disputes can end or suspend access; <Link href="/terms" title="Read refund and lifetime terms">refund and lifetime terms</Link> apply.</p>
                 </details>
                 <details className={styles.faqItem}>
                     <summary>How do payments work?<LuPlus aria-hidden="true" /></summary>
@@ -32,7 +32,7 @@ export function FaqSection() {
                 </details>
                 <details className={styles.faqItem}>
                     <summary>Can I explore without an account?<LuPlus aria-hidden="true" /></summary>
-                    <p>Yes. <Link href="/">Open the live map</Link> in guest mode to explore the top 10 stories from the last 24 hours. A free account gives you 50 stories per view, search, filtering, and local map notes.</p>
+                    <p>Yes. <Link href="/" title="Open the live map">Open the live map</Link> in guest mode to explore the top 10 stories from the last 24 hours. A free account gives you 50 stories per view, search, filtering, and local map notes.</p>
                 </details>
             </div>
         </section>

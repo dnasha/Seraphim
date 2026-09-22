@@ -56,6 +56,6 @@ describe('launch legal content', () => {
     expect(authModal).toContain('Privacy Policy');
     expect(authModal).not.toMatch(/merchant of record|partial refund|arbitration|Angel lifetime/i);
     expect(pricing).toContain('Refund and lifetime terms');
-    expect(faq).toContain('<Link href="/terms">refund and lifetime terms</Link>');
+    expect(faq).toContain('<Link href="/terms" title="Read refund and lifetime terms">refund and lifetime terms</Link>');
   });
 });

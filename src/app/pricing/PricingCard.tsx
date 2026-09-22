@@ -51,7 +51,7 @@ export function PricingCard({
                 : `${formatPrice(tier.monthlyPrice)} billed monthly after your trial`;
 
     const action = canManage ? (
-        <Link href="/account" className={styles.ctaBtn}>
+        <Link href="/account" className={styles.ctaBtn} title={isCurrent ? 'Manage your current plan' : `Switch to ${tier.name} from your account`}>
             {isCurrent ? 'Manage plan' : `Switch to ${tier.name}`} <LuArrowRight aria-hidden="true" />
         </Link>
     ) : (
@@ -61,6 +61,7 @@ export function PricingCard({
             disabled={isDisabled}
             aria-busy={isLoading}
             aria-describedby={`${tier.key}-billing ${tier.key}-terms`}
+            title={isLoading ? 'Opening checkout' : buttonText}
             onClick={() => handleCheckout(priceKey)}
         >
             {isLoading ? <><span className={styles.spinner} aria-hidden="true" /> Opening checkout…</> : <>
@@ -77,7 +78,7 @@ export function PricingCard({
                     <span className={styles.eyebrow}><LuSparkles aria-hidden="true" /> Angel founder membership</span>
                     <h2 id="angel-name">Prefer to pay once?</h2>
                     <p>Every Analyst feature for the lifetime of Seraphim, plus a Founder badge and a manually assigned Discord role.</p>
-                    <p id="angel-terms" className={styles.founderTerms}>Access lasts for the operational lifetime of the service. <Link href="/terms">Refund and lifetime terms</Link> apply.</p>
+                    <p id="angel-terms" className={styles.founderTerms}>Access lasts for the operational lifetime of the service. <Link href="/terms" title="Read refund and lifetime terms">Refund and lifetime terms</Link> apply.</p>
                 </div>
                 <div className={styles.founderAction}>
                     <div className={styles.priceLine}><span className={styles.priceAmount}>${tier.lifetimePrice}</span><span className={styles.pricePeriod}>one-time</span></div>
