@@ -1,0 +1,34 @@
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+.action svg { width: 15px; height: 15px; flex-shrink: 0; }
+.primary { background: var(--upgrade-accent); border-color: var(--upgrade-accent); color: var(--upgrade-on-accent); }
+.inline { min-height: 30px; padding: 5px 8px; border-color: var(--upgrade-border); background: var(--upgrade-tint); color: var(--upgrade-ink); font-size: 0.6875rem; }
+.action:disabled { cursor: default; background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); }
+.action[aria-busy="true"] { cursor: wait; }
+.closeButton { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.closeButton svg { width: 18px; height: 18px; }
+.action:focus-visible, .closeButton:focus-visible { outline: 2px solid var(--upgrade-focus); outline-offset: 3px; }
+@media (hover: hover) {
+  .action:not(:disabled):hover { border-color: var(--upgrade-border); background: var(--upgrade-tint); text-decoration: none; }
+  .action.primary:not(:disabled):hover { border-color: var(--upgrade-accent-hover); background: var(--upgrade-accent-hover); }
+  .closeButton:hover { background: var(--surface-alt); color: var(--text-primary); }
+}
+@media (prefers-reduced-motion: reduce) { .action { transition: none; } }

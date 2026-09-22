@@ -1,76 +1,10 @@
-/* TierBadge.module.css — Tier status badge styling */
-
-.badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3xs);
-    font-family: var(--font-ui);
-    font-weight: var(--weight-bold);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: var(--radius-sm);
-    user-select: none;
-    white-space: nowrap;
-    line-height: 1;
-
-    /* Default: small size */
-    font-size: var(--text-3xs);
-    padding: var(--space-3xs) var(--space-xs);
-}
-
-.md {
-    font-size: var(--text-2xs);
-    padding: var(--space-2xs) var(--space-sm);
-    border-radius: var(--radius-md);
-    gap: var(--space-2xs);
-}
-
-.icon {
-    flex-shrink: 0;
-}
-
-/* ═══ Tier Colors ═══ */
-
-.guest {
-    background: hsla(var(--text-muted-h), var(--text-muted-s), var(--text-muted-l), 0.15);
-    color: hsl(var(--text-muted-h), var(--text-muted-s), calc(var(--text-muted-l) - 4%));
-}
-
-.free {
-    background: hsla(var(--text-primary-h), var(--text-primary-s), var(--text-primary-l), 0.06);
-    color: var(--text-primary);
-}
-
-[data-theme="dark"] .free {
-    background: hsla(var(--text-primary-h), var(--text-primary-s), var(--text-primary-l), 0.08);
-}
-
-.pro {
-    background: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.12);
-    color: var(--accent);
-}
-
-[data-theme="dark"] .pro {
-    background: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.18);
-    color: var(--accent-hover);
-}
-
-.analyst {
-    background: hsla(var(--gold-h), var(--gold-s), var(--gold-l), 0.12);
-    color: hsl(var(--gold-h), var(--gold-s), calc(var(--gold-l) - 15%));
-}
-
-[data-theme="dark"] .analyst {
-    background: hsla(var(--gold-h), var(--gold-s), var(--gold-l), 0.15);
-    color: hsl(var(--gold-h), var(--gold-s), calc(var(--gold-l) + 15%));
-}
-
-.angel {
-    background: linear-gradient(135deg, hsla(var(--green-h), var(--green-s), var(--green-l), 0.15), hsla(var(--green-h), var(--green-s), var(--green-l), 0.12));
-    color: hsl(var(--green-h), var(--green-s), calc(var(--green-l) - 5%));
-}
-
-[data-theme="dark"] .angel {
-    background: linear-gradient(135deg, hsla(var(--green-h), var(--green-s), var(--green-l), 0.2), hsla(var(--green-h), var(--green-s), var(--green-l), 0.15));
-    color: hsl(var(--green-h), var(--green-s), calc(var(--green-l) + 15%));
-}
+.tier { --tier-ink: var(--text-muted); --tier-tint: var(--surface-alt); --tier-border: var(--border); }
+.tier[data-tier="pro"] { --tier-ink: color-mix(in srgb, var(--accent) 70%, var(--text-primary)); --tier-tint: color-mix(in srgb, var(--accent) 8%, var(--surface)); --tier-border: color-mix(in srgb, var(--accent) 28%, var(--border)); }
+.tier[data-tier="analyst"] { --tier-ink: hsl(var(--gold-h), 75%, 31%); --tier-tint: color-mix(in srgb, var(--gold) 8%, var(--surface)); --tier-border: color-mix(in srgb, var(--gold) 35%, var(--border)); }
+.tier[data-tier="angel"] { --tier-ink: hsl(var(--green-h), 70%, 28%); --tier-tint: color-mix(in srgb, var(--green) 8%, var(--surface)); --tier-border: color-mix(in srgb, var(--green) 30%, var(--border)); }
+:global([data-theme="dark"]) .tier[data-tier="analyst"] { --tier-ink: hsl(var(--gold-h), 80%, 68%); }
+:global([data-theme="dark"]) .tier[data-tier="angel"] { --tier-ink: hsl(var(--green-h), 65%, 65%); }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--tier-border); border-radius: 5px; background: var(--tier-tint); color: var(--tier-ink); font-family: var(--font-ui), sans-serif; font-size: 0.625rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.badge svg { width: 10px; height: 10px; flex-shrink: 0; }
+.md { padding: 5px 8px; font-size: 0.75rem; gap: 5px; border-radius: 6px; }
+.md svg { width: 12px; height: 12px; }

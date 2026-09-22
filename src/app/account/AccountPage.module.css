@@ -151,29 +151,7 @@
   color: var(--text-muted);
 }
 
-.planName[data-tier="pro"] {
-  color: var(--accent);
-}
-
-.planName[data-tier="analyst"] {
-  color: hsl(var(--gold-h), var(--gold-s), calc(var(--gold-l) - 15%));
-}
-
-.planName[data-tier="angel"] {
-  color: hsl(var(--green-h), var(--green-s), calc(var(--green-l) - 12%));
-}
-
-:global([data-theme="dark"]) .planName[data-tier="pro"] {
-  color: var(--accent-hover);
-}
-
-:global([data-theme="dark"]) .planName[data-tier="analyst"] {
-  color: hsl(var(--gold-h), var(--gold-s), calc(var(--gold-l) + 15%));
-}
-
-:global([data-theme="dark"]) .planName[data-tier="angel"] {
-  color: hsl(var(--green-h), var(--green-s), calc(var(--green-l) + 15%));
-}
+.planName { color: var(--tier-ink, var(--text-primary)); }
 
 .statusBadge {
   border-radius: 20px;

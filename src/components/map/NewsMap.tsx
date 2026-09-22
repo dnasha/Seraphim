@@ -41,10 +41,14 @@ import StateNotice from "@/components/ui/StateNotice";
 import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
+import type { MapLoadState } from '@/components/layout/StartupGate';
+import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
+  dataReady?: boolean;
+  onLoadStateChange?: (state: MapLoadState) => void;
   items: NewsItem[];
   selectedItemId: string | null;
   selectionVersion: number;
@@ -88,6 +92,8 @@ const devWarn = (message: unknown, ...optionalParams: unknown[]) => {
 
 const MAP_RECOVERY_LIMIT = 2;
 const MAP_RECOVERY_WINDOW_MS = 60_000;
+const MAP_LOAD_TIMEOUT_MS = 15_000;
+const MAP_FAILURE_MESSAGE = 'Check your connection and try again. You can still browse stories in the sidebar.';
 
 function isRecoverableMapResourceError(errorMsg: string) {
   const msg = errorMsg.toLowerCase();
@@ -107,6 +113,8 @@ function isRecoverableMapResourceError(errorMsg: string) {
 }
 
 export default function NewsMap({
+  dataReady = true,
+  onLoadStateChange,
   items,
   selectedItemId,
   selectionVersion,
@@ -132,13 +140,19 @@ export default function NewsMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
-  const eventsWiredRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [isRetryingMap, setIsRetryingMap] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  // Restore saved annotations on navigation; otherwise download the drawing
+  // engine only after the user first opens its tools. Keep it mounted thereafter.
+  const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
+    try { return Boolean(localStorage.getItem(DRAW_STORAGE_KEY)); }
+    catch { return false; }
+  });
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
   const [mutedClusters, setMutedClusters] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
@@ -168,6 +182,7 @@ export default function NewsMap({
   const appliedPreferencesForRef = useRef<string | null>(null);
   const isGlobeRef = useRef(isGlobe);
   const currentStyleRef = useRef(currentStyle);
+  const appliedStyleRef = useRef<{ style: string; individualPins: boolean } | null>(null);
   const mapReadyRef = useRef(mapReady);
 
   useEffect(() => {
@@ -344,9 +359,10 @@ export default function NewsMap({
   }, [geoItems, selectedItemId]);
 
   // Emit current viewport bounds to the parent with a debounce to minimize network traffic.
-  const emitBounds = useCallback((map: maplibregl.Map) => {
+  const emitBounds = useCallback((map: maplibregl.Map, immediate = false) => {
     if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
-    boundsDebounceRef.current = setTimeout(() => {
+    const publish = () => {
+      boundsDebounceRef.current = null;
       const bounds = map.getBounds();
       const center = map.getCenter();
       const bbox: BBox = {
@@ -360,7 +376,9 @@ export default function NewsMap({
         forceRaw: forceIndividualPinsRef.current,
       };
       onBoundsChangeRef.current?.(bbox);
-    }, 150);
+    };
+    if (immediate) publish();
+    else boundsDebounceRef.current = setTimeout(publish, 150);
   }, []);
 
   const latestGeoItemsRef = useRef(geoItems);
@@ -398,25 +416,51 @@ export default function NewsMap({
     );
 
     if (recoveryAttemptsRef.current.length >= MAP_RECOVERY_LIMIT) {
-      setMapError(
-        "The map engine is having trouble recovering. You can keep using the news feed while the map is unavailable.",
-      );
+      setMapError(MAP_FAILURE_MESSAGE);
+      setIsRetryingMap(false);
       devWarn(`Map recovery limit reached after ${reason}.`);
       return;
     }
 
     recoveryAttemptsRef.current.push(now);
     setIsChangingStyle(false);
-    setMapError(null);
+    mapReadyRef.current = false;
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
   }, []);
+
+  // Resource failures can otherwise leave a map (or style change) loading forever.
+  useEffect(() => {
+    if (mapReady || (mapError && !isRetryingMap)) return;
+    const timeout = setTimeout(() => {
+      setMapError(MAP_FAILURE_MESSAGE);
+      setIsRetryingMap(false);
+    }, MAP_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, [mapReady, mapError, isRetryingMap, retryCount, isChangingStyle]);
 
   // Core map initialization and event wiring.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     let map: maplibregl.Map;
+    let disposed = false;
+    let recoveryRequested = false;
+    // Event wiring belongs to this map instance, including after a retry.
+    let eventsWired = false;
+    const recover = (reason: string) => {
+      if (disposed || recoveryRequested) return;
+      recoveryRequested = true;
+      scheduleMapRecovery(reason);
+    };
+    const markReady = () => {
+      if (disposed || recoveryRequested) return;
+      mapReadyRef.current = true;
+      setMapError(null);
+      setIsRetryingMap(false);
+      setIsChangingStyle(false);
+      setMapReady(true);
+    };
 
     try {
       const view = getInitialViewState();
@@ -481,24 +525,31 @@ export default function NewsMap({
       });
     } catch (err) {
       console.error("Failed to initialize MapLibre:", err);
-      if (err instanceof maplibregl.GPUInitializationError) {
-        setTimeout(() => setMapError("The map requires WebGL2. Enable hardware acceleration or try a browser or device with WebGL2 support. You can still browse stories in the sidebar."), 0);
-        return;
-      }
-      setTimeout(() => scheduleMapRecovery("initialization failure"), 0);
-      return;
+      const timeout = setTimeout(() => {
+        if (err instanceof maplibregl.GPUInitializationError) {
+          setMapError('Enable hardware acceleration or try another browser. You can still browse stories in the sidebar.');
+          setIsRetryingMap(false);
+        } else {
+          recover('initialization failure');
+        }
+      }, 0);
+      return () => {
+        disposed = true;
+        clearTimeout(timeout);
+      };
     }
 
     map.on("webglcontextlost", (e) => {
       e.originalEvent.preventDefault();
       devWarn("WebGL context lost; waiting for browser restoration.");
+      mapReadyRef.current = false;
       setMapReady(false);
 
       if (contextRecoveryTimeoutRef.current) {
         clearTimeout(contextRecoveryTimeoutRef.current);
       }
       contextRecoveryTimeoutRef.current = setTimeout(() => {
-        scheduleMapRecovery("WebGL context loss");
+        recover("WebGL context loss");
       }, 3000);
     });
 
@@ -509,16 +560,12 @@ export default function NewsMap({
         contextRecoveryTimeoutRef.current = null;
       }
 
-      setMapError(null);
       map.resize();
 
       if (map.isStyleLoaded()) {
         addSourcesAndLayers(map)
-          .then(() => {
-            setIsChangingStyle(false);
-            setMapReady(true);
-          })
-          .catch(() => scheduleMapRecovery("post-restore layer rebuild"));
+          .then(markReady)
+          .catch(() => recover("post-restore layer rebuild"));
       }
     });
 
@@ -549,7 +596,7 @@ export default function NewsMap({
 
       if (e.error && !mapReadyRef.current) {
         console.error("MapLibre error event:", e.error);
-        scheduleMapRecovery("MapLibre error event");
+        recover("MapLibre error event");
       } else {
         devDebug("MapLibre runtime error suppressed:", e.error);
       }
@@ -642,8 +689,9 @@ export default function NewsMap({
       }
 
       addSourcesAndLayers(map).then(() => {
-        if (!eventsWiredRef.current) {
-          eventsWiredRef.current = true;
+        if (disposed || recoveryRequested) return;
+        if (!eventsWired) {
+          eventsWired = true;
 
           map.on("click", "unclustered-point", (e) => {
             if (e.features?.[0])
@@ -723,12 +771,15 @@ export default function NewsMap({
             }
           });
         }
-        setIsChangingStyle(false);
-        setMapReady(true);
-      });
+        markReady();
+      }).catch(() => recover('map layer initialization'));
     });
 
     mapRef.current = map;
+    appliedStyleRef.current = { style: currentStyle, individualPins: forceIndividualPinsRef.current };
+    // Bounds are available before tiles, glyphs, and icons finish loading.
+    // Start the viewport's news request in parallel with those resources.
+    emitBounds(map, true);
 
     // Use ResizeObserver for synchronous layout synchronization.
     // This prevents the common visual lag between the DOM container and the WebGL canvas during sidebar transitions.
@@ -748,6 +799,11 @@ export default function NewsMap({
     }
 
     return () => {
+      disposed = true;
+      if (boundsDebounceRef.current) {
+        clearTimeout(boundsDebounceRef.current);
+        boundsDebounceRef.current = null;
+      }
       if (resizeEndTimeoutRef.current)
         clearTimeout(resizeEndTimeoutRef.current);
       if (contextRecoveryTimeoutRef.current) {
@@ -769,8 +825,10 @@ export default function NewsMap({
   }, [retryCount]);
 
   const handleRetry = useCallback(() => {
+    recoveryAttemptsRef.current = [];
     setIsChangingStyle(false);
-    setMapError(null);
+    setIsRetryingMap(true);
+    mapReadyRef.current = false;
     setMapReady(false);
     setRetryCount((prev) => prev + 1);
   }, []);
@@ -812,13 +870,16 @@ export default function NewsMap({
 
   useEffect(() => {
     if (!mapRef.current) return;
+    if (appliedStyleRef.current?.style === currentStyle && appliedStyleRef.current.individualPins === forceIndividualPins) return;
+    appliedStyleRef.current = { style: currentStyle, individualPins: forceIndividualPins };
+    mapReadyRef.current = false;
     setMapReady(false);
     mapRef.current.setStyle(getMapLibreStyle(currentStyle), { diff: false });
   }, [currentStyle, forceIndividualPins]);
 
   // Transform news items into a FeatureCollection for high-performance batch rendering.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || isResizingRef.current) return;
+    if (!mapReady || !mapRef.current) return;
 
     const geojson = buildNewsFeatureCollection(geoItems);
 
@@ -829,6 +890,28 @@ export default function NewsMap({
     ) as maplibregl.GeoJSONSource;
     if (source) source.setData(geojson);
   }, [geoItems, mapReady]);
+
+  useEffect(() => {
+    if (!onLoadStateChange) return;
+    if (mapError) {
+      onLoadStateChange('error');
+      return;
+    }
+    onLoadStateChange('loading');
+    const map = mapRef.current;
+    if (!mapReady || !dataReady || !map) return;
+
+    // style.load only means the style definition is ready. Wait for a frame
+    // containing the tiles, labels, and the worker's current news source.
+    const onRender = () => {
+      if (!map.loaded() || !map.isSourceLoaded('news-events')) return;
+      onLoadStateChange('ready');
+      map.off('render', onRender);
+    };
+    map.on('render', onRender);
+    map.triggerRepaint();
+    return () => { map.off('render', onRender); };
+  }, [dataReady, geoItems, mapError, mapReady, onLoadStateChange]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -1074,24 +1157,17 @@ export default function NewsMap({
 
   return (
     <div className={styles.mapWrapper}>
-      {!mapReady && !mapError && (
+      {(!mapReady || mapError) && (
         <StateNotice
           placement="overlay"
-          variant="loading"
-          title={isChangingStyle ? "Updating map" : "Loading map"}
-          message={isChangingStyle
+          variant={mapError ? 'error' : 'loading'}
+          title={mapError ? 'Map unavailable' : isChangingStyle ? 'Updating map' : 'Loading map'}
+          message={mapError || (isChangingStyle
             ? "Applying the selected map style and restoring your layers."
-            : "Preparing the map and latest layers."}
-        />
-      )}
-      {mapError && (
-        <StateNotice
-          placement="overlay"
-          variant="error"
-          title="Map unavailable"
-          message={mapError}
-          actionLabel="Retry"
+            : "Preparing the map and latest layers.")}
+          actionLabel={mapError ? 'Try again' : undefined}
           actionTitle="Retry loading the map"
+          actionPending={isRetryingMap}
           onAction={handleRetry}
         />
       )}
@@ -1145,18 +1221,21 @@ export default function NewsMap({
             }}
             onResetOrientation={handleResetOrientation}
             drawToolsOpen={drawToolsOpen}
-            onToggleDrawTools={() => setDrawToolsOpen((o) => !o)}
+            onToggleDrawTools={() => {
+              setDrawToolsRequested(true);
+              setDrawToolsOpen((o) => !o);
+            }}
             bearing={mapBearing}
             disabled={disabled}
             userTier={userTier}
           />
-          <MapDrawTools
+          {drawToolsRequested && <MapDrawTools
             mapRef={mapRef}
             mapReady={mapReady}
             isOpen={drawToolsOpen}
             userTier={userTier}
             onClose={() => setDrawToolsOpen(false)}
-          />
+          />}
         </>
       )}
       <div

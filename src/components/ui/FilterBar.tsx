@@ -325,12 +325,15 @@ export default function FilterBar({
                                 {timeOptions.map((option) => (
                                     <GatedButton
                                         key={option.value}
-                                        className={`${styles.timeToggle} ${timeRange === option.value ? styles.timeToggleActive : ''}`}
+                                        className={`${styles.timeToggle} ${!disabled && canUseTimeRange(userTier, option.value) && timeRange === option.value ? styles.timeToggleActive : ''}`}
                                         onClick={() => handleTimeToggleClick(option.value)}
                                         aria-pressed={timeRange === option.value}
                                         allowed={!disabled && canUseTimeRange(userTier, option.value)}
                                         requiredTier={option.value === '1d' ? 'free' : option.value === 'custom' ? 'analyst' : 'pro'}
                                         featureName={option.value === 'custom' ? 'Custom date windows' : `${option.label} history`}
+                                        featureDescription={option.value === 'custom'
+                                            ? 'Choose an exact start and end date to investigate stories across all retained history.'
+                                            : `Look back through ${option.label.toLowerCase()} of reporting to see how stories developed.`}
                                         title={option.value === 'custom'
                                             ? 'Choose an exact start and end date'
                                             : `Show stories from the past ${option.label.toLowerCase()}`}
@@ -451,7 +454,7 @@ export default function FilterBar({
                     <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {volumeOptions.map((opt) => {
-                                const isActive = customValue === '' && minVolume === opt.value;
+                                const isActive = !disabled && hasFeature(userTier, 'advancedFilters') && customValue === '' && minVolume === opt.value;
                                 return (
                                     <GatedButton
                                         key={opt.value}
@@ -464,6 +467,7 @@ export default function FilterBar({
                                         allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
                                         requiredTier="pro"
                                         featureName="Story-volume filtering"
+                                        featureDescription="Focus on stories covered by multiple sources, with a minimum source count that you choose."
                                         title={opt.value === 1
                                             ? 'Show stories regardless of source count'
                                             : `Show stories reported by at least ${opt.value} sources`}
@@ -474,7 +478,14 @@ export default function FilterBar({
                                     </GatedButton>
                                 );
                             })}
-                            <div className={`${styles.customVolumeContainer} ${customValue !== '' ? styles.customVolumeContainerActive : ''}`}>
+                            {disabled || !hasFeature(userTier, 'advancedFilters') ? <GatedButton
+                                className={styles.timeToggle}
+                                allowed={false}
+                                requiredTier="pro"
+                                featureName="Custom story-volume filtering"
+                                featureDescription="Set an exact minimum source count to focus on the stories with the coverage you need."
+                                title="Set a custom minimum number of reporting sources"
+                            >Min</GatedButton> : <div className={`${styles.customVolumeContainer} ${customValue !== '' ? styles.customVolumeContainerActive : ''}`}>
                                 {renderVolumeIcon(customValue !== '', 'var(--text-secondary)')}
                                 <input
                                     type="number"
@@ -496,7 +507,7 @@ export default function FilterBar({
                                             ? 'Custom story-volume filtering requires the Pro plan'
                                             : 'Set a custom minimum number of reporting sources'}
                                 />
-                            </div>
+                            </div>}
                         </div>
                     </div>
                 </div>
@@ -506,7 +517,7 @@ export default function FilterBar({
                     <div className={styles.scrollWrapper}>
                         <div className={styles.sourceToggles}>
                             {credibilityOptions.map((opt) => {
-                                const isActive = credibilityTiers.includes(opt.value);
+                                const isActive = !disabled && hasFeature(userTier, 'advancedFilters') && credibilityTiers.includes(opt.value);
                                 return (
                                     <GatedButton
                                         key={opt.value}
@@ -516,6 +527,7 @@ export default function FilterBar({
                                         allowed={!disabled && hasFeature(userTier, 'advancedFilters')}
                                         requiredTier="pro"
                                         featureName="Credibility filtering"
+                                        featureDescription="Filter coverage by source credibility to focus your investigation on the reporting you want to see."
                                         title={`${isActive ? 'Exclude' : 'Include'} ${opt.label.toLowerCase()} sources`}
                                         style={{
                                             '--btn-color': opt.color,

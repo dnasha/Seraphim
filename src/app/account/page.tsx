@@ -12,6 +12,8 @@ import PublicPageHeader from '@/components/ui/PublicPageHeader';
 import styles from './AccountPage.module.css';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import { getSubscriptionStatusLabel } from './billingPresentation';
+import UpgradeLink from '@/components/ui/UpgradeLink';
+import tierStyles from '@/components/ui/TierBadge.module.css';
 
 const ProviderIcon = ({ provider }: { provider: string }) => {
   switch (provider) {
@@ -263,7 +265,7 @@ export default function AccountPage() {
             <>
               <div>
                 <div className={styles.planTitleRow}>
-                  <h3 className={styles.planName} data-tier={userTier}>{userTier === 'angel' ? 'Angel' : userTier === 'analyst' ? 'Analyst' : userTier === 'pro' ? 'Pro' : 'Free'}</h3>
+                  <h3 className={`${styles.planName} ${tierStyles.tier}`} data-tier={userTier}>{userTier === 'angel' ? 'Angel' : userTier === 'analyst' ? 'Analyst' : userTier === 'pro' ? 'Pro' : 'Free'}</h3>
                   {subscriptionStatusLabel && <span className={styles.statusBadge}>{subscriptionStatusLabel}</span>}
                 </div>
                 <p className={styles.helperText}>
@@ -282,7 +284,7 @@ export default function AccountPage() {
               {angelStatus === 'revoked' && <p className={`${styles.message} ${styles.error}`} role="status">Angel access ended after a refund or payment dispute. <a title="Email Seraphim support" href="mailto:support@seraphi.me">Contact support</a> with questions.</p>}
               <div className={styles.buttonGroup}>
                 {userTier === 'free' ? (
-                  <Link className={styles.button} title="Compare Seraphim plans" href="/pricing?returnTo=%2Faccount">Explore plans <LuArrowUpRight aria-hidden="true" /></Link>
+                  <UpgradeLink returnTo="/account" />
                 ) : (
                   <>
                     <button className={`${styles.button} ${styles.buttonSecondary}`} title="Open the billing portal" disabled={isManagingBilling} onClick={handleManageBilling}>

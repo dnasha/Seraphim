@@ -2,7 +2,14 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-let isOpen = false;
+export interface AuthModalIntent {
+  initialTab?: 'login' | 'signup';
+  returnTo?: string;
+  subtitle?: string;
+}
+
+const closedState = { isOpen: false, intent: undefined as AuthModalIntent | undefined };
+let state = closedState;
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void) {
@@ -11,17 +18,17 @@ function subscribe(listener: () => void) {
 }
 
 function snapshot() {
-  return isOpen;
+  return state;
 }
 
-export function setAuthModalOpen(nextOpen: boolean) {
-  if (isOpen === nextOpen) return;
-  isOpen = nextOpen;
+export function setAuthModalOpen(nextOpen: boolean, intent?: AuthModalIntent) {
+  if (state.isOpen === nextOpen && state.intent === intent) return;
+  state = nextOpen ? { isOpen: true, intent } : closedState;
   for (const listener of listeners) listener();
 }
 
 export function useAuthModalState() {
-  const open = useSyncExternalStore(subscribe, snapshot, () => false);
+  const current = useSyncExternalStore(subscribe, snapshot, () => closedState);
   const setOpen = useCallback((nextOpen: boolean) => setAuthModalOpen(nextOpen), []);
-  return [open, setOpen] as const;
+  return [current.isOpen, setOpen, current.intent] as const;
 }

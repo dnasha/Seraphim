@@ -6,7 +6,7 @@
  */
 
 import { NewsItem } from "@/lib/core/types";
-import { formatTimeAgo } from "@/components/map/MapConstants";
+import { formatTimeAgo } from "@/lib/utils/time";
 import { getCredibilityStyle, CATEGORY_COLORS, getSourceStyle } from "@/lib/styles/colors";
 import { canonicalEventCount } from "@/lib/utils/ranking";
 import styles from "./EventSidebar.module.css";

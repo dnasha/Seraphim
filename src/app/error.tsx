@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useTransition } from 'react';
 
 import StateNotice from '@/components/ui/StateNotice';
 
 export default function Error({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
+  const [isPending, startTransition] = useTransition();
   useEffect(() => {
     // Log the error to an error reporting service
     console.error("Global Error Caught:", error);
@@ -21,10 +22,11 @@ export default function Error({
       placement="page"
       variant="error"
       title="Something went wrong"
-      message="This view couldn’t be loaded. Your data is safe, and you can try again."
+      message="This view couldn’t be loaded. Please try again."
       actionLabel="Try again"
-      actionTitle="Retry rendering this page"
-      onAction={reset}
+      actionTitle="Retry loading this page"
+      actionPending={isPending}
+      onAction={() => startTransition(retry)}
     />
   );
 }

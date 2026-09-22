@@ -26,9 +26,19 @@ describe('pricing search parameters', () => {
       recommendedTier: 'analyst',
       requestedFeature: 'x'.repeat(80),
       cancelledCheckoutIntent: null,
+      initialPriceKey: null,
     });
 
     expect(parsePricingSearchParams({ tier: 'angel' }).recommendedTier).toBeNull();
+  });
+
+  it('restores only recognized checkout plans after signup', () => {
+    expect(parsePricingSearchParams({ plan: 'analyst_monthly' }).initialPriceKey).toBe('analyst_monthly');
+    expect(parsePricingSearchParams({ plan: 'pro_yearly' }).initialPriceKey).toBe('pro_yearly');
+    expect(parsePricingSearchParams({ plan: 'angel' }).initialPriceKey).toBe('angel');
+    expect(parsePricingSearchParams({ plan: 'free_monthly' }).initialPriceKey).toBeNull();
+    expect(parsePricingSearchParams({ plan: 'https://example.com' }).initialPriceKey).toBeNull();
+    expect(parsePricingSearchParams({ plan: '' }).initialPriceKey).toBeNull();
   });
 
   it('accepts only UUID checkout intents on an explicit cancellation return', () => {

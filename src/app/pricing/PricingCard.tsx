@@ -1,5 +1,8 @@
+import Link from 'next/link';
+import { LuArrowRight, LuCheck, LuSparkles } from 'react-icons/lu';
 import styles from './PricingPage.module.css';
 import { TierConfig } from './pricingConstants';
+import tierStyles from '@/components/ui/TierBadge.module.css';
 
 interface PricingCardProps {
     tier: TierConfig;
@@ -9,19 +12,12 @@ interface PricingCardProps {
     angelRemaining: number | null;
     angelTotal: number;
     isRecommended?: boolean;
+    isMobileSelected?: boolean;
+    isAuthLoading?: boolean;
     handleCheckout: (priceKey: string) => Promise<void>;
 }
 
-const formatPrice = (price: number) => {
-    if (price === 0) return 'Free';
-    return `$${price.toFixed(2)}`;
-};
-
-const getSavingsPercent = (monthly: number, yearly: number) => {
-    if (monthly === 0) return 0;
-    const monthlyAnnual = monthly * 12;
-    return Math.round(((monthlyAnnual - yearly) / monthlyAnnual) * 100);
-};
+const formatPrice = (price: number) => `$${price.toFixed(2)}`;
 
 export function PricingCard({
     tier,
@@ -31,140 +27,116 @@ export function PricingCard({
     angelRemaining,
     angelTotal,
     isRecommended = false,
+    isMobileSelected = true,
+    isAuthLoading = false,
     handleCheckout,
 }: PricingCardProps) {
-    const price = tier.isLifetime
-        ? tier.lifetimePrice
-        : isYearly
-            ? tier.yearlyPrice
-            : tier.monthlyPrice;
-    const savings = tier.isLifetime
-        ? null
-        : getSavingsPercent(tier.monthlyPrice, tier.yearlyPrice);
-    const priceKey = tier.isLifetime
-        ? tier.priceKeyMonthly
-        : isYearly
-            ? tier.priceKeyYearly
-            : tier.priceKeyMonthly;
-    const isFreeTier = tier.key === 'free';
-    const isCurrentPlan = tier.key === currentTier;
+    const priceKey = tier.isLifetime || !isYearly ? tier.priceKeyMonthly : tier.priceKeyYearly;
+    const isFree = tier.key === 'free';
+    const isCurrent = tier.key === currentTier;
     const isLoading = loadingTier === priceKey;
-    const annualMonthlyEquivalent = isYearly && tier.yearlyPrice > 0
-        ? tier.yearlyPrice / 12
-        : null;
-    const ctaText = isCurrentPlan
-        ? 'Current Plan'
-        : isFreeTier && currentTier === 'guest'
-            ? 'Sign Up Free'
-            : tier.cta;
-    const isDisabled = isCurrentPlan || isLoading || (tier.key === 'angel' && angelRemaining === 0) || (isFreeTier && currentTier !== 'guest');
+    const isSoldOut = tier.isLifetime && angelRemaining === 0;
+    const hasSubscription = currentTier === 'pro' || currentTier === 'analyst';
+    const isIncluded = currentTier === 'angel' || (isFree && hasSubscription);
+    const canManage = !tier.isLifetime && !isFree && hasSubscription;
+    const isDisabled = isAuthLoading || loadingTier !== null || isCurrent || isIncluded || isSoldOut;
+    const price = isYearly ? tier.yearlyPrice / 12 : tier.monthlyPrice;
+    const buttonText = isCurrent ? 'Current plan'
+        : isIncluded ? 'Included in your plan'
+            : isSoldOut ? 'Sold out'
+                : isFree ? 'Create free account' : tier.cta;
+    const billingDescription = isFree ? 'Free forever. No card needed.'
+        : tier.isLifetime ? 'One payment. No recurring bills.'
+            : isYearly ? `${formatPrice(tier.yearlyPrice)} billed yearly after your trial`
+                : `${formatPrice(tier.monthlyPrice)} billed monthly after your trial`;
+
+    const action = canManage ? (
+        <Link href="/account" className={styles.ctaBtn} title={isCurrent ? 'Manage your current plan' : `Switch to ${tier.name} from your account`}>
+            {isCurrent ? 'Manage plan' : `Switch to ${tier.name}`} <LuArrowRight aria-hidden="true" />
+        </Link>
+    ) : (
+        <button
+            type="button"
+            className={`${styles.ctaBtn} ${isRecommended && !isCurrent ? styles.ctaBtnPrimary : ''} ${tier.isLifetime ? styles.ctaBtnAngel : ''}`}
+            disabled={isDisabled}
+            aria-busy={isLoading}
+            aria-describedby={`${tier.key}-billing ${tier.key}-terms`}
+            title={isLoading ? 'Opening checkout' : buttonText}
+            onClick={() => handleCheckout(priceKey)}
+        >
+            {isLoading ? <><span className={styles.spinner} aria-hidden="true" /> Opening checkout…</> : <>
+                {buttonText}
+                {!isDisabled && <LuArrowRight aria-hidden="true" />}
+            </>}
+        </button>
+    );
+
+    if (tier.isLifetime) {
+        return (
+            <article className={`${styles.founderOffer} ${tierStyles.tier}`} data-tier="angel" aria-labelledby="angel-name">
+                <div className={styles.founderCopy}>
+                    <span className={styles.eyebrow}><LuSparkles aria-hidden="true" /> Angel founder membership</span>
+                    <h2 id="angel-name">Prefer to pay once?</h2>
+                    <p>Every Analyst feature for the lifetime of Seraphim, plus a Founder badge and a manually assigned Discord role.</p>
+                    <p id="angel-terms" className={styles.founderTerms}>Access lasts for the operational lifetime of the service. <Link href="/terms" title="Read refund and lifetime terms">Refund and lifetime terms</Link> apply.</p>
+                </div>
+                <div className={styles.founderAction}>
+                    <div className={styles.priceLine}><span className={styles.priceAmount}>${tier.lifetimePrice}</span><span className={styles.pricePeriod}>one-time</span></div>
+                    <p id="angel-billing" className={styles.billingNote}>{billingDescription}</p>
+                    {action}
+                    <p className={styles.actionNote}>
+                        {isCurrent ? 'Your lifetime membership is active'
+                            : isSoldOut ? 'All founder memberships have been claimed'
+                                : angelRemaining === null ? `Limited to ${angelTotal} memberships`
+                                    : `${angelRemaining} of ${angelTotal} memberships available`}
+                    </p>
+                </div>
+            </article>
+        );
+    }
 
     return (
-        <div
-            className={`${styles.card} ${tier.popular ? styles.cardPopular : ''} ${tier.key === 'angel' ? styles.cardAngel : ''} ${isRecommended ? styles.cardRecommended : ''} ${isCurrentPlan ? styles.cardCurrent : ''}`}
+        <article
+            className={`${styles.card} ${tierStyles.tier} ${isRecommended ? styles.cardRecommended : ''}`}
+            data-tier={tier.key}
+            data-mobile-selected={isMobileSelected}
+            aria-labelledby={`${tier.key}-name`}
         >
-            {isCurrentPlan ? (
-                <div className={`${styles.cardBadge} ${styles.cardBadgeCurrent}`}>
-                    Current Plan
-                </div>
-            ) : (isRecommended || tier.badge) && (
-                <div className={`${styles.cardBadge} ${(tier.popular || isRecommended) ? styles.cardBadgePopular : ''} ${tier.key === 'angel' ? styles.cardBadgeAngel : ''}`}>
-                    {isRecommended ? 'Recommended for you' : tier.badge}
-                </div>
-            )}
-
             <div className={styles.cardHeader}>
-                <h3 className={styles.cardName}>{tier.name}</h3>
+                <div className={styles.cardTitleRow}>
+                    <h2 id={`${tier.key}-name`} className={styles.cardName}>{tier.name}</h2>
+                    {isCurrent ? <span className={styles.currentBadge}>Your plan</span>
+                        : isRecommended && <span className={styles.recommendedBadge}>Recommended</span>}
+                </div>
                 <p className={styles.cardTagline}>{tier.tagline}</p>
             </div>
 
             <div className={styles.cardPricing}>
-                {tier.isLifetime ? (
-                    <>
-                        <span className={styles.priceAmount}>${tier.lifetimePrice}</span>
-                        <span className={styles.pricePeriod}>one-time</span>
-                    </>
-                ) : price === 0 ? (
-                    <>
-                        <span className={styles.priceAmount}>$0</span>
-                        <span className={styles.pricePeriod}>forever</span>
-                    </>
-                ) : (
-                    <>
-                        {!isYearly && (
-                            <span className={styles.billingNote}>
-                                Pay monthly, cancel anytime
-                            </span>
-                        )}
-                        <span className={styles.priceAmount}>
-                            {formatPrice(annualMonthlyEquivalent ?? price)}
-                        </span>
-                        <span className={styles.pricePeriod}>
-                            /month
-                        </span>
-                        {isYearly && savings && savings > 0 && (
-                            <span className={styles.priceSavings}>Save {savings}%</span>
-                        )}
-                        {isYearly && (
-                            <span className={styles.annualBilling}>
-                                Billed ${tier.yearlyPrice.toFixed(2)} annually
-                            </span>
-                        )}
-                    </>
-                )}
+                <div className={styles.priceLine}>
+                    <span className={styles.priceAmount}>{isFree ? '$0' : formatPrice(price)}</span>
+                    <span className={styles.pricePeriod}>{isFree ? '/ forever' : '/ month'}</span>
+                </div>
+                <p id={`${tier.key}-billing`} className={styles.billingNote}>{billingDescription}</p>
             </div>
 
-            {tier.key === 'angel' && angelRemaining !== null && (
-                <div className={styles.scarcityBadge} style={angelRemaining === 0 ? { color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)' } : undefined}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                        <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" />
-                    </svg>
-                    {angelRemaining === 0
-                        ? 'Sold out'
-                        : `Only ${angelRemaining} of ${angelTotal} remaining`
-                    }
-                </div>
-            )}
+            <div className={styles.cardAction}>
+                {action}
+                <p id={`${tier.key}-terms`} className={styles.actionNote}>
+                    {isFree ? 'Your starting point for global news'
+                        : canManage ? 'Review plan changes in your account'
+                            : isIncluded ? 'Already included with your membership'
+                                : <><strong>{tier.trialDays} days free</strong> · $0 today · card required</>}
+                </p>
+            </div>
 
-            {tier.trialDays > 0 && (
-                <div className={styles.trialBadge}>
-                    {tier.trialDays}-day free trial. No charge today.
-                </div>
-            )}
-
-            <ul className={styles.featureList}>
-                {tier.features.map((f) => (
-                    <li key={f} className={styles.featureItem}>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        {f}
-                    </li>
-                ))}
-            </ul>
-
-            <button
-                className={`${styles.ctaBtn} ${tier.popular && !isCurrentPlan ? styles.ctaBtnPopular : ''} ${tier.key === 'angel' && !isCurrentPlan ? styles.ctaBtnAngel : ''} ${(isFreeTier && currentTier !== 'guest') || isCurrentPlan ? styles.ctaBtnFree : ''}`}
-                disabled={isDisabled}
-                onClick={() => handleCheckout(priceKey)}
-                title={isCurrentPlan
-                    ? `${tier.name} is your current plan`
-                    : isLoading
-                        ? `Starting ${tier.name} checkout`
-                        : tier.key === 'angel' && angelRemaining === 0
-                            ? 'Angel founder memberships are sold out'
-                            : isFreeTier && currentTier !== 'guest'
-                                ? 'Your account already includes the Free plan'
-                                : `${ctaText}: ${tier.name} plan`}
-            >
-                {isLoading ? (
-                    <span className={styles.spinner} />
-                ) : (tier.key === 'angel' && angelRemaining === 0 && !isCurrentPlan) ? (
-                    'Sold Out'
-                ) : (
-                    ctaText
-                )}
-            </button>
-        </div>
+            <div className={styles.cardFeatures}>
+                <p className={styles.includesLabel}>{tier.includes ?? 'The essentials, included:'}</p>
+                <ul className={styles.featureList}>
+                    {tier.features.map((feature) => (
+                        <li key={feature}><LuCheck aria-hidden="true" /><span>{feature}</span></li>
+                    ))}
+                </ul>
+            </div>
+        </article>
     );
 }

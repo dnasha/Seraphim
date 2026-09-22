@@ -198,14 +198,4 @@ export function getMapLibreStyleForServer(styleKey: string): unknown {
  * Converts an ISO date string into a concise human-readable relative time string.
  * Optimized for dashboard density (e.g., '5m ago', '2h ago').
  */
-export function formatTimeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
+export { formatTimeAgo } from '@/lib/utils/time';

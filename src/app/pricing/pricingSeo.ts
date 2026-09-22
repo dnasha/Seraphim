@@ -1,10 +1,12 @@
 import { safeRelativePath } from '@/lib/security/redirects';
+import { TIERS } from './pricingConstants';
 
 export interface PricingSearchParams {
   returnTo: string;
   requestedFeature: string | null;
   recommendedTier: 'pro' | 'analyst' | null;
   cancelledCheckoutIntent: string | null;
+  initialPriceKey: string | null;
 }
 
 function firstValue(value: string | string[] | undefined) {
@@ -20,6 +22,10 @@ export function parsePricingSearchParams(
 ): PricingSearchParams {
   const feature = firstValue(params.feature)?.trim().slice(0, 80) || null;
   const tier = firstValue(params.tier);
+  const plan = firstValue(params.plan);
+  const initialPriceKey = plan && TIERS.some((tier) => tier.priceKeyMonthly === plan || tier.priceKeyYearly === plan)
+    ? plan
+    : null;
   const recommendedTier = tier === 'pro' || tier === 'analyst' ? tier : null;
   const checkoutIntent = firstValue(params.checkoutIntent);
   const cancelledCheckoutIntent = firstValue(params.checkout) === 'cancelled'
@@ -31,6 +37,7 @@ export function parsePricingSearchParams(
   return {
     returnTo: sanitizeReturnTo(params.returnTo),
     requestedFeature: feature,
+    initialPriceKey,
     recommendedTier,
     cancelledCheckoutIntent,
   };

@@ -142,6 +142,11 @@
 }
 
 .previewLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 4px;
   font-size: 0.6875rem;
   font-weight: 500;
@@ -189,7 +194,9 @@
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 4px 0;
+  gap: 10px;
+  min-height: 36px;
   text-align: left;
   font: inherit;
 }

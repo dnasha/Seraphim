@@ -714,37 +714,16 @@ Includes card expansion details and responsive mobile layouts.
 }
 
 .guestCtaButton {
-  font-family: var(--font-ui);
-  padding: 8px 14px;
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  align-self: flex-start;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  composes: action primary from "./UpgradeActions.module.css";
+  width: 100%;
+  margin-top: 16px;
 }
 
 @media (hover: hover) {
-  .guestCtaButton:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
-  }
+  .guestCtaButton:hover { background: var(--upgrade-accent-hover); }
 }
 
-.guestCtaButton:active {
-  transform: translateY(0) scale(0.97);
-  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.2);
-}
+
 
 /* Responsive */
 @media (max-width: 860px) {
@@ -1134,23 +1113,9 @@ Includes card expansion details and responsive mobile layouts.
   outline: none;
 }
 
-.timelineUpgradeBtn {
-  border: 1px solid #d4a72c;
-  border-radius: 5px;
-  background: transparent;
-  color: #d4a72c;
-  cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 3px 6px;
-}
+.timelineUpgradeBtn { flex-shrink: 0; }
 
-.timelineGuestCta {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent);
-  box-shadow: none;
-}
+.timelineGuestCta { white-space: normal; }
 
 .timelinePreview {
   margin: 8px 0 0;

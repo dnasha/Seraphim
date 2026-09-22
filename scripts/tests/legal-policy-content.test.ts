@@ -10,7 +10,7 @@ describe('launch legal content', () => {
   const terms = source('src/app/terms/page.tsx');
   const privacy = source('src/app/privacy/page.tsx');
   const authModal = source('src/components/auth/AuthModal.tsx');
-  const pricing = source('src/app/pricing/PricingPageClient.tsx');
+  const pricing = source('src/app/pricing/PricingCard.tsx');
   const faq = source('src/app/pricing/FaqSection.tsx');
 
   it('uses fixed policy versions and the approved public identity', () => {
@@ -56,6 +56,6 @@ describe('launch legal content', () => {
     expect(authModal).toContain('Privacy Policy');
     expect(authModal).not.toMatch(/merchant of record|partial refund|arbitration|Angel lifetime/i);
     expect(pricing).toContain('Refund and lifetime terms');
-    expect(faq).toContain('<Link href="/terms" title="Read the Terms of Service">Terms</Link>');
+    expect(faq).toContain('<Link href="/terms" title="Read refund and lifetime terms">refund and lifetime terms</Link>');
   });
 });

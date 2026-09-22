@@ -123,6 +123,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['usgs'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('usgs', !overlays['usgs'])} allowed={canUseOverlay(userTier, 'usgs')} requiredTier="free" featureName="Earthquake overlay"
+                             featureDescription="See recent earthquake locations and magnitudes alongside the news, using USGS reporting."
+                             indicator="badge"
                              title={`${overlays.usgs ? 'Hide' : 'Show'} USGS earthquakes from the past 24 hours`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -140,6 +142,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['noaa'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('noaa', !overlays['noaa'])} allowed={canUseOverlay(userTier, 'noaa')} requiredTier="pro" featureName="Weather radar overlay"
+                             featureDescription="Follow weather radar alongside live events to understand conditions on the ground."
+                             indicator="badge"
                              title={`${overlays.noaa ? 'Hide' : 'Show'} NOAA weather radar`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -157,6 +161,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['fires'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('fires', !overlays['fires'])} allowed={canUseOverlay(userTier, 'fires')} requiredTier="pro" featureName="Wildfire overlay"
+                             featureDescription="Locate active fire detections from NASA FIRMS and compare them with nearby reporting."
+                             indicator="badge"
                              title={`${overlays.fires ? 'Hide' : 'Show'} active wildfire detections`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -174,6 +180,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['flights'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('flights', !overlays['flights'])} allowed={canUseOverlay(userTier, 'flights')} requiredTier="analyst" featureName="Live flight tracking"
+                             featureDescription="Follow live aircraft positions to add aviation context to your investigation."
+                             indicator="badge"
                              title={`${overlays.flights ? 'Hide' : 'Show'} live aircraft positions`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -191,6 +199,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['iss'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('iss', !overlays['iss'])} allowed={canUseOverlay(userTier, 'iss')} requiredTier="analyst" featureName="ISS tracking"
+                             featureDescription="See the current position of the International Space Station on your map."
+                             indicator="badge"
                              title={`${overlays.iss ? 'Hide' : 'Show'} the current ISS position`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -208,6 +218,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['aqi'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('aqi', !overlays['aqi'])} allowed={canUseOverlay(userTier, 'aqi')} requiredTier="analyst" featureName="Air quality overlay"
+                             featureDescription="Explore local air-quality readings alongside the events and places you follow."
+                             indicator="badge"
                              title={`${overlays.aqi ? 'Hide' : 'Show'} air-quality readings`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -225,6 +237,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['radiation'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('radiation', !overlays['radiation'])} allowed={canUseOverlay(userTier, 'radiation')} requiredTier="analyst" featureName="Radiation overlay"
+                             featureDescription="Explore Safecast radiation measurements for environmental context in your area of interest."
+                             indicator="badge"
                              title={`${overlays.radiation ? 'Hide' : 'Show'} Safecast radiation readings`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -242,6 +256,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                         </div>
                         <GatedButton className={`${styles.toggleSwitch}${overlays['eonet'] ? ` ${styles.toggleSwitchOn}` : ''}`}
                              onClick={() => onOverlayToggle('eonet', !overlays['eonet'])} allowed={canUseOverlay(userTier, 'eonet')} requiredTier="pro" featureName="NASA events overlay"
+                             featureDescription="Track natural events reported by NASA, including storms, volcanoes, and other hazards."
+                             indicator="badge"
                              title={`${overlays.eonet ? 'Hide' : 'Show'} NASA natural events from the past 30 days`}>
                             <div className={styles.toggleKnob} />
                         </GatedButton>
@@ -272,24 +288,28 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
             </button>
 
             <GatedButton
-                className={`${styles.actionBtn}${isGlobe ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                className={`${styles.actionBtn}${isGlobe ? ` ${styles.actionBtnActive}` : ''}`}
                 onClick={onToggleGlobe}
                 title={isGlobe ? "Switch to 2D Map" : "Switch to 3D Globe"}
-                allowed={!disabled && hasFeature(userTier, 'globe')}
-                requiredTier={userTier === 'guest' ? 'free' : 'pro'}
+                allowed={hasFeature(userTier, 'globe')}
+                disabled={disabled && userTier !== 'guest'}
+                requiredTier="pro"
                 featureName="3D globe"
+                featureDescription="Explore world events on an interactive globe for a different perspective on global coverage."
             >
                 <span className={styles.btnText}>3D</span>
             </GatedButton>
 
             <div className={styles.bottomRow}>
                 <GatedButton
-                    className={`${styles.actionBtn}${drawToolsOpen ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                    className={`${styles.actionBtn}${drawToolsOpen ? ` ${styles.actionBtnActive}` : ''}`}
                     onClick={onToggleDrawTools}
                     title="Draw & Measure"
-                    allowed={!disabled && hasFeature(userTier, 'drawTools')}
+                    allowed={hasFeature(userTier, 'drawTools')}
+                    disabled={disabled && userTier !== 'guest'}
                     requiredTier="free"
                     featureName="Draw and measure tools"
+                    featureDescription="Annotate the map, measure distances and areas, and save your notes locally."
                 >
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
@@ -299,7 +319,8 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 </GatedButton>
 
             <button
-                className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
+                className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}`}
+                disabled={disabled && userTier !== 'guest'}
                 onClick={handleOverlayButtonClick}
                 title={overlayMenuOpen ? "Close environmental overlay controls" : "Open environmental overlay controls"}
                 aria-label={overlayMenuOpen ? "Close environmental overlay controls" : "Open environmental overlay controls"}

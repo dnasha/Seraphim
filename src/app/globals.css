@@ -79,6 +79,18 @@ body {
   --accent-hover: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) + 7%));
   --accent-active: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) - 8%));
 
+  /* Shared access, upgrade, pricing, and modal presentation. */
+  --upgrade-accent: var(--text-primary);
+  --upgrade-accent-hover: color-mix(in srgb, var(--text-primary) 85%, var(--surface));
+  --upgrade-on-accent: var(--surface);
+  --upgrade-ink: var(--text-secondary);
+  --upgrade-tint: var(--surface-alt);
+  --upgrade-border: color-mix(in srgb, var(--text-primary) 18%, var(--border));
+  --upgrade-focus: var(--text-primary);
+  --modal-backdrop: rgba(8, 12, 22, 0.56);
+  --modal-radius: 16px;
+  --modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+
   /* Source Brand Colors */
   --source-gnews: #065f46; /* aligned to deep green */
   --source-rss: #0066cc;

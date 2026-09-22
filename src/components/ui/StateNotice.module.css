@@ -9,25 +9,23 @@
     position: absolute;
     inset: 0;
     z-index: 900;
-    padding: var(--space-xl);
-    background: hsla(var(--surface-alt-h), var(--surface-alt-s), var(--surface-alt-l), 0.72);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
+    padding: var(--space-lg);
+    /* A flat scrim avoids compositing a blur over the WebGL canvas. */
+    background: hsla(var(--surface-alt-h), var(--surface-alt-s), var(--surface-alt-l), 0.8);
 }
 
 .floating {
     position: fixed;
-    left: 50%;
-    bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px));
-    z-index: 9999;
-    width: min(440px, calc(100vw - 32px));
-    transform: translateX(-50%);
+    left: max(var(--space-lg), env(safe-area-inset-left));
+    right: max(var(--space-lg), env(safe-area-inset-right));
+    bottom: max(var(--space-lg), calc(env(safe-area-inset-bottom) + 12px));
+    z-index: 1100;
 }
 
 .page {
     min-height: 100vh;
     min-height: 100dvh;
-    padding: var(--space-xl);
+    padding: var(--space-lg);
     background: var(--surface-alt);
 }
 
@@ -36,60 +34,62 @@
 
     position: relative;
     pointer-events: auto;
-    width: min(440px, 100%);
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: 14px 14px 14px 16px;
+    width: min(400px, 100%);
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-lg) var(--space-md);
+    padding: var(--space-xl);
     color: var(--text-primary);
-    background: hsla(var(--surface-h), var(--surface-s), var(--surface-l), 0.97);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.16);
-    animation: notice-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 6px -4px rgba(15, 23, 42, 0.08), 0 16px 40px -12px rgba(15, 23, 42, 0.2);
+    animation: notice-in 160ms ease-out;
 }
 
 .error {
     --notice-color: var(--red);
 }
 
-.info {
-    --notice-color: var(--accent);
-}
-
+.info,
 .loading {
     --notice-color: var(--accent);
 }
 
 .icon {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
     color: var(--notice-color);
-    background: var(--surface-alt);
-    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--notice-color) 9%, var(--surface));
     border-radius: var(--radius-md);
 }
 
 .icon svg {
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
 }
 
-.spinner {
-    width: 17px;
-    height: 17px;
-    border: 2px solid var(--border);
-    border-top-color: var(--notice-color);
+.spinner,
+.actionSpinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
     border-radius: 50%;
-    animation: notice-spin 700ms linear infinite;
+    animation: notice-spin 800ms linear infinite;
 }
 
 .copy {
     min-width: 0;
-    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.dismissible .copy {
+    padding-right: 24px;
 }
 
 .title,
@@ -101,55 +101,76 @@
     color: var(--text-primary);
     font-size: var(--text-base);
     font-weight: var(--weight-semibold);
-    line-height: 1.35;
+    line-height: 1.5;
 }
 
 .message {
-    margin-top: 2px;
+    margin-top: var(--space-2xs);
     color: var(--text-muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-normal);
-    line-height: 1.45;
+    line-height: 1.55;
 }
 
 .action,
 .dismiss {
-    flex-shrink: 0;
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    background: var(--surface-alt);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+    font: inherit;
+    transition: background 150ms ease, border-color 150ms ease;
 }
 
 .action {
-    min-height: 34px;
-    padding: 7px 11px;
+    grid-column: 2;
+    justify-self: start;
+    gap: var(--space-sm);
+    min-height: 40px;
+    min-width: 132px;
+    max-width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border-color: var(--border);
     border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: var(--surface-alt);
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
-    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.action svg,
+.actionSpinner {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.action:disabled {
+    cursor: wait;
+    color: var(--text-muted);
 }
 
 .dismiss {
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    width: 40px;
+    height: 40px;
     padding: 0;
-    border-color: transparent;
     border-radius: var(--radius-md);
     color: var(--text-muted);
     background: transparent;
 }
 
 .dismiss svg {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
 }
 
 @media (hover: hover) {
-    .action:hover,
+    .action:hover:not(:disabled),
     .dismiss:hover {
         color: var(--text-primary);
         background: var(--surface-hover);
@@ -157,26 +178,15 @@
     }
 }
 
-.action:active,
-.dismiss:active {
-    transform: translateY(1px);
-}
-
 .action:focus-visible,
 .dismiss:focus-visible {
-    outline: 2px solid var(--notice-color);
-    outline-offset: 2px;
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
 }
 
 @keyframes notice-in {
-    from {
-        opacity: 0;
-        transform: translateY(8px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes notice-spin {
@@ -185,32 +195,32 @@
 
 @media (max-width: 520px) {
     .notice {
-        align-items: flex-start;
-        flex-wrap: wrap;
+        padding: var(--space-lg);
     }
 
     .action {
-        width: 100%;
-        margin-left: 46px;
+        justify-self: stretch;
+        min-width: 0;
+        min-height: 44px;
     }
 
     .dismiss {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-    }
-
-    .notice:has(.dismiss) .copy {
-        padding-right: 26px;
+        top: var(--space-2xs);
+        right: var(--space-2xs);
+        width: 44px;
+        height: 44px;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .notice {
+    .notice,
+    .spinner,
+    .actionSpinner {
         animation: none;
     }
 
-    .spinner {
-        animation-duration: 1.4s;
+    .action,
+    .dismiss {
+        transition: none;
     }
 }
