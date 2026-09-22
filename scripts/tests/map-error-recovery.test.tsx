@@ -8,6 +8,10 @@ type MapHarness = {
     emit: (event: string, payload?: unknown) => void;
     handlers: Map<string, (event: unknown) => void>;
     remove: ReturnType<typeof vi.fn>;
+    setStyle: ReturnType<typeof vi.fn>;
+    loaded: ReturnType<typeof vi.fn>;
+    isSourceLoaded: ReturnType<typeof vi.fn>;
+    getSource: ReturnType<typeof vi.fn>;
 };
 const mocks = vi.hoisted(() => ({
     maps: [] as MapHarness[],
@@ -48,12 +52,17 @@ vi.mock('maplibre-gl', () => {
             return this;
         }
         emit(event: string, payload: unknown = {}) { this.handlers.get(event)?.(payload); }
-        off() {}
+        off(event: string, handler: (event: unknown) => void) {
+            if (this.handlers.get(event) === handler) this.handlers.delete(event);
+        }
         addControl() {}
         resize() {}
-        setStyle() {}
+        setStyle = vi.fn();
+        loaded = vi.fn(() => false);
+        isSourceLoaded = vi.fn(() => false);
+        triggerRepaint() {}
         getLayer() { return undefined; }
-        getSource() { return undefined; }
+        getSource = vi.fn();
         isStyleLoaded() { return true; }
         getBounds() { return { getSouth: () => -90, getNorth: () => 90, getWest: () => -180, getEast: () => 180 }; }
         getCenter() { return { lat: 0, lng: 0 }; }
@@ -92,6 +101,61 @@ describe('map error recovery', () => {
         vi.useRealTimers();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
+    });
+
+    it('publishes the viewport before style loading and does not rebuild the initial style', () => {
+        const onBoundsChange = vi.fn();
+        render(<NewsMap {...props} onBoundsChange={onBoundsChange} />);
+        expect(onBoundsChange).toHaveBeenCalledTimes(1);
+        expect(onBoundsChange).toHaveBeenCalledWith(expect.objectContaining({ minLng: -180, maxLng: 180, zoom: 1.2 }));
+        expect(mocks.layers).not.toHaveBeenCalled();
+        expect(latestMap().setStyle).not.toHaveBeenCalled();
+    });
+
+    it('waits for tiles and current story source to render before reporting startup ready', async () => {
+        const onLoadStateChange = vi.fn();
+        const { rerender } = render(<NewsMap {...props} dataReady={false} onLoadStateChange={onLoadStateChange} />);
+        await loadMap();
+        const map = latestMap();
+        map.loaded.mockReturnValue(true);
+        map.isSourceLoaded.mockReturnValue(true);
+        act(() => map.emit('render'));
+        expect(onLoadStateChange).not.toHaveBeenCalledWith('ready');
+
+        map.loaded.mockReturnValue(false);
+        rerender(<NewsMap {...props} dataReady onLoadStateChange={onLoadStateChange} />);
+        act(() => map.emit('render'));
+        expect(onLoadStateChange).not.toHaveBeenCalledWith('ready');
+
+        map.loaded.mockReturnValue(true);
+        map.isSourceLoaded.mockReturnValue(false);
+        act(() => map.emit('render'));
+        expect(onLoadStateChange).not.toHaveBeenCalledWith('ready');
+
+        map.isSourceLoaded.mockReturnValue(true);
+        act(() => map.emit('render'));
+        expect(onLoadStateChange).toHaveBeenLastCalledWith('ready');
+    });
+
+    it('does not drop story data that arrives while the sidebar is resizing', async () => {
+        let resize!: () => void;
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(callback: () => void) { resize = callback; }
+            observe() {} disconnect() {}
+        });
+        const { rerender } = render(<NewsMap {...props} />);
+        const setData = vi.fn();
+        latestMap().getSource.mockReturnValue({ setData });
+        await loadMap();
+        act(() => resize());
+        setData.mockClear();
+        rerender(<NewsMap {...props} items={[{
+            id: 'arrived-during-resize', title: 'New story', source: 'Example', sourceType: 'rss',
+            url: 'https://example.com', publishedAt: '2026-09-22T00:00:00Z', latitude: 10, longitude: 20,
+        }]} />);
+        expect(setData).toHaveBeenCalledWith(expect.objectContaining({ features: [expect.objectContaining({
+            properties: expect.objectContaining({ id: 'arrived-during-resize' }),
+        })] }));
     });
 
     it('shows an actionable WebGL error without automatically rebuilding the map', async () => {

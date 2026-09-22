@@ -41,10 +41,14 @@ import StateNotice from "@/components/ui/StateNotice";
 import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
+import type { MapLoadState } from '@/components/layout/StartupGate';
+import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
+  dataReady?: boolean;
+  onLoadStateChange?: (state: MapLoadState) => void;
   items: NewsItem[];
   selectedItemId: string | null;
   selectionVersion: number;
@@ -109,6 +113,8 @@ function isRecoverableMapResourceError(errorMsg: string) {
 }
 
 export default function NewsMap({
+  dataReady = true,
+  onLoadStateChange,
   items,
   selectedItemId,
   selectionVersion,
@@ -141,6 +147,12 @@ export default function NewsMap({
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  // Restore saved annotations on navigation; otherwise download the drawing
+  // engine only after the user first opens its tools. Keep it mounted thereafter.
+  const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
+    try { return Boolean(localStorage.getItem(DRAW_STORAGE_KEY)); }
+    catch { return false; }
+  });
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
   const [mutedClusters, setMutedClusters] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
@@ -170,6 +182,7 @@ export default function NewsMap({
   const appliedPreferencesForRef = useRef<string | null>(null);
   const isGlobeRef = useRef(isGlobe);
   const currentStyleRef = useRef(currentStyle);
+  const appliedStyleRef = useRef<{ style: string; individualPins: boolean } | null>(null);
   const mapReadyRef = useRef(mapReady);
 
   useEffect(() => {
@@ -346,9 +359,10 @@ export default function NewsMap({
   }, [geoItems, selectedItemId]);
 
   // Emit current viewport bounds to the parent with a debounce to minimize network traffic.
-  const emitBounds = useCallback((map: maplibregl.Map) => {
+  const emitBounds = useCallback((map: maplibregl.Map, immediate = false) => {
     if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
-    boundsDebounceRef.current = setTimeout(() => {
+    const publish = () => {
+      boundsDebounceRef.current = null;
       const bounds = map.getBounds();
       const center = map.getCenter();
       const bbox: BBox = {
@@ -362,7 +376,9 @@ export default function NewsMap({
         forceRaw: forceIndividualPinsRef.current,
       };
       onBoundsChangeRef.current?.(bbox);
-    }, 150);
+    };
+    if (immediate) publish();
+    else boundsDebounceRef.current = setTimeout(publish, 150);
   }, []);
 
   const latestGeoItemsRef = useRef(geoItems);
@@ -760,6 +776,10 @@ export default function NewsMap({
     });
 
     mapRef.current = map;
+    appliedStyleRef.current = { style: currentStyle, individualPins: forceIndividualPinsRef.current };
+    // Bounds are available before tiles, glyphs, and icons finish loading.
+    // Start the viewport's news request in parallel with those resources.
+    emitBounds(map, true);
 
     // Use ResizeObserver for synchronous layout synchronization.
     // This prevents the common visual lag between the DOM container and the WebGL canvas during sidebar transitions.
@@ -850,13 +870,16 @@ export default function NewsMap({
 
   useEffect(() => {
     if (!mapRef.current) return;
+    if (appliedStyleRef.current?.style === currentStyle && appliedStyleRef.current.individualPins === forceIndividualPins) return;
+    appliedStyleRef.current = { style: currentStyle, individualPins: forceIndividualPins };
+    mapReadyRef.current = false;
     setMapReady(false);
     mapRef.current.setStyle(getMapLibreStyle(currentStyle), { diff: false });
   }, [currentStyle, forceIndividualPins]);
 
   // Transform news items into a FeatureCollection for high-performance batch rendering.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || isResizingRef.current) return;
+    if (!mapReady || !mapRef.current) return;
 
     const geojson = buildNewsFeatureCollection(geoItems);
 
@@ -867,6 +890,28 @@ export default function NewsMap({
     ) as maplibregl.GeoJSONSource;
     if (source) source.setData(geojson);
   }, [geoItems, mapReady]);
+
+  useEffect(() => {
+    if (!onLoadStateChange) return;
+    if (mapError) {
+      onLoadStateChange('error');
+      return;
+    }
+    onLoadStateChange('loading');
+    const map = mapRef.current;
+    if (!mapReady || !dataReady || !map) return;
+
+    // style.load only means the style definition is ready. Wait for a frame
+    // containing the tiles, labels, and the worker's current news source.
+    const onRender = () => {
+      if (!map.loaded() || !map.isSourceLoaded('news-events')) return;
+      onLoadStateChange('ready');
+      map.off('render', onRender);
+    };
+    map.on('render', onRender);
+    map.triggerRepaint();
+    return () => { map.off('render', onRender); };
+  }, [dataReady, geoItems, mapError, mapReady, onLoadStateChange]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -1176,18 +1221,21 @@ export default function NewsMap({
             }}
             onResetOrientation={handleResetOrientation}
             drawToolsOpen={drawToolsOpen}
-            onToggleDrawTools={() => setDrawToolsOpen((o) => !o)}
+            onToggleDrawTools={() => {
+              setDrawToolsRequested(true);
+              setDrawToolsOpen((o) => !o);
+            }}
             bearing={mapBearing}
             disabled={disabled}
             userTier={userTier}
           />
-          <MapDrawTools
+          {drawToolsRequested && <MapDrawTools
             mapRef={mapRef}
             mapReady={mapReady}
             isOpen={drawToolsOpen}
             userTier={userTier}
             onClose={() => setDrawToolsOpen(false)}
-          />
+          />}
         </>
       )}
       <div

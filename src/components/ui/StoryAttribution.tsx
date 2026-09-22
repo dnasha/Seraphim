@@ -1,5 +1,5 @@
 import type { NewsItem } from '@/lib/core/types';
-import { formatTimeAgo } from '@/components/map/MapConstants';
+import { formatTimeAgo } from '@/lib/utils/time';
 import { safeExternalHttpUrl } from '@/lib/security/externalUrl';
 import styles from './StoryAttribution.module.css';
 

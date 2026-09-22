@@ -11,6 +11,7 @@ import { Metadata } from 'next';
 import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { HomeContent } from '@/components/layout/HomeContent';
 import { AuthProvider } from '@/components/auth/AuthProvider';
+import StartupScreen from '@/components/layout/StartupScreen';
 import { merriweather } from './homeFont';
 import {
     absoluteSiteUrl,
@@ -118,12 +119,15 @@ export default function Home() {
 
     return (
         <>
+            <link rel="preconnect" href="https://tiles.seraphi.me" crossOrigin="anonymous" />
+            <link rel="preconnect" href="https://tiles.openstreetmap.us" crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href="https://protomaps.github.io" />
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{ __html: websiteJsonLd }}
             />
             <AuthProvider>
-                <Suspense fallback={null}>
+                <Suspense fallback={<StartupScreen />}>
                     <HomeContent fontClassName={merriweather.variable} />
                 </Suspense>
             </AuthProvider>

@@ -24,9 +24,10 @@ import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import StateNotice from '@/components/ui/StateNotice';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
+import StartupGate, { type MapLoadState } from './StartupGate';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
-const NewsMap = dynamic(() => import('@/components/map').then(mod => mod.NewsMap), { ssr: false });
+const NewsMap = dynamic(() => import('@/components/map/NewsMap'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/auth/AuthModal'), { ssr: false });
 const GUEST_STORY_LIMIT = getEntitlements('guest').eventLimit;
 const FREE_STORY_LIMIT = getEntitlements('free').eventLimit;
@@ -44,7 +45,7 @@ function limitWithPinned(items: NewsItem[], limit: number, pinnedItemId: string 
 
 export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) {
     const { resolvedTheme, setTheme } = useTheme();
-    const { user, supabase, isLoading: authLoading, isGuest, setShowAuthModal } = useAuth();
+    const { user, supabase, isLoading: authLoading, isGuest, showAuthModal, setShowAuthModal } = useAuth();
     const { preferences, isLoaded: preferencesLoaded, updatePreferences } = useSyncedPreferences(supabase, user);
     const isGuestUser = isGuest || (!user && !authLoading);
     const { tier: userTier, isLoading: tierLoading } = useUserTier();
@@ -146,6 +147,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [mapLoadState, setMapLoadState] = useState<MapLoadState>('loading');
 
     useEffect(() => {
         if (isAuthResolving || !isGuestUser) return;
@@ -532,6 +534,12 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     );
 
     return (
+        <StartupGate
+            sessionReady={mounted && !authLoading && !tierLoading && preferencesLoaded}
+            storiesReady={!isLoading}
+            mapState={mapLoadState}
+            hasError={Boolean(error)}
+        >
         <div className={`${styles.appLayout} ${fontClassName}`}>
             {!isSidebarOpen && (
                 <div className={styles.floatingActions}>
@@ -576,6 +584,8 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
 
             <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
                 <NewsMap
+                    dataReady={!isLoading}
+                    onLoadStateChange={setMapLoadState}
                     items={visibleMapNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
@@ -597,8 +607,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 />
             </main>
 
-            {/* Auth modal (auto-shows on first visit) */}
-            <AuthModal />
+            {showAuthModal && <AuthModal />}
 
             {/* PWA Install Prompt (1.4) */}
             <PWAInstallPrompt />
@@ -618,5 +627,6 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 />
             )}
         </div>
+        </StartupGate>
     );
 }
