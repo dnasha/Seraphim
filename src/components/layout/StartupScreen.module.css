@@ -34,16 +34,17 @@
 }
 
 .eye {
-    animation: scan 3.6s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: scan 2.7s ease-in-out infinite;
 }
 
 @keyframes scan {
-    0%, 100% { transform: translate(0, 0); }
-    18% { transform: translate(-10px, -3px); }
-    36% { transform: translate(-3px, -5px); }
-    54% { transform: translate(10px, -2px); }
-    72% { transform: translate(8px, 5px); }
-    86% { transform: translate(0, 9px); }
+    0%, 74%, 80%, 92%, 100% { transform: translate(0, 0) scaleY(1); }
+    17% { transform: translate(-10px, -2px) scaleY(1); }
+    38% { transform: translate(10px, -2px) scaleY(1); }
+    59%, 66% { transform: translate(0, 9px) scaleY(1); }
+    86% { transform: translate(0, 0) scaleY(0.08); }
 }
 
 .brand {
