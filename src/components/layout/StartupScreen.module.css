@@ -26,29 +26,26 @@
 }
 
 .emblem {
-    position: relative;
-    width: 54px;
-    height: 54px;
-    margin: 0 auto 22px;
-    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-    border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 12%, transparent), transparent 72%);
+    display: block;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 14px;
+    color: var(--accent);
 }
 
-.emblem::before,
-.emblem::after {
-    content: '';
-    position: absolute;
-    inset: 8px;
-    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-    border-radius: 50%;
+.eye {
+    animation: scan 4s ease-in-out infinite;
 }
 
-.emblem::after { inset: 0 17px; }
-.emblem span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.emblem span:nth-child(1) { top: 12px; left: 12px; }
-.emblem span:nth-child(2) { top: 26px; right: 10px; }
-.emblem span:nth-child(3) { bottom: 8px; left: 22px; }
+@keyframes scan {
+    0%, 8%, 100% { transform: translate(0, 0); }
+    17%, 27% { transform: translate(-8px, -3px); }
+    36% { transform: translate(0, 0); }
+    45%, 55% { transform: translate(8px, -3px); }
+    64% { transform: translate(0, 0); }
+    73%, 83% { transform: translate(0, 8px); }
+    92% { transform: translate(0, 0); }
+}
 
 .brand {
     font-family: var(--font-logo), system-ui, sans-serif;
@@ -70,5 +67,6 @@
 .content[data-revealed='true'] { opacity: 1; pointer-events: auto; transition: opacity 180ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
+    .eye { animation: none; }
     .fill, .content[data-revealed='true'] { transition: none; }
 }
