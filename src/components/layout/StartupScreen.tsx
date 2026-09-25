@@ -21,13 +21,14 @@ export default function StartupScreen({
                         stroke="currentColor"
                         strokeWidth="12"
                     />
-                    <path
-                        className={styles.eye}
-                        d="M100 110.528L125 83.5281H75L100 110.528Z"
-                        fill="currentColor"
-                        stroke="currentColor"
-                        strokeWidth="12"
-                    />
+                    <g className={styles.eye}>
+                        <path
+                            d="M100 110.528L125 83.5281H75L100 110.528Z"
+                            fill="currentColor"
+                            stroke="currentColor"
+                            strokeWidth="12"
+                        />
+                    </g>
                 </svg>
                 <p className={styles.brand}>SERAPHIM</p>
                 <p className={styles.tagline}>The world, in view.</p>

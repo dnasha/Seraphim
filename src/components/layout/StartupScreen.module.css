@@ -27,24 +27,32 @@
 
 .emblem {
     display: block;
-    width: 96px;
-    height: 96px;
-    margin: 0 auto 14px;
+    width: 144px;
+    height: 144px;
+    margin: 0 auto 12px;
     color: var(--accent);
 }
 
 .eye {
-    animation: scan 4s ease-in-out infinite;
+    animation: scan 2.8s ease-in-out infinite;
 }
 
 @keyframes scan {
-    0%, 8%, 100% { transform: translate(0, 0); }
-    17%, 27% { transform: translate(-8px, -3px); }
-    36% { transform: translate(0, 0); }
-    45%, 55% { transform: translate(8px, -3px); }
-    64% { transform: translate(0, 0); }
-    73%, 83% { transform: translate(0, 8px); }
-    92% { transform: translate(0, 0); }
+    0%, 6%, 100% { transform: translate(0, 0); }
+    14%, 26% { transform: translate(-10px, -3px); }
+    34% { transform: translate(0, 0); }
+    42%, 54% { transform: translate(10px, -3px); }
+    62% { transform: translate(0, 0); }
+    70%, 82% { transform: translate(0, 9px); }
+    90% { transform: translate(0, 0); }
+}
+
+@keyframes scanReduced {
+    0%, 9%, 100% { transform: translate(0, 0); }
+    10%, 34% { transform: translate(-10px, 0); }
+    35%, 59% { transform: translate(10px, 0); }
+    60%, 84% { transform: translate(0, 9px); }
+    85%, 99% { transform: translate(0, 0); }
 }
 
 .brand {
@@ -67,6 +75,6 @@
 .content[data-revealed='true'] { opacity: 1; pointer-events: auto; transition: opacity 180ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
-    .eye { animation: none; }
+    .eye { animation: scanReduced 4s steps(1, end) infinite; }
     .fill, .content[data-revealed='true'] { transition: none; }
 }
