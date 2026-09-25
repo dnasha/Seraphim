@@ -27,43 +27,34 @@
 
 .emblem {
     display: block;
-    width: 144px;
-    height: 144px;
+    width: 128px;
+    height: 128px;
     margin: 0 auto 12px;
     color: var(--accent);
 }
 
 .eye {
-    animation: scan 2.8s ease-in-out infinite;
+    animation: scan 3.6s ease-in-out infinite;
 }
 
 @keyframes scan {
-    0%, 6%, 100% { transform: translate(0, 0); }
-    14%, 26% { transform: translate(-10px, -3px); }
-    34% { transform: translate(0, 0); }
-    42%, 54% { transform: translate(10px, -3px); }
-    62% { transform: translate(0, 0); }
-    70%, 82% { transform: translate(0, 9px); }
-    90% { transform: translate(0, 0); }
-}
-
-@keyframes scanReduced {
-    0%, 9%, 100% { transform: translate(0, 0); }
-    10%, 34% { transform: translate(-10px, 0); }
-    35%, 59% { transform: translate(10px, 0); }
-    60%, 84% { transform: translate(0, 9px); }
-    85%, 99% { transform: translate(0, 0); }
+    0%, 100% { transform: translate(0, 0); }
+    18% { transform: translate(-10px, -3px); }
+    36% { transform: translate(-3px, -5px); }
+    54% { transform: translate(10px, -2px); }
+    72% { transform: translate(8px, 5px); }
+    86% { transform: translate(0, 9px); }
 }
 
 .brand {
     font-family: var(--font-logo), system-ui, sans-serif;
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 600;
     letter-spacing: 0.2em;
     padding-left: 0.2em;
 }
 
-.tagline { margin-top: 6px; color: var(--text-muted); font-size: 13px; }
+.tagline { margin-top: 6px; color: var(--text-muted); font-size: 14px; }
 .track { margin-top: 30px; height: 3px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width 240ms ease; }
 .message { margin-top: 12px; color: var(--text-secondary); font-size: 12px; }
@@ -75,6 +66,5 @@
 .content[data-revealed='true'] { opacity: 1; pointer-events: auto; transition: opacity 180ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
-    .eye { animation: scanReduced 4s steps(1, end) infinite; }
     .fill, .content[data-revealed='true'] { transition: none; }
 }

@@ -31,7 +31,7 @@ export default function StartupScreen({
                     </g>
                 </svg>
                 <p className={styles.brand}>SERAPHIM</p>
-                <p className={styles.tagline}>The world, in view.</p>
+                <p className={styles.tagline}>Know the world as it happens!</p>
                 <div
                     className={styles.track}
                     role="progressbar"
