@@ -1,0 +1,6 @@
+body { --font-ui: Arial, sans-serif; --font-news: Georgia, serif; --font-logo: Arial, sans-serif; }
+.fixture-map { height: 100%; padding: 72px 24px 24px; background: linear-gradient(120deg, #e5f0e8, #dbe8f0); }
+.fixture-map h2 { font-size: 18px; }
+.fixture-map button { display: block; padding: 12px; margin: 12px 0; border: 1px solid #bdcbd7; border-radius: 8px; background: white; }
+.fixture-switches { position: fixed; top: 8px; right: 8px; z-index: 1001; display: flex; flex-wrap: wrap; max-width: 60vw; gap: 4px; }
+.fixture-switches button { padding: 4px 8px; background: white; border: 1px solid #bbb; border-radius: 4px; font-size: 10px; }
