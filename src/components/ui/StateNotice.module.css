@@ -18,7 +18,7 @@
     position: fixed;
     left: max(var(--space-lg), env(safe-area-inset-left));
     right: max(var(--space-lg), env(safe-area-inset-right));
-    bottom: max(var(--space-lg), calc(env(safe-area-inset-bottom) + 12px));
+    bottom: calc(var(--mobile-nav-height, 0px) + max(var(--space-lg), calc(env(safe-area-inset-bottom) + 12px)));
     z-index: 1100;
 }
 

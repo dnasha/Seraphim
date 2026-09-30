@@ -1,6 +1,6 @@
 .pwaPromptContainer {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(24px + var(--mobile-nav-height, 0px));
   right: 24px;
   z-index: 9999;
   width: 420px;
@@ -230,7 +230,7 @@
 /* Responsive adjustments */
 @media (max-width: 600px) {
   .pwaPromptContainer {
-    bottom: 0;
+    bottom: var(--mobile-nav-height, 0px);
     right: 0;
     left: 0;
     width: 100%;

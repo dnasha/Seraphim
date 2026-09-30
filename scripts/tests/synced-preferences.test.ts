@@ -25,6 +25,13 @@ afterEach(() => {
 });
 
 describe('sanitizeSyncedPreferences', () => {
+  it('defaults and bounds install prompt preferences', () => {
+    expect(sanitizeSyncedPreferences({})).toMatchObject({ pwaDismissCount: 0, pwaLastDismissedAt: 0 });
+    expect(sanitizeSyncedPreferences({ pwaDismissCount: 99, pwaLastDismissedAt: -1 }))
+      .toMatchObject({ pwaDismissCount: 2, pwaLastDismissedAt: 0 });
+    expect(sanitizeSyncedPreferences({ pwaDismissCount: NaN, pwaLastDismissedAt: Infinity }))
+      .toMatchObject({ pwaDismissCount: 0, pwaLastDismissedAt: 0 });
+  });
   it('accepts valid persisted preferences', () => {
     expect(sanitizeSyncedPreferences({
       sources: ['reddit', 'news'],
@@ -84,6 +91,51 @@ describe('sanitizeSyncedPreferences', () => {
 });
 
 describe('useSyncedPreferences', () => {
+  it('persists dismissals immediately and restores them on another device', async () => {
+    let saved = { ...DEFAULT_SYNCED_PREFERENCES };
+    const query: Record<string, unknown> = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      maybeSingle: vi.fn(async () => ({ data: { preferences: saved }, error: null })),
+    };
+    const upsert = vi.fn(async (row: { preferences: typeof saved }) => {
+      saved = row.preferences;
+      return { error: null };
+    });
+    const supabase = { from: vi.fn(() => ({ ...query, upsert })) } as unknown as SupabaseClient;
+    const user = { id: 'user-a' } as User;
+    const first = renderHook(() => useSyncedPreferences(supabase, user));
+    await waitFor(() => expect(first.result.current.isLoaded).toBe(true));
+    act(() => first.result.current.updatePreferences({ pwaDismissCount: 2, pwaLastDismissedAt: 100 }, { immediate: true }));
+    expect(upsert).toHaveBeenCalledOnce();
+    first.unmount();
+    localStorage.clear();
+
+    const second = renderHook(() => useSyncedPreferences(supabase, user));
+    await waitFor(() => expect(second.result.current.isLoaded).toBe(true));
+    expect(second.result.current.preferences).toMatchObject({ pwaDismissCount: 2, pwaLastDismissedAt: 100 });
+    second.unmount();
+  });
+
+  it('recovers a locally saved dismissal when the previous cloud write did not persist', async () => {
+    localStorage.setItem('seraphim_pwa_preference:user-a', JSON.stringify({ pwaDismissCount: 2, pwaLastDismissedAt: 100 }));
+    const query: Record<string, unknown> = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      maybeSingle: vi.fn(async () => ({ data: { preferences: { ...DEFAULT_SYNCED_PREFERENCES, theme: 'dark' } }, error: null })),
+    };
+    const upsert = vi.fn(async () => ({ error: null }));
+    const supabase = { from: vi.fn(() => ({ ...query, upsert })) } as unknown as SupabaseClient;
+    const user = { id: 'user-a' } as User;
+    const { result, unmount } = renderHook(() => useSyncedPreferences(supabase, user));
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.preferences).toMatchObject({ theme: 'dark', pwaDismissCount: 2 });
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-a', preferences: expect.objectContaining({ theme: 'dark', pwaDismissCount: 2 }),
+    }), { onConflict: 'user_id' });
+    unmount();
+  });
+
   it('loads the current user row and debounces validated upserts', async () => {
     const maybeSingle = vi.fn(async () => ({
       data: { preferences: { ...DEFAULT_SYNCED_PREFERENCES, sortMode: 'new' } },

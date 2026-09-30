@@ -134,11 +134,13 @@ export function useMapCamera({
     const popupElement = popupRef.current?.getElement?.();
     const measuredPopupHeight = popupElement?.getBoundingClientRect().height || 0;
     const isMobile =
-      typeof window !== "undefined" && window.innerWidth <= 860;
+      typeof window !== "undefined" && (
+        window.innerWidth <= 860 || (window.innerWidth <= 1023 && window.innerHeight <= 500)
+      );
     const viewportHeight = typeof window !== "undefined" ? window.innerHeight : containerHeight;
     // Match the popup's CSS height limits, including its border and desktop tip.
     const maximumPopupHeight = isMobile
-      ? viewportHeight * 0.6 + 2
+      ? Math.min(viewportHeight * 0.6, Math.max(120, containerHeight - MOBILE_MINIMUM_VISIBLE_MAP_HEIGHT - POPUP_VIEWPORT_GUTTER)) + 2
       : Math.min(720, viewportHeight - 44) + 12;
     const popupHeight = reserveLoadingPopupSpaceRef.current
       ? Math.max(measuredPopupHeight, maximumPopupHeight)

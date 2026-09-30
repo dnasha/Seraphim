@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import StartupScreen from './StartupScreen';
 import styles from './StartupScreen.module.css';
 
 export type MapLoadState = 'loading' | 'ready' | 'error';
+
+const subscribe = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 interface StartupGateProps {
     sessionReady: boolean;
@@ -15,12 +19,15 @@ interface StartupGateProps {
 }
 
 export default function StartupGate({ sessionReady, storiesReady, mapState, hasError, children }: StartupGateProps) {
+    // Auth can resolve before this subtree hydrates. Keep its first client render
+    // identical to the server shell, then mount the map and sidebar behind it.
+    const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
     const [revealed, setRevealed] = useState(false);
     const [slow, setSlow] = useState(false);
     const [elapsedMs, setElapsedMs] = useState<number>();
     const dialogRef = useRef<HTMLDialogElement>(null);
-    const ready = sessionReady && storiesReady && mapState === 'ready';
-    const failed = hasError || mapState === 'error';
+    const ready = hydrated && sessionReady && storiesReady && mapState === 'ready';
+    const failed = hydrated && (hasError || mapState === 'error');
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -55,8 +62,8 @@ export default function StartupGate({ sessionReady, storiesReady, mapState, hasE
         return () => cancelAnimationFrame(frame);
     }, [failed, ready, revealed]);
 
-    const progress = ready ? 100 : 10 + (sessionReady ? 25 : 0) + (storiesReady ? 25 : 0) + (mapState === 'ready' ? 35 : 0);
-    const message = !sessionReady ? 'Preparing your view' : !storiesReady ? 'Loading the latest stories' : 'Rendering the map';
+    const progress = !hydrated ? 10 : ready ? 100 : 10 + (sessionReady ? 25 : 0) + (storiesReady ? 25 : 0) + (mapState === 'ready' ? 35 : 0);
+    const message = !hydrated || !sessionReady ? 'Preparing your view' : !storiesReady ? 'Loading the latest stories' : 'Rendering the map';
 
     return (
         <>
@@ -67,7 +74,7 @@ export default function StartupGate({ sessionReady, storiesReady, mapState, hasE
                 aria-hidden={!revealed}
                 inert={!revealed}
             >
-                {children}
+                {hydrated ? children : null}
             </div>
             {!revealed && (
                 <dialog
