@@ -44,7 +44,7 @@ import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 import type { MapLoadState } from '@/components/layout/StartupGate';
 import { useCheckpointMapLayer } from '@/components/regions/useCheckpointMapLayer';
 import type { RegionSpec } from '@/lib/regions/geometry';
-import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
+import { hasSavedDrawings } from './draw/drawPersistence';
 import { buildActivityHeatmapData } from './activityHeatmap/data';
 import { ACTIVITY_HIT_LAYER, activityHitId, syncActivityHeatmap } from './activityHeatmap/layers';
 import { useActivityHeatmapPreference } from './activityHeatmap/useActivityHeatmapPreference';
@@ -169,10 +169,10 @@ export default function NewsMap({
   }, []);
   // Restore saved annotations on navigation; otherwise download the drawing
   // engine only after the user first opens its tools. Keep it mounted thereafter.
-  const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
-    try { return Boolean(localStorage.getItem(DRAW_STORAGE_KEY)); }
-    catch { return false; }
-  });
+  const [drawToolsRequested, setDrawToolsRequested] = useState(() => hasSavedDrawings(preferenceOwnerId) || hasSavedDrawings());
+  useEffect(() => {
+    if (hasSavedDrawings(preferenceOwnerId) || hasSavedDrawings()) setDrawToolsRequested(true);
+  }, [preferenceOwnerId]);
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
   const activityPreference = useActivityHeatmapPreference(preferenceOwnerId);
   const activityHeatmapEnabled = activityPreference.enabled;
@@ -1295,6 +1295,7 @@ export default function NewsMap({
             isOpen={drawToolsOpen}
             onInteractionOwnershipChange={onDrawingInteractionOwnershipChange}
             userTier={userTier}
+            ownerId={preferenceOwnerId}
             onClose={() => setDrawToolsOpen(false)}
           />}
         </>

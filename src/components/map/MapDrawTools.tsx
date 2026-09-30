@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import {
   TerraDraw,
@@ -24,10 +24,15 @@ import { GatedButton } from '@/components/ui/FeatureGate';
 import { DragFriendlyFreehandLineStringMode } from './draw/DragFriendlyFreehandLineStringMode';
 import { tessellateFreehandCoordinates, type FreehandCoordinate } from './draw/freehandGeometry';
 import { TextMarker } from './draw/TextMarker';
-import { MAX_IMPORT_BYTES, MAX_IMPORT_FEATURES, validateImportedFeatures } from './draw/importValidation';
+import { DrawingActionButton } from './draw/DrawingActionButton';
+import { MAX_IMPORT_BYTES } from './draw/importValidation';
+import { DrawingHistory, drawingDocument, drawingShortcut, emptyDrawingDocument, type DrawFeatures, type DrawingDocument } from './draw/drawingHistory';
+import { appendDrawingImport, duplicateDrawing, newDrawingId, replaceDrawFeatures, DRAW_COORDINATE_PRECISION } from './draw/drawingOperations';
 import {
   type TextAnnotation,
-  readPersistedDrawState,
+  readDrawStorage,
+  hasSavedDrawings,
+  drawingStorageKey,
   persistDrawState,
   clearPersistedDrawState,
 } from './draw/drawPersistence';
@@ -37,16 +42,17 @@ interface MapDrawToolsProps {
   mapReady: boolean;
   isOpen: boolean;
   userTier?: UserTier;
+  ownerId?: string | null;
   onClose?: () => void;
-  onInteractionOwnershipChange?: (owned: boolean) => void;
+  onInteractionOwnershipChange?: (ownsMapPointer: boolean) => void;
 }
 
 const COLORS = ['#5f62ec', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
 const SIZES = [2, 4, 8];
 const MIN_DRAW_SIZE = 1;
 const MAX_DRAW_SIZE = 50;
-const FREEHAND_OVERLAY_SOURCE_ID = 'td-freehand-lines-overlay-source';
-const FREEHAND_OVERLAY_LAYER_ID = 'td-freehand-lines-overlay-layer';
+const FREEHAND_OVERLAY_SOURCE_ID = 'experiment-drawing-history-freehand-source';
+const FREEHAND_OVERLAY_LAYER_ID = 'experiment-drawing-history-freehand-layer';
 
 const hasMapStyleObject = (map: maplibregl.Map): boolean => {
   return Boolean((map as maplibregl.Map & { style?: unknown }).style);
@@ -63,10 +69,10 @@ const getTerraDrawArtifactIds = (map: maplibregl.Map): { layerIds: string[]; sou
 
     const layerIds = (style.layers || [])
       .map((layer) => layer.id)
-      .filter((id): id is string => typeof id === 'string' && id.startsWith('td-'));
+      .filter((id): id is string => typeof id === 'string' && id.startsWith('experiment-drawing-history-'));
 
     const sourceIds = Object.keys(style.sources || {})
-      .filter((id) => id.startsWith('td-'));
+      .filter((id) => id.startsWith('experiment-drawing-history-'));
 
     return { layerIds, sourceIds };
   } catch {
@@ -110,22 +116,121 @@ const stopTerraDrawSafely = (draw: TerraDraw, map: maplibregl.Map) => {
 // Modes that own drag gestures while active instead of allowing the map to pan.
 const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle', 'eraser']);
 
-export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose, onInteractionOwnershipChange }: MapDrawToolsProps) {
+export default function MapDrawTools(props: MapDrawToolsProps) {
+  // A different account gets a fresh editor immediately, including portals and async work.
+  return <DrawingEditor key={`${props.ownerId ?? 'guest'}:${(props.userTier ?? 'guest') === 'guest' ? 'guest' : 'account'}`} {...props} />;
+}
+
+function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, onClose, onInteractionOwnershipChange }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
-  useLayoutEffect(() => {
-    // Report ownership before the next canvas gesture, including select/text/
-    // eraser modes that can use Terra Draw's static engine internally.
-    onInteractionOwnershipChange?.(isOpen && activeMode !== 'static');
-    return () => onInteractionOwnershipChange?.(false);
-  }, [activeMode, isOpen, onInteractionOwnershipChange]);
+  const activeModeRef = useRef(activeMode);
+  const isOpenRef = useRef(isOpen);
+  const calculateMeasurementRef = useRef<(() => void) | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
   const [activeFill, setActiveFill] = useState<boolean>(true);
   const [activeFillOpacity, setActiveFillOpacity] = useState<number>(40);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
-  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
-  const [importError, setImportError] = useState<string | null>(null);
+  const [initialStorage] = useState(() => readDrawStorage(userTier === 'guest' ? null : ownerId));
+  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>(initialStorage.document?.textAnnotations ?? []);
+  const persistentFeaturesRef = useRef<DrawFeatures>(initialStorage.document?.drawFeatures ?? []);
+  const textAnnotationsRef = useRef(textAnnotations);
+  const [history] = useState(() => new DrawingHistory(initialStorage.document ?? emptyDrawingDocument()));
+  const [, refreshHistory] = useState(0);
+  const [storageError, setStorageError] = useState<string | null>(initialStorage.error);
+  const recoveryRequiredRef = useRef(Boolean(initialStorage.error));
+  const [recoveryRequired, setRecoveryRequired] = useState(Boolean(initialStorage.error));
+  const [legacyAvailable, setLegacyAvailable] = useState(() => Boolean(ownerId && hasSavedDrawings()));
+  const suppressHistoryRef = useRef(false);
+  const pointerGestureRef = useRef(false);
+  const gestureBeforeRef = useRef<DrawingDocument | null>(null);
+  const pendingTextCreationRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readerRef = useRef<FileReader | null>(null);
+  const mountedRef = useRef(true);
+  const selectedIdRef = useRef<string | null>(null);
+  const selectedTextRef = useRef(false);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [autoFocusTextId, setAutoFocusTextId] = useState<string | null>(null);
+  const clearSelection = useCallback(() => {
+    selectedIdRef.current = null;
+    selectedTextRef.current = false;
+    setSelectedFeatureId(null);
+    setSelectedTextId(null);
+    setAutoFocusTextId(null);
+  }, []);
+  const captureDocument = useCallback(() => drawingDocument(drawRef.current?.getSnapshot() ?? persistentFeaturesRef.current,
+    textAnnotationsRef.current), []);
+  const saveDocument = useCallback((document: DrawingDocument) => {
+    persistentFeaturesRef.current = document.drawFeatures;
+    // An unreadable/unrestorable saved copy remains protected until an explicit recovery action.
+    if (recoveryRequiredRef.current) return;
+    const error = userTier === 'guest' ? null : (document.drawFeatures.length || document.textAnnotations.length
+      ? persistDrawState(document.drawFeatures, document.textAnnotations, ownerId) : clearPersistedDrawState(ownerId));
+    if (mountedRef.current) setStorageError(error);
+  }, [ownerId, userTier]);
+  const commitOperation = useCallback((label: string) => {
+    if (suppressHistoryRef.current || !mountedRef.current) return;
+    const document = captureDocument();
+    if (history.commit(document, label)) {
+      saveDocument(document);
+      refreshHistory(version => version + 1);
+    }
+  }, [captureDocument, history, saveDocument]);
+  const flushPending = useCallback(() => {
+    if (pendingTimerRef.current !== null) {
+      clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+    const pendingTextId = pendingTextCreationRef.current;
+    pendingTextCreationRef.current = null;
+    if (pendingTextId && textAnnotationsRef.current.find(annotation => annotation.id === pendingTextId)?.text.trim() === '') {
+      textAnnotationsRef.current = textAnnotationsRef.current.filter(annotation => annotation.id !== pendingTextId);
+      setTextAnnotations(textAnnotationsRef.current);
+      if (selectedIdRef.current === pendingTextId) clearSelection();
+    }
+    commitOperation('Edit');
+  }, [commitOperation, clearSelection]);
+  const scheduleEditCommit = () => {
+    if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+    pendingTimerRef.current = setTimeout(() => { pendingTimerRef.current = null; commitOperation('Style'); }, 400);
+  };
+  const restoreDocument = useCallback((document: DrawingDocument): boolean => {
+    if (!drawRef.current) return false;
+    const selection = { id: selectedIdRef.current, text: selectedTextRef.current };
+    suppressHistoryRef.current = true;
+    try {
+      replaceDrawFeatures(drawRef.current, document.drawFeatures);
+      textAnnotationsRef.current = structuredClone(document.textAnnotations);
+      setTextAnnotations(textAnnotationsRef.current);
+      pendingTextCreationRef.current = null;
+      persistentFeaturesRef.current = structuredClone(document.drawFeatures);
+      clearSelection();
+      const mode = isOpen ? activeModeRef.current : 'static';
+      drawRef.current.setMode(mode === 'text' || mode === 'eraser' ? 'static' : mode);
+      calculateMeasurementRef.current?.();
+      return true;
+    } catch (error) {
+      const mode = isOpen ? activeModeRef.current : 'static';
+      drawRef.current.setMode(mode === 'text' || mode === 'eraser' ? 'static' : mode);
+      if (selection.id && !selection.text && mode === 'select') drawRef.current.selectFeature(selection.id);
+      setImportError(error instanceof Error ? error.message : 'Drawings could not be restored.');
+      return false;
+    } finally { suppressHistoryRef.current = false; }
+  }, [clearSelection, isOpen]);
+  const applyDocument = (document: DrawingDocument, label: string) => {
+    if (restoreDocument(document)) commitOperation(label);
+  };
+  const handleHistory = useCallback((direction: 'undo' | 'redo') => {
+    flushPending();
+    const target = direction === 'undo' ? history.undoDocument : history.redoDocument;
+    if (!target || !restoreDocument(target)) return;
+    if (direction === 'undo') history.undo(); else history.redo();
+    saveDocument(target);
+    refreshHistory(version => version + 1);
+  }, [flushPending, history, restoreDocument, saveDocument]);
   const [hasPickedCustomColor, setHasPickedCustomColor] = useState(false);
   const [customPickerColor, setCustomPickerColor] = useState<string>('#8b5cf6');
   const colorRef = useRef(activeColor);
@@ -138,28 +243,34 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
   useEffect(() => { fillRef.current = activeFill; }, [activeFill]);
   useEffect(() => { fillOpacityRef.current = activeFillOpacity; }, [activeFillOpacity]);
 
-  useEffect(() => {
-    if (selectedFeatureId && drawRef.current) {
-      drawRef.current.updateFeatureProperties(selectedFeatureId, {
-        color: activeColor,
-        size: activeSize,
-        fill: activeFill,
-        fillOpacity: activeFill ? (activeFillOpacity / 100) : 0,
-      });
-      if (userTier !== 'guest') {
-        persistDrawState(drawRef.current.getSnapshot(), textAnnotations);
-      }
-    }
-  }, [activeColor, activeSize, activeFill, activeFillOpacity, selectedFeatureId, userTier, textAnnotations]);
+  const applyStyle = (values: { color?: string; size?: number; fill?: boolean; fillOpacity?: number }) => {
+    if (!selectedIdRef.current || selectedTextRef.current || !drawRef.current) return;
+    const feature = drawRef.current.getSnapshotFeature(selectedIdRef.current);
+    if (!feature || Object.entries(values).every(([key, value]) => feature.properties[key] === value)) return;
+    if (history.discardRedo()) refreshHistory(version => version + 1);
+    drawRef.current.updateFeatureProperties(selectedIdRef.current, values);
+    saveDocument(captureDocument());
+    scheduleEditCommit();
+  };
+  const changeColor = (color: string) => { setActiveColor(color); colorRef.current = color; applyStyle({ color }); };
+  const changeSize = (size: number) => { setActiveSize(size); sizeRef.current = size; applyStyle({ size }); };
+  const changeFill = (fill: boolean) => {
+    setActiveFill(fill); fillRef.current = fill;
+    applyStyle({ fill, fillOpacity: fill ? fillOpacityRef.current / 100 : 0 });
+  };
+  const changeOpacity = (opacity: number) => {
+    setActiveFillOpacity(opacity); fillOpacityRef.current = opacity;
+    applyStyle({ fillOpacity: fillRef.current ? opacity / 100 : 0 });
+  };
 
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth <= 860) {
-      setTimeout(() => {
-        setIsCollapsed(true);
-      }, 0);
+      const timer = setTimeout(() => setIsCollapsed(true), 0);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, []);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -224,10 +335,10 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   useEffect(() => {
     if (!isOpen) {
-      setTimeout(() => {
-        setPosition(null);
-      }, 0);
+      const timer = setTimeout(() => setPosition(null), 0);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isOpen]);
 
   useEffect(() => {
@@ -241,38 +352,79 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
   const [measurement, setMeasurement] = useState<{ value: number; unit: string; type: 'area' | 'distance' } | null>(null);
 
-  const initialPersistedState = useMemo(() => {
-    if (userTier === 'guest') return null;
-    return readPersistedDrawState();
-  }, [userTier]);
-
-
-
-  useEffect(() => {
-    if (initialPersistedState?.textAnnotations) {
-      requestAnimationFrame(() => {
-        setTextAnnotations(initialPersistedState.textAnnotations);
-      });
-    } else {
-      requestAnimationFrame(() => {
-        setTextAnnotations([]);
-      });
-    }
-  }, [initialPersistedState]);
-
   const textModeRef = useRef(false);
-  type SnapshotFeatures = ReturnType<InstanceType<typeof TerraDraw>['getSnapshot']>;
-  const persistentFeaturesRef = useRef<SnapshotFeatures>(
-    (userTier !== 'guest' ? initialPersistedState?.drawFeatures as SnapshotFeatures : []) ?? [],
-  );
-  const textAnnotationsRef = useRef<TextAnnotation[]>(textAnnotations);
+  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
 
-  const activeModeRef = useRef(activeMode);
-  const calculateMeasurementRef = useRef<(() => void) | null>(null);
-
+  const ownershipCallbackRef = useRef(onInteractionOwnershipChange);
+  const ownsPointerRef = useRef(false);
+  const toolOwnershipRef = useRef(false);
+  const annotationPointerRef = useRef(false);
+  const annotationPointerIdRef = useRef<number | undefined | null>(null);
+  const publishOwnership = useCallback((owns: boolean) => {
+    if (ownsPointerRef.current === owns) return;
+    ownsPointerRef.current = owns;
+    ownershipCallbackRef.current?.(owns);
+  }, []);
+  useLayoutEffect(() => {
+    ownershipCallbackRef.current = onInteractionOwnershipChange;
+    onInteractionOwnershipChange?.(ownsPointerRef.current);
+  }, [onInteractionOwnershipChange]);
+  useLayoutEffect(() => {
+    // Click tools and selection own map picking too, independently of drag-pan policy.
+    if (!mapReady || !isOpen) {
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+    }
+    toolOwnershipRef.current = mapReady && isOpen && activeMode !== 'static';
+    publishOwnership(toolOwnershipRef.current || annotationPointerRef.current);
+    return () => { toolOwnershipRef.current = false; publishOwnership(false); };
+  }, [activeMode, isOpen, mapReady, publishOwnership]);
   useEffect(() => {
-    textAnnotationsRef.current = textAnnotations;
-  }, [textAnnotations]);
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    const onDown = (event: PointerEvent) => {
+      if (event.isPrimary === false || (annotationPointerIdRef.current !== null && releaseTimer === null)) return;
+      if (!(event.target instanceof Element) || !event.target.closest('[data-drawing-annotation]')) return;
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      annotationPointerRef.current = true;
+      annotationPointerIdRef.current = event.pointerId;
+      publishOwnership(true);
+    };
+    const onRelease = (event: PointerEvent) => {
+      if (!annotationPointerRef.current || event.pointerId !== annotationPointerIdRef.current) return;
+      // MapLibre's completed click must see the same ownership as its pointer-down.
+      releaseTimer = setTimeout(() => {
+        releaseTimer = null;
+        annotationPointerRef.current = false;
+        annotationPointerIdRef.current = null;
+        publishOwnership(toolOwnershipRef.current);
+      }, 0);
+    };
+    const onBlur = () => {
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+      publishOwnership(false);
+    };
+    const onFocus = () => publishOwnership(toolOwnershipRef.current);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onRelease, true);
+    window.addEventListener('pointercancel', onRelease, true);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onRelease, true);
+      window.removeEventListener('pointercancel', onRelease, true);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+      publishOwnership(false);
+    };
+  }, [publishOwnership]);
 
   useEffect(() => { 
     activeModeRef.current = activeMode; 
@@ -309,23 +461,44 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         if (map.touchPitch) map.touchPitch.enable();
       }
     };
-  }, [activeMode, isOpen, mapRef]);
+  }, [activeMode, isOpen, mapRef, mapReady]);
   
   useEffect(() => {
-    if (userTier === 'guest') {
-      clearPersistedDrawState();
-      persistentFeaturesRef.current = [];
-      textAnnotationsRef.current = [];
-      
-      requestAnimationFrame(() => {
-        setTextAnnotations([]);
-        setMeasurement(null);
-        if (drawRef.current) {
-          drawRef.current.clear();
+    mountedRef.current = true;
+    return () => {
+      // Current text is already saved; cancel pending work for the departing account.
+      if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+      readerRef.current?.abort();
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ownerId) return;
+    const onStorage = (event: StorageEvent) => {
+      if ((event.key === drawingStorageKey(ownerId) || event.key === null) && event.newValue === null) {
+        if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+        readerRef.current?.abort();
+        pendingTimerRef.current = null;
+        recoveryRequiredRef.current = false;
+        setRecoveryRequired(false);
+        setStorageError(null);
+        gestureBeforeRef.current = null;
+        pointerGestureRef.current = false;
+        history.reset(emptyDrawingDocument());
+        // Deletion in another tab clears private UI and session history as well.
+        if (!restoreDocument(emptyDrawingDocument())) {
+          persistentFeaturesRef.current = [];
+          textAnnotationsRef.current = [];
+          setTextAnnotations([]);
+          clearSelection();
         }
-      });
-    }
-  }, [userTier]);
+        refreshHistory(version => version + 1);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [ownerId, history, restoreDocument, clearSelection]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -338,8 +511,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     removeStaleTerraDrawArtifacts(map);
 
-    const adapterPrefixId = `td-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const adapter = new TerraDrawMapLibreGLAdapter({ map, prefixId: adapterPrefixId });
+    const adapterPrefixId = `experiment-drawing-history-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const adapter = new TerraDrawMapLibreGLAdapter({ map, prefixId: adapterPrefixId, coordinatePrecision: DRAW_COORDINATE_PRECISION });
 
     type StyledFeature = { properties?: { color?: string; size?: number; fill?: boolean; fillOpacity?: number } };
 
@@ -400,8 +573,10 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     const draw = new TerraDraw({
       adapter,
+      tracked: false,
       modes: [
         new TerraDrawSelectMode({
+          keyEvents: { delete: null, deselect: 'Escape', rotate: null, scale: null },
           flags: {
             polygon: { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true } } },
             linestring: { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true } } },
@@ -463,13 +638,25 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     
     if (persistentFeaturesRef.current.length > 0) {
       try {
-        draw.addFeatures(persistentFeaturesRef.current);
-      } catch (err) {
-        console.warn("Failed to restore TerraDraw features:", err);
+        replaceDrawFeatures(draw, persistentFeaturesRef.current);
+      } catch {
+        recoveryRequiredRef.current = true;
+        persistentFeaturesRef.current = [];
+        history.reset(drawingDocument([], textAnnotationsRef.current));
+        // Protect writes synchronously, then report the external adapter failure after initialization.
+        queueMicrotask(() => {
+          if (!mountedRef.current || !recoveryRequiredRef.current) return;
+          setRecoveryRequired(true);
+          setStorageError('Saved drawings could not be restored. The saved copy is protected; new edits stay in this session.');
+          refreshHistory(version => version + 1);
+        });
       }
     }
     
     drawRef.current = draw;
+    const initialMode = isOpenRef.current ? activeModeRef.current : 'static';
+    textModeRef.current = initialMode === 'text';
+    draw.setMode(initialMode === 'text' || initialMode === 'eraser' ? 'static' : initialMode);
 
     const nativeLineLayerId = `${adapterPrefixId}-linestring`;
     if (map.getLayer(nativeLineLayerId)) {
@@ -514,7 +701,6 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     let overlayFrameId: number | null = null;
     let measurementTimer: ReturnType<typeof setTimeout> | null = null;
-    let persistenceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const syncFreehandOverlay = () => {
       overlayFrameId = null;
@@ -621,48 +807,102 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       calculateMeasurement();
     };
 
-    const flushPersistence = () => {
-      if (persistenceTimer !== null) {
-        clearTimeout(persistenceTimer);
-        persistenceTimer = null;
-      }
-      persistentFeaturesRef.current = draw.getSnapshot();
-      if (userTier !== 'guest') {
-        persistDrawState(persistentFeaturesRef.current, textAnnotationsRef.current);
-      }
-    };
-
-    const schedulePersistence = () => {
-      if (userTier === 'guest') return;
-      if (persistenceTimer !== null) clearTimeout(persistenceTimer);
-      persistenceTimer = setTimeout(flushPersistence, 250);
-    };
-
     const handleChange = () => {
       scheduleFreehandOverlay();
       scheduleMeasurement();
-      schedulePersistence();
     };
 
     calculateMeasurementRef.current = flushMeasurement;
     syncFreehandOverlay();
     map.on('zoomend', scheduleFreehandOverlay);
 
-    draw.on('finish', (id) => {
-      draw.updateFeatureProperties(id as string, { 
-        color: colorRef.current, 
-        size: sizeRef.current,
-        fill: fillRef.current,
-        fillOpacity: fillRef.current ? (fillOpacityRef.current / 100) : 0
+    const handleFinish = (id: string | number, context: { action: string; mode: string }) => {
+      if (suppressHistoryRef.current) return;
+      // Editing geometry retains its existing style; only newly drawn features use the palette.
+      if (context.action === 'draw') draw.updateFeatureProperties(id, {
+        color: colorRef.current, size: sizeRef.current, fill: fillRef.current,
+        fillOpacity: fillRef.current ? fillOpacityRef.current / 100 : 0,
       });
-      flushPersistence();
+      if (!pointerGestureRef.current) commitOperation(context.action === 'draw' ? 'Draw' : 'Edit geometry');
       scheduleFreehandOverlay();
       flushMeasurement();
-    });
+    };
+    draw.on('finish', handleFinish);
+
+    const canvas = map.getCanvas();
+    let gesturePointerId: number | undefined | null = null;
+    let gestureGeneration = 0;
+    let gestureMode = 'static';
+    let disposed = false;
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    const finishGesture = (generation: number) => {
+      if (disposed || generation !== gestureGeneration || !pointerGestureRef.current) return;
+      releaseTimer = null;
+      pointerGestureRef.current = false;
+      gesturePointerId = null;
+      gestureBeforeRef.current = null;
+      // Text placement remains pending until its initial edit finishes or is abandoned.
+      if (gestureMode !== 'text' && !draw.getSnapshot().some(feature => feature.properties.currentlyDrawing)) commitOperation('Draw or edit');
+    };
+    const pointerDown = (event: PointerEvent) => {
+      if (disposed || !isOpenRef.current || event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      // The adapter has finished the released gesture before the next pointer-down.
+      // Settle it now; its deferred callback must never close this new transaction.
+      if (releaseTimer !== null) {
+        clearTimeout(releaseTimer);
+        releaseTimer = null;
+        finishGesture(gestureGeneration);
+      }
+      if (pointerGestureRef.current) return;
+      flushPending();
+      gestureGeneration += 1;
+      gestureMode = activeModeRef.current;
+      gestureBeforeRef.current = captureDocument();
+      gesturePointerId = event.pointerId;
+      pointerGestureRef.current = true;
+      publishOwnership(toolOwnershipRef.current);
+      canvas.focus();
+    };
+    const pointerUp = (event?: PointerEvent) => {
+      if (disposed || !pointerGestureRef.current || (event && event.pointerId !== gesturePointerId)) return;
+      // Adapter drag-end runs after capture listeners; capture the completed document afterward.
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      const releasedGeneration = gestureGeneration;
+      releaseTimer = setTimeout(() => finishGesture(releasedGeneration), 0);
+    };
+    const interruptGesture = (event: Event) => {
+      if ('pointerId' in event && event.pointerId !== gesturePointerId) return;
+      if (!pointerGestureRef.current || releaseTimer !== null) return;
+      if (activeModeRef.current === 'eraser') { pointerUp(); return; }
+      const before = gestureBeforeRef.current;
+      if (!before) return;
+      suppressHistoryRef.current = true;
+      try {
+        replaceDrawFeatures(draw, before.drawFeatures);
+        persistentFeaturesRef.current = structuredClone(before.drawFeatures);
+        const mode = isOpenRef.current ? activeModeRef.current : 'static';
+        draw.setMode(mode === 'text' ? 'static' : mode);
+        clearSelection();
+      } finally {
+        gestureGeneration += 1;
+        suppressHistoryRef.current = false;
+        gestureBeforeRef.current = null;
+        gesturePointerId = null;
+        pointerGestureRef.current = false;
+      }
+    };
+    canvas.addEventListener('pointerdown', pointerDown, true);
+    window.addEventListener('pointerup', pointerUp, true);
+    window.addEventListener('pointercancel', interruptGesture, true);
+    canvas.addEventListener('lostpointercapture', interruptGesture, true);
+    window.addEventListener('blur', interruptGesture);
 
     draw.on('change', handleChange);
-    draw.on('select', (id) => {
-      setSelectedFeatureId(id as string);
+    const handleSelect = (id: string | number) => {
+      selectedIdRef.current = String(id);
+      selectedTextRef.current = false;
+      setSelectedTextId(null);
+      setSelectedFeatureId(String(id));
       
       const feature = draw.getSnapshot().find(f => f.id === id);
       if (feature && feature.properties) {
@@ -678,21 +918,43 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       }
 
       handleChange();
-    });
-    draw.on('deselect', () => {
+    };
+    const handleDeselect = () => {
+      if (!selectedTextRef.current) selectedIdRef.current = null;
       setSelectedFeatureId(null);
       handleChange();
-    });
+    };
+    draw.on('select', handleSelect);
+    draw.on('deselect', handleDeselect);
 
     return () => {
+      disposed = true;
+      gestureGeneration += 1;
       const instance = map;
       if (!instance) return;
 
       try {
         instance.off('zoomend', scheduleFreehandOverlay);
+        draw.off('finish', handleFinish);
+        draw.off('change', handleChange);
+        draw.off('select', handleSelect);
+        draw.off('deselect', handleDeselect);
         if (overlayFrameId !== null) cancelAnimationFrame(overlayFrameId);
         if (measurementTimer !== null) clearTimeout(measurementTimer);
-        if (persistenceTimer !== null) flushPersistence();
+        canvas.removeEventListener('pointerdown', pointerDown, true);
+        window.removeEventListener('pointerup', pointerUp, true);
+        window.removeEventListener('pointercancel', interruptGesture, true);
+        canvas.removeEventListener('lostpointercapture', interruptGesture, true);
+        window.removeEventListener('blur', interruptGesture);
+        if (releaseTimer !== null) clearTimeout(releaseTimer);
+        // Recovery cancels an interrupted shape gesture to its saved/history before-state.
+        // A finished gesture whose release is awaiting the adapter is canceled consistently too.
+        const before = gestureBeforeRef.current;
+        persistentFeaturesRef.current = pointerGestureRef.current && before
+          ? structuredClone(before.drawFeatures) : drawingDocument(draw.getSnapshot(), []).drawFeatures;
+        gestureBeforeRef.current = null;
+        pointerGestureRef.current = false;
+        if (mountedRef.current) clearSelection();
         calculateMeasurementRef.current = null;
         if (drawRef.current) {
           stopTerraDrawSafely(drawRef.current, instance);
@@ -703,15 +965,15 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         console.warn("MapDrawTools cleanup error suppressed:", err);
       }
     };
-  }, [mapReady, mapRef, userTier]);
+  }, [mapReady, mapRef, commitOperation, flushPending, clearSelection, captureDocument, history, publishOwnership]);
 
   // Unified Pointer-based Eraser handler for drag-to-erase (desktop and mobile)
   useEffect(() => {
-    if (activeMode !== 'eraser' || !mapReady || !mapRef.current) return;
+    if (!isOpen || activeMode !== 'eraser' || !mapReady || !mapRef.current) return;
     const map = mapRef.current;
     const canvas = map.getCanvas();
 
-    let isPointerErasing = false;
+    let erasingPointerId: number | null = null;
 
     const eraseAtScreenPoint = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
@@ -720,7 +982,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       
       // 1. Try MapLibre queryRenderedFeatures first (pixel-perfect)
       const features = map.queryRenderedFeatures([x, y]);
-      const tdFeature = features.find(f => f.layer.id.includes('td-') && (f.id !== undefined || (f.properties && f.properties.id)));
+      const tdFeature = features.find(f => f.layer.id.startsWith('experiment-drawing-history-') && (f.id !== undefined || (f.properties && f.properties.id)));
       if (tdFeature && drawRef.current) {
         const snapshot = drawRef.current.getSnapshot();
         const propertiesId = tdFeature.properties?.id;
@@ -792,7 +1054,8 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return; // Left click only for mouse
-      isPointerErasing = true;
+      if (erasingPointerId !== null || e.isPrimary === false) return;
+      erasingPointerId = e.pointerId;
       
       // Prevent map dragging during erasing gestures
       map.dragPan.disable();
@@ -803,26 +1066,32 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!isPointerErasing) return;
+      if (erasingPointerId !== e.pointerId || (e.pointerType === 'mouse' && !(e.buttons & 1))) return;
       eraseAtScreenPoint(e.clientX, e.clientY);
     };
 
-    const onPointerUp = () => {
-      isPointerErasing = false;
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerId === erasingPointerId) erasingPointerId = null;
     };
+    const onBlur = () => { erasingPointerId = null; };
 
     canvas.addEventListener('pointerdown', onPointerDown, { capture: true, passive: false });
     canvas.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
-    canvas.addEventListener('pointerup', onPointerUp, { capture: true });
-    canvas.addEventListener('pointercancel', onPointerUp, { capture: true });
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerUp, true);
+    canvas.addEventListener('lostpointercapture', onPointerUp, true);
+    window.addEventListener('blur', onBlur);
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown, true);
       canvas.removeEventListener('pointermove', onPointerMove, true);
-      canvas.removeEventListener('pointerup', onPointerUp, true);
-      canvas.removeEventListener('pointercancel', onPointerUp, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerUp, true);
+      canvas.removeEventListener('lostpointercapture', onPointerUp, true);
+      window.removeEventListener('blur', onBlur);
+      erasingPointerId = null;
     };
-  }, [activeMode, mapReady, mapRef]);
+  }, [activeMode, isOpen, mapReady, mapRef]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -830,17 +1099,19 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
     const handleMapClick = (e: maplibregl.MapMouseEvent) => {
       if (textModeRef.current) {
-        const id = Math.random().toString(36).substr(2, 9);
-        const initialZoom = map.getZoom();
-        const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-        setTextAnnotations(prev => {
-          const next = [...prev, { id, lngLat, text: '', initialZoom }];
-          textAnnotationsRef.current = next;
-          if (userTier !== 'guest') {
-            persistDrawState(persistentFeaturesRef.current, next);
-          }
-          return next;
-        });
+        flushPending();
+        const id = newDrawingId();
+        pendingTextCreationRef.current = id;
+        const next = [...textAnnotationsRef.current, { id,
+          lngLat: [e.lngLat.lng, e.lngLat.lat] as [number, number], text: '', initialZoom: map.getZoom() }];
+        textAnnotationsRef.current = next;
+        setTextAnnotations(next);
+        selectedIdRef.current = id;
+        selectedTextRef.current = true;
+        setSelectedTextId(id);
+        setSelectedFeatureId(null);
+        setAutoFocusTextId(id);
+        // Creation and the initial typing session commit together on blur.
       }
     };
 
@@ -855,7 +1126,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
         instance.off('click', handleMapClick);
       }
     };
-  }, [mapReady, mapRef, userTier]);
+  }, [mapReady, mapRef, flushPending]);
 
   useEffect(() => {
     if (!drawRef.current) return;
@@ -863,48 +1134,62 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     
     textModeRef.current = effectiveMode === 'text';
 
-    if (effectiveMode === 'text') {
-      drawRef.current.setMode('static');
-      if (mapRef.current) mapRef.current.getCanvas().style.cursor = 'crosshair';
-    } else if (effectiveMode === 'eraser') {
-      drawRef.current.setMode('static');
-      if (mapRef.current) {
-        mapRef.current.getCanvas().style.cursor = 'crosshair';
-        setTimeout(() => {
-          if (mapRef.current && activeModeRef.current === 'eraser') {
-            mapRef.current.dragPan.disable();
-            mapRef.current.touchZoomRotate.disable();
-            if (mapRef.current.touchPitch) mapRef.current.touchPitch.disable();
-          }
-        }, 50);
-      }
-    } else {
-      if (mapRef.current) {
-        mapRef.current.getCanvas().style.cursor = '';
-        mapRef.current.dragPan.enable();
-        mapRef.current.touchZoomRotate.enable();
-        if (mapRef.current.touchPitch) mapRef.current.touchPitch.enable();
-      }
-      drawRef.current.setMode(effectiveMode);
-    }
-  }, [activeMode, isOpen, mapRef]);
+    drawRef.current.setMode(effectiveMode === 'text' || effectiveMode === 'eraser' ? 'static' : effectiveMode);
+    const canvas = mapRef.current?.getCanvas();
+    if (canvas) canvas.style.cursor = effectiveMode === 'text' || effectiveMode === 'eraser' ? 'crosshair' : '';
+  }, [activeMode, isOpen, mapRef, mapReady]);
 
   const handleClear = () => {
-    setSelectedFeatureId(null);
-    if (drawRef.current) {
-      drawRef.current.clear();
-      setMeasurement(null);
-    }
-    persistentFeaturesRef.current = [];
-    textAnnotationsRef.current = [];
-    setTextAnnotations([]);
-    clearPersistedDrawState();
+    flushPending();
+    applyDocument(emptyDrawingDocument(), 'Clear');
   };
+  const handleDeleteSelection = useCallback(() => {
+    flushPending();
+    if (!selectedIdRef.current) return;
+    const document = captureDocument();
+    const id = selectedIdRef.current;
+    document.drawFeatures = document.drawFeatures.filter(feature => feature.id !== id);
+    document.textAnnotations = document.textAnnotations.filter(annotation => annotation.id !== id);
+    if (restoreDocument(document)) commitOperation('Delete');
+  }, [flushPending, captureDocument, restoreDocument, commitOperation]);
+  const handleDuplicate = () => {
+    flushPending();
+    if (!selectedIdRef.current) return;
+    try {
+      const map = mapRef.current;
+      let offset: [number, number] = [0.05, 0.05];
+      if (map) {
+        const center = map.project(map.getCenter());
+        const shifted = map.unproject([center.x + 24, center.y + 24]);
+        const original = map.getCenter();
+        offset = [shifted.lng - original.lng, shifted.lat - original.lat];
+      }
+      const result = duplicateDrawing(captureDocument(), selectedIdRef.current, offset);
+      if (result) applyDocument(result.document, 'Duplicate');
+    } catch (error) { setImportError(error instanceof Error ? error.message : 'Drawing could not be duplicated.'); }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const ownsFocus = isOpen && Boolean(target && (wrapperRef.current?.contains(target) ||
+        target === mapRef.current?.getCanvas() || target.closest('[data-drawing-annotation]')));
+      const editable = Boolean(target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+      const action = drawingShortcut(event, ownsFocus, editable);
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (action === 'delete') handleDeleteSelection(); else handleHistory(action);
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, mapRef, handleDeleteSelection, handleHistory]);
 
   const handleExport = () => {
     if (!hasFeature(userTier, 'geoJsonTransfer')) return;
     if (!drawRef.current) return;
-    const features = drawRef.current.getSnapshot();
+    flushPending();
+    const features = captureDocument().drawFeatures;
     
     const textFeatures = textAnnotations.filter(a => a.text.trim().length > 0).map(a => ({
       type: 'Feature',
@@ -952,118 +1237,153 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
     URL.revokeObjectURL(url); // Clean up the object URL to prevent memory leaks
   };
 
+  const importValue = (value: unknown) => {
+    // Validate and build the complete candidate before touching either shape or text state.
+    const candidate = appendDrawingImport(captureDocument(), value, mapRef.current?.getZoom() ?? 10);
+    if (!restoreDocument(candidate)) return false;
+    commitOperation('Import');
+    return true;
+  };
   const handleImport = () => {
     if (!hasFeature(userTier, 'geoJsonTransfer')) return;
+    flushPending();
     setImportError(null);
     const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.geojson,application/json';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
+    input.type = 'file'; input.accept = '.geojson,.json,application/json';
+    input.onchange = (event) => {
+      if (!mountedRef.current) return;
+      const file = (event.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      if (file.size > MAX_IMPORT_BYTES) {
-        setImportError('Choose a GeoJSON file smaller than 2 MB.');
-        return;
-      }
+      if (file.size > MAX_IMPORT_BYTES) { setImportError('Choose a GeoJSON file smaller than 2 MB.'); return; }
+      readerRef.current?.abort();
       const reader = new FileReader();
-      reader.onerror = () => setImportError('The file could not be read. Please try again.');
-      reader.onload = (event) => {
-        try {
-          const features = validateImportedFeatures(JSON.parse(event.target?.result as string));
-          if (features.length + persistentFeaturesRef.current.length + textAnnotationsRef.current.length > MAX_IMPORT_FEATURES) {
-            throw new Error('The map can hold up to 1,000 imported features. Remove some drawings first.');
-          }
-          const geojson = { type: 'FeatureCollection', features };
-          if (geojson.type === 'FeatureCollection' && drawRef.current) {
-            const drawFeatures = geojson.features.filter(f => !f.properties?.isText);
-            const importedText = geojson.features
-              .flatMap(f => f.geometry.type === 'Point' && f.properties?.isText ? [{
-                id: Math.random().toString(36).substr(2, 9),
-                lngLat: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [number, number],
-                text: String(f.properties.text),
-                initialZoom: Number(f.properties.initialZoom ?? (mapRef.current ? mapRef.current.getZoom() : 10)),
-              }] : []);
-            
-            drawRef.current.addFeatures(drawFeatures as SnapshotFeatures);
-            persistentFeaturesRef.current = drawRef.current.getSnapshot();
-            setTextAnnotations(prev => {
-              const next = [...prev, ...importedText];
-              textAnnotationsRef.current = next;
-              if (userTier !== 'guest') {
-                persistDrawState(persistentFeaturesRef.current, next);
-              }
-              return next;
-            });
-          }
-        } catch (err) {
-          console.error("Failed to import GeoJSON:", err);
-          setImportError(err instanceof Error && !(err instanceof SyntaxError) ? err.message : 'The file is not valid GeoJSON.');
-        }
+      readerRef.current = reader;
+      reader.onerror = () => { if (mountedRef.current) setImportError('The file could not be read. Please try again.'); };
+      reader.onload = () => {
+        if (!mountedRef.current) return;
+        try { importValue(JSON.parse(String(reader.result))); }
+        catch (error) { setImportError(error instanceof Error && !(error instanceof SyntaxError)
+          ? error.message : 'The file is not valid GeoJSON.'); }
       };
       reader.readAsText(file);
     };
     input.click();
   };
-
+  const importLegacy = () => {
+    flushPending();
+    const legacy = readDrawStorage(null, true);
+    if (!legacy.document) { setStorageError(legacy.error); return; }
+    try {
+      const imported = importValue({ type: 'FeatureCollection', features: [...legacy.document.drawFeatures,
+        ...legacy.document.textAnnotations.map(annotation => ({ type: 'Feature',
+          geometry: { type: 'Point', coordinates: annotation.lngLat },
+          properties: { isText: true, text: annotation.text, initialZoom: annotation.initialZoom } }))] });
+      if (imported) setLegacyAvailable(false);
+    } catch (error) { setImportError(error instanceof Error ? error.message : 'Device drawings could not be imported.'); }
+  };
+  const downloadProtectedCopy = () => {
+    if (!ownerId) return;
+    try {
+      const raw = localStorage.getItem(drawingStorageKey(ownerId));
+      if (raw === null) return;
+      const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'seraphim-drawings-recovery.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch { setStorageError('The protected saved copy could not be downloaded. It has been left untouched.'); }
+  };
+  const replaceProtectedCopy = () => {
+    flushPending();
+    const document = captureDocument();
+    const error = document.drawFeatures.length || document.textAnnotations.length
+      ? persistDrawState(document.drawFeatures, document.textAnnotations, ownerId) : clearPersistedDrawState(ownerId);
+    if (error) { setStorageError(error); return; }
+    recoveryRequiredRef.current = false;
+    setRecoveryRequired(false);
+    setStorageError(null);
+  };
+  const selectText = (id: string) => {
+    if (selectedIdRef.current !== id) flushPending();
+    // Deselecting a shape only changes presentation.
+    if (drawRef.current?.getMode() === 'select' && selectedFeatureId) drawRef.current.deselectFeature(selectedFeatureId);
+    selectedIdRef.current = id;
+    selectedTextRef.current = true;
+    setSelectedTextId(id);
+    setSelectedFeatureId(null);
+  };
   const updateTextAnnotation = (id: string, text: string) => {
-    setTextAnnotations(prev => {
-      const next = prev.map(a => a.id === id ? { ...a, text } : a);
-      textAnnotationsRef.current = next;
-      if (userTier !== 'guest') {
-        persistDrawState(persistentFeaturesRef.current, next);
-      }
-      return next;
-    });
+    if (textAnnotationsRef.current.find(annotation => annotation.id === id)?.text === text) return;
+    if (history.discardRedo()) refreshHistory(version => version + 1);
+    const next = textAnnotationsRef.current.map(annotation => annotation.id === id ? { ...annotation, text } : annotation);
+    textAnnotationsRef.current = next;
+    setTextAnnotations(next);
+    saveDocument(captureDocument());
   };
-
+  const finishTextEdit = (id: string) => {
+    if (pendingTextCreationRef.current === id) pendingTextCreationRef.current = null;
+    const annotation = textAnnotationsRef.current.find(annotation => annotation.id === id);
+    if (annotation?.text.trim() === '') {
+      textAnnotationsRef.current = textAnnotationsRef.current.filter(annotation => annotation.id !== id);
+      setTextAnnotations(textAnnotationsRef.current);
+      if (selectedIdRef.current === id) clearSelection();
+    }
+    commitOperation('Text');
+    saveDocument(captureDocument());
+  };
   const removeTextAnnotation = (id: string) => {
-    setTextAnnotations(prev => {
-      const next = prev.filter(a => a.id !== id);
-      textAnnotationsRef.current = next;
-      if (userTier !== 'guest') {
-        persistDrawState(persistentFeaturesRef.current, next);
-      }
-      return next;
-    });
+    flushPending();
+    textAnnotationsRef.current = textAnnotationsRef.current.filter(annotation => annotation.id !== id);
+    setTextAnnotations(textAnnotationsRef.current);
+    if (selectedIdRef.current === id) clearSelection();
+    commitOperation('Delete text');
   };
-
   const updateTextAnnotationPosition = (id: string, lngLat: [number, number]) => {
-    setTextAnnotations(prev => {
-      const next = prev.map(a => a.id === id ? { ...a, lngLat } : a);
-      textAnnotationsRef.current = next;
-      if (userTier !== 'guest') {
-        persistDrawState(persistentFeaturesRef.current, next);
-      }
-      return next;
-    });
+    textAnnotationsRef.current = textAnnotationsRef.current.map(annotation => annotation.id === id ? { ...annotation, lngLat } : annotation);
+    setTextAnnotations(textAnnotationsRef.current);
+    commitOperation('Move text');
   };
 
   const handleDrawSizeInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
     if (Number.isNaN(nextValue)) return;
-    setActiveSize(Math.max(MIN_DRAW_SIZE, Math.min(MAX_DRAW_SIZE, nextValue)));
+    changeSize(Math.max(MIN_DRAW_SIZE, Math.min(MAX_DRAW_SIZE, nextValue)));
   };
 
   const handleOpacityInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
     if (Number.isNaN(nextValue)) return;
-    setActiveFillOpacity(Math.max(0, Math.min(100, nextValue)));
+    changeOpacity(Math.max(0, Math.min(100, nextValue)));
   };
 
   const handleCustomColorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextColor = event.target.value;
     setHasPickedCustomColor(true);
     setCustomPickerColor(nextColor);
-    setActiveColor(nextColor);
+    changeColor(nextColor);
   };
 
   const isCustomColorActive = !COLORS.some((color) => color.toLowerCase() === activeColor.toLowerCase());
 
+  const storageStatus = storageError && <div className={isOpen ? styles.inlineStorageStatus : styles.storageStatus} data-drawing-status role="alert">
+        <p>{storageError}</p>
+        {recoveryRequired && <>
+          <p>The saved copy stays protected until you explicitly replace it. New edits stay in this session.</p>
+          <div className={styles.recoveryActions}>
+            <button type="button" onClick={downloadProtectedCopy} title="Download the protected original drawing document">Download saved copy</button>
+            <button type="button" onClick={replaceProtectedCopy} disabled={!mapReady} title="Explicitly replace the protected saved copy with the drawings currently on the map">Save current drawings instead</button>
+          </div>
+        </>}
+      </div>;
   return (
     <>
+      {!isOpen && storageStatus}
       {isOpen && (
         <div 
           ref={wrapperRef}
+          data-drawing-tools
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) flushPending(); }}
           className={styles.drawToolsWrapper}
           style={position ? {
             top: `${position.y}px`,
@@ -1120,9 +1440,25 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
               </div>
             </div>
 
+            <div className={styles.historyActions} role="group" aria-label="Drawing history and selection">
+              <DrawingActionButton className={styles.actionBtn} disabled={!mapReady || !history.canUndo} onAction={() => handleHistory('undo')}
+                title={history.undoLabel ? `Undo ${history.undoLabel} (Ctrl/Cmd Z)` : 'Undo (Ctrl/Cmd Z)'}>Undo</DrawingActionButton>
+              <DrawingActionButton className={styles.actionBtn} disabled={!mapReady || !history.canRedo} onAction={() => handleHistory('redo')}
+                title="Redo (Ctrl/Cmd Shift Z or Ctrl/Cmd Y)">Redo</DrawingActionButton>
+              <DrawingActionButton className={styles.actionBtn} disabled={!mapReady || !(selectedFeatureId || selectedTextId)} onAction={handleDuplicate}
+                title="Duplicate selected drawing or text">Duplicate</DrawingActionButton>
+              <DrawingActionButton className={`${styles.actionBtn} ${styles.danger}`} disabled={!mapReady || !(selectedFeatureId || selectedTextId)}
+                onAction={handleDeleteSelection} title="Delete selected drawing or text">Delete</DrawingActionButton>
+            </div>
+            {storageStatus}
             {!isCollapsed && (
               <div className={styles.panelContent}>
                 {importError && <p role="alert">{importError}</p>}
+                {legacyAvailable && <div className={styles.storageNotice}>
+                  <p>Device drawings from an earlier version are available. Import a copy into this account.</p>
+                  <button className={styles.actionBtn} onClick={importLegacy} disabled={!mapReady} title="Import a copy of legacy device drawings into this account">Import device drawings</button>
+                </div>}
+                <p className={styles.historyHint}>Undo keeps up to 50 edits during this session. Select a drawing to duplicate or delete it.</p>
                 {/* Section 1: Measurement */}
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Measure</div>
@@ -1136,39 +1472,39 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>Draw</div>
                   <div className={styles.grid}>
-                    <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => setActiveMode('select')} title="Select and edit an existing drawing">
+                    <button className={`${styles.toolBtn} ${activeMode === 'select' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('select'); }} title="Select and edit an existing drawing">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
                       Select
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => setActiveMode('polygon')} title="Draw a polygon and measure its area">
+                    <button className={`${styles.toolBtn} ${activeMode === 'polygon' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('polygon'); }} title="Draw a polygon and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 14l5-9 9 3 4 10-10 3-8-7z"/></svg>
                       Area
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => setActiveMode('linestring')} title="Draw a line and measure its distance">
+                    <button className={`${styles.toolBtn} ${activeMode === 'linestring' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('linestring'); }} title="Draw a line and measure its distance">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21L21 3"/></svg>
                       Ruler
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => setActiveMode('rectangle')} title="Draw a rectangle and measure its area">
+                    <button className={`${styles.toolBtn} ${activeMode === 'rectangle' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('rectangle'); }} title="Draw a rectangle and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
                       Rect
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => setActiveMode('circle')} title="Draw a circle and measure its area">
+                    <button className={`${styles.toolBtn} ${activeMode === 'circle' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('circle'); }} title="Draw a circle and measure its area">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
                       Circle
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => setActiveMode('point')} title="Place a point marker on the map">
+                    <button className={`${styles.toolBtn} ${activeMode === 'point' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('point'); }} title="Place a point marker on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                       Pin
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => setActiveMode('freehand-linestring')} title="Draw a freehand line on the map">
+                    <button className={`${styles.toolBtn} ${activeMode === 'freehand-linestring' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('freehand-linestring'); }} title="Draw a freehand line on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.58 7.58"/></svg>
                       Sketch
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => setActiveMode('text')} title="Place a text annotation on the map">
+                    <button className={`${styles.toolBtn} ${activeMode === 'text' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('text'); }} title="Place a text annotation on the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
                       Text
                     </button>
-                    <button className={`${styles.toolBtn} ${activeMode === 'eraser' ? styles.active : ''}`} onClick={() => setActiveMode('eraser')} title="Remove a drawing from the map">
+                    <button className={`${styles.toolBtn} ${activeMode === 'eraser' ? styles.active : ''}`} onClick={() => { flushPending(); setActiveMode('eraser'); }} title="Remove a drawing from the map">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
                         <path d="M22 21H7" />
@@ -1188,7 +1524,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         key={c}
                         className={`${styles.colorBtn} ${activeColor.toLowerCase() === c.toLowerCase() ? styles.active : ''}`}
                         style={{ backgroundColor: c }}
-                        onClick={() => setActiveColor(c)}
+                        onClick={() => { flushPending(); changeColor(c); }}
                         title={`Use ${c} as the draw color`}
                         aria-label={`Use ${c} as the draw color`}
                       />
@@ -1221,7 +1557,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                         <button
                           key={sizeValue}
                           className={`${styles.sizeBtn} ${styles.sizeSymbolBtn} ${activeSize === sizeValue ? styles.active : ''}`}
-                          onClick={() => setActiveSize(sizeValue)}
+                          onClick={() => { flushPending(); changeSize(sizeValue); }}
                           title={`Set draw size ${sizeValue}`}
                         >
                           <div className={styles.sizeIndicator} style={{ width: sizeValue * 1.5, height: sizeValue * 1.5 }} />
@@ -1246,7 +1582,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
                     <span className={styles.styleRowLabel}>Fill</span>
                     <button
                       className={`${styles.sizeBtn} ${styles.fillBtn} ${activeFill ? styles.active : ''}`}
-                      onClick={() => setActiveFill(!activeFill)}
+                      onClick={() => { flushPending(); changeFill(!activeFill); }}
                       title={`${activeFill ? 'Disable' : 'Enable'} shape fill`}
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill={activeFill ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
@@ -1272,7 +1608,7 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
 
                 {/* Section 5: Actions */}
                 <div className={styles.actions}>
-                  <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear} title="Remove all drawings and annotations from the map">
+                  <button className={`${styles.actionBtn} ${styles.danger}`} onClick={handleClear} disabled={!mapReady || !(history.hasDrawings || textAnnotations.length)} title="Remove all drawings and annotations from the map">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px', verticalAlign: 'middle' }}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                     Clear
                   </button>
@@ -1295,9 +1631,14 @@ export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'gue
       {textAnnotations.map(annotation => (
         <TextMarker 
           key={annotation.id} 
-          mapRef={mapRef} 
-          annotation={annotation} 
-          activeMode={activeMode}
+          mapRef={mapRef}
+          mapReady={mapReady}
+          annotation={annotation}
+          activeMode={isOpen ? activeMode : 'static'}
+          selected={selectedTextId === annotation.id}
+          autoFocus={autoFocusTextId === annotation.id}
+          onSelect={() => selectText(annotation.id)}
+          onEditEnd={() => finishTextEdit(annotation.id)}
           onUpdate={(text) => updateTextAnnotation(annotation.id, text)}
           onRemove={() => removeTextAnnotation(annotation.id)}
           onDragEnd={(lngLat) => updateTextAnnotationPosition(annotation.id, lngLat)}
