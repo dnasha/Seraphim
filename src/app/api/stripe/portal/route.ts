@@ -7,7 +7,7 @@ import { checkSensitiveRateLimit, hasValidSameOrigin } from '@/lib/security/sens
 import { resolveStripeCustomerId } from '@/lib/server/effectiveProfile';
 import { recordIncident, recordMetric } from '@/lib/server/operations';
 
-export async function POST(request: Request = new Request('http://localhost', { method: 'POST' })) {
+export async function POST(request: Request) {
   const origin = getConfiguredSiteUrl();
   if (!origin || !isBillingPortalEnabled()) {
     return NextResponse.json({ code: 'portal_disabled', error: 'Billing management is unavailable.' }, { status: 503 });

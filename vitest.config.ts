@@ -45,6 +45,7 @@ export default defineConfig({
                 'src/hooks/useViewState.ts',
                 'src/hooks/useNewsData.ts',
                 'src/lib/**/*.ts',
+                'src/features/browser-geofence/**/*.ts',
                 'src/proxy.ts',
                 'src/scraper/utils/**/*.ts',
                 'src/scraper/merger.ts',

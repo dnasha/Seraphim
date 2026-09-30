@@ -10,7 +10,7 @@ vi.mock('@/lib/stripe', () => ({
 }));
 vi.mock('@/lib/security/payments', () => ({ isAngelCheckoutEnabled: () => mocks.enabled }));
 
-import { clearAngelMetadataCacheForTests, GET } from '@/app/api/stripe/angel-count/route';
+let GET: typeof import('@/app/api/stripe/angel-count/route').GET;
 
 function countQuery(count: number) {
   const query: Record<string, unknown> = {};
@@ -22,9 +22,10 @@ function countQuery(count: number) {
 }
 
 describe('GET /api/stripe/angel-count', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    clearAngelMetadataCacheForTests();
+    vi.resetModules();
+    ({ GET } = await import('@/app/api/stripe/angel-count/route'));
     mocks.enabled = true;
     mocks.retrieve.mockResolvedValue({ product: { metadata: { inventory: '80' } } });
     mocks.from.mockImplementation((table: string) => countQuery(table === 'angel_purchases' ? 12 : 3));

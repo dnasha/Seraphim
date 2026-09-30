@@ -21,6 +21,7 @@ vi.mock('@/lib/server/effectiveProfile', () => ({ resolveStripeCustomerId: mocks
 vi.mock('@/lib/server/operations', () => ({ recordMetric: vi.fn(), recordIncident: vi.fn() }));
 
 import { POST } from '@/app/api/stripe/portal/route';
+const request = () => new Request('https://seraphim.example/api/stripe/portal', { method: 'POST' });
 
 describe('POST /api/stripe/portal', () => {
   beforeEach(() => {
@@ -36,20 +37,20 @@ describe('POST /api/stripe/portal', () => {
 
   it('independently disables portal creation before authentication', async () => {
     mocks.enabled = false;
-    expect((await POST()).status).toBe(503);
+    expect((await POST(request())).status).toBe(503);
     expect(mocks.getUser).not.toHaveBeenCalled();
   });
 
   it('rejects cross-origin portal requests before authentication', async () => {
     mocks.sameOrigin = false;
-    expect((await POST()).status).toBe(403);
+    expect((await POST(request())).status).toBe(403);
     expect(mocks.getUser).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('fails closed when the sensitive-action limiter is unavailable', async () => {
     mocks.rateLimit = { allowed: false, retryAfterSeconds: 60 };
-    const response = await POST();
+    const response = await POST(request());
     expect(response.status).toBe(429);
     expect(response.headers.get('Retry-After')).toBe('60');
     expect(mocks.profile).not.toHaveBeenCalled();
@@ -58,20 +59,20 @@ describe('POST /api/stripe/portal', () => {
 
   it('requires authentication and a linked billing customer', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
-    expect((await POST()).status).toBe(401);
+    expect((await POST(request())).status).toBe(401);
     mocks.profile.mockResolvedValueOnce(null);
-    expect((await POST()).status).toBe(404);
+    expect((await POST(request())).status).toBe(404);
   });
 
   it('creates a portal session for the effective profile customer', async () => {
-    const response = await POST();
+    const response = await POST(request());
     expect(await response.json()).toEqual({ url: 'https://billing.stripe.example/session' });
     expect(mocks.create).toHaveBeenCalledWith({ customer: 'cus-1', return_url: 'https://seraphim.example/account' });
   });
 
   it('returns a service error without creating a portal when the customer lookup fails', async () => {
     mocks.profile.mockRejectedValueOnce(new Error('database unavailable'));
-    const response = await POST();
+    const response = await POST(request());
     expect(response.status).toBe(503);
     expect(mocks.create).not.toHaveBeenCalled();
   });

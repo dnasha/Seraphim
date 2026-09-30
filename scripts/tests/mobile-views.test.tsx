@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 // Keep the real home state, sidebar, cards, and filter hooks; replace WebGL and
 // virtual-list measurements, which jsdom cannot provide.
-vi.mock('next/dynamic', () => ({ default: () => function MapDouble(props: {
+vi.mock('next/dynamic', () => ({ default: (loader: () => unknown) => !loader.toString().includes('NewsMap') ? () => null : function MapDouble(props: {
     selectedItemId: string | null;
     onSelectItem: (id: string | null) => void;
 }) {

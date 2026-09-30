@@ -24,12 +24,6 @@ const RESPONSE_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=60';
 const metadataSingleFlight = createSingleFlight(1);
 let metadataCache: { maxQuantity: number; expiresAt: number } | null = null;
 
-export function clearAngelMetadataCacheForTests() {
-    if (process.env.NODE_ENV !== 'test') return;
-    metadataCache = null;
-    metadataSingleFlight.clear();
-}
-
 async function getAngelMaxQuantity() {
     const now = Date.now();
     if (metadataCache && metadataCache.expiresAt > now) return metadataCache.maxQuantity;

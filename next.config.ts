@@ -4,8 +4,6 @@ import withSerwistInit from "@serwist/next";
 import { NEWS_IMAGE_HOSTS } from "./src/lib/utils/newsImages";
 import { buildCspReportOnly, CSP_ENFORCED_BASELINE } from "./src/lib/security/csp";
 
-process.env.SERWIST_SUPPRESS_TURBOPACK_WARNING = "1";
-
 type SizedManifestEntry = ManifestEntry & { size: number };
 
 const excludeVolatileNextAssets = (entries: SizedManifestEntry[]) => ({
@@ -58,6 +56,13 @@ const nextConfig: NextConfig = {
   ...(process.env.NODE_ENV === 'development' && { allowedDevOrigins: ['*'] }),
   async headers() {
     return [
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
       {
         source: '/api/:path*',
         headers: [
