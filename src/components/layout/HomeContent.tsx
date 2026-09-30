@@ -610,7 +610,12 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
             {showAuthModal && <AuthModal />}
 
             {/* PWA Install Prompt (1.4) */}
-            <PWAInstallPrompt />
+            <PWAInstallPrompt
+                userId={user?.id ?? null}
+                ready={!authLoading && preferencesLoaded}
+                preferences={preferences}
+                onPreferencesChange={updatePreferences}
+            />
 
             {error && (
                 <StateNotice

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { mergePwaDismissals, readPwaDismissal, writePwaDismissal, PWA_COOLDOWN_MS, PWA_DISMISS_LIMIT, type PwaDismissal } from '@/lib/pwaPreferences';
 import styles from './PWAInstallPrompt.module.css';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -12,123 +13,95 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
-export default function PWAInstallPrompt() {
-  const [isVisible, setIsVisible] = useState(false);
+interface PWAInstallPromptProps {
+  userId: string | null;
+  ready: boolean;
+  preferences: PwaDismissal | null;
+  onPreferencesChange: (patch: PwaDismissal, options?: { immediate?: boolean }) => void;
+}
+
+export default function PWAInstallPrompt(props: PWAInstallPromptProps) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  // Capture the event even while account preferences are still loading.
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  return <InstallPromptContent {...props} key={props.userId ?? 'guest'} deferredPrompt={deferredPrompt} clearPrompt={() => setDeferredPrompt(null)} />;
+}
+
+function InstallPromptContent({ userId, ready, preferences, onPreferencesChange, deferredPrompt, clearPrompt }: PWAInstallPromptProps & {
+  deferredPrompt: BeforeInstallPromptEvent | null;
+  clearPrompt: () => void;
+}) {
+  const [isVisible, setIsVisible] = useState(false);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [localDismissal, setLocalDismissal] = useState(() => readPwaDismissal(userId));
+  const [visitStartedAt] = useState(() => Date.now());
+  const dismissal = mergePwaDismissals(localDismissal, preferences ?? {});
+  const { pwaDismissCount, pwaLastDismissedAt } = dismissal;
+  const suppressed = pwaDismissCount >= PWA_DISMISS_LIMIT
+    || (pwaLastDismissedAt > 0 && visitStartedAt - pwaLastDismissedAt < PWA_COOLDOWN_MS);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // 1. Check if the app is already running in standalone mode (installed)
-    const isStandalone = 
-      window.matchMedia('(display-mode: standalone)').matches || 
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-    
+    if (!ready || suppressed) return;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     if (isStandalone) return;
 
-    // 2. Check if user dismissed the prompt recently (within 7 days)
-    const dismissedTime = localStorage.getItem('seraphim_pwa_dismissed');
-    if (dismissedTime) {
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      if (Date.now() - parseInt(dismissedTime, 10) < sevenDaysMs) {
-        return;
-      }
-    }
+    const isIOS = /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !('MSStream' in window);
+    if (!isIOS && !deferredPrompt) return;
 
-    // 3. Detect iOS Safari
-    const ua = window.navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
-    
-    if (isIOS) {
-      // Wait 6 seconds after mounting to display the prompt gently
-      timeoutRef.current = setTimeout(() => {
-        setIsIOSDevice(true);
-        setIsVisible(true);
-      }, 6000);
-      return () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      };
-    }
+    const timer = setTimeout(() => {
+      // Another tab may have dismissed it during the delay.
+      const latest = mergePwaDismissals({ pwaDismissCount, pwaLastDismissedAt }, readPwaDismissal(userId));
+      if (latest.pwaDismissCount >= PWA_DISMISS_LIMIT
+        || (latest.pwaLastDismissedAt > 0 && Date.now() - latest.pwaLastDismissedAt < PWA_COOLDOWN_MS)) return;
+      setIsIOSDevice(isIOS);
+      setIsVisible(true);
+    }, isIOS ? 6000 : 5000);
+    return () => clearTimeout(timer);
+  }, [ready, suppressed, deferredPrompt, pwaDismissCount, pwaLastDismissedAt, userId]);
 
-    // 4. Handle standard beforeinstallprompt (Android / Chrome / Windows / macOS Edge/Chrome)
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      
-      // Clear any existing scheduled prompt timer to prevent duplicate overlays
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      
-      // Show the prompt gently after a delay
-      timeoutRef.current = setTimeout(() => {
-        // Double check cooldown in case it was dismissed while the timeout was pending
-        const dismissedTime = localStorage.getItem('seraphim_pwa_dismissed');
-        if (dismissedTime) {
-          const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-          if (Date.now() - parseInt(dismissedTime, 10) < sevenDaysMs) {
-            return;
-          }
-        }
-        setIsVisible(true);
-      }, 5000);
+  useEffect(() => {
+    const handleStorage = () => setLocalDismissal(current => mergePwaDismissals(current, readPwaDismissal(userId)));
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [userId]);
+
+  const handleDismiss = () => {
+    const current = mergePwaDismissals(dismissal, readPwaDismissal(userId));
+    const next = {
+      pwaDismissCount: Math.min(PWA_DISMISS_LIMIT, current.pwaDismissCount + 1),
+      pwaLastDismissedAt: Date.now(),
     };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
-    // Fallback: If PWA is installable but the event fired before listener mounted, 
-    // some browsers might allow standard install triggers, but listening is safest.
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
+    setIsVisible(false);
+    setShowIOSInstructions(false);
+    setLocalDismissal(next);
+    writePwaDismissal(userId, next);
+    if (userId) onPreferencesChange(next, { immediate: true });
+  };
 
   const handleInstallClick = async () => {
     if (isIOSDevice) {
       setShowIOSInstructions(true);
       return;
     }
-
     if (!deferredPrompt) return;
-
-    // Show the browser's install prompt
     await deferredPrompt.prompt();
-    
-    // Wait for the user's response
     const { outcome } = await deferredPrompt.userChoice;
-    
-    setIsVisible(false);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    if (outcome === 'accepted') {
-      // Installed!
-    } else {
-      // Dismissed the native install prompt - set cooldown
-      localStorage.setItem('seraphim_pwa_dismissed', Date.now().toString());
-    }
-    
-    // Clear deferred prompt either way
-    setDeferredPrompt(null);
+    if (outcome === 'dismissed') handleDismiss();
+    else setIsVisible(false);
+    clearPrompt();
   };
 
-  const handleDismiss = () => {
-    setIsVisible(false);
-    setShowIOSInstructions(false);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    localStorage.setItem('seraphim_pwa_dismissed', Date.now().toString());
-  };
-
-  if (!isVisible) return null;
+  if (!isVisible || !ready || suppressed) return null;
 
   return (
     <div className={styles.pwaPromptContainer} role="alert">

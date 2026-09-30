@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import type { SortMode } from '@/lib/utils/filters';
+import { mergePwaDismissals, readPwaDismissal, sanitizePwaDismissal, type PwaDismissal } from '@/lib/pwaPreferences';
 
 export const DEFAULT_SOURCE_FILTERS = ['news', 'reddit', 'x', 'telegram', 'extra'];
 export const DEFAULT_CATEGORY_FILTERS = ['all'];
@@ -13,7 +14,7 @@ const ALLOWED_TIME_RANGES = new Set(['1d', '3d', '1w', '1m', 'custom']);
 const ALLOWED_MAP_STYLES = new Set(['standard', 'dark', 'black', 'light', 'satellite', 'topographic']);
 const ALLOWED_OVERLAYS = new Set(['usgs', 'noaa', 'eonet', 'fires', 'radiation', 'aqi', 'flights', 'iss']);
 
-export interface SyncedPreferences {
+export interface SyncedPreferences extends PwaDismissal {
   version: 1;
   sources: string[];
   categories: string[];
@@ -51,6 +52,8 @@ export const DEFAULT_SYNCED_PREFERENCES: SyncedPreferences = {
   forceIndividualPins: false,
   mutedClusters: false,
   globe: false,
+  pwaDismissCount: 0,
+  pwaLastDismissedAt: 0,
 };
 
 function validStringArray(value: unknown, allowed: Set<string>, fallback: string[]) {
@@ -99,6 +102,7 @@ export function sanitizeSyncedPreferences(value: unknown): SyncedPreferences {
     forceIndividualPins: raw.forceIndividualPins === true,
     mutedClusters: raw.mutedClusters === true,
     globe: raw.globe === true,
+    ...sanitizePwaDismissal(raw),
   };
 }
 
@@ -146,9 +150,13 @@ export function useSyncedPreferences(supabase: SupabaseClient, user: User | null
       if (error) {
         console.warn('[preferences] Cloud preference load failed; using local cache.', error.message);
       }
-      const next = data?.preferences
+      const cloud = data?.preferences
         ? sanitizeSyncedPreferences(data.preferences)
         : (cached ?? DEFAULT_SYNCED_PREFERENCES);
+      const next = {
+        ...cloud,
+        ...mergePwaDismissals(cloud, cached ?? {}, readPwaDismissal(user.id)),
+      };
       preferencesRef.current = next;
       setState({ userId: user.id, preferences: next });
       try {
@@ -156,13 +164,21 @@ export function useSyncedPreferences(supabase: SupabaseClient, user: User | null
       } catch {
         // A cache failure should never block cloud-backed preferences.
       }
+      if (next.pwaDismissCount > cloud.pwaDismissCount || next.pwaLastDismissedAt > cloud.pwaLastDismissedAt) {
+        const { error: saveError } = await supabase.from('user_preferences').upsert({
+          user_id: user.id,
+          preferences: next,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+        if (saveError) console.warn('[preferences] PWA preference recovery failed.', saveError.message);
+      }
     };
 
     void load();
     return () => { cancelled = true; };
   }, [supabase, user]);
 
-  const updatePreferences = useCallback((patch: Partial<SyncedPreferences>) => {
+  const updatePreferences = useCallback((patch: Partial<SyncedPreferences>, options?: { immediate?: boolean }) => {
     if (!user || !isLoaded) return;
     const next = sanitizeSyncedPreferences({ ...preferencesRef.current, ...patch });
     preferencesRef.current = next;
@@ -174,7 +190,7 @@ export function useSyncedPreferences(supabase: SupabaseClient, user: User | null
     }
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
+    const save = async () => {
       const snapshot = preferencesRef.current;
       const { error } = await supabase.from('user_preferences').upsert({
         user_id: user.id,
@@ -182,7 +198,9 @@ export function useSyncedPreferences(supabase: SupabaseClient, user: User | null
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
       if (error) console.warn('[preferences] Cloud preference save failed.', error.message);
-    }, 500);
+    };
+    if (options?.immediate) void save();
+    else saveTimerRef.current = setTimeout(save, 500);
   }, [isLoaded, supabase, user]);
 
   return { preferences, isLoaded, updatePreferences };
