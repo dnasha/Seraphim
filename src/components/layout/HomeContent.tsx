@@ -27,6 +27,9 @@ import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import StateNotice from '@/components/ui/StateNotice';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
+import RegionCheckpoints from '@/components/regions/RegionCheckpoints';
+import type { RegionSpec } from '@/lib/regions/geometry';
+import type { RegionFilters } from '@/lib/regions/checkpoints';
 import StartupGate, { type MapLoadState } from './StartupGate';
 import { LuMap, LuNewspaper } from 'react-icons/lu';
 
@@ -146,6 +149,12 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     const effectiveCustomEndDate = isGuestUser ? '' : debouncedCustomEndDate;
     const effectiveUserTier = isGuestUser || userTier !== 'guest' ? userTier : 'free';
     const isAuthResolving = authLoading;
+    const checkpointOwner = user && !isGuestUser && !authLoading && !tierLoading ? `${user.id}:${effectiveUserTier}` : null;
+    const [checkpointPreview, setCheckpointPreview] = useState<{ owner: string; region: RegionSpec | null } | null>(null);
+    const handleCheckpointPreview = useCallback((region: RegionSpec | null) => {
+        if (checkpointOwner) setCheckpointPreview({ owner: checkpointOwner, region });
+    }, [checkpointOwner]);
+    const checkpointRegion = checkpointOwner && checkpointPreview?.owner === checkpointOwner ? checkpointPreview.region : null;
     const filterState = useNewsFilterState();
     const newsResetKey = `${isGuestUser ? 'guest' : user?.id ? `user:${user.id}` : 'anonymous'}:${effectiveUserTier}`;
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
@@ -622,10 +631,12 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     id="map-view"
                     aria-label="Map"
                     className={styles.mainContent}
+                    style={checkpointOwner ? { '--map-bottom-panel-gap': '52px' } as React.CSSProperties : undefined}
                     data-mobile-active={mobileView === 'map'}
                     inert={isCompactLayout && mobileView !== 'map'}
                 >
                     <NewsMap
+                        checkpointRegion={checkpointRegion}
                         dataReady={Boolean(replay.state) || !isLoading}
                         isCapped={replay.state?.snapshot.isCapped ?? isCapped}
                         activityDataUnavailable={!replay.state && Boolean(error)}
@@ -650,6 +661,21 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                         syncedPreferences={tierLoading ? null : preferences}
                         onSyncedPreferencesChange={updatePreferences}
                     />
+                    {checkpointOwner && user && <RegionCheckpoints
+                        key={checkpointOwner}
+                        account={user.id}
+                        tier={effectiveUserTier}
+                        viewport={currentBBox}
+                        filters={{
+                            timeRange: effectiveTimeRange as RegionFilters['timeRange'],
+                            customStartDate: effectiveCustomStartDate, customEndDate: effectiveCustomEndDate,
+                            query: effectiveSearchQuery, sort: effectiveSortMode,
+                            sources, categories,
+                            minVolume: hasFeature(effectiveUserTier, 'advancedFilters') ? minVolume : 1,
+                            credibilityTiers: hasFeature(effectiveUserTier, 'advancedFilters') ? credibilityTiers : [1, 2, 3],
+                        }}
+                        onRegionPreview={handleCheckpointPreview}
+                    />}
                 </main>
             </div>
 

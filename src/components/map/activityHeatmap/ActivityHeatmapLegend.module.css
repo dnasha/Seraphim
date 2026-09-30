@@ -1,7 +1,7 @@
 .legend {
     position: absolute;
     left: max(12px, env(safe-area-inset-left));
-    bottom: max(44px, calc(env(safe-area-inset-bottom) + 32px));
+    bottom: calc(max(44px, calc(env(safe-area-inset-bottom) + 32px)) + var(--map-bottom-panel-gap, 0px));
     z-index: 800;
     width: min(260px, calc(100% - 88px));
     box-sizing: border-box;

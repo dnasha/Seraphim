@@ -42,6 +42,8 @@ import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 import type { MapLoadState } from '@/components/layout/StartupGate';
+import { useCheckpointMapLayer } from '@/components/regions/useCheckpointMapLayer';
+import type { RegionSpec } from '@/lib/regions/geometry';
 import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
 import { buildActivityHeatmapData } from './activityHeatmap/data';
 import { ACTIVITY_HIT_LAYER, activityHitId, syncActivityHeatmap } from './activityHeatmap/layers';
@@ -51,6 +53,7 @@ import ActivityHeatmapLegend from './activityHeatmap/ActivityHeatmapLegend';
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
+  checkpointRegion?: RegionSpec | null;
   dataReady?: boolean;
   isCapped?: boolean;
   activityDataUnavailable?: boolean;
@@ -121,6 +124,7 @@ function isRecoverableMapResourceError(errorMsg: string) {
 }
 
 export default function NewsMap({
+  checkpointRegion = null,
   dataReady = true,
   isCapped = false,
   activityDataUnavailable = false,
@@ -152,6 +156,7 @@ export default function NewsMap({
   const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
+  useCheckpointMapLayer(mapRef, mapReady, checkpointRegion);
   const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [isRetryingMap, setIsRetryingMap] = useState(false);
@@ -830,7 +835,10 @@ export default function NewsMap({
       // Keep popup headers/close controls inside that actual available height.
       const container = containerRef.current;
       if (container?.parentElement) {
-        container.parentElement.style.setProperty('--map-available-height', `${container.clientHeight}px`);
+        const height = `${container.clientHeight}px`;
+        container.parentElement.style.setProperty('--map-available-height', height);
+        // The checkpoint panel is a sibling of this map wrapper in HomeContent.
+        container.closest('main')?.style.setProperty('--map-available-height', height);
       }
       isResizingRef.current = true;
       if (resizeEndTimeoutRef.current)
