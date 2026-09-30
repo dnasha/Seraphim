@@ -125,6 +125,6 @@ installed Next.js version to the lockfile's 16.3.7. A forced frozen reinstall al
 restored a missing nested MIMEType 5 dependency required by jsdom 30. All 745
 installed lockfile entries matched their locked versions after reinstall (with
 the equivalent `v` prefix normalized). Neither manifest nor lockfile changed.
-Typecheck, lint, build and full coverage passed: 1,059 tests plus one existing
+Typecheck, lint, build and full coverage passed: 1,060 tests plus one existing
 todo; global coverage was 83.80% statements, 76.60% branches, 88.77% functions and
 86.83% lines. Desktop/mobile mocked browser QA passed with zero page errors.

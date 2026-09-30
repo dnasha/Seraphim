@@ -201,10 +201,9 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
       )
         return;
       const rebaselineRequired =
-        !!region.baseline &&
-        (!!region.rebaselineRequired ||
-          !snapshotsCompatible(region.baseline, snapshot));
-      const baselineCreated = !region.baseline;
+        !!region.rebaselineRequired ||
+        (!!region.baseline && !snapshotsCompatible(region.baseline, snapshot));
+      const baselineCreated = !region.baseline && !rebaselineRequired;
       const reviewable =
         !snapshot.coverage.stale && !snapshot.coverage.reportErrors;
       if (baselineCreated && reviewable) {

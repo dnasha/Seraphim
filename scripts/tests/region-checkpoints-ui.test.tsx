@@ -300,6 +300,35 @@ describe("checkpoint hook lifecycle", () => {
       reload.result.current.regions[0].baseline?.events.map((e) => e.id),
     ).toEqual(["a", "b"]);
   });
+  it("requires one explicit baseline when the first check encounters coverage drift", async () => {
+    const hook = await setup("a", "pro");
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    expect(hook.result.current.regions[0]).toMatchObject({
+      baseline: null,
+      rebaselineRequired: true,
+    });
+    fetcher.mockImplementation(async () =>
+      response(["a"], { appliedLimit: 1000 }),
+    );
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    expect(hook.result.current.regions[0].baseline).toBeNull();
+    expect(hook.result.current.displayed).toMatchObject({
+      baselineCreated: false,
+      rebaselineRequired: true,
+    });
+    expect(hook.result.current.changes).toEqual([]);
+    act(() => hook.result.current.review());
+    expect(hook.result.current.regions[0].rebaselineRequired).toBe(false);
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    expect(hook.result.current.displayed?.rebaselineRequired).toBe(false);
+    expect(hook.result.current.changes).toEqual([]);
+  });
   it("refuses an older capture without changing the review boundary", async () => {
     fetcher.mockImplementation(async () =>
       response(["a"], {}, "2026-09-30T00:00:50Z"),
