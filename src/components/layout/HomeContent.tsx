@@ -30,6 +30,7 @@ import { LuMap, LuNewspaper } from 'react-icons/lu';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map/NewsMap'), { ssr: false });
+const BrowserAlerts = dynamic(() => import('@/features/browser-geofence/BrowserAlerts'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/auth/AuthModal'), { ssr: false });
 const GUEST_STORY_LIMIT = getEntitlements('guest').eventLimit;
 const FREE_STORY_LIMIT = getEntitlements('free').eventLimit;
@@ -650,6 +651,13 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     <span>Map</span>
                 </button>
             </nav>
+
+            <BrowserAlerts
+                key={`browser-alerts:${authLoading || tierLoading ? 'resolving' : user?.id ?? 'guest'}:${effectiveUserTier}`}
+                account={!authLoading && !tierLoading && !isGuestUser ? user?.id ?? null : null}
+                bbox={currentBBox}
+                scope={{ sources, categories, credibilityTiers, minVolume, query: effectiveSearchQuery }}
+            />
 
             {showAuthModal && <AuthModal />}
 

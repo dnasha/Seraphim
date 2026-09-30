@@ -1,0 +1,21 @@
+.container { position: fixed; right: var(--space-lg); bottom: 38px; z-index: 125; font-size: var(--text-sm); color: var(--text-primary); }
+.launcher { display: flex; align-items: center; gap: var(--space-sm); background: var(--surface); box-shadow: 0 3px 18px #0002; }
+.container button { padding: var(--space-sm) var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; min-height: 36px; }
+.container button:hover { background: var(--surface-alt); }
+.container button:disabled { opacity: .5; cursor: default; }
+.container button:focus-visible, .container input:focus-visible, .container summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.panel { position: absolute; right: 0; bottom: 46px; width: min(430px, calc(100vw - 32px)); max-height: min(680px, calc(100dvh - 155px)); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-lg); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--modal-shadow); }
+.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); }
+.heading h2 { font-size: var(--text-md); }
+.panel p { margin: var(--space-md) 0; }
+.status { padding: var(--space-md); border-radius: var(--radius-md); background: var(--surface-alt); }
+.save, .watch { display: flex; flex-direction: column; gap: var(--space-sm); }
+.panel label { display: flex; flex-direction: column; gap: var(--space-xs); flex: 1; }
+.panel input { width: 100%; padding: var(--space-sm); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font: inherit; }
+.actions, .watch form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--space-sm); margin: var(--space-sm) 0; }
+.list { list-style: none; margin: var(--space-lg) 0 0; }
+.watch { border-top: 1px solid var(--border); padding: var(--space-md) 0; }
+.watch p { margin: 0; }
+.watch details p { padding-top: var(--space-sm); overflow-wrap: anywhere; }
+.watch summary { cursor: pointer; }
+@media (max-width: 860px) { .container { bottom: calc(76px + env(safe-area-inset-bottom)); right: var(--space-md); } .panel { width: calc(100vw - 24px); max-height: calc(100dvh - 165px - env(safe-area-inset-bottom)); } }
