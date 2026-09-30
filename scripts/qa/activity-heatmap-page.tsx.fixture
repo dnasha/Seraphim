@@ -1,0 +1,55 @@
+'use client';
+// Temporary browser fixture. Installed by activity-heatmap-fixture.mjs, never shipped.
+import { useState } from 'react';
+import { useTheme } from 'next-themes';
+import dynamic from 'next/dynamic';
+import * as maplibregl from 'maplibre-gl';
+import { MAP_STYLES } from '@/components/map/MapConstants';
+import { DEFAULT_SYNCED_PREFERENCES } from '@/hooks/useSyncedPreferences';
+import { mapActivityFixture } from '../../../scripts/tests/fixtures/mapActivity';
+
+declare global { interface Window { __heatmapMap: maplibregl.Map; __heatmapWrites: unknown[]; } }
+for (const style of ['standard', 'dark']) {
+    Object.assign(MAP_STYLES[style], { isPmtiles: false, isMapTiler: true, url: `/heatmap-qa-${style}.json` });
+}
+if (typeof window !== 'undefined') {
+    const original = maplibregl.Map.prototype.on;
+    Object.defineProperty(maplibregl.Map.prototype, 'on', { value: function(this: maplibregl.Map, ...args: unknown[]) {
+        window.__heatmapMap = this;
+        return Reflect.apply(original, this, args);
+    } });
+    window.__heatmapWrites = [];
+}
+const NewsMap = dynamic(() => import('@/components/map/NewsMap'), { ssr: false });
+
+export default function HeatmapQaPage() {
+    const { resolvedTheme, setTheme } = useTheme();
+    const [selected, select] = useState<string | null>(null);
+    const [version, setVersion] = useState(0);
+    const [owner, setOwner] = useState('fixture-a');
+    const [empty, setEmpty] = useState(false);
+    const [subset, setSubset] = useState(false);
+    const [capped, setCapped] = useState(false);
+    const [aggregate, setAggregate] = useState(false);
+    const [individual, setIndividual] = useState(false);
+    const items = empty ? [] : (subset ? mapActivityFixture.slice(0, 25) : mapActivityFixture).map((item, index) => aggregate && index % 10 === 0 ? { ...item, originalId: item.id, id: `cluster-z3-${item.id}`, storyCount: 15 } : item);
+    return <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', color: 'var(--text-primary)' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 8, fontSize: 12 }} aria-label="Fixture controls">
+            <strong>Heatmap QA · synthetic 1,000 events</strong>
+            <button onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>Theme</button>
+            <button onClick={() => setEmpty(!empty)}>Empty data</button>
+            <button onClick={() => setSubset(!subset)}>Displayed subset</button>
+            <button onClick={() => setCapped(!capped)}>Capped result</button>
+            <button onClick={() => setAggregate(!aggregate)}>Aggregate rows</button>
+            <button onClick={() => setOwner(owner === 'fixture-a' ? 'fixture-b' : 'fixture-a')}>Switch account</button>
+            <button onClick={() => setIndividual(!individual)}>Fixture individual pins</button>
+            <button onClick={() => { select('fixture-0'); setVersion(version + 1); }}>Sidebar story</button>
+            <output aria-label="Selected event">{selected ?? 'none'}</output>
+        </div>
+        <NewsMap items={items} selectedItemId={selected} selectionVersion={version} onSelectItem={id => { select(id); setVersion(v => v + 1); }}
+            isDarkMode={resolvedTheme === 'dark'} animatedEffects onAnimatedEffectsChange={() => {}}
+            initialCenter={[14, 32.5]} initialZoom={5} sortMode="hot" userTier="analyst" preferenceOwnerId={owner} isCapped={capped}
+            syncedPreferences={{ ...DEFAULT_SYNCED_PREFERENCES, forceIndividualPins: individual }}
+            onSyncedPreferencesChange={patch => { window.__heatmapWrites.push(patch); }} />
+    </div>;
+}

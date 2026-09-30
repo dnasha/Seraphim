@@ -37,6 +37,7 @@ export default defineConfig({
                 'src/app/api/**/*.ts',
                 'src/app/auth/**/*.ts',
                 'src/components/map/utils.ts',
+                'src/components/map/activityHeatmap/**/*.{ts,tsx}',
                 'src/hooks/useResizable.ts',
                 'src/hooks/useViewState.ts',
                 'src/hooks/useNewsData.ts',

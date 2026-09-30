@@ -145,7 +145,7 @@ describe('map error recovery', () => {
         });
         const { rerender } = render(<NewsMap {...props} />);
         const setData = vi.fn();
-        latestMap().getSource.mockReturnValue({ setData });
+        latestMap().getSource.mockImplementation((id: string) => ['news-events', 'selected-news-event'].includes(id) ? { setData } : undefined);
         await loadMap();
         act(() => resize());
         setData.mockClear();

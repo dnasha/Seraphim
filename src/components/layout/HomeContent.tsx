@@ -605,6 +605,8 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 >
                     <NewsMap
                         dataReady={!isLoading}
+                        isCapped={isCapped}
+                        activityDataUnavailable={Boolean(error)}
                         onLoadStateChange={setMapLoadState}
                         items={visibleMapNews}
                         selectedItemId={selectedItemId}

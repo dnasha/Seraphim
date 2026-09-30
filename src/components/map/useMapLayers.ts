@@ -9,6 +9,7 @@ import { useCallback } from "react";
 import type * as maplibregl from "maplibre-gl";
 import { CLUSTER_MAX_ZOOM } from "./utils";
 import { loadMapIcons } from "./layers/mapIcons";
+import { syncActivityHeatmap, type ActivityHeatmapState } from './activityHeatmap/layers';
 import {
   CLUSTERS_CIRCLE_PAINT,
   HOT_STORY_PULSE_PAINT,
@@ -33,12 +34,14 @@ interface UseMapLayersProps {
   forceIndividualPinsRef: React.MutableRefObject<boolean>;
   overlaysRef: React.MutableRefObject<Record<string, boolean>>;
   pendingGeoJsonRef: React.MutableRefObject<GeoJSON.FeatureCollection | null>;
+  activityHeatmapRef?: React.MutableRefObject<ActivityHeatmapState>;
 }
 
 export function useMapLayers({
   forceIndividualPinsRef,
   overlaysRef,
   pendingGeoJsonRef,
+  activityHeatmapRef,
 }: UseMapLayersProps) {
   const addSourcesAndLayers = useCallback(
     async (map: maplibregl.Map) => {
@@ -195,6 +198,9 @@ export function useMapLayers({
           paint: SELECTED_POINT_ACTIVE_PAINT,
         });
       }
+
+      // Restore the experiment with the latest displayed data after style/context reload.
+      if (activityHeatmapRef) syncActivityHeatmap(map, activityHeatmapRef.current);
 
       // External Live Overlays: Added beneath news clusters to prevent obstruction.
       
@@ -388,7 +394,7 @@ export function useMapLayers({
         );
       }
     },
-    [forceIndividualPinsRef, overlaysRef, pendingGeoJsonRef]
+    [forceIndividualPinsRef, overlaysRef, pendingGeoJsonRef, activityHeatmapRef]
   );
 
   return { addSourcesAndLayers };
