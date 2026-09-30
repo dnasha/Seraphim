@@ -7,8 +7,8 @@ import AnalystWorkspace, { EvidenceSelectionControl } from '@/components/analyst
 import { saveStore, storageKey, emptyStore } from '@/lib/analyst/storage';
 import { analystEvent, analystId, analystScope, detailBody, fixturePacket } from './fixtures/analyst';
 import type { UserTier } from '@/lib/entitlements';
-import { IDBFactory } from 'fake-indexeddb';
-import { CHANGE_KEY, DATABASE_NAME, mutateStore, readStore, resetStore } from '@/lib/analyst/database';
+import { IDBDatabase, IDBFactory } from 'fake-indexeddb';
+import { CHANGE_KEY, DATABASE_NAME, mutateStore, openStore, readStore, resetStore } from '@/lib/analyst/database';
 
 let account = 'owner';
 let status = 200;
@@ -21,7 +21,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const stored = (owner = 'owner') => readStore(indexedDB, owner);
 const boot = async () => {
   const hook = renderHook(({ owner, tier, ready }) => useAnalystWorkspace(owner, tier, ready), { initialProps: { owner: 'owner' as string | null, tier: 'analyst' as UserTier, ready: true } });
@@ -335,4 +335,140 @@ it('reports malformed cross-tab data without discarding an unsaved packet or sel
   await waitFor(() => expect(hook.result.current.error).toContain('Invalid'));
   expect(hook.result.current.unsaved).toBe(unsaved); expect(hook.result.current.selections).toHaveLength(1);
   expect(hook.result.current.error).toContain('Invalid');
+});
+
+it('attaches the first recovered generation without losing an unsaved capture, then honors later resets', async () => {
+  const factory = indexedDB;
+  const packets = Array.from({ length: 7 }, (_, i) => ({ ...fixturePacket(), id: analystId(100 + i) }));
+  saveStore(localStorage, { ...emptyStore('owner'), packets });
+  const original = await openStore(localStorage, factory, 'owner', new AbortController().signal);
+  vi.stubGlobal('indexedDB', undefined);
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  const unsaved = hook.result.current.unsaved;
+  expect(unsaved).not.toBeNull(); expect(hook.result.current.storageUnavailable).toBe(true);
+  vi.stubGlobal('indexedDB', factory);
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => expect(hook.result.current.packets).toHaveLength(7));
+  expect(hook.result.current.unsaved).toBe(unsaved); expect(hook.result.current.selections).toHaveLength(1);
+  expect(hook.result.current.storageUnavailable).toBe(false);
+  expect(hook.result.current.resetId).toBe(original.resetId);
+  await act(async () => { await hook.result.current.saveUnsaved(); });
+  expect((await stored()).packets).toHaveLength(8); expect(hook.result.current.unsaved).toBeNull();
+  await act(async () => { await resetStore(localStorage, factory, 'owner', new AbortController().signal); });
+  await waitFor(() => expect(hook.result.current.selections).toEqual([]));
+  await expect(mutateStore(factory, 'owner', original.resetId, { type: 'add-packet', packet: unsaved! }, new AbortController().signal)).rejects.toThrow('workspace was reset');
+  expect((await stored()).packets).toEqual([]);
+});
+
+it('recovers from a read failure through a same-generation cross-tab update and saves the retained eighth packet', async () => {
+  const packets = Array.from({ length: 7 }, (_, i) => ({ ...fixturePacket(), id: analystId(100 + i) }));
+  saveStore(localStorage, { ...emptyStore('owner'), packets });
+  const hook = await boot(); const generation = hook.result.current.resetId!;
+  act(() => hook.result.current.toggle(analystEvent()));
+  const nativeTransaction = IDBDatabase.prototype.transaction;
+  const outage = vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(function (this: IDBDatabase, ...args) {
+    if (args[1] === 'readonly') throw new DOMException('Temporary read outage', 'UnknownError');
+    return nativeTransaction.apply(this, args);
+  });
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => expect(hook.result.current.storageUnavailable).toBe(true));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  const unsaved = hook.result.current.unsaved;
+  expect(unsaved).not.toBeNull(); expect(hook.result.current.error).toContain('Safe saving');
+  outage.mockRestore();
+  await act(async () => { await mutateStore(indexedDB, 'owner', generation, { type: 'set-note', id: analystId(2), previous: '', note: 'native recovery notification' }, new AbortController().signal); });
+  await waitFor(() => expect(hook.result.current.storageUnavailable).toBe(false));
+  expect(hook.result.current.notes[analystId(2)]).toBe('native recovery notification');
+  expect(hook.result.current.unsaved).toBe(unsaved); expect(hook.result.current.selections).toHaveLength(1);
+  expect(hook.result.current.error).toBeNull();
+  await act(async () => { await hook.result.current.saveUnsaved(); });
+  expect((await stored()).packets).toHaveLength(8); expect((await stored()).packets[0].id).toBe(unsaved!.id);
+  expect(hook.result.current.unsaved).toBeNull();
+});
+
+it('retains pending capture during first attachment and requires a deliberate save into the new generation', async () => {
+  const factory = indexedDB;
+  vi.stubGlobal('indexedDB', undefined);
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  let resolveDetail: (response: Response) => void = () => {};
+  let signal: AbortSignal | undefined;
+  fakeFetch.mockImplementation(async (url: string, options: RequestInit) => {
+    if (url.includes('/access')) return Response.json({ userId: 'owner', tier: 'analyst' });
+    signal = options.signal as AbortSignal;
+    return new Promise<Response>(resolve => { resolveDetail = resolve; });
+  });
+  let pending: Promise<void> = Promise.resolve();
+  act(() => { pending = hook.result.current.capture(analystScope); });
+  await waitFor(() => expect(signal).toBeDefined());
+  vi.stubGlobal('indexedDB', factory);
+  await act(async () => { await hook.result.current.retryStorage(); });
+  expect(hook.result.current.busy).toBe(true); expect(signal!.aborted).toBe(false);
+  await act(async () => { resolveDetail(Response.json(detailBody())); await pending; });
+  expect(hook.result.current.unsaved).not.toBeNull(); expect((await stored()).packets).toEqual([]);
+  expect(hook.result.current.error).toContain('started before local saving recovered');
+  await act(async () => { await hook.result.current.saveUnsaved(); });
+  expect((await stored()).packets).toHaveLength(1);
+});
+
+it('offers non-destructive UI retries and migrates legacy storage once it becomes available', async () => {
+  const factory = indexedDB;
+  saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket()], notes: { [analystId()]: 'private legacy note' } });
+  vi.stubGlobal('indexedDB', undefined);
+  function Harness() {
+    const w = useAnalystWorkspace('owner', 'analyst', true);
+    return <><button onClick={() => w.setOpen(true)}>Open</button><AnalystWorkspace workspace={w} scope={analystScope} currentItem={analystEvent()} signedIn /></>;
+  }
+  render(<Harness />); fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  await screen.findByRole('button', { name: 'Retry local saving' });
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle active event in evidence selection' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Capture selected events' }));
+  await screen.findByRole('button', { name: 'Discard unsaved packet' });
+  // Failed retries retain the packet and never fall back to a whole-envelope write.
+  fireEvent.click(screen.getByRole('button', { name: 'Retry local saving' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('IndexedDB'));
+  expect(screen.getByRole('button', { name: 'Discard unsaved packet' })).toBeTruthy();
+  vi.stubGlobal('indexedDB', factory);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry saving packet' }));
+  await waitFor(async () => expect((await stored()).packets).toHaveLength(2));
+  expect(screen.queryByRole('button', { name: 'Discard unsaved packet' })).toBeNull();
+  expect(screen.getByRole('heading', { name: 'Selection 1/20' })).toBeTruthy();
+  expect(localStorage.getItem(storageKey('owner'))).toBeNull();
+  expect((await stored()).notes[analystId()]).toBe('private legacy note');
+  expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+});
+
+it('rechecks access on storage retry and clears retained work when access is revoked', async () => {
+  vi.stubGlobal('indexedDB', undefined);
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  expect(hook.result.current.unsaved).not.toBeNull(); status = 403;
+  await act(async () => { await hook.result.current.saveUnsaved(); });
+  expect(hook.result.current.allowed).toBe(false); expect(hook.result.current.unsaved).toBeNull();
+  expect(hook.result.current.selections).toEqual([]);
+});
+
+it('initializes a fresh generation after an externally deleted database envelope without reviving stale work', async () => {
+  const hook = await boot(); const previousGeneration = hook.result.current.resetId!;
+  act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DATABASE_NAME, 1);
+    request.onsuccess = () => {
+      const db = request.result; const tx = db.transaction('workspaces', 'readwrite');
+      tx.objectStore('workspaces').delete(storageKey('owner'));
+      tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => reject(tx.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+  act(() => window.dispatchEvent(new CustomEvent(CHANGE_KEY, { detail: storageKey('owner') })));
+  await waitFor(() => expect(hook.result.current.selections).toEqual([]));
+  expect(hook.result.current.storageUnavailable).toBe(true); expect(hook.result.current.packets).toEqual([]);
+  await act(async () => { await hook.result.current.retryStorage(); });
+  expect(hook.result.current.storageUnavailable).toBe(false); expect(hook.result.current.resetId).not.toBe(previousGeneration);
+  await expect(mutateStore(indexedDB, 'owner', previousGeneration, { type: 'add-packet', packet: fixturePacket() }, new AbortController().signal)).rejects.toThrow('workspace was reset');
+  expect((await stored()).packets).toEqual([]);
+  act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  expect((await stored()).packets).toHaveLength(1);
 });

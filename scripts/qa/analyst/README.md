@@ -112,3 +112,27 @@ Repair validation on 2026-09-30:
 - Committed native Chromium regression passed at desktop 1280×720 and mobile 390×844, with zero page errors, default note exclusion, explicit inclusion, immutable exports, reset cancellation, and no horizontal overflow. PDFs were generated with Chromium; native OS printing and real Supabase remain unverified.
 
 Current screenshots: [repaired desktop](screenshots/repaired-desktop-workspace.png), [repaired mobile](screenshots/repaired-mobile-workspace.png). These show the completed unsaved capture retained after ordinary cross-tab writes.
+
+## Storage recovery verification
+
+An unavailable database at startup has no observed reset generation. The first successful attachment preserves selections, unsaved captures, and pending work, and migrates valid legacy data when needed. Subsequent changes to an observed generation still clear private work and cancel operations. A capture that started without an observed generation remains unsaved even if storage recovers during its detail request; **Retry saving packet** explicitly saves that copy into the current generation. It cannot be saved automatically by work from before attachment.
+
+Successful reconciliation after a temporary read failure restores local saving without deleting data. **Retry local saving** rechecks server access and retries storage while retaining work. **Retry saving packet** also performs that recovery when necessary. Invalid data remains untouched, failed retries retain the packet, and a later real reset still rejects stale writes. The hooks do not persist a stale whole envelope on recovery.
+
+Reproduce the controlled startup unavailability and native transaction-read failures:
+
+```sh
+ANALYST_PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs \
+  node scripts/qa/analyst/recovery.mjs
+```
+
+The fixture server above must be running. Output defaults to `/tmp/analyst-recovery-qa`. The script restores Chromium's native IndexedDB APIs after fault injection. At desktop and mobile widths, it independently verifies startup failure → unsaved capture → restore/focus, repeated read failure → restore/focus, and read failure → restore/cross-tab update. Both capture paths retain selection and the same unsaved packet at 7/8 saved, then deliberately save that packet as the eighth. It also checks a failed explicit retry, later reset/stale-generation rejection, account isolation, and default private-note exclusion. Outbound requests are blocked.
+
+Recovery validation on 2026-09-30:
+
+- Typecheck, lint, and production build passed with Next.js 16.3.7; all 42 direct dependency versions still match the lockfile.
+- Full coverage: 114 test files, 1,072 passing tests, one existing TODO. Global statement/branch/function/line coverage: 84.36/75.86/88.16/87.63 percent. Hook coverage: 87.75/77.04/84.37/94.97 percent; workspace: 91.26/86.31/84.61/95.45 percent.
+- Six added hook/UI regressions cover first attachment, same-generation recovery at 7/8, pending capture with explicit save, non-destructive UI retries and delayed legacy migration, retry authorization failure, and fresh generation creation after an externally removed record.
+- Both native Chromium recovery and original transaction/keyboard/private-export regression scripts passed at 1280×720 and 390×844 with zero page errors. Real services and native OS print-dialog behavior remain unverified.
+
+Screenshots: [desktop capture retained after recovery](screenshots/recovery-desktop-retained.png), [mobile retry while storage is unavailable](screenshots/recovery-mobile-unavailable.png). Fixtures contain only synthetic data. Codex implemented the repairs following Astra's two recovery findings.

@@ -14,6 +14,7 @@ interface WorkspaceState {
   key: string;
   authorized: boolean;
   writable: boolean;
+  storageInitialized: boolean;
   store: AnalystStore;
   selections: AnalystSelection[];
   busy: boolean;
@@ -24,7 +25,7 @@ interface WorkspaceState {
 export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, ready: boolean) {
   const allowed = Boolean(ownerId && ready && hasFeature(tier, 'evidenceExport'));
   const key = `${ownerId ?? ''}:${tier}:${ready}`;
-  const [state, setState] = useState<WorkspaceState>(() => ({ key: '', authorized: false, writable: true, store: emptyStore(''), selections: [], busy: false, progress: 0, error: null, unsaved: null }));
+  const [state, setState] = useState<WorkspaceState>(() => ({ key: '', authorized: false, writable: true, storageInitialized: false, store: emptyStore(''), selections: [], busy: false, progress: 0, error: null, unsaved: null }));
   const [accessVersion, setAccessVersion] = useState(0);
   const [deniedKey, setDeniedKey] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -57,15 +58,18 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
     const signal = writes.current.signal;
     if (!stateRef.current.authorized || !current.current.allowed) return;
     try {
-      const store = await readStore(window.indexedDB, owner, signal);
+      const store = stateRef.current.storageInitialized
+        ? await readStore(window.indexedDB, owner, signal)
+        : await openStore(window.localStorage, window.indexedDB, owner, signal);
       signal.throwIfAborted();
       if (current.current.key !== expectedKey || !stateRef.current.authorized || !current.current.allowed) return;
-      if (store.resetId !== stateRef.current.store.resetId) {
+      // The first observed generation attaches storage, rather than proving a reset.
+      if (stateRef.current.storageInitialized && store.resetId !== stateRef.current.store.resetId) {
         active.current?.abort(); active.current = null;
         writes.current.abort(); writes.current = new AbortController(); drafts.current.clear();
-        update(s => ({ ...s, store, writable: Boolean(window.indexedDB), selections: [], unsaved: null, busy: false, error: null }));
+        update(s => ({ ...s, store, storageInitialized: Boolean(store.resetId), writable: Boolean(store.resetId), selections: [], unsaved: null, busy: false, error: null }));
       } else {
-        update(s => ({ ...s, store: withDrafts(store) }));
+        update(s => ({ ...s, store: withDrafts(store), storageInitialized: Boolean(store.resetId), writable: Boolean(store.resetId), error: s.writable ? s.error : null }));
       }
     } catch (e) {
       // A malformed ordinary update must not destroy the tab's completed work.
@@ -78,14 +82,17 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
     writes.current.abort(); writes.current = new AbortController(); drafts.current.clear();
     const controller = new AbortController();
     const writeSignal = writes.current.signal;
-    const reset: WorkspaceState = { key, authorized: false, writable: true, store: emptyStore(ownerId ?? ''), selections: [], busy: false, progress: 0, error: null, unsaved: null };
+    const reset: WorkspaceState = { key, authorized: false, writable: true, storageInitialized: false, store: emptyStore(ownerId ?? ''), selections: [], busy: false, progress: 0, error: null, unsaved: null };
     async function initialize() {
       let next = reset;
       if (allowed && ownerId) {
         try {
           await checkEvidenceAccess(ownerId, controller.signal);
           next = { ...next, authorized: true };
-          try { next.store = await openStore(window.localStorage, window.indexedDB, ownerId, AbortSignal.any([controller.signal, writeSignal])); }
+          try {
+            next.store = await openStore(window.localStorage, window.indexedDB, ownerId, AbortSignal.any([controller.signal, writeSignal]));
+            next.storageInitialized = true;
+          }
           catch (e) {
             next = { ...next, writable: false, error: e instanceof Error ? e.message : 'Could not read local storage.' };
             // Unavailable IndexedDB may still read validated legacy packets for export.
@@ -139,16 +146,26 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
       });
     } catch (e) { fail(e, key); }
   }, [valid, guard, key, fail, update]);
-  const persist = useCallback(async (mutation: StoreMutation, operationSignal?: AbortSignal) => {
+  const retryStorage = async () => {
+    if (!valid || !ownerId) return;
+    const signal = writes.current.signal;
+    try {
+      await checkEvidenceAccess(ownerId, signal); guard(key, signal);
+      await reconcile();
+    } catch (e) { fail(e, key); }
+  };
+  const persist = useCallback(async (mutation: StoreMutation, resetId: string | undefined, operationSignal?: AbortSignal) => {
     guard(key);
-    if (!stateRef.current.writable) throw new Error('Safe saving is unavailable. Delete invalid data or enable browser IndexedDB; completed captures can still be downloaded.');
+    if (!stateRef.current.writable) throw new Error('Safe saving is unavailable. Retry local saving after browser storage recovers; completed captures can still be downloaded.');
+    if (!resetId) throw new Error('This capture started before local saving recovered. Retry saving the packet to confirm saving it in the current workspace.');
     const signal = operationSignal ? AbortSignal.any([writes.current.signal, operationSignal]) : writes.current.signal;
-    const saved = await mutateStore(window.indexedDB, ownerId!, stateRef.current.store.resetId, mutation, signal, () => guard(key, signal));
+    const saved = await mutateStore(window.indexedDB, ownerId!, resetId, mutation, signal, () => guard(key, signal));
     guard(key, signal);
     return saved;
   }, [key, ownerId, guard]);
   const capture = useCallback(async (scope: EvidenceScope) => {
     if (!valid || active.current || stateRef.current.busy || !ownerId || stateRef.current.unsaved) return;
+    const resetId = stateRef.current.storageInitialized ? stateRef.current.store.resetId : undefined;
     const controller = new AbortController(); active.current = controller;
     update(s => ({ ...s, busy: true, progress: 0, error: null }));
     try {
@@ -156,7 +173,7 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
         onProgress: progress => { if (current.current.key === key && !controller.signal.aborted) update(s => ({ ...s, progress })); } });
       guard(key, controller.signal);
       update(s => ({ ...s, unsaved: packet }));
-      const saved = await persist({ type: 'add-packet', packet }, controller.signal);
+      const saved = await persist({ type: 'add-packet', packet }, resetId, controller.signal);
       update(s => ({ ...s, store: withDrafts(saved), unsaved: null }));
     } catch (e) { fail(e, key); }
     finally {
@@ -175,7 +192,7 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
       const store = await resetStore(window.localStorage, window.indexedDB, ownerId, signal, () => {
         if (current.current.key !== key || signal.aborted) throw new DOMException('Account changed.', 'AbortError');
       });
-      if (current.current.key === key && !signal.aborted) update(s => ({ ...s, store, writable: true, selections: [], unsaved: null, error: null, busy: false }));
+      if (current.current.key === key && !signal.aborted) update(s => ({ ...s, store, storageInitialized: true, writable: true, selections: [], unsaved: null, error: null, busy: false }));
     } catch (e) { if (current.current.key === key) update(s => ({ ...s, busy: false, error: e instanceof Error ? e.message : 'Could not delete browser data.' })); }
   };
   const setNote = async (id: string, note: string) => {
@@ -186,7 +203,7 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
       if (note.length > MAX_NOTE_LENGTH) throw new Error(`Notes are limited to ${MAX_NOTE_LENGTH} characters.`);
       drafts.current.set(id, { note, token });
       update(s => ({ ...s, store: withDrafts(s.store) }));
-      const saved = await persist({ type: 'set-note', id, note, previous });
+      const saved = await persist({ type: 'set-note', id, note, previous }, stateRef.current.store.resetId);
       if (drafts.current.get(id)?.token === token) drafts.current.delete(id);
       update(s => ({ ...s, store: withDrafts(saved) }));
     } catch (e) {
@@ -197,7 +214,7 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
   };
   const deletePacket = async (id: string) => {
     if (!valid || stateRef.current.busy) return;
-    try { const saved = await persist({ type: 'delete-packet', id }); update(s => ({ ...s, store: withDrafts(saved) })); }
+    try { const saved = await persist({ type: 'delete-packet', id }, stateRef.current.store.resetId); update(s => ({ ...s, store: withDrafts(saved) })); }
     catch (e) { fail(e, key); }
   };
   const saveUnsaved = async () => {
@@ -205,7 +222,13 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
     const packet = stateRef.current.unsaved;
     const controller = new AbortController(); active.current = controller;
     update(s => ({ ...s, busy: true }));
-    try { const saved = await persist({ type: 'add-packet', packet }, controller.signal); update(s => ({ ...s, store: withDrafts(saved), unsaved: null })); }
+    try {
+      if (!stateRef.current.writable) await retryStorage();
+      guard(key, controller.signal);
+      if (stateRef.current.unsaved !== packet) return;
+      const saved = await persist({ type: 'add-packet', packet }, stateRef.current.store.resetId, controller.signal);
+      update(s => ({ ...s, store: withDrafts(saved), unsaved: null, error: null }));
+    }
     catch (e) { fail(e, key); }
     finally { if (active.current === controller) { active.current = null; if (current.current.key === key) update(s => ({ ...s, busy: false })); } }
   };
@@ -223,6 +246,7 @@ export function useAnalystWorkspace(ownerId: string | null, tier: UserTier, read
   return {
     allowed: valid, open: openKey === key, setOpen: (open: boolean) => setOpenKey(open ? key : null),
     resetId: valid ? visible.store.resetId : null,
+    storageUnavailable: valid && !visible.writable, retryStorage,
     selections: visible.selections, packets: visible.store.packets, notes: visible.store.notes,
     busy: visible.busy, progress: visible.progress, error: state.key === key ? state.error : null, unsaved: visible.unsaved,
     toggle, capture, cancel, setNote, deletePacket, deleteLocalData, saveUnsaved, exportPacket,
