@@ -135,6 +135,6 @@
   }
   .panel {
     width: min(440px, calc(100vw - 32px));
-    max-height: calc(100dvh - 210px);
+    max-height: min(calc(100dvh - 210px), calc(var(--map-available-height, 100dvh) - 104px));
   }
 }

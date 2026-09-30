@@ -10,11 +10,17 @@ const sourceId = 'experiment-activity-heatmap-source', hitId = 'experiment-activ
 const results = [];
 const entry = 'http://127.0.0.1:4176/?lat=32.5&lng=14&zoom=4&t=1d&s=new';
 try {
-    for (const [name, viewport, timezoneId] of [['desktop', { width: 1440, height: 900 }, 'UTC'], ['mobile', { width: 390, height: 844 }, 'America/New_York']]) {
-        const mobile = name === 'mobile';
+    const viewports = [['desktop', { width: 1440, height: 900 }, 'UTC'], ['mobile', { width: 390, height: 844 }, 'America/New_York'],
+        ['narrow', { width: 320, height: 568 }, 'Asia/Kolkata'], ['landscape', { width: 844, height: 390 }, 'America/New_York']];
+    for (const [name, viewport, timezoneId] of viewports) {
+        const mobile = name !== 'desktop';
         const context = await browser.newContext({ viewport, timezoneId, isMobile: mobile, hasTouch: mobile });
         await context.addInitScript(() => { localStorage.setItem('seraphim_cookie_consent', 'essential'); localStorage.setItem('seraphim_seen_overlays', 'true'); });
-        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [];
+        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [], regionRequests = [];
+        let regionStage = 0;
+        const regionRow = index => ({ id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, title: `Synthetic live region event ${index}`,
+            source: 'Fixture', sourceType: 'rss', url: `https://example.invalid/region-${index}`, publishedAt: '2026-09-29T18:00:00Z',
+            latitude: 32, longitude: 14, sourcesCount: 1, storyCount: 1 });
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
         await context.route('**/*', route => {
@@ -24,6 +30,18 @@ try {
             if (url.href === 'https://api.maptiler.com/resources/logo.svg') {
                 mockedResources.push(url.href);
                 return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' });
+            }
+            if (url.origin === 'http://127.0.0.1:4176' && url.pathname === '/api/news') {
+                const scope = Object.fromEntries(url.searchParams);
+                regionRequests.push(scope);
+                assert.equal(scope.force_raw, 'true'); assert.equal(scope.view, 'sidebar'); assert.equal(scope.scope, 'viewport');
+                return route.fulfill({ json: { items: Array.from({ length: regionStage + 1 }, (_, index) => regionRow(index + 1)),
+                    lastUpdated: '2026-09-30T12:00:00Z', meta: { clustered: false, scope: 'viewport', view: 'sidebar', sort: scope.sort, isCapped: false, stale: false, appliedLimit: 1000 } } });
+            }
+            if (url.origin === 'http://127.0.0.1:4176' && url.pathname.startsWith('/api/news/00000000-0000-4000-8000-')) {
+                assert.equal(url.searchParams.get('refresh'), 'true');
+                const row = regionRow(Number(url.pathname.slice(-12)));
+                return route.fulfill({ json: { event: row, sources: [{ url: row.url }], totalSources: 1, timelineRestricted: false } });
             }
             if (url.origin === 'http://127.0.0.1:4176' && !url.pathname.startsWith('/api/')) return route.continue();
             forbidden.push(url.href); return route.abort();
@@ -35,6 +53,14 @@ try {
         if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
         const camera = () => page.evaluate(() => { const map = window.__combinedMap; return { center: map.getCenter().toArray(), zoom: map.getZoom(), bearing: map.getBearing() }; });
         const data = () => page.evaluate(id => window.__combinedMap.getSource(id).serialize().data, sourceId);
+        const visibleHit = layers => page.evaluate(layers => {
+            const map = window.__combinedMap, canvas = map.getCanvas(), rect = canvas.getBoundingClientRect();
+            for (const row of map.queryRenderedFeatures({ layers })) {
+                const point = map.project(row.geometry.coordinates), x = point.x + rect.x, y = point.y + rect.y;
+                if (document.elementFromPoint(x, y) === canvas) return { id: row.properties.canonicalId, x, y };
+            }
+            throw new Error('No unobscured rendered news point reaches the actual canvas.');
+        }, layers);
         const fixtureControl = async name => {
             const details = page.locator('.fixture-switches');
             if (!(await details.evaluate(node => node.open))) await details.locator('summary').click();
@@ -54,6 +80,40 @@ try {
         await page.waitForFunction(id => window.__combinedMap.getSource(id).serialize().data.features.length === 0, sourceId);
         await scrub('End');
         assert.equal((await data()).features.length, 1000);
+        // A region check reads its own live raw scope even when replay displays no rows.
+        await scrub('Home');
+        const launcher = page.getByRole('button', { name: 'Region checkpoints', exact: true });
+        await launcher.click();
+        const regions = page.getByRole('region', { name: 'Region checkpoints', exact: true });
+        const regionName = `Synthetic ${name} watch`;
+        await regions.getByLabel('Region name', { exact: true }).fill(regionName);
+        await regions.getByRole('button', { name: 'Save viewport', exact: true }).click();
+        await regions.getByRole('button', { name: regionName, exact: true }).click();
+        await regions.getByRole('button', { name: 'Check changes', exact: true }).click();
+        await regions.getByText(/Baseline saved/).waitFor();
+        assert.equal((await data()).features.length, 0);
+        const checkpointKey = 'seraphim:experiment:region-checkpoints:v1:fixture-account';
+        const saved = () => page.evaluate(key => JSON.parse(localStorage.getItem(key)).regions[0], checkpointKey);
+        assert.equal((await saved()).baseline.events.length, 1);
+        await page.screenshot({ path: `${output}/${name}-region-during-empty-replay.png` });
+        // Region panel bounds and its close button remain usable above the replay panel.
+        const regionBox = await regions.boundingBox();
+        assert(regionBox.y >= 0); assert(regionBox.x >= 0); assert(regionBox.x + regionBox.width <= viewport.width);
+        await regions.getByRole('button', { name: 'Close region checkpoints', exact: true }).click();
+        const beforePan = await camera();
+        await page.evaluate(() => window.__combinedMap.jumpTo({ center: [16, 33], zoom: 5 }));
+        await launcher.click(); regionStage = 1;
+        await regions.getByRole('button', { name: 'Check changes', exact: true }).click();
+        await regions.getByText('Newly observed event', { exact: true }).waitFor();
+        assert.deepEqual(regionRequests[1], regionRequests[0]);
+        assert.equal((await saved()).baseline.events.length, 1);
+        regionStage = 2; // A later backend change must not enter the displayed review.
+        await regions.getByRole('button', { name: 'Mark reviewed', exact: true }).click();
+        assert.equal((await saved()).baseline.events.length, 2); assert.equal(regionRequests.length, 2);
+        assert(!page.url().includes(regionName));
+        await regions.getByRole('button', { name: 'Close region checkpoints', exact: true }).click();
+        await page.evaluate(view => window.__combinedMap.jumpTo(view), beforePan);
+        await scrub('End');
         // Actual native pointer scrub to halfway excludes all 1-hour rows.
         const slider = page.getByRole('slider', { name: 'Reporting cursor' }), box = await slider.boundingBox();
         await slider.click({ position: { x: box.width / 2, y: box.height / 2 } });
@@ -78,10 +138,7 @@ try {
         await page.screenshot({ path: `${output}/${name}-frozen-dark.png` });
         // Pick a real rendered dot while replay owns presentation; the camera stays put.
         await page.waitForFunction(id => window.__combinedMap.queryRenderedFeatures({ layers: [id] }).length > 0, hitId);
-        const hit = await page.evaluate(id => {
-            const map = window.__combinedMap, row = map.queryRenderedFeatures({ layers: [id] })[0], point = map.project(row.geometry.coordinates), rect = map.getCanvas().getBoundingClientRect();
-            return { id: row.properties.canonicalId, x: point.x + rect.x, y: point.y + rect.y };
-        }, hitId);
+        const hit = await visibleHit([hitId]);
         const pickCamera = await camera();
         if (mobile) await page.touchscreen.tap(hit.x, hit.y); else await page.mouse.click(hit.x, hit.y);
         await page.waitForFunction(id => new URL(location.href).searchParams.get('eventId') === id, hit.id);
@@ -94,10 +151,40 @@ try {
         // The selected sidebar detail is explicitly retained outside the frame;
         // it contributes neither a normal marker nor any heatmap density.
         assert.equal(await page.evaluate(() => window.__combinedMap.getSource('selected-news-event').serialize().data.features.length), 0);
-        assert.equal(await page.getByText(`Synthetic event ${hit.id.replace('fixture-', '')}`, { exact: true }).count(), 1);
+        if (mobile) await page.getByRole('button', { name: 'Stories', exact: true }).click();
+        await page.getByText(`Synthetic event ${hit.id.replace('fixture-', '')}`, { exact: true }).waitFor({ state: 'visible' });
+        if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
         await scrub('End');
         assert.deepEqual(await camera(), pickCamera);
         await page.locator('.maplibregl-popup-close-button').click();
+        // A real drawing vertex over news must not pick a story or expand a cluster.
+        for (const heatmap of [true, false]) {
+            if (!heatmap) {
+                await page.getByRole('button', { name: 'Map settings', exact: true }).click(); await toggle.click();
+                await page.getByRole('button', { name: 'Map settings', exact: true }).click();
+            }
+            await page.getByRole('button', { name: 'Draw & Measure', exact: true }).click();
+            await page.getByRole('button', { name: 'Close drawing tools', exact: true }).waitFor();
+            // Mobile collapses on first mount; reopening keeps the user's last state.
+            if (mobile && heatmap) await page.getByRole('button', { name: 'Expand panel', exact: true }).waitFor();
+            if (await page.getByRole('button', { name: 'Expand panel', exact: true }).isVisible()) await page.getByRole('button', { name: 'Expand panel', exact: true }).click();
+            await page.getByRole('button', { name: 'Area', exact: true }).click();
+            await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+            const layers = heatmap ? [hitId] : ['clusters-circle', 'unclustered-point'];
+            await page.waitForFunction(layers => window.__combinedMap.queryRenderedFeatures({ layers }).length > 0, layers);
+            const vertex = await visibleHit(layers);
+            await page.evaluate(() => { window.__combinedCanvasClicks = 0; window.__combinedMap.once('click', () => window.__combinedCanvasClicks++); });
+            const drawCamera = await camera(), drawUrl = page.url();
+            if (mobile) await page.touchscreen.tap(vertex.x, vertex.y); else await page.mouse.click(vertex.x, vertex.y);
+            await page.waitForFunction(() => Object.keys(window.__combinedMap.getStyle().sources).some(id => id.startsWith('td-') && window.__combinedMap.getSource(id).serialize().data?.features?.length > 0));
+            assert.equal(await page.evaluate(() => window.__combinedCanvasClicks), 1);
+            assert.deepEqual(await camera(), drawCamera); assert.equal(page.url(), drawUrl);
+            await page.getByRole('button', { name: 'Expand panel', exact: true }).click();
+            await page.getByRole('button', { name: 'Clear', exact: true }).click();
+            await page.getByRole('button', { name: 'Close drawing tools', exact: true }).click();
+        }
+        await page.getByRole('button', { name: 'Map settings', exact: true }).click(); await toggle.click();
+        await page.getByRole('button', { name: 'Map settings', exact: true }).click();
         // Restoring from a real WebGL loss must reinstall the current frozen density.
         const recovery = await page.evaluate(() => {
             const map = window.__combinedMap, extension = map.getCanvas().getContext('webgl2')?.getExtension('WEBGL_lose_context');
@@ -140,8 +227,8 @@ try {
         assert.deepEqual(forbidden, []);
         assert.deepEqual(errors, []);
         results.push({ name, viewport, timezoneId, realMapLibre: true, syntheticRows: 1000, frozenFramePoints: 667,
-            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
-            forbiddenRequests: forbidden.length, mockedResources: mockedResources.length, browserErrors: errors.length });
+            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region checks while replay empty/fixed saved scope after pan/explicit displayed review boundary/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/drawing ownership with heatmap on and off/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
+            mockedRegionReads: regionRequests.length, forbiddenRequests: forbidden.length, mockedResources: mockedResources.length, browserErrors: errors.length });
         await context.close();
     }
 } catch (error) {
