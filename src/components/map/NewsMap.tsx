@@ -42,7 +42,7 @@ import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 import type { MapLoadState } from '@/components/layout/StartupGate';
-import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
+import { hasSavedDrawings } from './draw/drawPersistence';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
@@ -149,10 +149,10 @@ export default function NewsMap({
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
   // Restore saved annotations on navigation; otherwise download the drawing
   // engine only after the user first opens its tools. Keep it mounted thereafter.
-  const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
-    try { return Boolean(localStorage.getItem(DRAW_STORAGE_KEY)); }
-    catch { return false; }
-  });
+  const [drawToolsRequested, setDrawToolsRequested] = useState(() => hasSavedDrawings(preferenceOwnerId) || hasSavedDrawings());
+  useEffect(() => {
+    if (hasSavedDrawings(preferenceOwnerId) || hasSavedDrawings()) setDrawToolsRequested(true);
+  }, [preferenceOwnerId]);
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
   const [mutedClusters, setMutedClusters] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
@@ -1234,6 +1234,7 @@ export default function NewsMap({
             mapReady={mapReady}
             isOpen={drawToolsOpen}
             userTier={userTier}
+            ownerId={preferenceOwnerId}
             onClose={() => setDrawToolsOpen(false)}
           />}
         </>

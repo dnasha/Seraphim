@@ -5,18 +5,28 @@ import { TextAnnotation } from './drawPersistence';
 import styles from '../MapDrawTools.module.css';
 
 interface TextMarkerProps { 
-  mapRef: React.MutableRefObject<maplibregl.Map | null>; 
+  mapRef: React.MutableRefObject<maplibregl.Map | null>;
+  mapReady: boolean;
   annotation: TextAnnotation; 
   activeMode: string;
+  selected: boolean;
+  autoFocus: boolean;
+  onSelect: () => void;
+  onEditEnd: () => void;
   onUpdate: (text: string) => void;
   onRemove: () => void;
   onDragEnd: (lngLat: [number, number]) => void;
 }
 
 export function TextMarker({ 
-  mapRef, 
+  mapRef,
+  mapReady,
   annotation, 
   activeMode,
+  selected,
+  autoFocus,
+  onSelect,
+  onEditEnd,
   onUpdate, 
   onRemove,
   onDragEnd,
@@ -37,7 +47,7 @@ export function TextMarker({
   const [scale, setScale] = useState(1);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
     const updateScale = () => {
@@ -57,9 +67,14 @@ export function TextMarker({
         instance.off('zoom', updateScale);
       }
     };
-  }, [mapRef, annotation.initialZoom]);
+  }, [mapRef, mapReady, annotation.initialZoom]);
 
   useEffect(() => {
+    if (!mapReady) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
     if (!mapRef.current || !markerContainer) return;
 
     if (!markerRef.current) {
@@ -74,7 +89,7 @@ export function TextMarker({
     } else {
       markerRef.current.setLngLat(annotation.lngLat);
     }
-  }, [mapRef, annotation.lngLat, markerContainer]);
+  }, [mapRef, mapReady, annotation.lngLat, markerContainer]);
 
   useEffect(() => {
     return () => {
@@ -88,7 +103,7 @@ export function TextMarker({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!textareaRef.current) return;
+    if (!mapReady || !textareaRef.current || !autoFocus) return;
 
     let raf2: number | null = null;
     const raf1 = requestAnimationFrame(() => {
@@ -107,7 +122,15 @@ export function TextMarker({
         cancelAnimationFrame(raf2);
       }
     };
-  }, [annotation.id]);
+  }, [annotation.id, autoFocus, mapReady]);
+
+  // Restoring history updates existing markers as well as newly mounted ones.
+  // Keep the native editor uncontrolled so its own typing undo remains intact.
+  useEffect(() => {
+    if (textareaRef.current && textareaRef.current.value !== annotation.text) {
+      textareaRef.current.value = annotation.text;
+    }
+  }, [annotation.text]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -130,8 +153,8 @@ export function TextMarker({
 
   return createPortal(
     <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
-      <div className={styles.textMarkerContainer}>
-        <div className={styles.textMarkerDrag} title="Drag to move">
+      <div className={`${styles.textMarkerContainer} ${selected ? styles.selectedText : ''}`} data-drawing-annotation>
+        <div className={styles.textMarkerDrag} title="Drag to move" onPointerDown={onSelect}>
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 9h14M5 15h14"/></svg>
         </div>
         <textarea
@@ -140,7 +163,8 @@ export function TextMarker({
           defaultValue={annotation.text}
           placeholder="Type here..."
           title="Edit the text annotation"
-          autoFocus
+          maxLength={2000}
+          onFocus={onSelect}
           rows={1}
           style={activeMode === 'eraser' ? { cursor: 'crosshair' } : undefined}
           onChange={(e) => {
@@ -169,9 +193,8 @@ export function TextMarker({
             }
           }}
         onBlur={(e) => {
-          if (e.target.value.trim() === '') {
-            onRemove();
-          }
+          onUpdate(e.target.value);
+          onEditEnd();
         }}
         onKeyDown={(e) => {
           e.stopPropagation();

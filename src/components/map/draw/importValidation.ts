@@ -33,6 +33,19 @@ export function validateImportedFeatures(value: unknown): Array<Feature<Point | 
         ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]);
     }
     if (!valid) throw new Error('Use valid points, lines, or closed polygons with at most 50,000 vertices.');
+    const properties = feature.properties;
+    if (['selectionPoint', 'midPoint', 'closingPoint', 'snappingPoint', 'coordinatePoint', 'currentlyDrawing']
+      .some(key => properties?.[key])) {
+      throw new Error('Import completed drawings rather than temporary drawing handles.');
+    }
+    if (properties?.color != null && (typeof properties.color !== 'string' || !/^#[\da-f]{6}$/i.test(properties.color))) {
+      throw new Error('Drawing colors must be six-digit hex colors.');
+    }
+    if ((properties?.size != null && (typeof properties.size !== 'number' || !Number.isFinite(properties.size) || properties.size < 1 || properties.size > 50)) ||
+        (properties?.fill != null && typeof properties.fill !== 'boolean') ||
+        (properties?.fillOpacity != null && (typeof properties.fillOpacity !== 'number' || !Number.isFinite(properties.fillOpacity) || properties.fillOpacity < 0 || properties.fillOpacity > 1))) {
+      throw new Error('Drawing styles must have a valid size, fill, and opacity.');
+    }
     if (feature.properties?.isText && (type !== 'Point' || typeof feature.properties.text !== 'string' ||
         feature.properties.text.length > 2000 || (feature.properties.initialZoom != null &&
         (typeof feature.properties.initialZoom !== 'number' || !Number.isFinite(feature.properties.initialZoom) ||

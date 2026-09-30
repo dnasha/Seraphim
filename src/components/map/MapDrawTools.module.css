@@ -22,7 +22,62 @@
     gap: 12px;
     pointer-events: auto;
     width: 280px;
+    max-height: calc(100dvh - 32px);
     cursor: grab;
+    touch-action: manipulation;
+}
+
+.historyActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.historyActions .actionBtn {
+    padding: 8px 2px;
+    min-height: 36px;
+    font-size: 11px;
+}
+
+.actionBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.actionBtn:focus-visible, .headerBtn:focus-visible, .toolBtn:focus-visible, .colorBtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.historyHint, .storageNotice {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.selectedText .textMarker {
+    border-color: var(--accent);
+}
+
+.textMarkerContainer:focus-within .textMarkerDrag,
+.textMarkerContainer:focus-within .textMarkerDelete,
+.selectedText .textMarkerDrag, .selectedText .textMarkerDelete {
+    opacity: 1;
+    transform: scale(1);
+}
+
+@media (hover: none) {
+    .textMarkerDrag, .textMarkerDelete {
+        opacity: 1;
+        transform: scale(1);
+        width: 28px;
+        height: 28px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cycling { animation: none; }
 }
 
 .drawToolsPanel:active {
@@ -530,6 +585,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overflow-y: auto;
 }
 
 /* Mobile responsive styles */
@@ -643,5 +699,9 @@
     .actionBtn {
         padding: 8px 0;
         font-size: 12px;
+    }
+
+    .historyActions .actionBtn {
+        min-height: 44px;
     }
 }
