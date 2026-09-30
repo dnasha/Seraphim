@@ -144,9 +144,14 @@ export default function RegionCheckpoints({
                   {r.region.name}
                 </button>
                 <span className={styles.muted}>
-                  {r.baseline
-                    ? `Reviewed ${timeLabel(r.baseline.coverage.checkedAt)}`
-                    : "No baseline yet"}
+                  {r.rebaselineRequired ||
+                  (r.baseline &&
+                    (r.baseline.observationVersion !== 2 ||
+                      r.baseline.tier !== tier))
+                    ? "Compatible baseline required"
+                    : r.baseline
+                      ? `Reviewed ${timeLabel(r.baseline.coverage.checkedAt)}`
+                      : "No baseline yet"}
                 </span>
               </li>
             ))}
@@ -223,6 +228,13 @@ export default function RegionCheckpoints({
                   filters to create a fresh baseline.
                 </p>
               )}
+              {region.rebaselineRequired && (
+                <p role="status">
+                  Server coverage changed. Refresh account access and check
+                  again. A compatible observation requires an explicit new
+                  baseline.
+                </p>
+              )}
               <details>
                 <summary>Reset baseline</summary>
                 <p>
@@ -252,9 +264,21 @@ export default function RegionCheckpoints({
                   <p>
                     {coverage.stale
                       ? "Stale results. Review is disabled; the previous baseline is unchanged."
-                      : result.baselineCreated
-                        ? `${result.resetForTier ? "Plan changed. " : ""}Baseline saved. Future checks compare with this observation.`
-                        : `${checkpoint.changes.length} changed events since the last review.`}
+                      : coverage.reportErrors
+                        ? "Report details are unavailable. Review is disabled; the previous baseline is unchanged."
+                        : result.rebaselineRequired
+                          ? "Coverage changed. Establish a compatible baseline explicitly; this observation is not compared with the previous review."
+                          : result.baselineCreated
+                            ? `${result.resetForTier ? "Plan changed. " : ""}Baseline saved. Future checks compare with this observation.`
+                            : `${checkpoint.changes.length} observed changed events since the last review.${coverage.reportsComplete ? "" : " Report coverage is incomplete."}`}
+                  </p>
+                  <p className={styles.muted}>
+                    {coverage.reportsComplete
+                      ? "Report identities resolved for all observed events."
+                      : `Incomplete report coverage for ${coverage.unresolvedReports ?? coverage.observedCount} event(s). Unseen report identities cannot establish an absence of source changes.`}{" "}
+                    {coverage.detailReadCount ?? 0}/24 detail read(s); at most
+                    three run concurrently. Source-count increases without
+                    identities are labelled uncertain.
                   </p>
                   <p className={styles.muted}>
                     Observed {coverage.observedCount} individual events. Data
@@ -290,7 +314,9 @@ export default function RegionCheckpoints({
                                     ? "Identity changed / possible merge"
                                     : k === "sources"
                                       ? `${change.addedSources} newly observed source(s)`
-                                      : "Observable title or location correction",
+                                      : k === "source-count"
+                                        ? `Reported source count increased by ${change.reportedSourceIncrease}; report identities unresolved`
+                                        : "Observable title or location correction",
                               )
                               .join(" · ")}
                           </p>
@@ -313,12 +339,15 @@ export default function RegionCheckpoints({
                     type="button"
                     disabled={
                       coverage.stale ||
+                      !!coverage.reportErrors ||
                       result.baselineCreated ||
                       !!checkpoint.pending
                     }
                     onClick={checkpoint.review}
                   >
-                    Mark reviewed
+                    {result.rebaselineRequired
+                      ? "Establish compatible baseline"
+                      : "Mark reviewed"}
                   </button>
                   <p className={styles.muted}>
                     Reviews only this displayed snapshot. Later arrivals require

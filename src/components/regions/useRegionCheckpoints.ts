@@ -9,21 +9,24 @@ import {
   compareSnapshots,
   decodeCheckpoints,
   encodeCheckpoints,
-  filterKey,
   MAX_REGIONS,
   reviewedSnapshot,
   validateFilters,
+  snapshotsCompatible,
+  assertCaptureBoundary,
   type CheckpointSnapshot,
   type RegionFilters,
   type SavedCheckpoint,
 } from "@/lib/regions/checkpoints";
 import { readRegion } from "@/lib/regions/readRegion";
+import { RegionCoverageMismatch } from "@/lib/regions/resolveReports";
 
 export interface DisplayedCheck {
   regionId: string;
   snapshot: CheckpointSnapshot;
   baselineCreated: boolean;
   resetForTier: boolean;
+  rebaselineRequired: boolean;
 }
 /** Mount with key=account:tier: auth changes synchronously discard all private UI. */
 export function useRegionCheckpoints(account: string, tier: UserTier) {
@@ -153,6 +156,7 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
               ...r,
               filters: filters ? validateFilters(filters) : r.filters,
               baseline: null,
+              rebaselineRequired: false,
             }
           : r,
       ),
@@ -196,11 +200,14 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
         operation.current !== controller
       )
         return;
-      const baselineCreated =
-        !region.baseline ||
-        region.baseline.tier !== tier ||
-        region.baseline.filterKey !== filterKey(region.filters);
-      if (baselineCreated && !snapshot.coverage.stale) {
+      const rebaselineRequired =
+        !!region.baseline &&
+        (!!region.rebaselineRequired ||
+          !snapshotsCompatible(region.baseline, snapshot));
+      const baselineCreated = !region.baseline;
+      const reviewable =
+        !snapshot.coverage.stale && !snapshot.coverage.reportErrors;
+      if (baselineCreated && reviewable) {
         const baseline = reviewedSnapshot(null, snapshot);
         persist(
           regionsRef.current.map((r) =>
@@ -211,10 +218,27 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
       setDisplayed({
         regionId: id,
         snapshot,
-        baselineCreated: baselineCreated && !snapshot.coverage.stale,
+        baselineCreated: baselineCreated && reviewable,
         resetForTier: !!region.baseline && region.baseline.tier !== tier,
+        rebaselineRequired,
       });
     } catch (e) {
+      if (
+        e instanceof RegionCoverageMismatch &&
+        mounted.current &&
+        !controller.signal.aborted &&
+        operation.current === controller
+      ) {
+        try {
+          persist(
+            regionsRef.current.map((r) =>
+              r.region.id === id ? { ...r, rebaselineRequired: true } : r,
+            ),
+          );
+        } catch {
+          setReady(false);
+        }
+      }
       if (mounted.current && operation.current === controller)
         setError(
           e instanceof Error
@@ -236,16 +260,23 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
         (r) => r.region.id === displayed.regionId,
       );
       if (!region) return;
-      const baseline = reviewedSnapshot(region.baseline, displayed.snapshot);
+      assertCaptureBoundary(region.baseline, displayed.snapshot);
+      const baseline = reviewedSnapshot(
+        displayed.rebaselineRequired ? null : region.baseline,
+        displayed.snapshot,
+      );
       persist(
         regionsRef.current.map((r) =>
-          r.region.id === region.region.id ? { ...r, baseline } : r,
+          r.region.id === region.region.id
+            ? { ...r, baseline, rebaselineRequired: false }
+            : r,
         ),
       );
       setDisplayed({
         ...displayed,
         baselineCreated: true,
         resetForTier: false,
+        rebaselineRequired: false,
       });
     } catch (e) {
       setError(
@@ -257,9 +288,10 @@ export function useRegionCheckpoints(account: string, tier: UserTier) {
   };
   const baseline =
     regions.find((r) => r.region.id === displayed?.regionId)?.baseline ?? null;
-  const changes = displayed
-    ? compareSnapshots(baseline, displayed.snapshot)
-    : [];
+  const changes =
+    displayed && !displayed.rebaselineRequired
+      ? compareSnapshots(baseline, displayed.snapshot)
+      : [];
   const scopeReady = loadedScope === expectedScope;
   return {
     regions: scopeReady ? regions : [],

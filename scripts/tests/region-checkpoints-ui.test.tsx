@@ -47,11 +47,12 @@ const event = (id: string): NewsItem => ({
 function response(
   ids: string[],
   meta: Partial<NonNullable<NewsResponse["meta"]>> = {},
+  capturedAt = "2026-09-30T00:00:00Z",
 ) {
   return new Response(
     JSON.stringify({
       items: ids.map(event),
-      lastUpdated: "2026-09-30T00:00:00Z",
+      lastUpdated: capturedAt,
       meta: {
         sort: "hot",
         scope: "viewport",
@@ -218,15 +219,21 @@ describe("checkpoint hook lifecycle", () => {
     hook.unmount();
     const paid = renderHook(() => useRegionCheckpoints("a", "pro"));
     await waitFor(() => expect(paid.result.current.ready).toBe(true));
-    fetcher.mockImplementation(async () => response(["b"]));
+    fetcher.mockImplementation(async () =>
+      response(["b"], { appliedLimit: 1000 }),
+    );
     await act(async () => {
       await paid.result.current.check(hook.id);
     });
     expect(paid.result.current.displayed).toMatchObject({
-      baselineCreated: true,
+      baselineCreated: false,
       resetForTier: true,
+      rebaselineRequired: true,
     });
     expect(paid.result.current.changes).toEqual([]);
+    expect(paid.result.current.regions[0].baseline?.tier).toBe("free");
+    act(() => paid.result.current.review());
+    expect(paid.result.current.regions[0].baseline?.tier).toBe("pro");
   });
   it("handles quota/write denial, corrupted schema and clear recovery honestly", async () => {
     const hook = await setup();
@@ -250,6 +257,101 @@ describe("checkpoint hook lifecycle", () => {
     expect(corrupt.result.current.ready).toBe(true);
     expect(localStorage.getItem(checkpointStorageKey("a"))).toBe(null);
   });
+  it("persists coverage invalidation and requires an explicit compatible baseline after a server limit mismatch", async () => {
+    fetcher.mockImplementation(async () =>
+      response(["a"], { appliedLimit: 1000 }),
+    );
+    const hook = await setup("a", "pro");
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    const baseline = structuredClone(hook.result.current.regions[0].baseline);
+    fetcher.mockImplementation(async () =>
+      response(["a", "b"], { appliedLimit: 50 }),
+    );
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    expect(hook.result.current.error).toMatch(/Server event coverage/);
+    expect(hook.result.current.displayed).toBeNull();
+    expect(hook.result.current.regions[0]).toMatchObject({
+      baseline,
+      rebaselineRequired: true,
+    });
+    hook.unmount();
+    const reload = renderHook(() => useRegionCheckpoints("a", "pro"));
+    await waitFor(() => expect(reload.result.current.ready).toBe(true));
+    expect(reload.result.current.regions[0].rebaselineRequired).toBe(true);
+    fetcher.mockImplementation(async () =>
+      response(["a", "b"], { appliedLimit: 1000 }),
+    );
+    await act(async () => {
+      await reload.result.current.check(hook.id);
+    });
+    expect(reload.result.current.displayed).toMatchObject({
+      rebaselineRequired: true,
+      baselineCreated: false,
+    });
+    expect(reload.result.current.changes).toEqual([]);
+    expect(reload.result.current.regions[0].baseline).toEqual(baseline);
+    act(() => reload.result.current.review());
+    expect(reload.result.current.regions[0].rebaselineRequired).toBe(false);
+    expect(
+      reload.result.current.regions[0].baseline?.events.map((e) => e.id),
+    ).toEqual(["a", "b"]);
+  });
+  it("refuses an older capture without changing the review boundary", async () => {
+    fetcher.mockImplementation(async () =>
+      response(["a"], {}, "2026-09-30T00:00:50Z"),
+    );
+    const hook = await setup();
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    const stored = localStorage.getItem(checkpointStorageKey("a"));
+    fetcher.mockImplementation(async () =>
+      response(["a", "b"], {}, "2026-09-30T00:00:10Z"),
+    );
+    await act(async () => {
+      await hook.result.current.check(hook.id);
+    });
+    expect(hook.result.current.error).toMatch(/older/);
+    expect(hook.result.current.displayed).toBeNull();
+    act(() => hook.result.current.review());
+    expect(localStorage.getItem(checkpointStorageKey("a"))).toBe(stored);
+  });
+  it("cancels in-flight detail work on account switch even if the service resolves late", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    let finish!: (value: Response) => void;
+    fetcher.mockImplementation((url) =>
+      String(url).startsWith("/api/news?")
+        ? Promise.resolve(response([id]))
+        : new Promise((resolve) => {
+            finish = resolve;
+          }),
+    );
+    const hook = await setup("account-a");
+    let pending!: Promise<void>;
+    act(() => {
+      pending = hook.result.current.check(hook.id);
+    });
+    await waitFor(() => expect(fetcher.mock.calls.length).toBe(2));
+    const signal = fetcher.mock.calls[1][1]!.signal!;
+    hook.unmount();
+    const other = renderHook(() => useRegionCheckpoints("account-b", "free"));
+    await act(async () => {
+      finish(new Response("{}"));
+      await pending;
+    });
+    expect(signal.aborted).toBe(true);
+    expect(other.result.current.displayed).toBeNull();
+    expect(
+      decodeCheckpoints(
+        localStorage.getItem(checkpointStorageKey("account-a")),
+        "account-a",
+      )[0].baseline,
+    ).toBeNull();
+  });
   it("deletion in another tab clears private results and cancels a read", async () => {
     const hook = await setup();
     await act(async () => {
@@ -270,6 +372,54 @@ describe("checkpoint hook lifecycle", () => {
 });
 
 describe("checkpoint panel", () => {
+  it("labels incomplete source observations and exposes explicit compatible rebaseline", async () => {
+    const ui = render(
+      <RegionCheckpoints
+        account="a"
+        tier="pro"
+        viewport={viewport}
+        filters={filters}
+        onRegionPreview={vi.fn()}
+      />,
+    );
+    fetcher.mockImplementation(async () =>
+      response(["a"], { appliedLimit: 1000 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Region checkpoints" }));
+    fireEvent.change(screen.getByLabelText("Region name"), {
+      target: { value: "Coverage watch" },
+    });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Save viewport",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save viewport" }));
+    fireEvent.click(screen.getByRole("button", { name: "Coverage watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check changes" }));
+    await screen.findByText(/Baseline saved/);
+    expect(screen.getByText(/Incomplete report coverage for 1/)).toBeTruthy();
+    fetcher.mockImplementation(async () =>
+      response(["a"], { appliedLimit: 50 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check changes" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+    fetcher.mockImplementation(async () =>
+      response(["b"], { appliedLimit: 1000 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check changes" }));
+    await screen.findByText(/Establish a compatible baseline explicitly/);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Establish compatible baseline" }),
+    );
+    await screen.findByText(/Baseline saved/);
+    ui.unmount();
+  });
   it("supports named capture, fixed saved filters, rename/delete, stale disclosure and keyboard close", async () => {
     const preview = vi.fn();
     const props = {

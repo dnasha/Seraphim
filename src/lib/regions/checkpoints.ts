@@ -3,12 +3,18 @@ import { canonicalNewsId } from "@/lib/utils/ranking";
 import { reportIdentityKey } from "@/lib/utils/reportIdentity";
 import {
   canUseTimeRange,
+  getEntitlements,
   hasFeature,
   type UserTier,
   type TimeRangeKey,
 } from "@/lib/entitlements";
 import { NEWS_SOURCES, NEWS_CATEGORIES } from "@/lib/utils/newsFilterParams";
-import { validateRegionSpec, type RegionSpec } from "./geometry";
+import {
+  normalizeRegionLongitude,
+  regionLongitudeDistance,
+  validateRegionSpec,
+  type RegionSpec,
+} from "./geometry";
 
 export interface RegionFilters {
   timeRange: TimeRangeKey;
@@ -28,6 +34,10 @@ export interface EventFingerprint {
   longitude: number;
   latitude: number;
   reports: string[];
+  reportCount?: number;
+  reportsComplete?: boolean;
+  capturedAt?: string;
+  reportsCheckedAt?: string;
 }
 export interface Coverage {
   capturedAt: string;
@@ -38,8 +48,14 @@ export interface Coverage {
   readCount: number;
   observedCount: number;
   appliedLimits: number[];
+  captures?: { scope: string; capturedAt: string }[];
+  detailReadCount?: number;
+  unresolvedReports?: number;
+  reportsComplete?: boolean;
+  reportErrors?: number;
 }
 export interface CheckpointSnapshot {
+  observationVersion?: 2;
   tier: UserTier;
   filterKey: string;
   events: EventFingerprint[];
@@ -49,12 +65,15 @@ export interface SavedCheckpoint {
   region: RegionSpec;
   filters: RegionFilters;
   baseline: CheckpointSnapshot | null;
+  rebaselineRequired?: boolean;
 }
-export type ChangeKind = "event" | "sources" | "correction" | "identity";
+export type ChangeKind =
+  "event" | "sources" | "source-count" | "correction" | "identity";
 export interface RegionChange {
   event: EventFingerprint;
   kinds: ChangeKind[];
   addedSources: number;
+  reportedSourceIncrease?: number;
   previous?: EventFingerprint;
 }
 export const MAX_REGIONS = 8;
@@ -148,21 +167,80 @@ export function fingerprint(item: NewsItem): EventFingerprint {
     id,
     title: text(item.title),
     location: text(item.locationName ?? ""),
-    longitude: item.longitude!,
+    longitude: normalizeRegionLongitude(item.longitude!),
     latitude: item.latitude!,
     reports,
+    reportCount:
+      Number.isInteger(item.sourcesCount) && item.sourcesCount! >= 0
+        ? item.sourcesCount
+        : reports.length,
   };
 }
-export function compareSnapshots(
+export function snapshotsCompatible(
+  a: CheckpointSnapshot,
+  b: CheckpointSnapshot,
+): boolean {
+  return (
+    a.tier === b.tier &&
+    a.filterKey === b.filterKey &&
+    a.observationVersion === b.observationVersion &&
+    a.coverage.appliedLimits.every(
+      (limit) => limit === getEntitlements(b.tier).eventLimit,
+    )
+  );
+}
+/** Capture time, rather than publication or check time, bounds comparable observations. */
+export function assertCaptureBoundary(
   baseline: CheckpointSnapshot | null,
   next: CheckpointSnapshot,
-): RegionChange[] {
+): void {
   if (
     !baseline ||
     baseline.tier !== next.tier ||
     baseline.filterKey !== next.filterKey
   )
+    return;
+  const fail = () => {
+    throw new Error(
+      "Region data is older than the last reviewed capture. Check again; the previous review is unchanged.",
+    );
+  };
+  const previousCaptures = new Map(
+    baseline.coverage.captures?.map((c) => [c.scope, Date.parse(c.capturedAt)]),
+  );
+  if (next.coverage.captures?.length) {
+    for (const c of next.coverage.captures) {
+      const boundary =
+        previousCaptures.get(c.scope) ??
+        Date.parse(baseline.coverage.capturedAt);
+      if (Date.parse(c.capturedAt) < boundary) fail();
+    }
+  } else if (
+    Date.parse(next.coverage.capturedAt) <
+    Date.parse(baseline.coverage.capturedAt)
+  )
+    fail();
+  const known = new Map(baseline.events.map((e) => [e.id, e]));
+  for (const e of next.events) {
+    const prior = known.get(e.id);
+    if (
+      prior &&
+      Date.parse(e.capturedAt ?? next.coverage.capturedAt) <
+        Date.parse(prior.capturedAt ?? baseline.coverage.capturedAt)
+    )
+      fail();
+  }
+}
+export function compareSnapshots(
+  baseline: CheckpointSnapshot | null,
+  next: CheckpointSnapshot,
+): RegionChange[] {
+  if (!baseline || !snapshotsCompatible(baseline, next)) return [];
+  try {
+    assertCaptureBoundary(baseline, next);
+  } catch {
     return [];
+  }
   const known = new Map(baseline.events.map((e) => [e.id, e]));
   const reportOwners = new Map<string, Set<string>>();
   for (const e of baseline.events)
@@ -188,14 +266,23 @@ export function compareSnapshots(
       (r) => !previous.reports.includes(r),
     ).length;
     if (addedSources) kinds.push("sources");
+    const reportedSourceIncrease = Math.max(
+      0,
+      (event.reportCount ?? event.reports.length) -
+        (previous.reportCount ?? previous.reports.length),
+    );
+    if (reportedSourceIncrease > addedSources && !event.reportsComplete)
+      kinds.push("source-count");
     if (
       event.title !== previous.title ||
       event.location !== previous.location ||
-      Math.abs(event.longitude - previous.longitude) > 1e-5 ||
+      regionLongitudeDistance(event.longitude, previous.longitude) > 1e-5 ||
       Math.abs(event.latitude - previous.latitude) > 1e-5
     )
       kinds.push("correction");
-    return kinds.length ? [{ event, kinds, addedSources, previous }] : [];
+    return kinds.length
+      ? [{ event, kinds, addedSources, reportedSourceIncrease, previous }]
+      : [];
   });
 }
 /** Retain observed identities/sources even when results age out or coverage is capped. */
@@ -205,15 +292,29 @@ export function reviewedSnapshot(
 ): CheckpointSnapshot {
   if (displayed.coverage.stale)
     throw new Error("Stale results cannot be marked reviewed.");
-  const compatible =
-    baseline?.tier === displayed.tier &&
-    baseline.filterKey === displayed.filterKey;
+  if (displayed.coverage.reportErrors)
+    throw new Error(
+      "Report details are unavailable. Review is disabled; the previous baseline is unchanged.",
+    );
+  assertCaptureBoundary(baseline, displayed);
+  const compatible = baseline && snapshotsCompatible(baseline, displayed);
+  if (baseline && !compatible)
+    throw new Error(
+      "Coverage changed. Explicitly establish a compatible baseline before reviewing changes.",
+    );
   const events = new Map(
     (compatible ? baseline!.events : []).map((e) => [e.id, e]),
   );
   for (const event of displayed.events)
     events.set(event.id, {
       ...event,
+      longitude: normalizeRegionLongitude(event.longitude),
+      reportsCheckedAt:
+        event.reportsCheckedAt ?? events.get(event.id)?.reportsCheckedAt,
+      reportCount: Math.max(
+        events.get(event.id)?.reportCount ?? 0,
+        event.reportCount ?? event.reports.length,
+      ),
       reports: [
         ...new Set([
           ...(events.get(event.id)?.reports ?? []),
@@ -248,6 +349,34 @@ function validateSnapshot(s: CheckpointSnapshot): void {
   )
     throw new Error("Invalid checkpoint snapshot.");
   const c = s.coverage;
+  if (s.observationVersion != null && s.observationVersion !== 2)
+    throw new Error("Invalid observation version.");
+  if (
+    s.observationVersion === 2 &&
+    (!Array.isArray(c.captures) ||
+      c.captures.length !== c.readCount ||
+      c.captures.some(
+        (v) =>
+          !v ||
+          typeof v.scope !== "string" ||
+          v.scope.length > 256 ||
+          !Number.isFinite(Date.parse(v.capturedAt)),
+      ) ||
+      new Set(c.captures.map((v) => v.scope)).size !== c.captures.length ||
+      !Number.isInteger(c.detailReadCount) ||
+      c.detailReadCount! < 0 ||
+      c.detailReadCount! > 24 ||
+      !Number.isInteger(c.unresolvedReports) ||
+      c.unresolvedReports! < 0 ||
+      c.unresolvedReports! > c.observedCount ||
+      typeof c.reportsComplete !== "boolean" ||
+      c.reportsComplete !== (c.unresolvedReports === 0) ||
+      c.reportErrors !== 0 ||
+      c.appliedLimits.some(
+        (limit) => limit !== getEntitlements(s.tier).eventLimit,
+      ))
+  )
+    throw new Error("Invalid checkpoint report coverage.");
   if (
     ![c.capturedAt, c.checkedAt].every(
       (t) => typeof t === "string" && Number.isFinite(Date.parse(t)),
@@ -269,6 +398,19 @@ function validateSnapshot(s: CheckpointSnapshot): void {
   let reports = 0;
   const ids = new Set();
   for (const e of s.events) {
+    if (
+      s.observationVersion === 2 &&
+      (typeof e.capturedAt !== "string" ||
+        !Number.isFinite(Date.parse(e.capturedAt)) ||
+        typeof e.reportsComplete !== "boolean" ||
+        !Number.isInteger(e.reportCount) ||
+        e.reportCount! < 0 ||
+        e.reportCount! > 1_000_000 ||
+        (e.reportsCheckedAt != null &&
+          (typeof e.reportsCheckedAt !== "string" ||
+            !Number.isFinite(Date.parse(e.reportsCheckedAt)))))
+    )
+      throw new Error("Invalid event observation coverage.");
     if (
       !e ||
       typeof e.id !== "string" ||
@@ -318,6 +460,11 @@ export function decodeCheckpoints(
   return data.regions.map((r) => {
     const region = validateRegionSpec(r.region),
       filters = validateFilters(r.filters);
+    if (
+      r.rebaselineRequired != null &&
+      typeof r.rebaselineRequired !== "boolean"
+    )
+      throw new Error("Invalid baseline compatibility.");
     if (ids.has(region.id)) throw new Error("Duplicate saved region.");
     ids.add(region.id);
     if (r.baseline !== null) {
@@ -325,7 +472,14 @@ export function decodeCheckpoints(
       if (r.baseline.filterKey !== filterKey(filters))
         throw new Error("Saved filters and baseline differ.");
     }
-    return { region, filters, baseline: r.baseline };
+    return {
+      region,
+      filters,
+      baseline: r.baseline,
+      ...(r.rebaselineRequired == null
+        ? {}
+        : { rebaselineRequired: r.rebaselineRequired }),
+    };
   });
 }
 export function encodeCheckpoints(

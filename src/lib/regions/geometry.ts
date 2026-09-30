@@ -9,7 +9,11 @@ export interface RegionSpec {
   createdAt: string;
 }
 export const MAX_REGION_VERTICES = 512;
-const lng = (x: number) => ((((x + 180) % 360) + 360) % 360) - 180;
+export const normalizeRegionLongitude = (x: number) =>
+  ((((x + 180) % 360) + 360) % 360) - 180;
+const lng = normalizeRegionLongitude;
+export const regionLongitudeDistance = (a: number, b: number) =>
+  Math.abs(normalizeRegionLongitude(a - b));
 export const regionPolygons = (
   geometry: Polygon | MultiPolygon,
 ): Position[][][] =>

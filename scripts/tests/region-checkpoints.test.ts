@@ -206,9 +206,12 @@ describe("region checkpoint observation and review", () => {
     );
     const changedTier = { ...snapshot([event("b")]), tier: "pro" as const };
     expect(compareSnapshots(a, changedTier)).toEqual([]);
-    expect(reviewedSnapshot(a, changedTier).events.map((e) => e.id)).toEqual([
-      "b",
-    ]);
+    expect(() => reviewedSnapshot(a, changedTier)).toThrow(
+      /compatible baseline/,
+    );
+    expect(reviewedSnapshot(null, changedTier).events.map((e) => e.id)).toEqual(
+      ["b"],
+    );
     const changedFilters = {
       ...snapshot([event("b")]),
       filterKey: filterKey({ ...filters, categories: ["world"] }),

@@ -41,8 +41,12 @@ const session = {
   user,
 };
 const cookie = `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`;
+const ids = {
+  a: "00000000-0000-4000-8000-000000000001",
+  late: "00000000-0000-4000-8000-000000000002",
+};
 const event = (id, extra = {}) => ({
-  id,
+  id: ids[id],
   title: `Synthetic checkpoint event ${id}`,
   url: `https://example.test/${id}`,
   source: "Synthetic Publisher",
@@ -52,6 +56,7 @@ const event = (id, extra = {}) => ({
   publishedAt: new Date().toISOString(),
   latitude: 0,
   longitude: 0,
+  sourcesCount: 1,
   ...extra,
 });
 const transparentPng = Buffer.from(
@@ -72,7 +77,10 @@ try {
       { name: "sb-supabase-auth-token", value: cookie, url: base },
     ]);
     let stage = 0;
+    let seamMode = false;
     const requests = [],
+      detailRequests = [],
+      observedIds = new Set(),
       external = [],
       errors = [],
       preferenceWrites = [];
@@ -95,10 +103,51 @@ try {
         return route.fulfill({ json: {} });
       }
       if (url.origin === base) {
-        if (url.pathname === "/api/account/profile")
+        if (url.pathname === "/api/account/profile") {
+          // Allow auth state/effects to settle as they would during a network read.
+          await new Promise((resolve) => setTimeout(resolve, 100));
           return route.fulfill({
-            json: { effectiveTier: "free", tierSource: "billing" },
+            json: { effectiveTier: "pro", tierSource: "billing" },
           });
+        }
+        if (url.pathname.startsWith("/api/news/")) {
+          const label = Object.keys(ids).find((key) =>
+            url.pathname.endsWith(ids[key]),
+          );
+          assert(label, "Only feed-observed UUIDs may be resolved");
+          detailRequests.push(url);
+          if (stage === 5 && label === "a")
+            return route.fulfill({
+              status: 503,
+              json: { error: "Synthetic detail unavailable" },
+            });
+          const item = event(
+            label,
+            label === "a" && stage >= 2 && !seamMode
+              ? { title: "Synthetic corrected event a", sourcesCount: 2 }
+              : {},
+          );
+          if (seamMode) item.longitude = stage === 0 ? 180 : -180;
+          const sources = [
+            item.url,
+            ...(label === "a" && stage >= 2 && !seamMode
+              ? ["https://other.example.test/a"]
+              : []),
+          ].map((url) => ({
+            name: "Synthetic publisher",
+            url,
+            source_type: "rss",
+            discovered_at: "2000-01-01T00:00:00Z",
+          }));
+          return route.fulfill({
+            json: {
+              event: item,
+              sources,
+              totalSources: sources.length,
+              timelineRestricted: false,
+            },
+          });
+        }
         if (url.pathname === "/api/news") {
           const raw = url.searchParams.get("force_raw") === "true";
           if (raw) requests.push(url);
@@ -110,27 +159,22 @@ try {
           const items = [
             event(
               "a",
-              raw && stage >= 2
+              raw && stage >= 2 && !seamMode
                 ? {
                     title: "Synthetic corrected event a",
-                    sources: [
-                      {
-                        name: "Synthetic additional publisher",
-                        url: "https://other.example.test/a",
-                        sourceType: "rss",
-                        discoveredAt: new Date().toISOString(),
-                      },
-                    ],
+                    sourcesCount: stage === 5 ? 3 : 2,
                   }
                 : {},
             ),
           ];
-          if (raw && stage >= 1)
+          if (seamMode) items[0].longitude = stage === 0 ? 180 : -180;
+          if (raw && stage >= 1 && !seamMode)
             items.push(event("late", { publishedAt: "2000-01-01T00:00:00Z" }));
+          if (raw) for (const item of items) observedIds.add(item.id);
           return route.fulfill({
             json: {
               items,
-              lastUpdated: new Date().toISOString(),
+              lastUpdated: `2026-09-30T00:00:${{ 0: "10", 1: "20", 2: "30", 3: "40", 4: "45", 5: "50", 6: "55", 7: "20", 8: "58", 9: "59" }[stage]}Z`,
               meta: {
                 sort: url.searchParams.get("sort") || "hot",
                 view: url.searchParams.get("view") || "map",
@@ -138,7 +182,7 @@ try {
                 clustered: false,
                 isCapped: raw && stage === 3,
                 stale: raw && stage === 3,
-                appliedLimit: 50,
+                appliedLimit: stage === 6 ? 50 : 1000,
                 zoomBucket: null,
               },
               sources: { gnews: null, rss: null, social: null },
@@ -192,7 +236,21 @@ try {
       .getByRole("button", { name: `Synthetic ${name} watch`, exact: true })
       .click();
     await panel.getByRole("button", { name: "Check changes" }).click();
-    await panel.getByText(/Baseline saved/).waitFor();
+    await panel
+      .getByText(/Baseline saved/)
+      .waitFor({ timeout: 10_000 })
+      .catch(async (error) => {
+        await page.screenshot({ path: `${out}/${name}-baseline-error.png` });
+        console.error(
+          JSON.stringify({
+            panel: await panel.innerText(),
+            rawRequests: requests.map(String),
+            details: detailRequests.map(String),
+            pageErrors: errors,
+          }),
+        );
+        throw error;
+      });
     const storeKey = `seraphim:experiment:region-checkpoints:v1:${user.id}`;
     let stored = JSON.parse(
       await page.evaluate((key) => localStorage.getItem(key), storeKey),
@@ -214,9 +272,11 @@ try {
     // Feed changes after the displayed snapshot: reviewing must not refetch.
     stage = 2;
     const readsBeforeReview = requests.length;
+    const detailsBeforeReview = detailRequests.length;
     await panel.getByRole("button", { name: "Mark reviewed" }).click();
     await panel.getByText(/Baseline saved/).waitFor();
     assert.equal(requests.length, readsBeforeReview);
+    assert.equal(detailRequests.length, detailsBeforeReview);
     stored = JSON.parse(
       await page.evaluate((key) => localStorage.getItem(key), storeKey),
     );
@@ -238,6 +298,17 @@ try {
       .getByRole("button", { name: "Mark reviewed" })
       .scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${out}/${name}-corrections.png` });
+    // The lean feed only exposes counts; report identities came from exact detail.
+    assert(detailRequests.length > 0);
+    assert(
+      detailRequests.every(
+        (url) =>
+          observedIds.has(url.pathname.split("/").at(-1)) &&
+          url.searchParams.get("refresh") === "true",
+      ),
+    );
+    await panel.getByRole("button", { name: "Mark reviewed" }).click();
+    await panel.getByText(/Baseline saved/).waitFor();
     const prior = await page.evaluate(
       (key) => localStorage.getItem(key),
       storeKey,
@@ -260,6 +331,81 @@ try {
       await page.evaluate((key) => localStorage.getItem(key), storeKey),
       prior,
     );
+    stage = 5;
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel
+      .getByText(/Report details are unavailable. Review is disabled/)
+      .waitFor();
+    await panel
+      .getByText(
+        /Reported source count increased by 1; report identities unresolved/,
+      )
+      .waitFor();
+    assert.equal(
+      await panel.getByRole("button", { name: "Mark reviewed" }).isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), storeKey),
+      prior,
+    );
+    await panel
+      .getByRole("button", { name: "Mark reviewed" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/${name}-incomplete.png` });
+    stage = 6;
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel
+      .getByRole("alert")
+      .getByText(/Server event coverage differs/)
+      .waitFor();
+    let blocked = JSON.parse(
+      await page.evaluate((key) => localStorage.getItem(key), storeKey),
+    );
+    assert.equal(blocked.regions[0].rebaselineRequired, true);
+    assert.deepEqual(
+      blocked.regions[0].baseline,
+      JSON.parse(prior).regions[0].baseline,
+    );
+    assert.equal(
+      await panel.getByRole("button", { name: "Mark reviewed" }).count(),
+      0,
+    );
+    stage = 7;
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel
+      .getByRole("alert")
+      .getByText(/older than the last reviewed capture/)
+      .waitFor();
+    blocked = JSON.parse(
+      await page.evaluate((key) => localStorage.getItem(key), storeKey),
+    );
+    assert.deepEqual(
+      blocked.regions[0].baseline,
+      JSON.parse(prior).regions[0].baseline,
+    );
+    stage = 8;
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel
+      .getByText(/Establish a compatible baseline explicitly/)
+      .waitFor();
+    assert.deepEqual(
+      JSON.parse(
+        await page.evaluate((key) => localStorage.getItem(key), storeKey),
+      ).regions[0].baseline,
+      JSON.parse(prior).regions[0].baseline,
+    );
+    await panel
+      .getByRole("button", { name: "Establish compatible baseline" })
+      .click();
+    await panel.getByText(/Baseline saved/).waitFor();
+    assert.equal(
+      JSON.parse(
+        await page.evaluate((key) => localStorage.getItem(key), storeKey),
+      ).regions[0].rebaselineRequired,
+      false,
+    );
+    await page.screenshot({ path: `${out}/${name}-rebaseline.png` });
     // Reload restores baseline, and the saved region does not follow camera URLs.
     stage = 2;
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -315,10 +461,47 @@ try {
     );
     await panel.getByLabel("Region name", { exact: true }).press("Escape");
     assert.equal(await launcher.getAttribute("aria-expanded"), "false");
+    // Capture a viewport crossing the seam; ±180 is the same event location.
+    seamMode = true;
+    stage = 0;
+    await page.goto(`${base}/?lat=0&lng=180&zoom=4`, {
+      waitUntil: "domcontentloaded",
+    });
+    if (name === "mobile")
+      await page.getByRole("button", { name: "Map", exact: true }).click();
+    await launcher.click();
+    await panel
+      .getByLabel("Region name", { exact: true })
+      .fill("Synthetic seam watch");
+    await panel.getByRole("button", { name: "Save viewport" }).click();
+    await panel
+      .getByRole("button", { name: "Synthetic seam watch", exact: true })
+      .click();
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel.getByText(/Baseline saved/).waitFor();
+    const seamBaseline = JSON.parse(
+      await page.evaluate((key) => localStorage.getItem(key), storeKey),
+    ).regions[0].baseline;
+    assert.equal(seamBaseline.events.length, 1);
+    assert.equal(seamBaseline.events[0].longitude, -180);
+    stage = 9;
+    await panel.getByRole("button", { name: "Check changes" }).click();
+    await panel
+      .getByText("0 observed changed events since the last review.", {
+        exact: true,
+      })
+      .waitFor();
+    await panel
+      .getByRole("button", { name: "Mark reviewed" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${out}/${name}-antimeridian.png` });
+    assert.equal(errors.length, 0, errors.join("\n"));
     results.push({
       viewport: name,
       passed: true,
       rawReads: requests.length,
+      detailReads: detailRequests.length,
+      antimeridianPassed: true,
       externalRequestsMocked: external.length,
       pageErrors: errors,
     });

@@ -1,13 +1,20 @@
 import type { NewsResponse, NewsItem } from "@/lib/core/types";
 import { getEntitlements, type UserTier } from "@/lib/entitlements";
-import { regionContains, regionReadBounds } from "./geometry";
+import {
+  regionContains,
+  regionReadBounds,
+  regionLongitudeDistance,
+} from "./geometry";
+import { RegionCoverageMismatch, resolveRegionReports } from "./resolveReports";
 import {
   filtersAllowed,
   filterKey,
   fingerprint,
+  assertCaptureBoundary,
   type SavedCheckpoint,
   type CheckpointSnapshot,
   type EventFingerprint,
+  type Coverage,
 } from "./checkpoints";
 
 /** Use the entitled feed transport only; never send names, holes, IDs or baselines. */
@@ -23,7 +30,7 @@ export async function readRegion(
       "Saved filters are unavailable on this plan. Use current filters to reset the baseline.",
     );
   const events = new Map<string, EventFingerprint>();
-  const coverage = {
+  const coverage: Coverage = {
     capturedAt: "",
     checkedAt: "",
     capped: false,
@@ -32,6 +39,11 @@ export async function readRegion(
     readCount: 0,
     observedCount: 0,
     appliedLimits: [] as number[],
+    captures: [],
+    detailReadCount: 0,
+    unresolvedReports: 0,
+    reportsComplete: false,
+    reportErrors: 0,
   };
   let capturedAt = Infinity;
   for (const bounds of regionReadBounds(checkpoint.region.geometry)) {
@@ -81,7 +93,6 @@ export async function readRegion(
       typeof meta.stale !== "boolean" ||
       !Number.isInteger(meta.appliedLimit) ||
       meta.appliedLimit! < 1 ||
-      meta.appliedLimit! > getEntitlements(tier).eventLimit ||
       !Array.isArray(data.items) ||
       data.items.length > meta.appliedLimit! ||
       !Number.isFinite(Date.parse(data.lastUpdated))
@@ -89,15 +100,25 @@ export async function readRegion(
       throw new Error(
         "Region coverage could not be verified. Previous review is unchanged.",
       );
+    if (meta.appliedLimit !== getEntitlements(tier).eventLimit)
+      throw new RegionCoverageMismatch(
+        "Server event coverage differs from this plan. Refresh account access, check again, and explicitly establish a compatible baseline.",
+      );
     capturedAt = Math.min(capturedAt, Date.parse(data.lastUpdated));
     coverage.readCount++;
     coverage.appliedLimits.push(meta.appliedLimit!);
+    coverage.captures!.push({
+      scope: JSON.stringify(bounds),
+      capturedAt: new Date(Date.parse(data.lastUpdated)).toISOString(),
+    });
     coverage.capped ||= meta.isCapped;
     coverage.stale ||= meta.stale;
     for (const item of data.items) {
       validateItem(item);
       // Validate canonical/raw identity before membership: never trust centroids.
-      const event = fingerprint(item);
+      const event = fingerprint({ ...item, sources: undefined });
+      event.capturedAt = new Date(Date.parse(data.lastUpdated)).toISOString();
+      event.reportsComplete = false;
       if (
         !regionContains(
           checkpoint.region.geometry,
@@ -111,8 +132,8 @@ export async function readRegion(
         if (
           prior.title !== event.title ||
           prior.location !== event.location ||
-          prior.longitude !== event.longitude ||
-          prior.latitude !== event.latitude
+          regionLongitudeDistance(prior.longitude, event.longitude) > 1e-5 ||
+          Math.abs(prior.latitude - event.latitude) > 1e-5
         )
           throw new Error(
             "An event changed between region reads. Check again before reviewing.",
@@ -120,19 +141,42 @@ export async function readRegion(
         event.reports = [
           ...new Set([...prior.reports, ...event.reports]),
         ].sort();
+        event.reportCount = Math.max(
+          prior.reportCount ?? 0,
+          event.reportCount ?? 0,
+        );
+        if (Date.parse(prior.capturedAt!) > Date.parse(event.capturedAt!))
+          event.capturedAt = prior.capturedAt;
       }
       events.set(event.id, event);
     }
   }
   coverage.observedCount = events.size;
   coverage.capturedAt = new Date(capturedAt).toISOString();
-  coverage.checkedAt = new Date().toISOString();
-  return {
+  const snapshot: CheckpointSnapshot = {
+    observationVersion: 2,
     tier,
     filterKey: filterKey(f),
     events: [...events.values()].sort((a, b) => a.id.localeCompare(b.id)),
     coverage,
   };
+  assertCaptureBoundary(checkpoint.baseline, snapshot);
+  if (!coverage.stale)
+    Object.assign(
+      coverage,
+      await resolveRegionReports(
+        snapshot.events,
+        checkpoint.region,
+        tier,
+        checkpoint.baseline,
+        signal,
+        fetcher,
+      ),
+    );
+  else coverage.unresolvedReports = snapshot.events.length;
+  coverage.reportsComplete = coverage.unresolvedReports === 0;
+  coverage.checkedAt = new Date().toISOString();
+  return snapshot;
 }
 function validateItem(item: NewsItem): void {
   if (
@@ -141,6 +185,10 @@ function validateItem(item: NewsItem): void {
     (item.originalId != null && typeof item.originalId !== "string") ||
     typeof item.title !== "string" ||
     typeof item.url !== "string" ||
+    (item.sourcesCount != null &&
+      (!Number.isInteger(item.sourcesCount) ||
+        item.sourcesCount < 0 ||
+        item.sourcesCount > 1_000_000)) ||
     (item.locationName != null &&
       (typeof item.locationName !== "string" ||
         item.locationName.length > 1000)) ||
