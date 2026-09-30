@@ -131,7 +131,8 @@ describe('incident identity regression checks', () => {
       row('local', { title: 'Avonmouth factory explosion kills a dozen workers' })];
     const { db } = database(candidates, [1, 0.9]);
     const result = await resolveStoryMerges([event(generic)], db as never);
-    expect(vectors.generate).toHaveBeenCalledOnce();
+    expect(vectors.generate).toHaveBeenCalledTimes(2);
+    expect(vectors.generate).toHaveBeenLastCalledWith([`${generic.title}. ${candidates[1].description}`]);
     expect([...result.merges.keys()]).toEqual(['local']);
   });
 
@@ -284,5 +285,65 @@ describe('conservative detail and location evidence', () => {
       expect(passesSemanticThreshold(region, region, 0.65), location_name).toBe(false);
     }
     expect(hasPreciseLocation(event({ location_name: 'Pentagon', latitude: 38.87, longitude: -77.06 }))).toBe(true);
+  });
+});
+
+
+describe('persisted representative invariants', () => {
+  beforeEach(() => { vectors.generate.mockReset().mockImplementation(async texts => texts.map(() => [1, ...Array(383).fill(0)])); });
+
+  it('retains all earlier promotions when a later low-tier report only adds a source', async () => {
+    const original = row('factory', { title: 'Warehouse fire reported in Bristol', description: '', published_at: '2026-09-19T08:00:00Z' });
+    const promoted = event({ title: 'Avonmouth warehouse fire damages buildings', description: 'Detailed eyewitness report.',
+      url: 'https://b.example/fire', published_at: '2026-09-19T10:00:00Z', credibility_tier: 1, image_url: 'https://b.example/fire.jpg' });
+    const older = event({ title: 'Crews respond to Bristol warehouse fire', description: '', url: 'https://c.example/fire',
+      published_at: '2026-09-19T09:00:00Z', credibility_tier: 3 });
+    for (const incoming of [[promoted, older], [older, promoted]]) {
+      const result = await resolveStoryMerges(structuredClone(incoming), database([original], [0.94]).db as never);
+      const merge = result.merges.get('factory')!;
+      expect(merge).toMatchObject({ title: promoted.title, url: promoted.url, description: promoted.description,
+        credibility_tier: 1, image_url: promoted.image_url, primary_discovered_at: promoted.published_at, event_count: 3 });
+      expect(merge.description_provenance?.url).toBe(promoted.url);
+      expect(new Set([merge.url, ...merge.sources.map(source => source.url)]))
+        .toEqual(new Set([original.url, promoted.url, older.url]));
+    }
+  });
+
+  it('refreshes a stored pin and embeds the actual mixed headline/description', async () => {
+    const oldVector = [1, ...Array(383).fill(0)];
+    const combinedVector = [0, 1, ...Array(382).fill(0)];
+    vectors.generate.mockResolvedValueOnce([oldVector]).mockResolvedValueOnce([combinedVector]);
+    const original = row('factory', { description: 'A lengthy initial account with eyewitness details at the factory.',
+      latitude: 54, longitude: -2, location_name: 'United Kingdom' });
+    const incoming = event({ title: 'Death toll rises to 13 after Bristol factory explosion', description: 'Updated toll.',
+      url: 'https://b.example/fire', published_at: '2026-09-19T11:00:00Z' });
+    const result = await resolveStoryMerges([incoming], database([original], [0.94]).db as never);
+    const merge = result.merges.get('factory')!;
+    expect(merge).toMatchObject({ latitude: incoming.latitude, longitude: incoming.longitude, location_name: incoming.location_name });
+    expect(vectors.generate).toHaveBeenLastCalledWith([`${incoming.title}. ${original.description}`]);
+    expect(JSON.parse(merge.embedding!)).toEqual(combinedVector);
+  });
+
+  it('invalidates a stored stale vector when final representative generation fails', async () => {
+    vectors.generate.mockResolvedValueOnce([[1, ...Array(383).fill(0)]]).mockRejectedValueOnce(new Error('model unavailable'));
+    const original = row('factory', { description: 'A lengthy initial account with eyewitness details at the factory.' });
+    const incoming = event({ title: 'Death toll rises to 13 after Bristol factory explosion', description: 'Updated toll.',
+      url: 'https://b.example/fire', published_at: '2026-09-19T11:00:00Z' });
+    const result = await resolveStoryMerges([incoming], database([original], [0.94]).db as never);
+    expect(result.merges.get('factory')?.embedding).toBeNull();
+    expect(result.merges.get('factory')?.title).toBe(incoming.title);
+  });
+
+  it('does not clear the stored pin on description-only promotion or reuse a stale vector', async () => {
+    const original = row('factory', { description: 'Short original description.', published_at: '2026-09-19T10:00:00Z' });
+    const incoming = event({ title: 'Earlier factory explosion report from Bristol', description: 'A much longer detailed account of the same factory explosion.',
+      url: 'https://b.example/fire', published_at: '2026-09-19T09:00:00Z', latitude: null, longitude: null, location_name: null });
+    const result = await resolveStoryMerges([incoming], database([original], [0.94]).db as never);
+    const merge = result.merges.get('factory')!;
+    expect(merge.title).toBeUndefined();
+    expect(merge.latitude).toBeUndefined();
+    expect(merge.description).toBe(incoming.description);
+    expect(vectors.generate).toHaveBeenLastCalledWith([`${original.title}. ${incoming.description}`]);
+    expect(merge.embedding).toBeTruthy();
   });
 });

@@ -190,3 +190,32 @@ describe("RSS adapters", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+
+describe('RSS primary-only cooldown', () => {
+  const source = { name: 'Example', url: 'https://feed.example/rss', fallbackUrls: ['https://fallback.example/rss'], category: 'world', credibility_tier: 1 as const };
+  it.each([200, 304])('polls the fallback during cooldown with HTTP %s without renewing primary failure evidence', async (status) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(status === 304 ? null : '<rss/>', { status }));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.parseString.mockResolvedValue({ items: [] });
+    beginSourceHealthCollection();
+    await fetchSingleFeed(source, 1000, { openCircuits: new Set([sourceCircuitKey('rss-primary', source.name)]) });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(source.fallbackUrls[0]);
+    expect(completeSourceHealthCollection()[0].error_code).toBe('primary_cooldown');
+  });
+  it('still probes the primary when cooldown has expired or emergency mode is explicit', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('<rss/>')));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.parseString.mockResolvedValue({ items: [] });
+    await fetchSingleFeed(source, 1000);
+    await fetchSingleFeed(source, 1000, { emergency: true, openCircuits: new Set([sourceCircuitKey('rss-primary', source.name)]) });
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([source.url, source.url]);
+  });
+  it('retains primary failure evidence when the fallback returns 304', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(new Response(null, {status: 304})));
+    beginSourceHealthCollection();
+    await fetchSingleFeed(source, 1000);
+    expect(completeSourceHealthCollection()[0].error_code).toBe('fallback_timeout');
+  });
+});

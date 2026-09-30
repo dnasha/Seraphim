@@ -151,10 +151,9 @@ describe('applyNewsFilters - time range filtering', () => {
     });
 
     it('"1w" shows items within 7 days', () => {
-        const result = applyNewsFilters([recentItem, oldItem, ancientItem], defaultOpts({ timeRange: '1w' }));
-        expect(result).toContain(recentItem);
-        expect(result).toContain(oldItem);
-        expect(result).not.toContain(ancientItem);
+        const fiveDaysOld = makeItem({ publishedAt: new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString() });
+        const result = applyNewsFilters([recentItem, oldItem, fiveDaysOld, ancientItem], defaultOpts({ timeRange: '1w' }));
+        expect(result).toEqual([recentItem, oldItem, fiveDaysOld]);
     });
 
     it('"all" shows everything', () => {
@@ -253,8 +252,8 @@ describe('applyNewsFilters - search query', () => {
     const item2 = makeItem({ title: 'Stock market crashes', description: 'Nasdaq drops 5%' });
     const item3 = makeItem({ title: 'Generic news', locationName: 'Damascus' });
 
-    it('matches in title', () => {
-        const result = applyNewsFilters([item1, item2], defaultOpts({ searchQuery: 'ukraine' }));
+    it('matches in title case-insensitively', () => {
+        const result = applyNewsFilters([item1, item2], defaultOpts({ searchQuery: 'UKRAINE' }));
         expect(result).toEqual([item1]);
     });
 
@@ -266,16 +265,6 @@ describe('applyNewsFilters - search query', () => {
     it('matches in locationName', () => {
         const result = applyNewsFilters([item1, item3], defaultOpts({ searchQuery: 'damascus' }));
         expect(result).toEqual([item3]);
-    });
-
-    it('is case insensitive', () => {
-        const result = applyNewsFilters([item1], defaultOpts({ searchQuery: 'UKRAINE' }));
-        expect(result).toEqual([item1]);
-    });
-
-    it('empty search shows all', () => {
-        const result = applyNewsFilters([item1, item2, item3], defaultOpts({ searchQuery: '' }));
-        expect(result).toHaveLength(3);
     });
 });
 

@@ -68,6 +68,21 @@ export function evaluateOpenSourceCircuits(
       open.add(key);
     }
   }
+  // A working fallback must remain available while its failing primary cools
+  // down. Skipped primary attempts do not extend the cooldown indefinitely.
+  const primaryAttempts = ordered.filter(attempt =>
+    attempt.source_type === 'rss' && attempt.error_code !== 'primary_cooldown'
+  ).map(attempt => ({
+    ...attempt,
+    source_type: 'rss-primary',
+    outcome: attempt.error_code?.startsWith('fallback_') ? 'provider_error' : attempt.outcome,
+    error_code: attempt.error_code?.startsWith('fallback_')
+      ? attempt.error_code.slice('fallback_'.length) : attempt.error_code,
+  }));
+  if (primaryAttempts.length > 0) {
+    // These synthetic records cannot recurse: only rss records enter this path.
+    for (const key of evaluateOpenSourceCircuits(primaryAttempts, now)) open.add(key);
+  }
   return open;
 }
 
@@ -81,6 +96,7 @@ export async function loadOpenSourceCircuits(db: SupabaseClient, now = Date.now(
       .select('source_name, source_type, outcome, error_code, created_at')
       .gte('created_at', cutoff)
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .range(from, from + ATTEMPT_PAGE_SIZE - 1);
     if (error) {
       console.warn(`[polling] Unable to load source circuit history: ${error.message}`);

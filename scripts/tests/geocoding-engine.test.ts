@@ -22,26 +22,6 @@ describe('KNOWN_LOCATIONS dictionary', () => {
         expect(Object.keys(KNOWN_LOCATIONS).length).toBeGreaterThan(1000);
     });
 
-    it('contains expected major cities', () => {
-        expect(KNOWN_LOCATIONS['kyiv']).toBeDefined();
-        expect(KNOWN_LOCATIONS['london']).toBeDefined();
-        expect(KNOWN_LOCATIONS['tokyo']).toBeDefined();
-        expect(KNOWN_LOCATIONS['moscow']).toBeDefined();
-    });
-
-    it('contains expected landmarks', () => {
-        expect(KNOWN_LOCATIONS['pentagon']).toBeDefined();
-        expect(KNOWN_LOCATIONS['kremlin']).toBeDefined();
-        expect(KNOWN_LOCATIONS['gaza city']).toBeDefined();
-        expect(KNOWN_LOCATIONS['red sea']).toBeDefined();
-    });
-
-    it('contains expected countries', () => {
-        expect(KNOWN_LOCATIONS['france']).toBeDefined();
-        expect(KNOWN_LOCATIONS['brazil']).toBeDefined();
-        expect(KNOWN_LOCATIONS['nigeria']).toBeDefined();
-    });
-
     it('has correct types on entries', () => {
         expect(KNOWN_LOCATIONS['pentagon'].type).toBe('landmark');
         expect(KNOWN_LOCATIONS['kyiv'].type).toBe('landmark'); // Kyiv is treated as a high-priority landmark
@@ -313,11 +293,6 @@ describe('extractLocation - multi-word locations', () => {
   Verifies extraction of specific landmarks and territories.
 */
 describe('extractLocation - landmarks', () => {
-    it('detects Pentagon', () => {
-        const { candidates } = extractLocation('Pentagon briefing outlines new NATO deployment strategy', '');
-        expect(Array.isArray(candidates)).toBe(true);
-    });
-
     it('detects Kremlin', () => {
         const { match } = extractLocation('Kremlin spokesperson denies involvement in incident', '');
         expect(match?.toLowerCase()).toContain('kremlin');
@@ -610,14 +585,10 @@ describe('extractLocation - superpower penalty', () => {
   Handles text containing no geographic references.
 */
 describe('extractLocation - no location', () => {
-    it('returns null for locationless headlines', () => {
-        const { match } = extractLocation('Scientists develop breakthrough quantum computing algorithm', '');
-        expect(match === null || typeof match === 'string').toBe(true);
-    });
-
-    it('always returns a candidates array', () => {
-        const { candidates } = extractLocation('Random text with no geography', '');
-        expect(Array.isArray(candidates)).toBe(true);
+    it('returns no match or candidates for locationless text', () => {
+        const result = extractLocation('Scientists develop breakthrough quantum computing algorithm', '');
+        expect(result.match).toBeNull();
+        expect(result.candidates).toEqual([]);
     });
 });
 

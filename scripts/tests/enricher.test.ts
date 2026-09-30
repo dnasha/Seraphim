@@ -45,12 +45,6 @@ describe('enrichItemsWithLocation - coordinate attachment', () => {
         expect(result[0].longitude).toBeDefined();
         expect(result[0].locationName?.toLowerCase()).toContain('kyiv');
     });
-
-    it('returns items unchanged when no location is extractable', async () => {
-        const items = [makeItem({ title: 'Scientists develop new quantum algorithm' })];
-        const result = await enrichItemsWithLocation(items);
-        expect(result).toHaveLength(1);
-    });
 });
 
 /*
@@ -113,14 +107,14 @@ describe('enrichItemsWithLocation - source-default suppression', () => {
     });
 
     it('does not invent a location from a domestic feed scope', async () => {
-        const [result] = await enrichItemsWithLocation([makeItem({
+        const input = makeItem({
             title: 'Scientists develop new quantum algorithm',
             description: 'The method could speed up future computing tasks.',
             source: 'NPR US',
             sourceCountryCode: 'US',
-        })]);
-        expect(result.latitude).toBeUndefined();
-        expect(result.longitude).toBeUndefined();
+        });
+        const result = await enrichItemsWithLocation([input]);
+        expect(result).toEqual([{ ...input, foundLocations: [] }]);
     });
 
     it('removes publisher attribution without moving a maritime incident to its country', async () => {
@@ -149,15 +143,13 @@ describe('enrichItemsWithLocation - canonical coordinates', () => {
         ];
         const result = await enrichItemsWithLocation(items);
 
-        const geocoded = result.filter(r => r.latitude != null && r.longitude != null);
-        expect(geocoded.length).toBeGreaterThanOrEqual(2);
-
-        if (geocoded.length >= 2) {
-            // Both persisted locations must be the canonical geocoder coordinate.
-            const coordsMatch =
-                geocoded[0].latitude === geocoded[1].latitude &&
-                geocoded[0].longitude === geocoded[1].longitude;
-            expect(coordsMatch).toBe(true);
+        expect(result).toHaveLength(2);
+        for (const item of result) {
+            expect(item).toMatchObject({
+                latitude: 50.45,
+                longitude: 30.52,
+                locationName: 'Kyiv',
+            });
         }
     });
 });

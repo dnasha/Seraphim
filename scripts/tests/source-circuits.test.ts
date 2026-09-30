@@ -52,3 +52,27 @@ describe('source circuit breaker', () => {
       .toContain(sourceCircuitKey('reddit', 'Example'));
   });
 });
+
+
+describe('RSS primary-only cooldown', () => {
+  it('keeps an empty or successful fallback available while skipping repeated primary failures', () => {
+    const rows = [5, 15, 25].map(minutes => attempt(new Date(NOW - minutes * 60_000).toISOString(), {
+      source_type: 'rss', outcome: minutes === 5 ? 'empty' : 'healthy', error_code: 'fallback_timeout',
+    }));
+    const open = evaluateOpenSourceCircuits(rows, NOW);
+    expect(open.has(sourceCircuitKey('rss-primary', 'Example'))).toBe(true);
+    expect(open.has(sourceCircuitKey('rss', 'Example'))).toBe(false);
+    expect(evaluateOpenSourceCircuits([
+      attempt(new Date(NOW + 30 * 60_000).toISOString(), { outcome: 'healthy', error_code: 'primary_cooldown' }), ...rows,
+    ], NOW + 31 * 60_000).has(sourceCircuitKey('rss-primary', 'Example'))).toBe(false);
+  });
+
+  it('resets after a primary success and does not cool down a single transient failure', () => {
+    const rows = [5, 15, 25].map(minutes => attempt(new Date(NOW - minutes * 60_000).toISOString(), {
+      outcome: 'healthy', error_code: 'fallback_timeout',
+    }));
+    expect(evaluateOpenSourceCircuits(rows.slice(0, 1), NOW).has(sourceCircuitKey('rss-primary', 'Example'))).toBe(false);
+    rows.unshift(attempt(new Date(NOW).toISOString(), { outcome: 'healthy', error_code: null }));
+    expect(evaluateOpenSourceCircuits(rows, NOW).has(sourceCircuitKey('rss-primary', 'Example'))).toBe(false);
+  });
+});
