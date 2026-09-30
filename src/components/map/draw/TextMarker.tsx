@@ -41,8 +41,10 @@ export function TextMarker({
   });
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const onDragEndRef = useRef(onDragEnd);
+  const eraserRef = useRef({ activeMode, onRemove });
   
   useEffect(() => { onDragEndRef.current = onDragEnd; }, [onDragEnd]);
+  useEffect(() => { eraserRef.current = { activeMode, onRemove }; }, [activeMode, onRemove]);
 
   const [scale, setScale] = useState(1);
 
@@ -135,7 +137,14 @@ export function TextMarker({
   useEffect(() => {
     if (!textareaRef.current) return;
     const el = textareaRef.current;
-    const stop = (e: Event) => e.stopPropagation();
+    const stop = (e: Event) => {
+      // This native listener stops events before React's portal listener sees them.
+      if (e.type === 'pointerdown' && eraserRef.current.activeMode === 'eraser') {
+        e.preventDefault();
+        eraserRef.current.onRemove();
+      }
+      e.stopPropagation();
+    };
     
     // Use native event listeners to prevent MapLibre from intercepting the resize handle
     el.addEventListener('mousedown', stop);

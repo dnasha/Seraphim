@@ -44,6 +44,7 @@ interface MapDrawToolsProps {
   userTier?: UserTier;
   ownerId?: string | null;
   onClose?: () => void;
+  onInteractionOwnershipChange?: (ownsMapPointer: boolean) => void;
 }
 
 const COLORS = ['#5f62ec', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
@@ -120,7 +121,7 @@ export default function MapDrawTools(props: MapDrawToolsProps) {
   return <DrawingEditor key={`${props.ownerId ?? 'guest'}:${(props.userTier ?? 'guest') === 'guest' ? 'guest' : 'account'}`} {...props} />;
 }
 
-function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, onClose }: MapDrawToolsProps) {
+function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, onClose, onInteractionOwnershipChange }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
   const activeModeRef = useRef(activeMode);
@@ -139,9 +140,13 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
   const [history] = useState(() => new DrawingHistory(initialStorage.document ?? emptyDrawingDocument()));
   const [, refreshHistory] = useState(0);
   const [storageError, setStorageError] = useState<string | null>(initialStorage.error);
+  const recoveryRequiredRef = useRef(Boolean(initialStorage.error));
+  const [recoveryRequired, setRecoveryRequired] = useState(Boolean(initialStorage.error));
   const [legacyAvailable, setLegacyAvailable] = useState(() => Boolean(ownerId && hasSavedDrawings()));
   const suppressHistoryRef = useRef(false);
   const pointerGestureRef = useRef(false);
+  const gestureBeforeRef = useRef<DrawingDocument | null>(null);
+  const pendingTextCreationRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readerRef = useRef<FileReader | null>(null);
   const mountedRef = useRef(true);
@@ -149,10 +154,19 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
   const selectedTextRef = useRef(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [autoFocusTextId, setAutoFocusTextId] = useState<string | null>(null);
+  const clearSelection = useCallback(() => {
+    selectedIdRef.current = null;
+    selectedTextRef.current = false;
+    setSelectedFeatureId(null);
+    setSelectedTextId(null);
+    setAutoFocusTextId(null);
+  }, []);
   const captureDocument = useCallback(() => drawingDocument(drawRef.current?.getSnapshot() ?? persistentFeaturesRef.current,
     textAnnotationsRef.current), []);
   const saveDocument = useCallback((document: DrawingDocument) => {
     persistentFeaturesRef.current = document.drawFeatures;
+    // An unreadable/unrestorable saved copy remains protected until an explicit recovery action.
+    if (recoveryRequiredRef.current) return;
     const error = userTier === 'guest' ? null : (document.drawFeatures.length || document.textAnnotations.length
       ? persistDrawState(document.drawFeatures, document.textAnnotations, ownerId) : clearPersistedDrawState(ownerId));
     if (mountedRef.current) setStorageError(error);
@@ -170,19 +184,19 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
       clearTimeout(pendingTimerRef.current);
       pendingTimerRef.current = null;
     }
+    const pendingTextId = pendingTextCreationRef.current;
+    pendingTextCreationRef.current = null;
+    if (pendingTextId && textAnnotationsRef.current.find(annotation => annotation.id === pendingTextId)?.text.trim() === '') {
+      textAnnotationsRef.current = textAnnotationsRef.current.filter(annotation => annotation.id !== pendingTextId);
+      setTextAnnotations(textAnnotationsRef.current);
+      if (selectedIdRef.current === pendingTextId) clearSelection();
+    }
     commitOperation('Edit');
-  }, [commitOperation]);
+  }, [commitOperation, clearSelection]);
   const scheduleEditCommit = () => {
     if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
     pendingTimerRef.current = setTimeout(() => { pendingTimerRef.current = null; commitOperation('Style'); }, 400);
   };
-  const clearSelection = useCallback(() => {
-    selectedIdRef.current = null;
-    selectedTextRef.current = false;
-    setSelectedFeatureId(null);
-    setSelectedTextId(null);
-    setAutoFocusTextId(null);
-  }, []);
   const restoreDocument = useCallback((document: DrawingDocument): boolean => {
     if (!drawRef.current) return false;
     const selection = { id: selectedIdRef.current, text: selectedTextRef.current };
@@ -191,6 +205,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
       replaceDrawFeatures(drawRef.current, document.drawFeatures);
       textAnnotationsRef.current = structuredClone(document.textAnnotations);
       setTextAnnotations(textAnnotationsRef.current);
+      pendingTextCreationRef.current = null;
       persistentFeaturesRef.current = structuredClone(document.drawFeatures);
       clearSelection();
       const mode = isOpen ? activeModeRef.current : 'static';
@@ -340,6 +355,77 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
   const textModeRef = useRef(false);
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
 
+  const ownershipCallbackRef = useRef(onInteractionOwnershipChange);
+  const ownsPointerRef = useRef(false);
+  const toolOwnershipRef = useRef(false);
+  const annotationPointerRef = useRef(false);
+  const annotationPointerIdRef = useRef<number | undefined | null>(null);
+  const publishOwnership = useCallback((owns: boolean) => {
+    if (ownsPointerRef.current === owns) return;
+    ownsPointerRef.current = owns;
+    ownershipCallbackRef.current?.(owns);
+  }, []);
+  useEffect(() => {
+    ownershipCallbackRef.current = onInteractionOwnershipChange;
+    onInteractionOwnershipChange?.(ownsPointerRef.current);
+  }, [onInteractionOwnershipChange]);
+  useEffect(() => {
+    // Click tools and selection own map picking too, independently of drag-pan policy.
+    if (!mapReady || !isOpen) {
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+    }
+    toolOwnershipRef.current = mapReady && isOpen && activeMode !== 'static';
+    publishOwnership(toolOwnershipRef.current || annotationPointerRef.current);
+    return () => { toolOwnershipRef.current = false; publishOwnership(false); };
+  }, [activeMode, isOpen, mapReady, publishOwnership]);
+  useEffect(() => {
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    const onDown = (event: PointerEvent) => {
+      if (event.isPrimary === false || (annotationPointerIdRef.current !== null && releaseTimer === null)) return;
+      if (!(event.target instanceof Element) || !event.target.closest('[data-drawing-annotation]')) return;
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      annotationPointerRef.current = true;
+      annotationPointerIdRef.current = event.pointerId;
+      publishOwnership(true);
+    };
+    const onRelease = (event: PointerEvent) => {
+      if (!annotationPointerRef.current || event.pointerId !== annotationPointerIdRef.current) return;
+      // MapLibre's completed click must see the same ownership as its pointer-down.
+      releaseTimer = setTimeout(() => {
+        releaseTimer = null;
+        annotationPointerRef.current = false;
+        annotationPointerIdRef.current = null;
+        publishOwnership(toolOwnershipRef.current);
+      }, 0);
+    };
+    const onBlur = () => {
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+      publishOwnership(false);
+    };
+    const onFocus = () => publishOwnership(toolOwnershipRef.current);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onRelease, true);
+    window.addEventListener('pointercancel', onRelease, true);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onRelease, true);
+      window.removeEventListener('pointercancel', onRelease, true);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+      annotationPointerRef.current = false;
+      annotationPointerIdRef.current = null;
+      publishOwnership(false);
+    };
+  }, [publishOwnership]);
+
   useEffect(() => { 
     activeModeRef.current = activeMode; 
     if (calculateMeasurementRef.current) {
@@ -394,6 +480,11 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
         if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
         readerRef.current?.abort();
         pendingTimerRef.current = null;
+        recoveryRequiredRef.current = false;
+        setRecoveryRequired(false);
+        setStorageError(null);
+        gestureBeforeRef.current = null;
+        pointerGestureRef.current = false;
         history.reset(emptyDrawingDocument());
         // Deletion in another tab clears private UI and session history as well.
         if (!restoreDocument(emptyDrawingDocument())) {
@@ -548,8 +639,17 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     if (persistentFeaturesRef.current.length > 0) {
       try {
         replaceDrawFeatures(draw, persistentFeaturesRef.current);
-      } catch (err) {
-        console.warn("Failed to restore TerraDraw features:", err);
+      } catch {
+        recoveryRequiredRef.current = true;
+        persistentFeaturesRef.current = [];
+        history.reset(drawingDocument([], textAnnotationsRef.current));
+        // Protect writes synchronously, then report the external adapter failure after initialization.
+        queueMicrotask(() => {
+          if (!mountedRef.current || !recoveryRequiredRef.current) return;
+          setRecoveryRequired(true);
+          setStorageError('Saved drawings could not be restored. The saved copy is protected; new edits stay in this session.');
+          refreshHistory(version => version + 1);
+        });
       }
     }
     
@@ -730,26 +830,55 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     draw.on('finish', handleFinish);
 
     const canvas = map.getCanvas();
+    let gesturePointerId: number | undefined | null = null;
     const pointerDown = (event: PointerEvent) => {
-      if (!isOpenRef.current || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      if (!isOpenRef.current || event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
       flushPending();
+      gestureBeforeRef.current = captureDocument();
+      gesturePointerId = event.pointerId;
       pointerGestureRef.current = true;
+      publishOwnership(toolOwnershipRef.current);
       canvas.focus();
     };
     let releaseTimer: ReturnType<typeof setTimeout> | null = null;
-    const pointerUp = () => {
-      if (!pointerGestureRef.current) return;
+    const pointerUp = (event?: PointerEvent) => {
+      if (!pointerGestureRef.current || (event && event.pointerId !== gesturePointerId)) return;
       // Adapter drag-end runs after capture listeners; capture the completed document afterward.
       if (releaseTimer !== null) clearTimeout(releaseTimer);
       releaseTimer = setTimeout(() => {
         releaseTimer = null;
         pointerGestureRef.current = false;
-        if (!draw.getSnapshot().some(feature => feature.properties.currentlyDrawing)) commitOperation('Draw or edit');
+        gesturePointerId = null;
+        gestureBeforeRef.current = null;
+        // Text placement remains pending until its initial edit finishes or is abandoned.
+        if (activeModeRef.current !== 'text' && !draw.getSnapshot().some(feature => feature.properties.currentlyDrawing)) commitOperation('Draw or edit');
       }, 0);
+    };
+    const interruptGesture = (event: Event) => {
+      if ('pointerId' in event && event.pointerId !== gesturePointerId) return;
+      if (!pointerGestureRef.current || releaseTimer !== null) return;
+      if (activeModeRef.current === 'eraser') { pointerUp(); return; }
+      const before = gestureBeforeRef.current;
+      if (!before) return;
+      suppressHistoryRef.current = true;
+      try {
+        replaceDrawFeatures(draw, before.drawFeatures);
+        persistentFeaturesRef.current = structuredClone(before.drawFeatures);
+        const mode = isOpenRef.current ? activeModeRef.current : 'static';
+        draw.setMode(mode === 'text' ? 'static' : mode);
+        clearSelection();
+      } finally {
+        suppressHistoryRef.current = false;
+        gestureBeforeRef.current = null;
+        gesturePointerId = null;
+        pointerGestureRef.current = false;
+      }
     };
     canvas.addEventListener('pointerdown', pointerDown, true);
     window.addEventListener('pointerup', pointerUp, true);
-    window.addEventListener('pointercancel', pointerUp, true);
+    window.addEventListener('pointercancel', interruptGesture, true);
+    canvas.addEventListener('lostpointercapture', interruptGesture, true);
+    window.addEventListener('blur', interruptGesture);
 
     draw.on('change', handleChange);
     const handleSelect = (id: string | number) => {
@@ -795,11 +924,18 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
         if (measurementTimer !== null) clearTimeout(measurementTimer);
         canvas.removeEventListener('pointerdown', pointerDown, true);
         window.removeEventListener('pointerup', pointerUp, true);
-        window.removeEventListener('pointercancel', pointerUp, true);
+        window.removeEventListener('pointercancel', interruptGesture, true);
+        canvas.removeEventListener('lostpointercapture', interruptGesture, true);
+        window.removeEventListener('blur', interruptGesture);
         if (releaseTimer !== null) clearTimeout(releaseTimer);
+        // Recovery cancels an interrupted shape gesture to its saved/history before-state.
+        // A finished gesture whose release is awaiting the adapter is canceled consistently too.
+        const before = gestureBeforeRef.current;
+        persistentFeaturesRef.current = pointerGestureRef.current && before
+          ? structuredClone(before.drawFeatures) : drawingDocument(draw.getSnapshot(), []).drawFeatures;
+        gestureBeforeRef.current = null;
         pointerGestureRef.current = false;
         if (mountedRef.current) clearSelection();
-        persistentFeaturesRef.current = drawingDocument(draw.getSnapshot(), []).drawFeatures;
         calculateMeasurementRef.current = null;
         if (drawRef.current) {
           stopTerraDrawSafely(drawRef.current, instance);
@@ -810,7 +946,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
         console.warn("MapDrawTools cleanup error suppressed:", err);
       }
     };
-  }, [mapReady, mapRef, commitOperation, flushPending, clearSelection]);
+  }, [mapReady, mapRef, commitOperation, flushPending, clearSelection, captureDocument, history, publishOwnership]);
 
   // Unified Pointer-based Eraser handler for drag-to-erase (desktop and mobile)
   useEffect(() => {
@@ -818,7 +954,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     const map = mapRef.current;
     const canvas = map.getCanvas();
 
-    let isPointerErasing = false;
+    let erasingPointerId: number | null = null;
 
     const eraseAtScreenPoint = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
@@ -899,7 +1035,8 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return; // Left click only for mouse
-      isPointerErasing = true;
+      if (erasingPointerId !== null || e.isPrimary === false) return;
+      erasingPointerId = e.pointerId;
       
       // Prevent map dragging during erasing gestures
       map.dragPan.disable();
@@ -910,24 +1047,30 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!isPointerErasing) return;
+      if (erasingPointerId !== e.pointerId || (e.pointerType === 'mouse' && !(e.buttons & 1))) return;
       eraseAtScreenPoint(e.clientX, e.clientY);
     };
 
-    const onPointerUp = () => {
-      isPointerErasing = false;
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerId === erasingPointerId) erasingPointerId = null;
     };
+    const onBlur = () => { erasingPointerId = null; };
 
     canvas.addEventListener('pointerdown', onPointerDown, { capture: true, passive: false });
     canvas.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
-    canvas.addEventListener('pointerup', onPointerUp, { capture: true });
-    canvas.addEventListener('pointercancel', onPointerUp, { capture: true });
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerUp, true);
+    canvas.addEventListener('lostpointercapture', onPointerUp, true);
+    window.addEventListener('blur', onBlur);
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown, true);
       canvas.removeEventListener('pointermove', onPointerMove, true);
-      canvas.removeEventListener('pointerup', onPointerUp, true);
-      canvas.removeEventListener('pointercancel', onPointerUp, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+      window.removeEventListener('pointercancel', onPointerUp, true);
+      canvas.removeEventListener('lostpointercapture', onPointerUp, true);
+      window.removeEventListener('blur', onBlur);
+      erasingPointerId = null;
     };
   }, [activeMode, isOpen, mapReady, mapRef]);
 
@@ -939,6 +1082,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
       if (textModeRef.current) {
         flushPending();
         const id = newDrawingId();
+        pendingTextCreationRef.current = id;
         const next = [...textAnnotationsRef.current, { id,
           lngLat: [e.lngLat.lng, e.lngLat.lat] as [number, number], text: '', initialZoom: map.getZoom() }];
         textAnnotationsRef.current = next;
@@ -1118,6 +1262,29 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
       if (imported) setLegacyAvailable(false);
     } catch (error) { setImportError(error instanceof Error ? error.message : 'Device drawings could not be imported.'); }
   };
+  const downloadProtectedCopy = () => {
+    if (!ownerId) return;
+    try {
+      const raw = localStorage.getItem(drawingStorageKey(ownerId));
+      if (raw === null) return;
+      const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'seraphim-drawings-recovery.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch { setStorageError('The protected saved copy could not be downloaded. It has been left untouched.'); }
+  };
+  const replaceProtectedCopy = () => {
+    flushPending();
+    const document = captureDocument();
+    const error = document.drawFeatures.length || document.textAnnotations.length
+      ? persistDrawState(document.drawFeatures, document.textAnnotations, ownerId) : clearPersistedDrawState(ownerId);
+    if (error) { setStorageError(error); return; }
+    recoveryRequiredRef.current = false;
+    setRecoveryRequired(false);
+    setStorageError(null);
+  };
   const selectText = (id: string) => {
     if (selectedIdRef.current !== id) flushPending();
     // Deselecting a shape only changes presentation.
@@ -1136,6 +1303,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     saveDocument(captureDocument());
   };
   const finishTextEdit = (id: string) => {
+    if (pendingTextCreationRef.current === id) pendingTextCreationRef.current = null;
     const annotation = textAnnotationsRef.current.find(annotation => annotation.id === id);
     if (annotation?.text.trim() === '') {
       textAnnotationsRef.current = textAnnotationsRef.current.filter(annotation => annotation.id !== id);
@@ -1179,8 +1347,19 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
 
   const isCustomColorActive = !COLORS.some((color) => color.toLowerCase() === activeColor.toLowerCase());
 
+  const storageStatus = storageError && <div className={isOpen ? styles.inlineStorageStatus : styles.storageStatus} data-drawing-status role="alert">
+        <p>{storageError}</p>
+        {recoveryRequired && <>
+          <p>The saved copy stays protected until you explicitly replace it. New edits stay in this session.</p>
+          <div className={styles.recoveryActions}>
+            <button type="button" onClick={downloadProtectedCopy} title="Download the protected original drawing document">Download saved copy</button>
+            <button type="button" onClick={replaceProtectedCopy} disabled={!mapReady} title="Explicitly replace the protected saved copy with the drawings currently on the map">Save current drawings instead</button>
+          </div>
+        </>}
+      </div>;
   return (
     <>
+      {!isOpen && storageStatus}
       {isOpen && (
         <div 
           ref={wrapperRef}
@@ -1252,10 +1431,10 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
               <DrawingActionButton className={`${styles.actionBtn} ${styles.danger}`} disabled={!mapReady || !(selectedFeatureId || selectedTextId)}
                 onAction={handleDeleteSelection} title="Delete selected drawing or text">Delete</DrawingActionButton>
             </div>
+            {storageStatus}
             {!isCollapsed && (
               <div className={styles.panelContent}>
                 {importError && <p role="alert">{importError}</p>}
-                {storageError && <p role="alert">{storageError}</p>}
                 {legacyAvailable && <div className={styles.storageNotice}>
                   <p>Device drawings from an earlier version are available. Import a copy into this account.</p>
                   <button className={styles.actionBtn} onClick={importLegacy} disabled={!mapReady} title="Import a copy of legacy device drawings into this account">Import device drawings</button>

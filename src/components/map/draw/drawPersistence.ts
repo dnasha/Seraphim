@@ -44,6 +44,11 @@ function validateDocument(value: unknown, version: number): PersistedDrawState {
   if (document.drawFeatures.some(feature => !modes.has(String(feature.properties?.mode)))) {
     throw new Error('Unsupported drawing mode.');
   }
+  if (document.drawFeatures.some(feature => feature.geometry.type !==
+    (feature.properties.mode === 'point' ? 'Point' :
+      ['linestring', 'freehand-linestring'].includes(String(feature.properties.mode)) ? 'LineString' : 'Polygon'))) {
+    throw new Error('Drawing mode does not match its geometry.');
+  }
   return { version, ...document };
 }
 

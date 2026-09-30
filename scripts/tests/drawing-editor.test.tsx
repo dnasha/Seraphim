@@ -144,4 +144,90 @@ describe('real TerraDraw editor lifecycle', () => {
     view.rerender(<MapDrawTools {...props} ownerId={null} userTier="guest" />);
     expect(localStorage.getItem(DRAW_STORAGE_KEY)).not.toBeNull();
   });
+  it('keeps pointer-created text and initial typing in one operation and abandons empty creation without history', async () => {
+    const map = makeMap(); render(<MapDrawTools mapRef={map.mapRef} mapReady isOpen userTier="analyst" ownerId="a" />);
+    await advance(); click('Text');
+    const place = async () => {
+      fireEvent.pointerDown(map.canvas); fireEvent.pointerUp(map.canvas);
+      act(() => map.events.get('click')?.({ lngLat: { lng: 10, lat: 20 } }));
+      await advance(40);
+      return screen.getByTitle('Edit the text annotation');
+    };
+    const empty = await place(); fireEvent.blur(empty);
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveProperty('disabled', true);
+    const input = await place(); fireEvent.change(input, { target: { value: 'Initial text' } }); fireEvent.blur(input);
+    click('Undo'); expect(screen.queryByTitle('Edit the text annotation')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveProperty('disabled', true);
+    click('Redo'); expect(screen.getByTitle('Edit the text annotation')).toHaveProperty('value', 'Initial text');
+  });
+  it('protects unreadable and engine-rejected saved copies throughout local edits and clear', async () => {
+    for (const raw of ['broken JSON', JSON.stringify({ version: 2, drawFeatures: [{ type: 'Feature',
+      id: '11111111-1111-4111-8111-111111111111', properties: { mode: 'circle' },
+      geometry: { type: 'Polygon', coordinates: [[[0, 0], [10, 10], [0, 10], [10, 0], [0, 0]]] } }], textAnnotations: [] })]) {
+      const map = makeMap(); localStorage.setItem(drawingStorageKey('a'), raw);
+      const view = render(<MapDrawTools mapRef={map.mapRef} mapReady isOpen userTier="analyst" ownerId="a" />);
+      await advance();
+      expect(screen.getByRole('alert').textContent).toMatch(/protected|untouched/);
+      click('Pin'); act(() => currentAdapter().callbacks.onClick(mouse(10, 20)));
+      expect(localStorage.getItem(drawingStorageKey('a'))).toBe(raw);
+      click('Clear'); expect(localStorage.getItem(drawingStorageKey('a'))).toBe(raw);
+      click('Pin'); act(() => currentAdapter().callbacks.onClick(mouse(10, 20)));
+      click('Save current drawings instead');
+      expect(localStorage.getItem(drawingStorageKey('a'))).not.toBe(raw);
+      expect(screen.queryByRole('alert')).toBeNull();
+      view.unmount();
+    }
+  });
+  it('cancels an interrupted drag during map recovery consistently with current storage and history', async () => {
+    const map = makeMap(); const props = { mapRef: map.mapRef, mapReady: true, isOpen: true, userTier: 'analyst' as const, ownerId: 'a' };
+    const view = render(<MapDrawTools {...props} />);
+    click('Pin'); act(() => currentAdapter().callbacks.onClick(mouse(10, 20))); const initial = documentState();
+    const saved = localStorage.getItem(drawingStorageKey('a'));
+    click('Select'); act(() => currentDraw().selectFeature(initial.drawFeatures[0].id!));
+    fireEvent.pointerDown(map.canvas);
+    act(() => currentAdapter().callbacks.onDragStart(mouse(10, 20), () => {}));
+    act(() => currentAdapter().callbacks.onDrag(mouse(20, 20), () => {}));
+    expect(documentState()).not.toEqual(initial);
+    view.rerender(<MapDrawTools {...props} mapReady={false} />);
+    view.rerender(<MapDrawTools {...props} />); await advance(100);
+    expect(documentState()).toEqual(initial); expect(localStorage.getItem(drawingStorageKey('a'))).toBe(saved);
+    click('Undo'); expect(documentState().drawFeatures).toHaveLength(0);
+    click('Redo'); expect(documentState()).toEqual(initial);
+  });
+  it('ends erasing globally before hover and commits one coherent undo transaction', async () => {
+    const map = makeMap(); render(<MapDrawTools mapRef={map.mapRef} mapReady isOpen userTier="analyst" ownerId="a" />);
+    click('Pin'); act(() => currentAdapter().callbacks.onClick(mouse(10, 20)));
+    act(() => currentAdapter().callbacks.onClick(mouse(30, 20))); const initial = documentState();
+    const rendered = (id: string | number | undefined) => [{ properties: { id }, layer: { id: 'experiment-drawing-history-point' } }] as unknown as maplibregl.MapGeoJSONFeature[];
+    const query = vi.spyOn(map.mapRef.current, 'queryRenderedFeatures').mockReturnValue(rendered(initial.drawFeatures[0].id));
+    const pointer = (target: HTMLElement, type: string, buttons: number, pointerId = 1) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { pointerType: 'mouse', pointerId, isPrimary: pointerId === 1, button: 0, buttons, clientX: 100, clientY: 100 });
+      fireEvent(target, event);
+    };
+    click('Eraser'); pointer(map.canvas, 'pointerdown', 1);
+    pointer(map.canvas, 'pointercancel', 0, 2);
+    pointer(map.canvas, 'pointerup', 0, 2); await advance();
+    expect(JSON.parse(localStorage.getItem(drawingStorageKey('a'))!).drawFeatures).toEqual(initial.drawFeatures);
+    pointer(screen.getByRole('button', { name: 'Undo' }), 'pointerup', 0); await advance();
+    expect(documentState().drawFeatures).toHaveLength(1);
+    query.mockReturnValue(rendered(initial.drawFeatures[1].id)); pointer(map.canvas, 'pointermove', 0);
+    expect(documentState().drawFeatures).toHaveLength(1);
+    click('Undo'); expect(documentState()).toEqual(initial);
+    expect(JSON.parse(localStorage.getItem(drawingStorageKey('a'))!).drawFeatures).toEqual(initial.drawFeatures);
+  });
+  it('publishes ownership for click tools, selection and annotation gestures and clears it on close/recovery/unmount', async () => {
+    const map = makeMap(); const ownership = vi.fn();
+    const props = { mapRef: map.mapRef, mapReady: true, isOpen: true, userTier: 'analyst' as const, ownerId: 'a', onInteractionOwnershipChange: ownership };
+    const view = render(<MapDrawTools {...props} />); expect(ownership).toHaveBeenLastCalledWith(false);
+    for (const mode of ['Pin', 'Area', 'Ruler', 'Select', 'Text']) { click(mode); expect(ownership).toHaveBeenLastCalledWith(true); }
+    await advance(); act(() => map.events.get('click')?.({ lngLat: { lng: 10, lat: 20 } })); await advance(40);
+    const text = screen.getByTitle('Edit the text annotation'); fireEvent.change(text, { target: { value: 'Existing text' } }); fireEvent.blur(text);
+    view.rerender(<MapDrawTools {...props} isOpen={false} />); expect(ownership).toHaveBeenLastCalledWith(false);
+    fireEvent.pointerDown(text); expect(ownership).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerUp(text); await advance(); expect(ownership).toHaveBeenLastCalledWith(false);
+    view.rerender(<MapDrawTools {...props} />); expect(ownership).toHaveBeenLastCalledWith(true);
+    view.rerender(<MapDrawTools {...props} mapReady={false} />); expect(ownership).toHaveBeenLastCalledWith(false);
+    view.unmount(); expect(ownership).toHaveBeenLastCalledWith(false);
+  });
 });

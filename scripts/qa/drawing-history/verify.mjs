@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { verifyRegressions } from './regressions.mjs';
 const require = createRequire(resolve(process.env.DRAWING_QA_PACKAGE_ROOT ?? '.', 'package.json'));
 const { chromium, expect } = require('@playwright/test');
 const artifactDir = resolve(process.env.DRAWING_QA_ARTIFACTS ?? 'artifacts/drawing-history');
@@ -9,11 +10,12 @@ await mkdir(artifactDir, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium', args: ['--no-sandbox'] });
 const baseUrl = process.env.DRAWING_QA_URL ?? 'http://127.0.0.1:4175';
 const results = [];
-async function scenario(name, options, run) {
+async function scenario(name, options, run, initializeContext) {
   const context = await browser.newContext(options);
   // Fixture uses real MapLibre/TerraDraw with a blank style and no external services.
   await context.route('**/*', route => new URL(route.request().url()).origin === new URL(baseUrl).origin
     ? route.continue() : route.abort());
+  if (initializeContext) await initializeContext(context);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -197,5 +199,6 @@ try {
     await expect.poll(async () => (await state()).drawFeatures.length).toBe(1);
     await button('Undo').tap(); await expect.poll(async () => (await state()).drawFeatures.length).toBe(2);
   });
+  await verifyRegressions(scenario, expect);
   console.log(JSON.stringify({ results, artifactDir }, null, 2));
 } finally { await browser.close(); }

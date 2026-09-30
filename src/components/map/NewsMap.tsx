@@ -147,6 +147,10 @@ export default function NewsMap({
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  const drawingOwnsMapPointerRef = useRef(false);
+  const handleDrawingOwnershipChange = useCallback((ownsMapPointer: boolean) => {
+    drawingOwnsMapPointerRef.current = ownsMapPointer;
+  }, []);
   // Restore saved annotations on navigation; otherwise download the drawing
   // engine only after the user first opens its tools. Keep it mounted thereafter.
   const [drawToolsRequested, setDrawToolsRequested] = useState(() => hasSavedDrawings(preferenceOwnerId) || hasSavedDrawings());
@@ -694,18 +698,21 @@ export default function NewsMap({
           eventsWired = true;
 
           map.on("click", "unclustered-point", (e) => {
+            if (drawingOwnsMapPointerRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
               );
           });
           map.on("click", "unclustered-point-active", (e) => {
+            if (drawingOwnsMapPointerRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
               );
           });
           map.on("click", "selected-point-active", (e) => {
+            if (drawingOwnsMapPointerRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
@@ -713,6 +720,7 @@ export default function NewsMap({
           });
 
           map.on("click", "clusters-circle", async (e) => {
+            if (drawingOwnsMapPointerRef.current) return;
             const features = map.queryRenderedFeatures(e.point, {
               layers: ["clusters-circle"],
             });
@@ -724,6 +732,7 @@ export default function NewsMap({
                 "news-events",
               ) as maplibregl.GeoJSONSource;
               const zoom = await source.getClusterExpansionZoom(clusterId);
+              if (drawingOwnsMapPointerRef.current) return;
               map.flyTo({
                 center:
                   features[0].geometry.type === "Point"
@@ -1235,6 +1244,7 @@ export default function NewsMap({
             isOpen={drawToolsOpen}
             userTier={userTier}
             ownerId={preferenceOwnerId}
+            onInteractionOwnershipChange={handleDrawingOwnershipChange}
             onClose={() => setDrawToolsOpen(false)}
           />}
         </>
