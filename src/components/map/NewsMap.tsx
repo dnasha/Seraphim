@@ -42,11 +42,14 @@ import styles from "./NewsMap.module.css";
 import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/entitlements';
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 import type { MapLoadState } from '@/components/layout/StartupGate';
+import { useCheckpointMapLayer } from '@/components/regions/useCheckpointMapLayer';
+import type { RegionSpec } from '@/lib/regions/geometry';
 import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
+  checkpointRegion?: RegionSpec | null;
   dataReady?: boolean;
   onLoadStateChange?: (state: MapLoadState) => void;
   items: NewsItem[];
@@ -113,6 +116,7 @@ function isRecoverableMapResourceError(errorMsg: string) {
 }
 
 export default function NewsMap({
+  checkpointRegion = null,
   dataReady = true,
   onLoadStateChange,
   items,
@@ -141,6 +145,7 @@ export default function NewsMap({
   const mapTilerLogoRef = useRef<HTMLAnchorElement | null>(null);
   const suppressPopupCloseRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
+  useCheckpointMapLayer(mapRef, mapReady, checkpointRegion);
   const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [isRetryingMap, setIsRetryingMap] = useState(false);
