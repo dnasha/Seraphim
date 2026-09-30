@@ -14,6 +14,7 @@ type Harness = {
     sources: Map<string, { data: GeoJSON.FeatureCollection; setData: ReturnType<typeof vi.fn> }>;
     setStyle: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>;
     queryRenderedFeatures: ReturnType<typeof vi.fn>;
+    flyTo: ReturnType<typeof vi.fn>;
 };
 const mocks = vi.hoisted(() => ({ maps: [] as Harness[], pulseStart: vi.fn(), pulseStop: vi.fn(), pulseDispose: vi.fn(), drawingOwnership: undefined as ((owned: boolean) => void) | undefined }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -55,6 +56,7 @@ vi.mock('maplibre-gl', () => ({
         setPaintProperty() {} addControl() {} resize() {} triggerRepaint() {}
         setStyle = vi.fn(() => { this.layers.clear(); this.sources.clear(); });
         remove = vi.fn(); queryRenderedFeatures = vi.fn(() => []);
+        flyTo = vi.fn();
         getBounds() { return { getSouth: () => -90, getNorth: () => 90, getWest: () => -180, getEast: () => 180 }; }
         getCenter() { return { lat: 30, lng: 10 }; } getZoom() { return 4; }
         getCanvas() { return { style: { cursor: '' } }; }
@@ -164,6 +166,27 @@ describe('heatmap integrated with NewsMap and Settings', () => {
         rerender(<NewsMap {...defaults} items={[]} preferenceOwnerId="account-b" />);
         expect(latest().sources.has(ACTIVITY_SOURCE)).toBe(false);
         expect(screen.queryByLabelText('Activity density legend')).toBeNull();
+    });
+    it('blocks every pin/cluster story interaction when drawing owns the pointer with heatmap off', async () => {
+        localStorage.setItem(DRAW_STORAGE_KEY, '{"version":1,"drawFeatures":[],"textAnnotations":[]}');
+        const { rerender } = render(<NewsMap {...defaults} presentationOnly />);
+        await advance(); await load();
+        const payload = { point: { x: 30, y: 30 }, features: [dot('fixture-3')] };
+        const clickAll = () => {
+            for (const layer of ['unclustered-point', 'unclustered-point-active', 'selected-point-active', 'clusters-circle']) latest().emit(`click:${layer}`, payload);
+        };
+        act(() => mocks.drawingOwnership!(true));
+        act(clickAll);
+        expect(defaults.onSelectItem).not.toHaveBeenCalled();
+        expect(latest().queryRenderedFeatures).not.toHaveBeenCalled();
+        expect(latest().flyTo).not.toHaveBeenCalled();
+        rerender(<NewsMap {...defaults} presentationOnly isDarkMode />);
+        await advance(20); await load();
+        act(clickAll);
+        expect(defaults.onSelectItem).not.toHaveBeenCalled();
+        act(() => mocks.drawingOwnership!(false));
+        act(() => latest().emit('click:selected-point-active', payload));
+        expect(defaults.onSelectItem).toHaveBeenCalledExactlyOnceWith('fixture-3');
     });
 });
 

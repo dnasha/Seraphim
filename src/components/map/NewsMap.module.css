@@ -205,7 +205,7 @@
   flex-direction: column;
   width: 500px;
   /* Include the popup border and tip in the 16px viewport gutters. */
-  max-height: min(720px, calc(100dvh - 44px));
+  max-height: min(720px, calc(100dvh - 44px), calc(var(--map-available-height, 100dvh) - 44px));
   background: var(--surface);
   position: relative;
 }
@@ -690,7 +690,7 @@
     max-width: none;
     height: 60dvh;
     /* Keep the selected pin visible above the sheet, including in landscape. */
-    max-height: max(120px, calc(100dvh - var(--mobile-nav-height, 0px) - 176px));
+    max-height: min(max(120px, calc(100dvh - var(--mobile-nav-height, 0px) - 176px)), calc(var(--map-available-height, 100dvh) - 20px));
   }
 
   .mapWrapper :global(.news-popup-img-container) {
@@ -711,4 +711,3 @@
   color: var(--text-secondary);
   font-size: 0.76rem;
 }
-

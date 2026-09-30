@@ -653,7 +653,8 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 </main>
             </div>
 
-            <ReplayTimeline replay={replay} tier={effectiveUserTier} resolving={authLoading || tierLoading} />
+            <ReplayTimeline replay={replay} tier={effectiveUserTier} resolving={authLoading || tierLoading}
+                liveError={error} liveLoading={isLoading} onRetryLive={() => fetchNews(true)} onDismissLiveError={dismissError} />
 
             <nav className={styles.mobileNavigation} aria-label="Mobile views">
                 <button
@@ -688,7 +689,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 onPreferencesChange={updatePreferences}
             />
 
-            {error && (
+            {error && !replay.state && (
                 <StateNotice
                     placement="floating"
                     variant="error"

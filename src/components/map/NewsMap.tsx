@@ -826,6 +826,12 @@ export default function NewsMap({
     // Use ResizeObserver for synchronous layout synchronization.
     // This prevents the common visual lag between the DOM container and the WebGL canvas during sidebar transitions.
     const resizeObserver = new ResizeObserver(() => {
+      // Replay and mobile panels reduce the map independently of the viewport.
+      // Keep popup headers/close controls inside that actual available height.
+      const container = containerRef.current;
+      if (container?.parentElement) {
+        container.parentElement.style.setProperty('--map-available-height', `${container.clientHeight}px`);
+      }
       isResizingRef.current = true;
       if (resizeEndTimeoutRef.current)
         clearTimeout(resizeEndTimeoutRef.current);

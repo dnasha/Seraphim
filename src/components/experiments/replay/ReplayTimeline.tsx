@@ -85,7 +85,10 @@ function ReplayControls({ replay, tier }: { replay: Replay; tier: UserTier }) {
     </>;
 }
 
-export default function ReplayTimeline({ replay, tier, resolving }: { replay: Replay; tier: UserTier; resolving: boolean }) {
+export default function ReplayTimeline({ replay, tier, resolving, liveError, liveLoading = false, onRetryLive, onDismissLiveError }: {
+    replay: Replay; tier: UserTier; resolving: boolean; liveError?: string | null; liveLoading?: boolean;
+    onRetryLive?: () => void; onDismissLiveError?: () => void;
+}) {
     const permitted = !resolving && hasFeature(tier, 'fullTimeline');
     const reasonId = useId();
     const captureReason = resolving ? 'Wait for account access to finish loading.' : replay.captureDisabledReason;
@@ -99,6 +102,11 @@ export default function ReplayTimeline({ replay, tier, resolving }: { replay: Re
         </div>
         {captureReason && <p id={reasonId} role="status" className={styles.captureReason}>{captureReason}</p>}
         {replay.state && <div className={styles.body}>
+            {liveError && <div role="status" className={styles.warning}>
+                <p>Live update unavailable: {liveError} Frozen replay remains available.</p>
+                {onRetryLive && <button type="button" title="Retry the live feed without replacing the frozen snapshot" onClick={onRetryLive} disabled={liveLoading}>Retry live update</button>}
+                {onDismissLiveError && <button type="button" title="Dismiss the live feed error without changing replay" onClick={onDismissLiveError}>Dismiss live update error</button>}
+            </div>}
             {replay.state.snapshot.isCapped && <p className={styles.warning}>Capped coverage{replay.state.snapshot.appliedLimit ? ` (limit ${replay.state.snapshot.appliedLimit})` : ''}: replay and comparisons may omit represented events and reporting activity.</p>}
             {replay.state.snapshot.clustered && <p className={styles.warning}>Spatial cluster representatives are shown; hidden cluster members have no individual replay history here.</p>}
             {!replay.state.snapshot.entries.length && <p role="status">No dated activity in this loaded view. Return live to adjust coverage, then freeze again.</p>}

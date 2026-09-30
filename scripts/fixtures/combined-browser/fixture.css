@@ -1,0 +1,4 @@
+body { --font-ui: Arial, sans-serif; --font-news: Georgia, serif; --font-logo: Arial, sans-serif; }
+.fixture-switches { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 1001; max-width: 55vw; padding: 4px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: 10px; }
+.fixture-switches summary { cursor: pointer; }
+.fixture-switches button { display: block; padding: 4px; width: 100%; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); }
