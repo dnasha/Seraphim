@@ -47,6 +47,17 @@ describe("GET /api/news/[id]", () => {
     mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: { timelineSourceLimit: null } });
   });
 
+  it.each(['guest', 'free', 'pro', 'analyst', 'angel'])('adds evidence capture authorization for %s without loosening source gates', async (tier) => {
+    const { getEntitlements } = await import('@/lib/entitlements');
+    mocks.resolveEntitlements.mockResolvedValue({ tier, userId: tier === 'guest' ? null : `evidence-${tier}`, entitlements: getEntitlements(tier as import('@/lib/entitlements').UserTier) });
+    const id = '77777777-7777-4777-8777-777777777777';
+    mocks.from.mockReturnValue(detailQuery({ id, title: 'Evidence', source: 'Primary', source_type: 'rss', url: 'https://example.invalid', published_at: '2026-09-30', sources: [] }));
+    const result = await GET(new Request(`https://seraphim.example/api/news/${id}?evidence=true`, { headers: { 'x-vercel-forwarded-for': '198.51.100.80' } }), params(id));
+    const expected = tier === 'guest' ? 401 : tier === 'analyst' || tier === 'angel' ? 200 : 403;
+    expect(result.status).toBe(expected);
+    if (expected !== 200) expect(mocks.from).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed IDs without querying Supabase", async () => {
     const response = await GET(new Request("https://seraphim.example/api/news/not-a-uuid"), params("not-a-uuid"));
 

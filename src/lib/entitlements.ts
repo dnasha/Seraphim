@@ -20,7 +20,8 @@ export type EntitlementFeature =
   | 'globe'
   | 'proOverlays'
   | 'analystOverlays'
-  | 'individualPins';
+  | 'individualPins'
+  | 'evidenceExport';
 
 export interface TierEntitlements {
   tier: UserTier;
@@ -45,6 +46,7 @@ const GUEST_FEATURES: Record<EntitlementFeature, boolean> = {
   proOverlays: false,
   analystOverlays: false,
   individualPins: false,
+  evidenceExport: false,
 };
 
 const FREE_FEATURES: Record<EntitlementFeature, boolean> = {
@@ -69,6 +71,7 @@ const ANALYST_FEATURES: Record<EntitlementFeature, boolean> = {
   geoJsonTransfer: true,
   analystOverlays: true,
   individualPins: true,
+  evidenceExport: true,
 };
 
 export const TIER_ENTITLEMENTS: Readonly<Record<UserTier, TierEntitlements>> = {

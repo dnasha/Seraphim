@@ -126,6 +126,13 @@ export async function GET(
     }
 
     const access = await resolveRequestEntitlements();
+    // Additive experiment gate; ordinary exact shared links keep their existing access.
+    if (new URL(request.url).searchParams.get('evidence') === 'true' &&
+        (!access.userId || !access.entitlements.features.evidenceExport)) {
+        return NextResponse.json({ error: 'Evidence capture requires Analyst or Angel' }, {
+            status: access.userId ? 403 : 401, headers: PRIVATE_HEADERS,
+        });
+    }
     const clientIp = getTrustedClientIp(request.headers);
     if (!clientIp) {
         return NextResponse.json(

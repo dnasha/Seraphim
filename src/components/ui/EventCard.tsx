@@ -8,6 +8,7 @@
 import { NewsItem } from "@/lib/core/types";
 import { formatTimeAgo } from "@/lib/utils/time";
 import { getCredibilityStyle, CATEGORY_COLORS, getSourceStyle } from "@/lib/styles/colors";
+import { EvidenceSelectionControl } from "@/components/analyst/AnalystWorkspace";
 import { canonicalEventCount } from "@/lib/utils/ranking";
 import styles from "./EventSidebar.module.css";
 import React from "react";
@@ -25,6 +26,9 @@ interface EventCardProps {
   isExpanded: boolean;
   onCardClick: (item: NewsItem) => void;
   userTier: UserTier;
+  evidenceSelected?: boolean;
+  evidenceBusy?: boolean;
+  onToggleEvidence?: (item: NewsItem) => void;
 }
 
 export default function EventCard({
@@ -34,6 +38,9 @@ export default function EventCard({
   isExpanded,
   onCardClick,
   userTier,
+  evidenceSelected = false,
+  evidenceBusy = false,
+  onToggleEvidence,
 }: EventCardProps) {
   const catColor = CATEGORY_COLORS[item.category || "general"] || CATEGORY_COLORS.general;
   const credStyle = getCredibilityStyle(item.credibilityTier);
@@ -363,6 +370,9 @@ export default function EventCard({
           </div>
         )}
       </div>
+      {onToggleEvidence && <EvidenceSelectionControl title={item.title} selected={evidenceSelected}
+        representative={Boolean(item.originalId && item.originalId !== item.id) || (item.storyCount ?? 1) > 1}
+        disabled={evidenceBusy} onToggle={() => onToggleEvidence(item)} />}
     </div>
   );
 }
