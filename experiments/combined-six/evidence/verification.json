@@ -1,6 +1,6 @@
 {
   "date": "2026-09-30",
-  "status": "Implementation verified; separate final Astra combo review pending",
+  "status": "Compact repair verified; independent Astra re-review pending",
   "baseline": "4c693ccd78e7d0c26842488db77be3ae0ede0fd5",
   "approvedHeads": {
     "replay": "333413dd12e5aa1a9ba65897231d602070338874",
@@ -81,33 +81,33 @@
     "lint": "passed",
     "tests": {
       "files": 135,
-      "passed": 1275,
+      "passed": 1276,
       "todo": 1
     },
     "coverage": {
       "lines": {
         "total": 8231,
-        "covered": 7142,
+        "covered": 7148,
         "skipped": 0,
-        "pct": 86.76
+        "pct": 86.84
       },
       "statements": {
         "total": 9876,
-        "covered": 8256,
+        "covered": 8266,
         "skipped": 0,
-        "pct": 83.59
+        "pct": 83.69
       },
       "functions": {
         "total": 1655,
-        "covered": 1427,
+        "covered": 1433,
         "skipped": 0,
-        "pct": 86.22
+        "pct": 86.58
       },
       "branches": {
-        "total": 8340,
-        "covered": 6348,
+        "total": 8342,
+        "covered": 6359,
         "skipped": 0,
-        "pct": 76.11
+        "pct": 76.22
       },
       "branchesTrue": {
         "total": 0,
@@ -243,7 +243,7 @@
       },
       "compiledDashboard": true,
       "nativeWorker": {
-        "active": "http://127.0.0.1:39301/sw.js",
+        "active": "http://127.0.0.1:40183/sw.js",
         "controlled": true
       },
       "replayHeatmap": true,
@@ -273,7 +273,7 @@
       },
       "compiledDashboard": true,
       "nativeWorker": {
-        "active": "http://127.0.0.1:45045/sw.js",
+        "active": "http://127.0.0.1:45009/sw.js",
         "controlled": true
       },
       "replayHeatmap": true,
@@ -337,5 +337,38 @@
     "Live providers, Supabase policies and actual OS notification/print receipt not exercised",
     "Safari/Firefox remain unverified",
     "One inherited Vitest TODO; existing Vite/PostCSS fixture warnings"
-  ]
+  ],
+  "compactRepair": {
+    "reviewedParent": "9c70cfc647987c3415179da2f828fb8d2e9226ad",
+    "report": "compact-repair.json",
+    "viewports": [
+      {
+        "width": 480,
+        "height": 320
+      },
+      {
+        "width": 568,
+        "height": 320
+      },
+      {
+        "width": 640,
+        "height": 360
+      },
+      {
+        "width": 667,
+        "height": 375
+      },
+      {
+        "width": 844,
+        "height": 390
+      },
+      {
+        "width": 920,
+        "height": 412
+      }
+    ],
+    "regionHeightAt568x320": 232,
+    "mapHeightAt568x320": 122,
+    "realNotifications": 0
+  }
 }

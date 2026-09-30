@@ -22,5 +22,13 @@
 @media (width <= 430px) { .launcher > span:first-of-type { display: none; } }
 @media (width < 1024px) and (max-height: 500px) {
   .container { top: 12px; bottom: auto; }
-  .panel { top: 48px; bottom: auto; max-height: calc(var(--map-available-height, 100dvh) - 72px); }
+  .container:has(.panel) { z-index: 2600; }
+  .panel {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: auto;
+    width: min(430px, calc(100vw - 24px));
+    max-height: calc(100dvh - var(--mobile-nav-height, 64px) - max(12px, env(safe-area-inset-top)) - 12px);
+  }
 }

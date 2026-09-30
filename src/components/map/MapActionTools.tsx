@@ -56,6 +56,11 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
     const [showBadge, setShowBadge] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const overlayButtonRef = useRef<HTMLButtonElement>(null);
+    const closeOverlayMenu = () => {
+        setOverlayMenuOpen(false);
+        overlayButtonRef.current?.focus();
+    };
     const statusLabel = (key: string, fallback: string) => {
         const status = overlayStatuses[key] ?? 'idle';
         if (!overlays[key] || status === 'idle') return fallback;
@@ -108,8 +113,12 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
     return (
         <div className={styles.mapActionArea} ref={menuRef}>
             {overlayMenuOpen && (
-                <div className={styles.overlayMenu}>
-                    <div className={styles.menuHeader}>Live Overlays</div>
+                <div className={styles.overlayMenu} onKeyDown={event => {
+                    if (event.key === 'Escape') { event.stopPropagation(); closeOverlayMenu(); }
+                }}>
+                    <div className={styles.menuHeader}>Live Overlays
+                        <button type="button" className={styles.menuClose} aria-label="Close overlay panel" title="Close environmental overlays and return to the map controls" onClick={closeOverlayMenu}>Close</button>
+                    </div>
                     
                     <label className={styles.overlayToggle}>
                         <div className={styles.toggleLeft}>
@@ -319,6 +328,7 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
                 </GatedButton>
 
             <button
+                ref={overlayButtonRef}
                 className={`${styles.actionBtn}${overlayMenuOpen || Object.values(overlays).some(Boolean) ? ` ${styles.actionBtnActive}` : ''}`}
                 disabled={disabled && userTier !== 'guest'}
                 onClick={handleOverlayButtonClick}
@@ -336,4 +346,3 @@ const MapActionTools: React.FC<MapActionToolsProps> = ({
 };
 
 export default MapActionTools;
-

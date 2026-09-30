@@ -20,6 +20,7 @@ import {
 } from '@turf/turf';
 import styles from './MapDrawTools.module.css';
 import { hasFeature, type UserTier } from '@/lib/entitlements';
+import { COMPACT_LAYOUT_QUERY } from '@/hooks/useCompactLayout';
 import { GatedButton } from '@/components/ui/FeatureGate';
 import { DragFriendlyFreehandLineStringMode } from './draw/DragFriendlyFreehandLineStringMode';
 import { tessellateFreehandCoordinates, type FreehandCoordinate } from './draw/freehandGeometry';
@@ -266,7 +267,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 860) {
+    if (typeof window !== 'undefined' && (window.innerWidth <= 860 || window.matchMedia(COMPACT_LAYOUT_QUERY).matches)) {
       const timer = setTimeout(() => setIsCollapsed(true), 0);
       return () => clearTimeout(timer);
     }
@@ -278,7 +279,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
   const draggingRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (window.innerWidth <= 860 || e.button !== 0) return;
+    if (window.innerWidth <= 860 || window.matchMedia(COMPACT_LAYOUT_QUERY).matches || e.button !== 0) return;
 
     const target = e.target as HTMLElement;
     const isInteractive = target.closest('button, input, select, textarea, label, [role="button"]');

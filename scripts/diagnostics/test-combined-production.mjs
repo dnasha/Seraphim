@@ -6,15 +6,38 @@ import { createServer, request as httpRequest } from 'node:http';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const artifact = new URL(process.env.SERAPHIM_QA_BASE_URL || 'http://127.0.0.1:4175');
 assert(['localhost', '127.0.0.1', '[::1]'].includes(artifact.hostname), 'Loopback QA only');
-const output = 'artifacts/combined-six/served';
+const compact = process.env.SERAPHIM_QA_COMPACT === '1';
+const output = compact ? 'artifacts/combined-six/compact-repair/served' : 'artifacts/combined-six/served';
+const viewports = compact
+    ? [['small-landscape', { width: 480, height: 320 }], ['se-landscape', { width: 568, height: 320 }],
+        ['landscape-640', { width: 640, height: 360 }], ['landscape-667', { width: 667, height: 375 }],
+        ['landscape-844', { width: 844, height: 390 }], ['landscape-920', { width: 920, height: 412 }]]
+    : [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]];
+// CSS visibility alone misses clipping and another launcher's pointer interception.
+async function reachable(locator) {
+    await locator.scrollIntoViewIfNeeded();
+    const result = await locator.evaluate(el => {
+        const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return { centerHits: !!hit && el.contains(hit), rect: r.toJSON(), label: el.getAttribute('aria-label') || el.textContent };
+    });
+    assert(result.centerHits, `Control center is obscured: ${JSON.stringify(result)}`);
+    return result.rect;
+}
+async function usableSheet(locator, viewport) {
+    const rect = await locator.boundingBox();
+    assert(rect && rect.height >= 160, 'Short landscape panels need usable scroll space');
+    assert(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= viewport.width + 1);
+    assert(rect.y + rect.height <= viewport.height - 64, 'Sheet must leave mobile navigation available');
+    return rect;
+}
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
     args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
 const id = n => `22222222-2222-4222-8222-${String(n).padStart(12, '0')}`;
 const results = [], servers = [];
 try {
-    for (const [name, viewport] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
-        const mobile = name === 'mobile', user = { id: id(999), email: 'fixture@example.invalid', role: 'authenticated', aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+    for (const [name, viewport] of viewports) {
+        const mobile = compact || name === 'mobile', user = { id: id(999), email: 'fixture@example.invalid', role: 'authenticated', aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
         let now = Date.now(), tier = 'analyst', raw = [1], revision = 0;
         const published = n => new Date(now - [20, 12, 1][(n - 1) % 3] * 3_600_000).toISOString();
         const row = n => ({ id: id(n), title: `Served synthetic event ${n}`, source: 'Fixture', sourceType: 'rss',
@@ -118,19 +141,58 @@ try {
             throw error;
         });
         await p.getByRole('button', { name: 'Map settings', exact: true }).click();
+        if (compact) await usableSheet(p.locator('[class*="MapSettings_mapSettingsPanel"]'), viewport);
         await p.getByRole('button', { name: 'Satellite', exact: true }).click();
+        if (compact) await reachable(p.getByRole('switch', { name: 'Activity heatmap', exact: true }));
         await p.getByRole('switch', { name: 'Activity heatmap', exact: true }).click();
         await p.getByLabel('Activity density legend').getByText('3 displayed points', { exact: true }).waitFor();
         await p.getByRole('button', { name: 'Map settings', exact: true }).click();
         await p.getByRole('button', { name: 'Freeze loaded view', exact: true }).click();
+        let compactControls;
+        if (compact) {
+            const beforeZoom = Number(new URL(p.url()).searchParams.get('zoom'));
+            const zoomIn = await reachable(p.getByRole('button', { name: 'Zoom in', exact: true }));
+            const zoomOut = await reachable(p.getByRole('button', { name: 'Zoom out', exact: true }));
+            const canvasBounds = await p.locator('.maplibregl-canvas').boundingBox();
+            assert(zoomIn.y + zoomIn.height <= canvasBounds.y + canvasBounds.height);
+            assert(zoomOut.y + zoomOut.height <= canvasBounds.y + canvasBounds.height);
+            await p.getByRole('button', { name: 'Zoom in', exact: true }).click();
+            await p.waitForFunction(zoom => Number(new URL(location.href).searchParams.get('zoom')) > zoom + 0.9, beforeZoom);
+            await p.getByRole('button', { name: 'Zoom out', exact: true }).click();
+            await p.waitForFunction(zoom => Math.abs(Number(new URL(location.href).searchParams.get('zoom')) - zoom) < 0.02, beforeZoom);
+            const legend = p.getByLabel('Activity density legend');
+            await reachable(legend.locator('summary')); await legend.locator('summary').click();
+            const legendSheet = await usableSheet(legend, viewport);
+            await reachable(legend.getByText(/Coverage can be incomplete/));
+            await legend.locator('summary').click();
+            await p.getByRole('button', { name: 'Open environmental overlay controls', exact: true }).click();
+            const overlays = p.locator('[class*="MapActionTools_overlayMenu"]');
+            const overlaySheet = await usableSheet(overlays, viewport);
+            await reachable(overlays.getByRole('button').last());
+            await reachable(p.getByRole('button', { name: 'Close overlay panel', exact: true }));
+            await p.getByRole('button', { name: 'Close overlay panel', exact: true }).click();
+            assert(await p.getByRole('button', { name: 'Open environmental overlay controls', exact: true }).evaluate(el => el === document.activeElement));
+            await p.getByRole('button', { name: 'Open environmental overlay controls', exact: true }).click();
+            await p.getByRole('button', { name: 'Close overlay panel', exact: true }).focus();
+            await p.keyboard.press('Escape'); await overlays.waitFor({ state: 'hidden' });
+            await p.screenshot({ path: `${output}/${name}-controls.png` });
+            compactControls = { zoomIn, zoomOut, canvasBounds, legendSheet, overlaySheet };
+        }
         const slider = p.getByRole('slider', { name: 'Reporting cursor' });
         await slider.focus(); await slider.press('Home');
         await p.getByLabel('Activity density legend').getByText('No located stories in the displayed data.', { exact: true }).waitFor();
         await p.getByRole('button', { name: 'Region checkpoints', exact: true }).click();
         const region = p.getByRole('region', { name: 'Region checkpoints', exact: true });
+        if (compact) {
+            compactControls.regionSheet = await usableSheet(region, viewport);
+            await reachable(region.getByLabel('Region name', { exact: true }));
+        }
         await region.getByLabel('Region name', { exact: true }).fill(`Served ${name} region`);
+        if (compact) await reachable(region.getByRole('button', { name: 'Save viewport', exact: true }));
+        if (name === 'se-landscape') await p.screenshot({ path: `${output}/${name}-region-form.png` });
         await region.getByRole('button', { name: 'Save viewport', exact: true }).click();
         await region.getByRole('button', { name: `Served ${name} region`, exact: true }).click();
+        if (compact) await reachable(region.getByRole('button', { name: 'Check changes', exact: true }));
         await region.getByRole('button', { name: 'Check changes', exact: true }).click();
         await region.getByText(/Baseline saved/).waitFor();
         const regionKey = `seraphim:experiment:region-checkpoints:v1:${user.id}`;
@@ -138,13 +200,28 @@ try {
         assert.equal((await baseline()).events.length, 1);
         raw = [1, 2]; await region.getByRole('button', { name: 'Check changes', exact: true }).click();
         await region.getByText('Newly observed event', { exact: true }).waitFor();
+        if (compact) await reachable(region.getByRole('button', { name: 'Mark reviewed', exact: true }));
         await region.getByRole('button', { name: 'Mark reviewed', exact: true }).click();
+        if (compact) await p.screenshot({ path: `${output}/${name}-region.png` });
         const reviewed = await baseline(); assert.equal(reviewed.events.length, 2);
+        if (name === 'se-landscape') {
+            await p.setViewportSize({ width: 667, height: 375 });
+            compactControls.resizedRegionSheet = await usableSheet(region, { width: 667, height: 375 });
+            await reachable(region.getByRole('button', { name: 'Check changes', exact: true }));
+            await p.setViewportSize(viewport);
+            await reachable(region.getByRole('button', { name: 'Close region checkpoints', exact: true }));
+            assert.deepEqual(await baseline(), reviewed);
+        }
         await region.getByRole('button', { name: 'Close region checkpoints', exact: true }).click();
         await p.getByRole('button', { name: 'Watch alerts', exact: true }).click();
         const alerts = p.getByRole('region', { name: 'Watch alerts', exact: true });
+        if (compact) {
+            compactControls.alertSheet = await usableSheet(alerts, viewport);
+            await reachable(alerts.getByRole('button', { name: 'Save current viewport + filters', exact: true }));
+        }
         assert.equal(await p.evaluate(() => qa.prompts), 0);
         await alerts.getByRole('button', { name: 'Save current viewport + filters', exact: true }).click();
+        if (compact) await reachable(alerts.getByRole('button', { name: 'Enable browser notifications', exact: true }));
         await alerts.getByRole('button', { name: 'Enable browser notifications', exact: true }).click();
         const watchKey = `seraphim:experiment:browser-geofence:v1:${user.id}`;
         await p.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.watches[0]?.checkpoint?.seen.length === 2, watchKey);
@@ -173,6 +250,10 @@ try {
         await p.getByRole('button', { name: 'Close drawing tools', exact: true }).waitFor();
         if (mobile) await p.getByRole('button', { name: 'Expand panel', exact: true }).waitFor();
         if (await p.getByRole('button', { name: 'Expand panel', exact: true }).isVisible()) await p.getByRole('button', { name: 'Expand panel', exact: true }).click();
+        if (compact) {
+            compactControls.drawingSheet = await usableSheet(p.locator('[data-drawing-tools] > div').first(), viewport);
+            await reachable(p.getByRole('button', { name: 'Pin', exact: true }));
+        }
         await p.getByRole('button', { name: 'Pin', exact: true }).click();
         await p.getByRole('button', { name: 'Collapse panel', exact: true }).click();
         await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
@@ -231,7 +312,7 @@ try {
         assert.deepEqual(forbidden, []); assert.deepEqual(await activeWorker.evaluate(() => self.qaForbidden), []); assert.deepEqual(errors, []);
         const worker = await p.evaluate(async () => { const reg = await navigator.serviceWorker.getRegistration('/'); return { active: reg.active.scriptURL, controlled: !!navigator.serviceWorker.controller }; });
         assert.equal(worker.active, `${base.origin}/sw.js`); assert(worker.controlled);
-        results.push({ name, viewport, compiledDashboard: true, nativeWorker: worker, replayHeatmap: true, regionLiveDuringEmptyReplay: true,
+        results.push({ compactControls, name, viewport, compiledDashboard: true, nativeWorker: worker, replayHeatmap: true, regionLiveDuringEmptyReplay: true,
             explicitReviewedBoundary: true, alertsLiveDuringEmptyReplay: true, separateReviewAndDelivery: true, mockedPermissionClicks: 1, mockedDeliveries: 1,
             canonicalDotSelection: selected, drawingOwnership: true, undoRedoPersistence: true, frozenReplayEvidence: true, notesOptIn: true,
             nativeModalEscape: true, tierRevalidationCleanup: true, noOverflow: true, forbiddenRequests: forbidden.length, pageErrors: errors.length,
@@ -239,6 +320,12 @@ try {
         await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2));
         console.log(`${name} served six-feature checks passed`); await ctx.close();
     }
+} catch (error) {
+    for (const ctx of browser.contexts()) for (const page of ctx.pages()) {
+        await page.screenshot({ path: `${output}/failure.png` }).catch(() => {});
+        await writeFile(`${output}/failure.txt`, await page.locator('body').innerText()).catch(() => {});
+    }
+    throw error;
 } finally {
     await browser.close();
     for (const server of servers) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

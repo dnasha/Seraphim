@@ -711,3 +711,14 @@
   color: var(--text-secondary);
   font-size: 0.76rem;
 }
+
+/* Two touch-sized zoom buttons must fit even when replay leaves a shallow map. */
+@media (width < 1024px) and (max-height: 500px) {
+  .mapWrapper :global(.maplibregl-ctrl-top-right .maplibregl-ctrl-group) {
+    flex-direction: row !important;
+  }
+  .mapWrapper :global(.maplibregl-ctrl-group button) {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}

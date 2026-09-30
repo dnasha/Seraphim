@@ -1,10 +1,10 @@
 # Combined six experiment: testing guide
 
-Branch: `experiment/combined-six`. This is the seventh testing branch, built from immutable baseline `4c693ccd78e7d0c26842488db77be3ae0ede0fd5`. All six approved feature histories are preserved. Final combined Astra review is pending; this branch has no production deployment.
+Branch: `experiment/combined-six`. This is the seventh testing branch, built from immutable baseline `4c693ccd78e7d0c26842488db77be3ae0ede0fd5`. All six approved feature histories are preserved. The first combined Astra review blocked the short landscape layout; its repair is implemented and awaiting independent re-review. This branch has no production deployment.
 
 ## Where to start
 
-Open the dashboard. On compact screens, **Map** contains map tools and replay controls; **Stories** contains story selection and the evidence workspace. Switching tabs keeps replay mounted. Close a floating panel when you need the canvas underneath it. Panels scroll at small heights, and the short landscape layout places map actions in a row.
+Open the dashboard. On compact screens, **Map** contains map tools and replay controls; **Stories** contains story selection and the evidence workspace. Switching tabs keeps replay mounted. Close a floating panel or story popup when you need the canvas or another launcher underneath it. At short landscape heights, region checkpoints, watch alerts, map settings, environmental overlays, drawing tools and expanded heatmap information use scrollable sheets above the Map/Stories navigation. They can temporarily cover replay controls; closing them reveals the same frozen frame. Collapse drawing tools to leave the canvas available for the active tool. Zoom and map actions use separate horizontal rows. This behavior is verified from 480×320 through 920×412; other device/browser combinations remain unverified.
 
 | Experiment | Entry point | Access | What to try |
 | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Open the dashboard. On compact screens, **Map** contains map tools and replay co
 2. While replay is empty, check a saved region and an enabled watch. Both read independent live, unclustered scopes. Region **Mark reviewed** commits the displayed result; it does not fetch again or change the alert delivery checkpoint. **Review saved scope** in alerts does not mark a region reviewed.
 3. Return to a populated replay frame. Use Pin over an actual story dot with heatmap on, then off. A vertex must not select a story or fly the map. Undo/Redo must restore the same document. Close drawing tools to resume story picking.
 4. Select an event during replay and capture evidence while playback or live data changes. The packet records the frozen replay window and current exact detail observations. Change the cursor and export again: the packet remains unchanged. Notes are excluded until explicitly checked. Escape closes the dialog without clearing the selected event; dashboard shortcuts remain isolated while it is open.
-5. Change style, switch Map/Stories, and try keyboard controls. All launchers should remain reachable. Change account or downgrade: private work and pending requests must stop immediately; replay must clear when access is lost, and account-specific saved records must remain isolated.
+5. Change style, switch Map/Stories, and try keyboard controls. Close the current sheet/popup before switching tools; each launcher and its controls should then be reachable. Try 568×320 specifically: freeze replay, save/check a region, and close the sheet without returning live. Change account or downgrade: private work and pending requests must stop immediately; replay must clear when access is lost, and account-specific saved records must remain isolated.
 6. In the synthetic fixture, try storage denial/corruption and malformed imports. Evidence recovery retains completed packets. Drawing protects unreadable saved data until explicit replacement, and legacy device drawings require explicit account import. Failed imports are atomic; quota failures must remain visible even with drawing tools closed.
 
 ## Limits to keep in mind
@@ -54,7 +54,7 @@ PLAYWRIGHT_MODULE_PATH=/path/to/playwright/index.mjs CHROMIUM_PATH=/path/to/chro
   node scripts/diagnostics/test-combined-storage.mjs
 ```
 
-The fixture uses real HomeContent, MapLibre, Terra Draw and native IndexedDB with synthetic auth/feed/provider boundaries. Nothing installs a fixture application route. The compiled-dashboard and worker checks are described in [QA evidence](QA.md). [Screenshots](evidence/) contain only original synthetic data.
+The fixture uses real HomeContent, MapLibre, Terra Draw and native IndexedDB with synthetic auth/feed/provider boundaries. Nothing installs a fixture application route. The compiled-dashboard, six-viewport compact regression and worker checks are described in [QA evidence](QA.md). [Screenshots](evidence/) contain only original synthetic data.
 
 Physical devices, hardware GPU performance, Safari/Firefox, live providers/database policies, actual OS notification receipt, and native print dialogs remain unverified. Chromium checks use SwiftShader and emulated touch.
 

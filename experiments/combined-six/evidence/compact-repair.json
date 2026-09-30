@@ -1,0 +1,718 @@
+{
+  "reviewedParent": "9c70cfc647987c3415179da2f828fb8d2e9226ad",
+  "date": "2026-09-30",
+  "status": "Compact repair verified; independent Astra re-review pending",
+  "gates": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "webpackBuild": "passed",
+    "frozenInstall": "passed; no changes",
+    "tests": {
+      "files": 135,
+      "passed": 1276,
+      "todo": 1
+    },
+    "coverage": {
+      "lines": {
+        "total": 8231,
+        "covered": 7148,
+        "skipped": 0,
+        "pct": 86.84
+      },
+      "statements": {
+        "total": 9876,
+        "covered": 8266,
+        "skipped": 0,
+        "pct": 83.69
+      },
+      "functions": {
+        "total": 1655,
+        "covered": 1433,
+        "skipped": 0,
+        "pct": 86.58
+      },
+      "branches": {
+        "total": 8342,
+        "covered": 6359,
+        "skipped": 0,
+        "pct": 76.22
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    },
+    "parity": {
+      "locked": 823,
+      "installed": 746,
+      "direct": 42,
+      "directMatched": 42,
+      "mismatches": [],
+      "critical": [
+        {
+          "key": "next",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "eslint-config-next",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "@next/swc-linux-x64-gnu",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "maplibre-gl",
+          "expected": "6.11.2",
+          "actual": "6.11.2",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "terra-draw",
+          "expected": "1.35.0",
+          "actual": "1.35.0",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "fake-indexeddb",
+          "expected": "6.2.5",
+          "actual": "6.2.5",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "isomorphic-dompurify/jsdom",
+          "expected": "30.1.1",
+          "actual": "30.1.1",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "isomorphic-dompurify/jsdom/whatwg-mimetype",
+          "expected": "5.0.0",
+          "actual": "5.0.0",
+          "installed": true,
+          "match": true
+        }
+      ]
+    }
+  },
+  "compactCompiledDashboard": [
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 372,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 416,
+          "bottom": 108,
+          "left": 372
+        },
+        "zoomOut": {
+          "x": 424,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 468,
+          "bottom": 108,
+          "left": 424
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 480,
+          "height": 122
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 181.125
+        },
+        "overlaySheet": {
+          "x": 167.9185333251953,
+          "y": 12,
+          "width": 303.99998474121094,
+          "height": 232
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 232
+        },
+        "alertSheet": {
+          "x": 38,
+          "y": 12,
+          "width": 430,
+          "height": 232
+        },
+        "drawingSheet": {
+          "x": 70,
+          "y": 12,
+          "width": 340,
+          "height": 232
+        }
+      },
+      "name": "small-landscape",
+      "viewport": {
+        "width": 480,
+        "height": 320
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:37703/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 460,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 504,
+          "bottom": 108,
+          "left": 460
+        },
+        "zoomOut": {
+          "x": 512,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 556,
+          "bottom": 108,
+          "left": 512
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 568,
+          "height": 122
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 181.125
+        },
+        "overlaySheet": {
+          "x": 257.3197021484375,
+          "y": 12,
+          "width": 304,
+          "height": 232
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 232
+        },
+        "resizedRegionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 287
+        },
+        "alertSheet": {
+          "x": 126,
+          "y": 12,
+          "width": 430,
+          "height": 232
+        },
+        "drawingSheet": {
+          "x": 114,
+          "y": 12,
+          "width": 340,
+          "height": 232
+        }
+      },
+      "name": "se-landscape",
+      "viewport": {
+        "width": 568,
+        "height": 320
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:39009/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 532,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 576,
+          "bottom": 108,
+          "left": 532
+        },
+        "zoomOut": {
+          "x": 584,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 628,
+          "bottom": 108,
+          "left": 584
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 640,
+          "height": 145
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 181.125
+        },
+        "overlaySheet": {
+          "x": 330,
+          "y": 12,
+          "width": 304,
+          "height": 272
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 272
+        },
+        "alertSheet": {
+          "x": 198,
+          "y": 12,
+          "width": 430,
+          "height": 272
+        },
+        "drawingSheet": {
+          "x": 150,
+          "y": 12,
+          "width": 340,
+          "height": 272
+        }
+      },
+      "name": "landscape-640",
+      "viewport": {
+        "width": 640,
+        "height": 360
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:38549/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 559,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 603,
+          "bottom": 108,
+          "left": 559
+        },
+        "zoomOut": {
+          "x": 611,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 655,
+          "bottom": 108,
+          "left": 611
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 667,
+          "height": 154
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 181.125
+        },
+        "overlaySheet": {
+          "x": 357,
+          "y": 12,
+          "width": 304,
+          "height": 287
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 287
+        },
+        "alertSheet": {
+          "x": 225,
+          "y": 12,
+          "width": 430,
+          "height": 287
+        },
+        "drawingSheet": {
+          "x": 163.5,
+          "y": 12,
+          "width": 340,
+          "height": 287
+        }
+      },
+      "name": "landscape-667",
+      "viewport": {
+        "width": 667,
+        "height": 375
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:36605/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 736,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 780,
+          "bottom": 108,
+          "left": 736
+        },
+        "zoomOut": {
+          "x": 788,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 832,
+          "bottom": 108,
+          "left": 788
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 844,
+          "height": 162
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 181.125
+        },
+        "overlaySheet": {
+          "x": 534,
+          "y": 12,
+          "width": 304,
+          "height": 302
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 302
+        },
+        "alertSheet": {
+          "x": 402,
+          "y": 12,
+          "width": 430,
+          "height": 302
+        },
+        "drawingSheet": {
+          "x": 252,
+          "y": 12,
+          "width": 340,
+          "height": 302
+        }
+      },
+      "name": "landscape-844",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:35025/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "compactControls": {
+        "zoomIn": {
+          "x": 812,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 856,
+          "bottom": 108,
+          "left": 812
+        },
+        "zoomOut": {
+          "x": 864,
+          "y": 64,
+          "width": 44,
+          "height": 44,
+          "top": 64,
+          "right": 908,
+          "bottom": 108,
+          "left": 864
+        },
+        "canvasBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 920,
+          "height": 175
+        },
+        "legendSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 400,
+          "height": 192.375
+        },
+        "overlaySheet": {
+          "x": 610,
+          "y": 12,
+          "width": 304,
+          "height": 324
+        },
+        "regionSheet": {
+          "x": 12,
+          "y": 12,
+          "width": 440,
+          "height": 324
+        },
+        "alertSheet": {
+          "x": 478,
+          "y": 12,
+          "width": 430,
+          "height": 324
+        },
+        "drawingSheet": {
+          "x": 290,
+          "y": 12,
+          "width": 340,
+          "height": 324
+        }
+      },
+      "name": "landscape-920",
+      "viewport": {
+        "width": 920,
+        "height": 412
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:40119/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    }
+  ],
+  "desktopPortraitCompiledDashboard": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:40183/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "name": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:45009/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    }
+  ],
+  "worker": "Unmodified compiled worker/cache/navigation/click probes passed; see artifacts/combined-six/compact-repair/worker.log",
+  "realNotifications": 0,
+  "limits": [
+    "Chromium with SwiftShader and emulated touch",
+    "One floating sheet/popup at a time; close it to reach underlying tools/replay",
+    "Physical devices, Safari/Firefox, real providers and OS notifications unverified"
+  ]
+}

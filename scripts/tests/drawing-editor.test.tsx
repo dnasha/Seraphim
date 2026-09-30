@@ -67,8 +67,26 @@ describe('real TerraDraw editor lifecycle', () => {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 16));
     vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
   });
   afterEach(() => { cleanup(); document.body.innerHTML = ''; vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it('keeps a wide compact landscape sheet collapsed initially and does not drag it off screen', async () => {
+    vi.stubGlobal('innerWidth', 920);
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    const map = makeMap();
+    render(<MapDrawTools mapRef={map.mapRef} mapReady isOpen userTier="analyst" ownerId="a" />);
+    await advance();
+    expect(screen.getByRole('button', { name: 'Expand panel' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Pin' })).toBeNull();
+    click('Expand panel');
+    expect(screen.getByRole('button', { name: 'Pin' })).toBeDefined();
+    const wrapper = document.querySelector<HTMLElement>('[data-drawing-tools]')!;
+    fireEvent.mouseDown(wrapper.firstElementChild!.firstElementChild!, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 200 });
+    fireEvent.mouseUp(window);
+    expect(wrapper.style.top).toBe('');
+    expect(wrapper.style.left).toBe('');
+  });
   it('commits one completed drag, ignores selection, preserves style, and restores history after style reload', async () => {
     const map = makeMap();
     const props = { mapRef: map.mapRef, mapReady: true, isOpen: true, userTier: 'analyst' as const, ownerId: 'a' };
