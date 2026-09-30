@@ -39,6 +39,7 @@ export default defineConfig({
                 'src/components/map/utils.ts',
                 'src/components/experiments/replay/**/*.ts',
                 'src/components/experiments/replay/**/*.tsx',
+                'src/components/map/activityHeatmap/**/*.{ts,tsx}',
                 'src/hooks/useResizable.ts',
                 'src/hooks/useViewState.ts',
                 'src/hooks/useNewsData.ts',

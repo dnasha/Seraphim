@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import {
   TerraDraw,
@@ -38,6 +38,7 @@ interface MapDrawToolsProps {
   isOpen: boolean;
   userTier?: UserTier;
   onClose?: () => void;
+  onInteractionOwnershipChange?: (owned: boolean) => void;
 }
 
 const COLORS = ['#5f62ec', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ffffff', '#000000'];
@@ -109,9 +110,15 @@ const stopTerraDrawSafely = (draw: TerraDraw, map: maplibregl.Map) => {
 // Modes that own drag gestures while active instead of allowing the map to pan.
 const TOUCH_DRAW_MODES = new Set(['freehand-linestring', 'rectangle', 'circle', 'eraser']);
 
-export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose }: MapDrawToolsProps) {
+export default function MapDrawTools({ mapRef, mapReady, isOpen, userTier = 'guest', onClose, onInteractionOwnershipChange }: MapDrawToolsProps) {
   const drawRef = useRef<TerraDraw | null>(null);
   const [activeMode, setActiveMode] = useState<string>('static');
+  useLayoutEffect(() => {
+    // Report ownership before the next canvas gesture, including select/text/
+    // eraser modes that can use Terra Draw's static engine internally.
+    onInteractionOwnershipChange?.(isOpen && activeMode !== 'static');
+    return () => onInteractionOwnershipChange?.(false);
+  }, [activeMode, isOpen, onInteractionOwnershipChange]);
   const [activeColor, setActiveColor] = useState<string>(COLORS[0]);
   const [activeSize, setActiveSize] = useState<number>(SIZES[1]);
   const [activeFill, setActiveFill] = useState<boolean>(true);

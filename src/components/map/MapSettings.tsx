@@ -19,6 +19,10 @@ interface MapSettingsProps {
     onStyleChange: (style: string) => void;
     forceIndividualPins: boolean;
     onForceIndividualPinsToggle: () => void;
+    activityHeatmap?: boolean;
+    onActivityHeatmapChange?: (enabled: boolean) => void;
+    activityPreferenceError?: string | null;
+    onActivityPreferenceReset?: () => void;
     isOpen: boolean;
     onToggleOpen: () => void;
     panelRef: React.RefObject<HTMLDivElement>;
@@ -43,6 +47,10 @@ const MapSettings: React.FC<MapSettingsProps> = ({
     onStyleChange,
     forceIndividualPins,
     onForceIndividualPinsToggle,
+    activityHeatmap = false,
+    onActivityHeatmapChange,
+    activityPreferenceError,
+    onActivityPreferenceReset,
     isOpen,
     onToggleOpen,
     panelRef,
@@ -154,12 +162,20 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                      */}
                     <div className={styles.settingsSection}>
                         <div className={styles.settingsLabel}>Display Mode</div>
-                        <GatedButton className={styles.settingsToggle} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode" featureDescription="Inspect each event as its own pin, even in busy regions where nearby stories would normally be grouped." indicator="none" title={forceIndividualPins ? 'Group nearby events into clusters' : 'Show every event as an individual pin'}>
+                        <button className={styles.settingsToggle} role="switch" aria-checked={activityHeatmap} onClick={() => onActivityHeatmapChange?.(!activityHeatmap)} aria-describedby="activity-heatmap-description" title={`${activityHeatmap ? 'Disable' : 'Enable'} relative activity density for displayed stories`}>
+                            <span className={styles.settingsToggleLabel}>Activity heatmap</span>
+                            <div className={`${styles.toggleSwitch}${activityHeatmap ? ` ${styles.toggleSwitchOn}` : ''}`} aria-hidden="true"><div className={styles.toggleKnob} /></div>
+                        </button>
+                        <p id="activity-heatmap-description" className={styles.settingsDescription}>Relative density of loaded, filtered stories. Saved on this device for this account.</p>
+                        {activityPreferenceError && <p className={styles.settingsDescription} role="status">{activityPreferenceError}</p>}
+                        {onActivityPreferenceReset && <button className={styles.resetChoice} onClick={onActivityPreferenceReset} title="Delete the saved heatmap choice for this account on this device">Reset saved heatmap choice</button>}
+                        <GatedButton className={styles.settingsToggle} disabled={activityHeatmap} onClick={onForceIndividualPinsToggle} allowed={hasFeature(userTier, 'individualPins')} requiredTier="analyst" featureName="Individual pin mode" featureDescription="Inspect each event as its own pin, even in busy regions where nearby stories would normally be grouped." indicator="none" title={activityHeatmap ? 'Your pin preference is retained while the heatmap is on' : forceIndividualPins ? 'Group nearby events into clusters' : 'Show every event as an individual pin'}>
                             <span className={styles.settingsToggleLabel}>Force individual pins</span>
                             {hasFeature(userTier, 'individualPins') ? <div className={`${styles.toggleSwitch}${forceIndividualPins ? ` ${styles.toggleSwitchOn}` : ''}`}>
                                 <div className={styles.toggleKnob} />
                             </div> : <TierBadge tier="analyst" locked />}
                         </GatedButton>
+                        {activityHeatmap && <p className={styles.settingsDescription}>Pins, cluster counts and pulses are hidden. Your pin preference returns when the heatmap is off.</p>}
                     </div>
 
                     <div className={styles.settingsDivider} />
@@ -191,4 +207,3 @@ const MapSettings: React.FC<MapSettingsProps> = ({
 };
 
 export default MapSettings;
-

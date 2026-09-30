@@ -626,7 +626,9 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     inert={isCompactLayout && mobileView !== 'map'}
                 >
                     <NewsMap
-                        dataReady={!isLoading}
+                        dataReady={Boolean(replay.state) || !isLoading}
+                        isCapped={replay.state?.snapshot.isCapped ?? isCapped}
+                        activityDataUnavailable={!replay.state && Boolean(error)}
                         onLoadStateChange={setMapLoadState}
                         items={displayedMapNews}
                         selectedItemId={selectedItemId}

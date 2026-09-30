@@ -43,11 +43,17 @@ import { canUseMapStyle, canUseOverlay, hasFeature, type UserTier } from '@/lib/
 import type { SyncedPreferences } from '@/hooks/useSyncedPreferences';
 import type { MapLoadState } from '@/components/layout/StartupGate';
 import { DRAW_STORAGE_KEY } from './draw/drawPersistence';
+import { buildActivityHeatmapData } from './activityHeatmap/data';
+import { ACTIVITY_HIT_LAYER, activityHitId, syncActivityHeatmap } from './activityHeatmap/layers';
+import { useActivityHeatmapPreference } from './activityHeatmap/useActivityHeatmapPreference';
+import ActivityHeatmapLegend from './activityHeatmap/ActivityHeatmapLegend';
 
 const MapDrawTools = dynamic(() => import("./MapDrawTools"), { ssr: false });
 
 interface NewsMapProps {
   dataReady?: boolean;
+  isCapped?: boolean;
+  activityDataUnavailable?: boolean;
   onLoadStateChange?: (state: MapLoadState) => void;
   items: NewsItem[];
   selectedItemId: string | null;
@@ -116,6 +122,8 @@ function isRecoverableMapResourceError(errorMsg: string) {
 
 export default function NewsMap({
   dataReady = true,
+  isCapped = false,
+  activityDataUnavailable = false,
   onLoadStateChange,
   items,
   selectedItemId,
@@ -150,6 +158,10 @@ export default function NewsMap({
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  const drawingOwnsInteractionRef = useRef(false);
+  const onDrawingInteractionOwnershipChange = useCallback((owned: boolean) => {
+    drawingOwnsInteractionRef.current = owned;
+  }, []);
   // Restore saved annotations on navigation; otherwise download the drawing
   // engine only after the user first opens its tools. Keep it mounted thereafter.
   const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
@@ -157,6 +169,8 @@ export default function NewsMap({
     catch { return false; }
   });
   const [forceIndividualPins, setForceIndividualPins] = useState(false);
+  const activityPreference = useActivityHeatmapPreference(preferenceOwnerId);
+  const activityHeatmapEnabled = activityPreference.enabled;
   const [mutedClusters, setMutedClusters] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<string>(
     isDarkMode ? "dark" : "standard",
@@ -279,7 +293,7 @@ export default function NewsMap({
     const map = mapRef.current;
     const pulse = createHotStoryPulseController(map);
 
-    if (!animatedEffects) {
+    if (!animatedEffects || activityHeatmapEnabled) {
       pulse.stop();
       return;
     }
@@ -300,7 +314,7 @@ export default function NewsMap({
       map.off("moveend", start);
       pulse.dispose();
     };
-  }, [mapReady, animatedEffects]);
+  }, [mapReady, animatedEffects, activityHeatmapEnabled]);
 
   // Keep the two theme-following base styles aligned without replacing a
   // deliberately selected satellite/topographic/premium style.
@@ -329,6 +343,13 @@ export default function NewsMap({
     () => selectedJitterAnchor(items, selectedItemId),
     [items, selectedItemId],
   );
+
+  // Derive density from the original displayed input, before pin jitter.
+  // Replay can supply its displayed dataset through the same items prop.
+  const activityData = useMemo(() => buildActivityHeatmapData(items), [items]);
+  const activityState = useMemo(() => ({ enabled: activityHeatmapEnabled, dark: isDarkMode, data: activityData }), [activityHeatmapEnabled, isDarkMode, activityData]);
+  const activityHeatmapRef = useRef(activityState);
+  useEffect(() => { activityHeatmapRef.current = activityState; }, [activityState]);
 
   // Pre-process items for the map: filter valid coords, apply jitter, and identify top stories.
   const geoItems = useMemo(() => {
@@ -393,7 +414,12 @@ export default function NewsMap({
     forceIndividualPinsRef,
     overlaysRef,
     pendingGeoJsonRef,
+    activityHeatmapRef,
   });
+
+  useEffect(() => {
+    if (mapReady && mapRef.current) syncActivityHeatmap(mapRef.current, activityState);
+  }, [mapReady, activityState]);
 
   const { getInitialViewState, handleResetOrientation, cancelCameraFlight } = useMapCamera({
     mapRef,
@@ -697,19 +723,28 @@ export default function NewsMap({
         if (!eventsWired) {
           eventsWired = true;
 
+          map.on('click', (e) => {
+            if (!activityHeatmapRef.current.enabled || drawingOwnsInteractionRef.current) return;
+            const id = activityHitId(map, e.point);
+            if (id) onSelectItemRef.current(id);
+          });
+
           map.on("click", "unclustered-point", (e) => {
+            if (drawingOwnsInteractionRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
               );
           });
           map.on("click", "unclustered-point-active", (e) => {
+            if (drawingOwnsInteractionRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
               );
           });
           map.on("click", "selected-point-active", (e) => {
+            if (drawingOwnsInteractionRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
@@ -717,6 +752,7 @@ export default function NewsMap({
           });
 
           map.on("click", "clusters-circle", async (e) => {
+            if (drawingOwnsInteractionRef.current) return;
             const features = map.queryRenderedFeatures(e.point, {
               layers: ["clusters-circle"],
             });
@@ -728,6 +764,7 @@ export default function NewsMap({
                 "news-events",
               ) as maplibregl.GeoJSONSource;
               const zoom = await source.getClusterExpansionZoom(clusterId);
+              if (disposed || recoveryRequested || drawingOwnsInteractionRef.current) return;
               map.flyTo({
                 center:
                   features[0].geometry.type === "Point"
@@ -756,6 +793,7 @@ export default function NewsMap({
             "unclustered-point",
             "unclustered-point-active",
             "selected-point-active",
+            ACTIVITY_HIT_LAYER,
           ]) {
             map.on("mouseenter", layer, () => {
               map.getCanvas().style.cursor = "pointer";
@@ -1184,6 +1222,10 @@ export default function NewsMap({
       {!mapError && (
         <>
           <MapSettings
+            activityHeatmap={activityHeatmapEnabled}
+            onActivityHeatmapChange={activityPreference.change}
+            activityPreferenceError={activityPreference.error}
+            onActivityPreferenceReset={activityPreference.reset}
             mapStyle={currentStyle}
             onStyleChange={(style) => {
               setIsChangingStyle(true);
@@ -1237,6 +1279,7 @@ export default function NewsMap({
             mapRef={mapRef}
             mapReady={mapReady}
             isOpen={drawToolsOpen}
+            onInteractionOwnershipChange={onDrawingInteractionOwnershipChange}
             userTier={userTier}
             onClose={() => setDrawToolsOpen(false)}
           />}
@@ -1248,6 +1291,8 @@ export default function NewsMap({
         className={styles.newsMapContainer}
         style={{ backfaceVisibility: "hidden", transform: "translateZ(0)" }}
       />
+
+      {activityHeatmapEnabled && !mapError && <ActivityHeatmapLegend data={activityData} dark={isDarkMode} loading={!dataReady} isCapped={isCapped} unavailable={activityDataUnavailable} />}
 
       {selectedItem && popupContainer && createPortal(
         <MapPopup item={selectedItem} userTier={userTier} />,
