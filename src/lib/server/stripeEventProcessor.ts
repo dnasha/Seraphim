@@ -62,7 +62,7 @@ async function transitionCheckoutIntent(
 ) {
   const intentId = session.metadata?.checkout_intent_id;
   if (!intentId) return;
-  const { error } = await supabaseAdmin
+  const update = supabaseAdmin
     .from('billing_checkout_intents')
     .update({
       status,
@@ -73,6 +73,12 @@ async function transitionCheckoutIntent(
       completed_at: status === 'completed' ? new Date().toISOString() : null,
     })
     .eq('id', intentId);
+  // Snapshot webhooks may arrive out of order. A paid completion wins, while
+  // delayed pending/failed/expired snapshots cannot reopen a terminal intent.
+  // Keep the guard in the UPDATE itself rather than a racy read-before-write.
+  const { error } = await (status === 'completed'
+    ? update
+    : update.in('status', ['creating', 'open', 'pending_payment']));
   if (error) throw error;
 }
 

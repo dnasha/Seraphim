@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StartupGate from '@/components/layout/StartupGate';
 import StartupScreen from '@/components/layout/StartupScreen';
 import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 
 const props = { sessionReady: false, storiesReady: false, mapState: 'loading' as const, hasError: false };
 const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
@@ -25,6 +26,34 @@ describe('coordinated startup', () => {
         expect(html).toContain('role="progressbar"');
         expect(html).toContain('Preparing your view');
         expect(html).toContain('SERAPHIM');
+    });
+
+    it('hydrates the same shell when auth resolves before the dashboard hydrates', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        container.innerHTML = renderToString(
+            <StartupGate {...props}><div data-testid="dashboard">Map</div></StartupGate>
+        );
+        expect(container.querySelector('[data-testid="dashboard"]')).toBeNull();
+
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let root: ReturnType<typeof hydrateRoot> | undefined;
+        try {
+            await act(async () => {
+                root = hydrateRoot(container,
+                    <StartupGate {...props} sessionReady storiesReady mapState="ready">
+                        <div data-testid="dashboard">Map</div>
+                    </StartupGate>
+                );
+                await vi.advanceTimersByTimeAsync(64);
+            });
+            expect(container.querySelector('[data-testid="dashboard"]')).toBeTruthy();
+            expect(errors).not.toHaveBeenCalled();
+        } finally {
+            await act(async () => root?.unmount());
+            errors.mockRestore();
+            container.remove();
+        }
     });
 
     it('keeps both surfaces mounted and inert until auth, stories, and a rendered map are ready', async () => {

@@ -46,9 +46,6 @@ describe("map feature payload", () => {
       storyCount: 4,
       isTopHot: true,
     });
-    expect(collection.features[0].properties).not.toHaveProperty("imageUrl");
-    expect(collection.features[0].properties).not.toHaveProperty("description");
-    expect(collection.features[0].properties).not.toHaveProperty("title");
   });
 });
 

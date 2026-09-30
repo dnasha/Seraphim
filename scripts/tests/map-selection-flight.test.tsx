@@ -14,9 +14,9 @@ const story = (overrides: Partial<NewsItem> = {}): NewsItem => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
-function flightHarness(item: NewsItem, height: number, mobile = false) {
-  vi.stubGlobal("innerWidth", mobile ? 390 : 1280);
-  vi.stubGlobal("innerHeight", 800);
+function flightHarness(item: NewsItem, height: number, mobile = false, viewport = { width: mobile ? 390 : 1280, height: 800, mapHeight: 800 }) {
+  vi.stubGlobal("innerWidth", viewport.width);
+  vi.stubGlobal("innerHeight", viewport.height);
   let resize = () => {};
   let frame = () => {};
   vi.stubGlobal("ResizeObserver", class {
@@ -28,7 +28,7 @@ function flightHarness(item: NewsItem, height: number, mobile = false) {
   vi.stubGlobal("cancelAnimationFrame", () => { frame = () => {}; });
   const canvas = document.createElement("canvas");
   const container = document.createElement("div");
-  Object.defineProperty(container, "clientHeight", { value: 800 });
+  Object.defineProperty(container, "clientHeight", { value: viewport.mapHeight });
   const element = document.createElement("div");
   let popupHeight = height;
   element.getBoundingClientRect = () => ({ height: popupHeight }) as DOMRect;
@@ -144,6 +144,16 @@ it("includes the mobile sheet in the initial destination", () => {
   h.land();
   h.update(story({ description: "Mobile details" }), 482);
   expect(h.map.easeTo).not.toHaveBeenCalled();
+  expect(h.map.flyTo).toHaveBeenCalledTimes(1);
+  h.unmount();
+});
+
+it("reserves room above the sheet on a landscape phone after accounting for navigation", () => {
+  const h = flightHarness(story(), 0, true, { width: 932, height: 430, mapHeight: 366 });
+  expect(h.target().padding).toEqual(paddingFor(366, 192, true));
+  expect(h.target().padding).toMatchObject({ top: 0, bottom: 206 });
+  h.land();
+  h.update(story({ description: "Landscape details" }), 192);
   expect(h.map.flyTo).toHaveBeenCalledTimes(1);
   h.unmount();
 });

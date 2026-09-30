@@ -112,15 +112,27 @@ export async function fetchSingleFeed(
     const urls = [source.url, ...(source.fallbackUrls ?? [])];
     let lastError: unknown;
     let primaryErrorCode: string | null = null;
+    const skipPrimary = urls.length > 1 && !options.emergency &&
+      isSourceCircuitOpen(options.openCircuits, 'rss-primary', source.name);
+    // One overall budget, not a fresh budget per retry, redirect and fallback.
+    // A configured fallback gets a chance after one primary attempt.
+    const budgetMs = Math.max(1, timeoutMs * 2);
+    const deadline = startedAt + budgetMs;
+    const deadlineSignal = AbortSignal.timeout(budgetMs);
+    const fallbackCode = () => skipPrimary ? 'primary_cooldown'
+      : primaryErrorCode ? `fallback_${primaryErrorCode}`.slice(0, 64) : null;
 
-    for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
+    for (let urlIndex = skipPrimary ? 1 : 0; urlIndex < urls.length; urlIndex++) {
       const sourceUrl = urls[urlIndex];
       try {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0 || deadlineSignal.aborted) throw new Error('Feed deadline timeout');
         const fetched = await fetchBoundedFeed(sourceUrl, {
           headers: RSS_HEADERS,
-          timeoutMs,
+          timeoutMs: Math.min(timeoutMs, remainingMs),
+          signal: deadlineSignal,
           validator: options.validators?.get(sourceUrl),
-          maxAttempts: 2,
+          maxAttempts: urls.length > 1 ? 1 : 2,
         });
         if (fetched.notModified) {
           const watermark = options.validators?.get(sourceUrl)?.latestItemAt ?? null;
@@ -131,7 +143,8 @@ export async function fetchSingleFeed(
             outcome: knownFresh ? 'healthy' : watermark ? 'stale' : 'empty',
             fetched_count: 0, accepted_count: 0, rejected_count: 0,
             latest_usable_item_at: watermark,
-            duration_ms: Date.now() - startedAt, error_code: watermark ? null : 'freshness_unknown',
+            duration_ms: Date.now() - startedAt,
+            error_code: urlIndex > 0 ? fallbackCode() : watermark ? null : 'freshness_unknown',
           });
           return [];
         }
@@ -173,7 +186,7 @@ export async function fetchSingleFeed(
             outcome: items.length ? 'healthy' : 'empty', fetched_count: feedItems.length,
             accepted_count: items.length, rejected_count: Math.max(0, feedItems.length - items.length),
             latest_usable_item_at: latestItemAt(items), duration_ms: Date.now() - startedAt,
-            error_code: urlIndex > 0 && primaryErrorCode ? `fallback_${primaryErrorCode}`.slice(0, 64) : null,
+            error_code: urlIndex > 0 ? fallbackCode() : null,
         });
         if (urlIndex > 0) {
           console.log(`[RSS] ${source.name}: fallback feed responded (${items.length} recent item(s))`);

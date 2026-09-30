@@ -26,39 +26,36 @@
 }
 
 .emblem {
-    position: relative;
-    width: 54px;
-    height: 54px;
-    margin: 0 auto 22px;
-    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-    border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 12%, transparent), transparent 72%);
+    display: block;
+    width: 128px;
+    height: 128px;
+    margin: 0 auto 12px;
+    color: var(--accent);
 }
 
-.emblem::before,
-.emblem::after {
-    content: '';
-    position: absolute;
-    inset: 8px;
-    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-    border-radius: 50%;
+.eye {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: scan 2.7s ease-in-out infinite;
 }
 
-.emblem::after { inset: 0 17px; }
-.emblem span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.emblem span:nth-child(1) { top: 12px; left: 12px; }
-.emblem span:nth-child(2) { top: 26px; right: 10px; }
-.emblem span:nth-child(3) { bottom: 8px; left: 22px; }
+@keyframes scan {
+    0%, 74%, 80%, 92%, 100% { transform: translate(0, 0) scaleY(1); }
+    17% { transform: translate(-10px, -2px) scaleY(1); }
+    38% { transform: translate(10px, -2px) scaleY(1); }
+    59%, 66% { transform: translate(0, 9px) scaleY(1); }
+    86% { transform: translate(0, 0) scaleY(0.08); }
+}
 
 .brand {
     font-family: var(--font-logo), system-ui, sans-serif;
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 600;
     letter-spacing: 0.2em;
     padding-left: 0.2em;
 }
 
-.tagline { margin-top: 6px; color: var(--text-muted); font-size: 13px; }
+.tagline { margin-top: 6px; color: var(--text-muted); font-size: 14px; }
 .track { margin-top: 30px; height: 3px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width 240ms ease; }
 .message { margin-top: 12px; color: var(--text-secondary); font-size: 12px; }

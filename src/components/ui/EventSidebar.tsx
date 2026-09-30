@@ -63,6 +63,9 @@ function randomIndex(length: number): number {
 }
 
 interface EventSidebarProps {
+  id?: string;
+  mobileActive?: boolean;
+  inert?: boolean;
   items: NewsItem[];
   selectedItemId: string | null;
   selectionVersion: number;
@@ -92,6 +95,9 @@ interface EventSidebarProps {
 }
 
 export default function EventSidebar({
+  id,
+  mobileActive = true,
+  inert = false,
   items,
   selectedItemId,
   selectionVersion,
@@ -201,8 +207,6 @@ export default function EventSidebar({
 
   const handleCardClick = useCallback(
     (item: NewsItem) => {
-      /* Viewport check for mobile-specific interactions */
-      const isMobile = () => window.innerWidth < 860;
       const targetId = canonicalNewsId(item);
       const isSelected = matchesNewsId(item, selectedItemId);
 
@@ -215,13 +219,8 @@ export default function EventSidebar({
       }
 
       onSelectItem(isSelected ? null : targetId);
-      if (!isSelected) {
-        if (isMobile()) {
-          onToggleSidebar();
-        }
-      }
     },
-    [selectedItemId, onSelectItem, onToggleSidebar, onFetchDetails],
+    [selectedItemId, onSelectItem, onFetchDetails],
   );
 
   const handleRandomSelect = useCallback(() => {
@@ -317,10 +316,14 @@ export default function EventSidebar({
 
   return (
     <aside
+      id={id}
+      aria-label="Stories"
+      data-mobile-active={mobileActive}
+      inert={inert}
       ref={sidebarRef}
       className={[
         styles.eventSidebar,
-        isOpen ? styles.eventSidebarMobileOpen : styles.eventSidebarCollapsed,
+        !isOpen ? styles.eventSidebarCollapsed : "",
         isResizing ? styles.isResizing : "",
       ].join(" ")}
       style={
@@ -387,21 +390,6 @@ export default function EventSidebar({
                 fill="currentColor"
               >
                 <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-              </svg>
-            </button>
-            <button
-              className={`${styles.sidebarToggleBtn} ${styles.mobileCloseBtn}`}
-              onClick={onToggleSidebar}
-              aria-label="Close sidebar"
-              title="Close the story sidebar"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="22"
-                height="22"
-                fill="currentColor"
-              >
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
               </svg>
             </button>
           </div>

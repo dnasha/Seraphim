@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   cancelSubscription: vi.fn(), updates: [] as Array<{ table: string; payload: Record<string, unknown> }>,
   profile: { tier: 'free', stripe_subscription_id: null as string | null }, claimError: null as null | { code: string }, released: vi.fn(),
   recordMetric: vi.fn(), recordIncident: vi.fn(), recoverIncident: vi.fn(),
+  intentStatus: 'open', appliedIntentStatuses: [] as string[],
 }));
 
 vi.mock('@/lib/server/recoveryJobs', () => ({
@@ -41,14 +42,23 @@ function webhookRequest(signature: string | null) {
 
 function tableQuery(table: string) {
   const query: Record<string, unknown> = {};
+  let payload: Record<string, unknown> | undefined;
+  let allowedStatuses: string[] | undefined;
   query.insert = vi.fn(async () => ({ error: table === 'stripe_processed_events' ? mocks.claimError : null }));
   query.delete = vi.fn(() => { mocks.released(); return query; });
   query.select = vi.fn(() => query);
   query.eq = vi.fn(() => query);
+  query.in = vi.fn((_column: string, statuses: string[]) => { allowedStatuses = statuses; return query; });
   query.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
   query.single = vi.fn(async () => ({ data: table === 'user_profiles' ? mocks.profile : table === 'angel_purchases' ? { replaced_subscription_id: mocks.profile.stripe_subscription_id } : null, error: null }));
-  query.update = vi.fn((payload: Record<string, unknown>) => { mocks.updates.push({ table, payload }); return query; });
-  query.then = (resolve: (input: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
+  query.update = vi.fn((next: Record<string, unknown>) => { payload = next; mocks.updates.push({ table, payload: next }); return query; });
+  query.then = (resolve: (input: unknown) => unknown) => {
+    if (table === 'billing_checkout_intents' && payload && (!allowedStatuses || allowedStatuses.includes(mocks.intentStatus))) {
+      mocks.intentStatus = String(payload.status);
+      mocks.appliedIntentStatuses.push(mocks.intentStatus);
+    }
+    return Promise.resolve({ data: null, error: null }).then(resolve);
+  };
   return query;
 }
 
@@ -59,7 +69,7 @@ const activeSubscription = {
 
 describe('POST /api/stripe/webhook', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.updates.length = 0; mocks.claimError = null; mocks.profile = { tier: 'free', stripe_subscription_id: null };
+    vi.clearAllMocks(); mocks.intentStatus = 'open'; mocks.appliedIntentStatuses.length = 0; mocks.updates.length = 0; mocks.claimError = null; mocks.profile = { tier: 'free', stripe_subscription_id: null };
     mocks.from.mockImplementation(tableQuery);
     mocks.rpc.mockImplementation(async (name: string) => name === 'transition_angel_purchase'
       ? { data: [{ result_code: 'transitioned', affected_user_id: 'user-1', previous_status: 'active', current_status: 'revoked' }], error: null }
@@ -258,5 +268,30 @@ describe('POST /api/stripe/webhook', () => {
     } } });
     expect((await POST(webhookRequest('valid'))).status).toBe(500);
     expect(mocks.released).toHaveBeenCalled();
+  });
+
+  it.each([
+    { sequence: ['paid', 'pending', 'pending'], expected: ['completed'] },
+    { sequence: ['pending', 'paid', 'pending'], expected: ['pending_payment', 'completed'] },
+    { sequence: ['paid', 'failed'], expected: ['completed'] },
+    { sequence: ['paid', 'expired'], expected: ['completed'] },
+    { sequence: ['failed', 'pending', 'paid'], expected: ['failed', 'completed'] },
+    { sequence: ['expired', 'pending', 'paid'], expected: ['expired', 'completed'] },
+    { sequence: ['paid', 'paid'], expected: ['completed', 'completed'] },
+  ])('keeps checkout state monotonic through reordered/duplicate snapshots: $sequence', async ({ sequence, expected }) => {
+    const session = { id: 'cs-delayed', mode: 'payment', payment_intent: 'pi-delayed', customer: 'cus-1',
+      metadata: { supabase_user_id: 'user-1', price_key: 'angel', checkout_intent_id: 'intent-1' } };
+    for (const [index, state] of sequence.entries()) {
+      const type = state === 'paid' ? 'checkout.session.async_payment_succeeded'
+        : state === 'failed' ? 'checkout.session.async_payment_failed'
+          : state === 'expired' ? 'checkout.session.expired' : 'checkout.session.completed';
+      mocks.constructEvent.mockReturnValue({ id: `evt-${index}`, type,
+        data: { object: { ...session, payment_status: state === 'paid' ? 'paid' : 'unpaid' } } });
+      expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    }
+    expect(mocks.intentStatus).toBe('completed');
+    expect(mocks.appliedIntentStatuses).toEqual(expected);
+    const completed = mocks.appliedIntentStatuses.indexOf('completed');
+    expect(mocks.appliedIntentStatuses.slice(completed).every(status => status === 'completed')).toBe(true);
   });
 });

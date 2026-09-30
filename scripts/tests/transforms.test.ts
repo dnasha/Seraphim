@@ -56,7 +56,6 @@ describe('cleanString', () => {
         const withOrphaned = 'Test\uD800 text';
         const result = cleanString(withOrphaned);
         expect(result).toBe('Test text');
-        expect(result).not.toContain('\uD800');
     });
 
     it('strips orphaned low surrogate', () => {

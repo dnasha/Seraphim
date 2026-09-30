@@ -144,7 +144,7 @@ describe("indexed scraper candidate matching", () => {
     });
   });
 
-  it("does not embed an incoming event that already has an exact database title match", async () => {
+  it.each([false, true])('skips matching vectors for exact titles, but refreshes changed description: %s', async (descriptionChanges) => {
     const existingId = "11111111-1111-4111-8111-111111111111";
     const titleQuery = {
       select: vi.fn().mockReturnThis(),
@@ -161,7 +161,7 @@ describe("indexed scraper candidate matching", () => {
         data: [{
           id: existingId, sources: [], latitude: 10, longitude: 20,
           location_name: "Example City", title: incoming().title,
-          description: "Earlier details.", credibility_tier: 2, impact_score: 1,
+          description: descriptionChanges ? "Earlier details." : incoming().description, credibility_tier: 2, impact_score: 1,
           event_count: 1, source: "Existing", source_type: "rss",
           url: "https://existing.example/report", published_at: "2026-07-12T11:00:00.000Z",
         }],
@@ -173,7 +173,13 @@ describe("indexed scraper candidate matching", () => {
 
     const result = await resolveStoryMerges([incoming()], { from, rpc } as never);
 
-    expect(vectorMocks.generateEmbeddings).not.toHaveBeenCalled();
+    if (descriptionChanges) {
+      expect(vectorMocks.generateEmbeddings).toHaveBeenCalledExactlyOnceWith([`${incoming().title}. ${incoming().description}`]);
+      expect(result.merges.get(existingId)?.embedding).toBeTruthy();
+    } else {
+      expect(vectorMocks.generateEmbeddings).not.toHaveBeenCalled();
+      expect(result.merges.get(existingId)?.embedding).toBeUndefined();
+    }
     expect(rpc).not.toHaveBeenCalled();
     expect(result.merges.has(existingId)).toBe(true);
   });

@@ -6,7 +6,7 @@
   Usage: bun run test -- scripts/tests/utils.test.ts
 */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { normalizeAccents, toTitleCase, cleanCandidate } from '@/lib/geocoding/utils';
 import { ensureIsoDate } from '@/lib/utils/date';
 import { getCategoryColor, getSourceStyle, DEFAULT_PIN_COLOR, CATEGORY_COLORS } from '@/lib/styles/colors';
@@ -22,17 +22,14 @@ describe('normalizeAccents', () => {
         expect(normalizeAccents('naïve')).toBe('naive');
         expect(normalizeAccents('Zürich')).toBe('Zurich');
         expect(normalizeAccents('Ödön')).toBe('Odon');
+        expect(normalizeAccents('Ångström')).toBe('Angstrom');
+        expect(normalizeAccents('Ñoño')).toBe('Nono');
     });
 
     it('passes through plain ASCII unchanged', () => {
         expect(normalizeAccents('London')).toBe('London');
         expect(normalizeAccents('New York')).toBe('New York');
         expect(normalizeAccents('')).toBe('');
-    });
-
-    it('handles fully accented strings', () => {
-        expect(normalizeAccents('Ångström')).toBe('Angstrom');
-        expect(normalizeAccents('Ñoño')).toBe('Nono');
     });
 });
 
@@ -44,6 +41,7 @@ describe('toTitleCase', () => {
     it('capitalizes each word', () => {
         expect(toTitleCase('new york')).toBe('New York');
         expect(toTitleCase('united states')).toBe('United States');
+        expect(toTitleCase('kyiv')).toBe('Kyiv');
     });
 
     it('handles the special "dc" abbreviation', () => {
@@ -53,10 +51,6 @@ describe('toTitleCase', () => {
     it('handles hyphenated words', () => {
         expect(toTitleCase('port-au-prince')).toBe('Port-Au-Prince');
         expect(toTitleCase('guinea-bissau')).toBe('Guinea-Bissau');
-    });
-
-    it('handles single word', () => {
-        expect(toTitleCase('kyiv')).toBe('Kyiv');
     });
 
     it('handles empty/falsy input', () => {
@@ -107,47 +101,34 @@ describe('cleanCandidate', () => {
   Validates normalization of various date formats into standard ISO strings.
 */
 describe('ensureIsoDate', () => {
+    const now = '2026-09-30T12:00:00.000Z';
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(now));
+    });
+
+    afterEach(() => vi.useRealTimers());
+
     it('returns valid ISO for a standard ISO string', () => {
         const iso = '2026-04-10T16:35:00.000Z';
         expect(ensureIsoDate(iso)).toBe(iso);
     });
 
     it('parses RFC 2822 dates', () => {
-        const rfc = 'Thu, 10 Apr 2026 16:35:00 GMT';
-        const result = ensureIsoDate(rfc);
-        expect(result).toContain('2026-04-10');
-        expect(new Date(result).getTime()).not.toBeNaN();
+        expect(ensureIsoDate('Thu, 10 Apr 2026 16:35:00 GMT')).toBe('2026-04-10T16:35:00.000Z');
     });
 
     it('handles CrisisWatch format', () => {
-        const crisisWatch = 'Friday, April 10, 2026 - 16:35';
-        const result = ensureIsoDate(crisisWatch);
-        expect(result).toContain('2026');
-        expect(new Date(result).getTime()).not.toBeNaN();
+        // This feed supplies local time, so keep the expectation portable across TZs.
+        expect(ensureIsoDate('Friday, April 10, 2026 - 16:35'))
+            .toBe(new Date(2026, 3, 10, 16, 35).toISOString());
     });
 
-    it('returns current time for null/undefined', () => {
-        const before = Date.now();
-        const result = ensureIsoDate(null);
-        const after = Date.now();
-        const parsed = new Date(result).getTime();
-        expect(parsed).toBeGreaterThanOrEqual(before - 1000);
-        expect(parsed).toBeLessThanOrEqual(after + 1000);
-    });
-
-    it('returns current time for undefined', () => {
-        const result = ensureIsoDate(undefined);
-        expect(new Date(result).getTime()).not.toBeNaN();
-    });
-
-    it('returns current time for garbage strings', () => {
-        const result = ensureIsoDate('not a date at all xyz');
-        expect(new Date(result).getTime()).not.toBeNaN();
-    });
-
-    it('returns current time for empty string', () => {
-        const result = ensureIsoDate('');
-        expect(new Date(result).getTime()).not.toBeNaN();
+    it('falls back to the current time for missing or unparseable dates', () => {
+        for (const input of [null, undefined, '', 'not a date at all xyz']) {
+            expect(ensureIsoDate(input), `input: ${String(input)}`).toBe(now);
+        }
     });
 });
 
@@ -190,14 +171,8 @@ describe('getSourceStyle', () => {
         expect(getSourceStyle('Telegram - NEXTA').bg).toBe('#0088cc');
     });
 
-    it('returns brand indigo for other sources', () => {
+    it('returns brand indigo for non-social sources', () => {
         expect(getSourceStyle('Ars Technica').bg).toBe('#5f62ec');
-        expect(getSourceStyle('BleepingComputer').bg).toBe('#5f62ec');
-    });
-
-    it('returns brand indigo for unknown sources', () => {
         expect(getSourceStyle('BBC News').bg).toBe('#5f62ec');
     });
 });
-
-

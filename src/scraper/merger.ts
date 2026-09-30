@@ -58,6 +58,10 @@ export interface ImageEnrichmentTarget {
 }
 
 export interface StoryMerge {
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  embedding?: string | null;
   description_provenance?: DbEvent['description_provenance'];
   independent_publisher_count?: number;
   sources: DbEventSource[];
@@ -414,7 +418,15 @@ export async function resolveStoryMerges(
         const mergedResult = calculateMergedStory(storyState, event);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id: _id, ...mergeData } = mergedResult;
-        merges.set(bestMatchId, mergeData);
+        merges.set(bestMatchId, {
+          ...existingMerge,
+          ...mergeData,
+          ...(mergedResult.title !== undefined ? {
+            latitude: event.latitude ?? null,
+            longitude: event.longitude ?? null,
+            location_name: event.location_name ?? null,
+          } : {}),
+        });
         mergeCount++;
         if (
           !event.image_url &&
@@ -549,6 +561,33 @@ export async function resolveStoryMerges(
         pendingExactTitles.set(fingerprint, indices);
       }
     }
+  }
+
+  // Persisted clusters need the same representative/vector invariant as new
+  // clusters. Embed the final combined title/description, once all reports in
+  // this batch have been folded in; an incoming article's vector can be wrong
+  // when the representative retains an older, more detailed description.
+  const changedRepresentatives = [...merges].flatMap(([id, merge]) => {
+    const original = candidateDetails.get(id)!;
+    const text = buildEmbeddingText(merge.title ?? original.title, merge.description ?? original.description);
+    return text === buildEmbeddingText(original.title, original.description) ? [] : [{ merge, text }];
+  });
+  const missingTexts = [...new Set(changedRepresentatives.map(item => item.text))]
+    .filter(text => !embeddingsByText.has(text));
+  if (missingTexts.length) {
+    try {
+      const vectors = await generateEmbeddings(missingTexts);
+      for (let index = 0; index < missingTexts.length; index++) {
+        if (vectors[index]) embeddingsByText.set(missingTexts[index], vectors[index]);
+      }
+    } catch {
+      console.warn('[vectorize] Could not embed updated stored representatives; invalidating stale vectors.');
+    }
+  }
+  for (const { merge, text } of changedRepresentatives) {
+    const vector = embeddingsByText.get(text);
+    // Explicit null matters: omitting the field would preserve the old vector.
+    merge.embedding = vector ? `[${vector.join(',')}]` : null;
   }
 
   console.log(`[vectorize] Story resolution: ${mergeCount} merged, ${newEvents.length} new events`);

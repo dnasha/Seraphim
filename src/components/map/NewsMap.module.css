@@ -653,7 +653,7 @@
 }
 
 /* On narrow screens, detach story details from the marker and use a bottom sheet. */
-@media (max-width: 860px) {
+@media (max-width: 860px), (width < 1024px) and (max-height: 500px) {
   .newsMapContainer {
     /* The GPU transform creates a stacking context that traps MapLibre
        popups beneath sibling map controls. Let the popup z-index participate
@@ -689,7 +689,8 @@
     width: 100%;
     max-width: none;
     height: 60dvh;
-    max-height: 60dvh;
+    /* Keep the selected pin visible above the sheet, including in landscape. */
+    max-height: max(120px, calc(100dvh - var(--mobile-nav-height, 0px) - 176px));
   }
 
   .mapWrapper :global(.news-popup-img-container) {
