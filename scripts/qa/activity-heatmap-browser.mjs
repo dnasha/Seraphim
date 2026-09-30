@@ -56,8 +56,9 @@ try {
             const point = map.project(feature.geometry.coordinates), rect = map.getCanvas().getBoundingClientRect();
             return { id: feature.properties.canonicalId, x: point.x + rect.x, y: point.y + rect.y };
         }, hitId);
-        await page.mouse.click(hit.x, hit.y);
-        await expect(page.getByLabel('Selected event')).not.toHaveText('none');
+        if (mobile) await page.touchscreen.tap(hit.x, hit.y);
+        else await page.mouse.click(hit.x, hit.y);
+        await expect(page.getByLabel('Selected event')).toHaveText(hit.id);
         await expect(page.locator('.news-popup')).toBeVisible();
         await page.waitForFunction(() => !window.__heatmapMap.isMoving());
         expect(await page.evaluate(() => window.__heatmapMap.getSource('selected-news-event').serialize().data.features.length)).toBe(1);
@@ -89,10 +90,14 @@ try {
             const canvas = window.__heatmapMap.getCanvas(), gl = canvas.getContext('webgl2');
             const extension = gl?.getExtension('WEBGL_lose_context');
             if (!extension) return false;
+            window.__heatmapContextEvents = [];
+            window.__heatmapMap.once('webglcontextlost', () => window.__heatmapContextEvents.push('lost'));
+            window.__heatmapMap.once('webglcontextrestored', () => window.__heatmapContextEvents.push('restored'));
             extension.loseContext(); setTimeout(() => extension.restoreContext(), 300); return true;
         });
         if (!recovery) throw new Error('WEBGL_lose_context unavailable');
-        await page.waitForFunction(id => window.__heatmapMap?.getLayer(id) && window.__heatmapMap.loaded(), hitId);
+        await page.waitForFunction(id => window.__heatmapContextEvents.includes('lost') && window.__heatmapContextEvents.includes('restored')
+            && window.__heatmapMap?.getLayer(id) && window.__heatmapMap.loaded(), hitId);
         await page.getByRole('button', { name: 'Switch account', exact: true }).click();
         await expect(page.getByLabel('Activity density legend')).toHaveCount(0);
         expect(await page.evaluate(id => Boolean(window.__heatmapMap.getSource(id)), sourceId)).toBe(false);

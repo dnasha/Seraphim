@@ -60,6 +60,7 @@ function layerMap() {
         addLayer: vi.fn((layer: maplibregl.LayerSpecification) => layers.set(layer.id, layer)),
         setPaintProperty: vi.fn(), removeLayer: vi.fn((id: string) => layers.delete(id)),
         removeSource: vi.fn((id: string) => sources.delete(id)), queryRenderedFeatures: vi.fn(),
+        project: vi.fn(([x, y]: [number, number]) => ({ x, y })),
     };
     return { map: map as unknown as maplibregl.Map, calls: map, layers, sources };
 }
@@ -96,16 +97,59 @@ describe('heatmap rendering modes', () => {
         expect(calls.addSource).toHaveBeenCalledTimes(2);
         expect(layers.has(ACTIVITY_HIT_LAYER)).toBe(true);
     });
-    it('provides canonical small-dot interaction with touch tolerance and preserves selected clicks', () => {
+    it('prefers the exact canonical dot over a nearer tolerance hit and preserves selected-marker ownership', () => {
         const { map, calls } = layerMap();
-        expect(activityHitId(map, { x: 20, y: 30 } as maplibregl.Point)).toBeNull();
+        const point = { x: 20, y: 30 } as maplibregl.Point;
+        expect(activityHitId(map, point)).toBeNull();
         syncActivityHeatmap(map, { enabled: true, dark: false, data: buildActivityHeatmapData([event]) });
-        calls.queryRenderedFeatures.mockReturnValue([{ layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId: 'representative-a' } }]);
-        expect(activityHitId(map, { x: 20, y: 30 } as maplibregl.Point)).toBe('representative-a');
-        expect(calls.queryRenderedFeatures).toHaveBeenCalledWith([[12, 22], [28, 38]], { layers: [ACTIVITY_HIT_LAYER, 'selected-point-active'] });
+        const exact = hit('representative-a', 21, 30);
+        calls.queryRenderedFeatures.mockImplementation(target => Array.isArray(target)
+            ? [hit('wrong-neighbor', 20, 30), exact] : [exact]);
+        expect(activityHitId(map, point)).toBe('representative-a');
+        expect(calls.queryRenderedFeatures).toHaveBeenCalledTimes(1);
+        expect(calls.queryRenderedFeatures).toHaveBeenCalledWith(point, { layers: [ACTIVITY_HIT_LAYER, 'selected-point-active'] });
         calls.queryRenderedFeatures.mockReturnValue([{ layer: { id: 'selected-point-active' }, properties: { canonicalId: 'selected' } }]);
-        expect(activityHitId(map, { x: 20, y: 30 } as maplibregl.Point)).toBeNull();
+        expect(activityHitId(map, point)).toBeNull();
+    });
+    it('picks the nearest tolerant dot, keeps eight-pixel accessibility, and ignores nearby selected markers', () => {
+        const { map, calls } = layerMap();
+        syncActivityHeatmap(map, { enabled: true, dark: false, data: buildActivityHeatmapData([event]) });
+        const point = { x: 20, y: 30 } as maplibregl.Point;
+        // Exact query misses; the expanded query can be in any worker order.
+        calls.queryRenderedFeatures.mockImplementation(target => Array.isArray(target)
+            ? [hit('far', 28, 30), hit('nearest', 24, 30), { layer: { id: 'selected-point-active' } }] : []);
+        expect(activityHitId(map, point)).toBe('nearest');
+        expect(calls.queryRenderedFeatures).toHaveBeenLastCalledWith([[12, 22], [28, 38]], { layers: [ACTIVITY_HIT_LAYER] });
+        calls.queryRenderedFeatures.mockImplementation(target => Array.isArray(target) ? [hit('edge', 28, 30)] : []);
+        expect(activityHitId(map, point)).toBe('edge');
         calls.queryRenderedFeatures.mockReturnValue([]);
-        expect(activityHitId(map, { x: 20, y: 30 } as maplibregl.Point)).toBeNull();
+        expect(activityHitId(map, point)).toBeNull();
+    });
+    it('breaks exact and tolerance ties by canonical id across feature order and layer reinstalls', () => {
+        const { map, calls, layers, sources } = layerMap();
+        const state = { enabled: true, dark: false, data: buildActivityHeatmapData([event]) };
+        const point = { x: 20, y: 30 } as maplibregl.Point;
+        for (const exact of [true, false]) {
+            for (const ordered of [[hit('b', 18, 30), hit('a', 22, 30)], [hit('a', 22, 30), hit('b', 18, 30)]]) {
+                syncActivityHeatmap(map, state);
+                calls.queryRenderedFeatures.mockImplementation(target => exact || Array.isArray(target) ? ordered : []);
+                expect(activityHitId(map, point)).toBe('a');
+                layers.delete(ACTIVITY_HIT_LAYER); sources.clear();
+            }
+        }
+    });
+    it('ignores malformed picking features instead of selecting invalid identities', () => {
+        const { map, calls } = layerMap();
+        syncActivityHeatmap(map, { enabled: true, dark: false, data: buildActivityHeatmapData([event]) });
+        calls.queryRenderedFeatures.mockReturnValue([
+            hit(123, 20, 30), hit('invalid-coordinate', NaN, 30),
+            { layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId: 'line' }, geometry: { type: 'LineString' } },
+            hit('valid', 20, 30),
+        ]);
+        expect(activityHitId(map, { x: 20, y: 30 } as maplibregl.Point)).toBe('valid');
     });
 });
+
+function hit(canonicalId: unknown, x: number, y: number) {
+    return { layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId }, geometry: { type: 'Point', coordinates: [x, y] } };
+}

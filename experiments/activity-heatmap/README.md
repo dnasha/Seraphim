@@ -6,7 +6,7 @@ Branch: `experiment/activity-heatmap`. Immutable base: `4c693ccd78e7d0c26842488d
 
 Open Map settings → Display Mode → Activity heatmap. The toggle works with the current displayed, entitled dataset and persists only on this device, separately for each account and guests. Reset saved heatmap choice deletes that account's local choice. Storage failures leave a working session toggle and an explanatory message.
 
-Heatmap mode hides normal news pins, cluster circles/counts and hot-story pulses. It retains the selected category marker and existing popup/sidebar selection. Small dots offer an 8 px click/touch tolerance. Turning it off restores the previous individual-pin mode and animations without changing that preference, map scope, filters or selection.
+Heatmap mode hides normal news pins, cluster circles/counts and hot-story pulses. It retains the selected category marker and existing popup/sidebar selection. Exact dot hits take priority; misses use an 8 px tolerance and select the nearest projected dot. Equal-distance ties use canonical ID order. Drawing tools own their canvas gestures while active, including their selected-marker clicks; closing the tools restores normal heatmap selection. Turning heatmap off restores the previous individual-pin mode and animations without changing that preference, map scope, filters or selection.
 
 The legend shows relative loaded/filtered reporting density, explicitly distinguishes it from danger/risk, and explains zoom changes, approximate grouped locations, incomplete/stale coverage and caps. Empty, loading and failed-update states have specific text. The palette follows the application theme; the Settings panel and legend remain scrollable in constrained viewports.
 
@@ -33,7 +33,24 @@ The legend shows relative loaded/filtered reporting density, explicitly distingu
 
 The first full run caught missing button tooltips, which were added. The initial map-recovery mock also returned a news source for every possible source ID; it now respects source identity. No unresolved failures or environment blockers remain. Vitest emits the baseline warning about future Vite native config loading; existing negative-path tests intentionally log simulated failures. The initial agent-browser smoke test used unavailable remote glyphs and MapLibre's fallback; the final scripted browser runs mock all remote resources and report no browser errors.
 
-The pinned baseline contained no reusable 1,000-event map fixture, so this branch adds a deterministic synthetic fixture used by tests and browser QA. Browser QA uses a fixture basemap/font responses and a mock account/tier, not live customer services. Production tiles, hardware mobile GPUs and other browser engines were not tested. Separate Astra verification is pending.
+The pinned baseline contained no reusable 1,000-event map fixture, so this branch adds a deterministic synthetic fixture used by tests and browser QA. Browser QA uses a fixture basemap/font responses and a mock account/tier, not live customer services. Production tiles, hardware mobile GPUs and other browser engines were not tested.
+
+## Astra review repairs recorded 2026-09-30
+
+Astra independently found two P2 issues at the first pushed head: a tolerance-box click could choose a neighboring event, and drawing a vertex over a dot could select a story and move the camera. Both are repaired in this follow-up; fresh Astra verification remains pending.
+
+- Picking queries actual hits first and preserves the selected marker's ownership only for an actual marker hit. It then ranks tolerant candidates by projected screen distance, with canonical ID order breaking ties. Nearby selected markers no longer block another dot merely by touching the tolerance box.
+- `MapDrawTools` exposes an optional `onInteractionOwnershipChange` callback, synchronized before the next canvas event. `NewsMap` retains the ownership in a ref and blocks heatmap and selected-marker selection while any active drawing/edit/text/eraser tool owns interaction. The callback clears on closing/unmount and remains valid through style reloads.
+- Feature tests: **26 passed**. New cases cover exact-hit priority, nearest fallback, the eight-pixel target, tied candidates in reversed order and layer reinstalls, malformed candidates, and drawing ownership through style reloads.
+- Dependency parity: the saved environment initially had Next 16.3.5, MapLibre 6.10.0 and Terra Draw 1.34.0. A clean `bun install --frozen-lockfile` restores **41/41 direct dependencies to their locked versions**, including Next 16.3.7, MapLibre 6.11.2 and Terra Draw 1.35.0. No manifest/lockfile edits. The first incremental install retained an invalid nested jsdom/MIME resolution and failed unrelated scraper tests; the clean install restores nested jsdom 30.1.1 → MIME 5.0.0 and fixes the import. Final checks below use the clean installation; earlier saved-environment evidence is superseded.
+- `bun run typecheck`, `bun run lint` and `bun run build`: passed on the clean dependencies. The build uses placeholder service settings and excludes the temporary QA route/assets. Stale `.next/dev/types` referencing the removed fixture were cleared before checking application types.
+- Full coverage: **113 files passed; 1,037 tests passed; one existing todo**. Statements 83.84%, branches 76.04%, functions 88.36%, lines 86.91%; thresholds unchanged. All heatmap helper files retain 100% line coverage. The existing coverage allowlist does not include the main map integration components; actual interactions are additionally exercised below.
+- The strengthened existing browser suite asserts the intended canonical ID, uses touchscreen taps on mobile, and waits for observed WebGL lost/restored events. Desktop/mobile toggle, selection/sidebar, theme/context recovery, account storage, empty/capped/subset and individual-pin restore checks pass with zero API requests and browser errors.
+- New `activity-heatmap-interactions.mjs`: desktop **(538,601) selects fixture-0**, mobile **(104,600) selects fixture-250**. Both 1,000-event viewports pass nearest tolerant picking, actual drawing vertex creation, all nine tools (Area/Ruler/Rect/Circle/Pin/Sketch/Text/Eraser/Select) with unchanged selection/version/camera, selected-marker suppression, style reload, and selection restoration after closing drawing. Camera move events and real canvas click delivery are asserted. Zero API requests and browser errors.
+- Desktop/mobile screenshots were inspected. Final repair evidence is saved at `/workspace/.seraphim-tools/logs/heatmap-repair-clean-interactions/` and `heatmap-repair-clean-qa/`; final quality logs use the `heatmap-repair-clean-*` prefix. Direct version parity is recorded in `heatmap-repair-dependency-parity.json`.
+- An early coverage attempt ran with the temporary QA route installed and failed the repository tooltip check on fixture-only buttons. The route/assets were removed before the passing full coverage run. The initial interaction runner also required fixture synchronization with mobile lazy loading and hiding the popup UI while retaining selection to exercise its underlying marker; the final runner asserts that clicks reach the real canvas.
+
+The fixtures mock accounts and external resources and run Chromium with SwiftShader and emulated mobile touch. Production services, hardware GPU performance, and the combined experiment branches remain unverified. No fetching/query/entitlement or cloud-preference changes are part of these repairs.
 
 ## Reproduce browser QA
 
@@ -50,6 +67,7 @@ In a second shell, set `NODE_PATH` to the external installation's `node_modules`
 
 ```sh
 node scripts/qa/activity-heatmap-browser.mjs
+node scripts/qa/activity-heatmap-interactions.mjs
 ```
 
 After stopping the dev server, **remove the temporary QA route and public assets before repository checks, building or committing**:
@@ -63,6 +81,7 @@ Artifacts default to ignored `artifacts/activity-heatmap`; override with `HEATMA
 ## Integration hotspots
 
 - `NewsMap.tsx`: preference hook, displayed `items` → density memo/ref, pulse suppression, generic small-dot click handler and legend. The usual `news-events` source and `forceIndividualPins` query mode remain independent.
+- `MapDrawTools.tsx`: optional interaction ownership callback. Preserve it or connect the combined drawing experiment's equivalent ownership signal; report all active drawing/edit/annotation modes and clear ownership on close/unmount.
 - `useMapLayers.ts`: one optional ref and a small restore call alongside the selected layer registration. Preserve this call when integrating other experiment layers.
 - `MapSettings.tsx`/CSS: new toggle, local reset/error controls and temporarily disabled individual-pin control. Keep the saved individual-pin state separate from heatmap visibility.
 - `HomeContent.tsx`: only passes existing `isCapped` and error flags. For replay integration, pass the replay **displayed** dataset as `items`; never provide the underlying full snapshot/live dataset to density.

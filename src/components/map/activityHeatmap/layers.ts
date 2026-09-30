@@ -60,14 +60,35 @@ export function syncActivityHeatmap(map: maplibregl.Map, state: ActivityHeatmapS
     }
 }
 
-/** A forgiving touch target around small dots; the existing selected marker owns its click. */
+function nearestActivityId(map: maplibregl.Map, point: maplibregl.Point, hits: maplibregl.MapGeoJSONFeature[]): string | null {
+    let nearest: { id: string; distance: number } | undefined;
+    for (const hit of hits) {
+        if (hit.layer.id !== ACTIVITY_HIT_LAYER) continue;
+        const id: unknown = hit.properties.canonicalId;
+        if (typeof id !== 'string' || hit.geometry.type !== 'Point') continue;
+        const [longitude, latitude] = hit.geometry.coordinates;
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) continue;
+        const center = map.project([longitude, latitude]);
+        const distance = (center.x - point.x) ** 2 + (center.y - point.y) ** 2;
+        // Canonical identity breaks collocated/equidistant ties independently of
+        // worker feature order, viewport, and style reloads.
+        if (!nearest || distance < nearest.distance || (distance === nearest.distance && id < nearest.id)) {
+            nearest = { id, distance };
+        }
+    }
+    return nearest?.id ?? null;
+}
+
+/** Exact dots win; an eight-pixel tolerance retains forgiving touch targets. */
 export function activityHitId(map: maplibregl.Map, point: maplibregl.Point): string | null {
     if (!map.getLayer(ACTIVITY_HIT_LAYER)) return null;
     const layers = [ACTIVITY_HIT_LAYER, 'selected-point-active'].filter(id => map.getLayer(id));
-    const hits = map.queryRenderedFeatures([[point.x - 8, point.y - 8], [point.x + 8, point.y + 8]], { layers });
-    if (hits.some(hit => hit.layer.id === 'selected-point-active')) return null;
+    const exact = map.queryRenderedFeatures(point, { layers });
+    // Only an actual marker hit belongs to the existing selected-marker handler.
+    // A marker near the tolerance box must not block a different dot.
+    if (exact.some(hit => hit.layer.id === 'selected-point-active')) return null;
     // Canonical ids deliberately resolve the representative's individual detail.
     // Never use a cluster-z id or pretend a representative is a cluster expansion.
-    const id: unknown = hits[0]?.properties.canonicalId;
-    return typeof id === 'string' ? id : null;
+    return nearestActivityId(map, point, exact) ?? nearestActivityId(map, point,
+        map.queryRenderedFeatures([[point.x - 8, point.y - 8], [point.x + 8, point.y + 8]], { layers: [ACTIVITY_HIT_LAYER] }));
 }

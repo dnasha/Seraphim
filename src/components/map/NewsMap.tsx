@@ -155,6 +155,10 @@ export default function NewsMap({
   const [retryCount, setRetryCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  const drawingOwnsInteractionRef = useRef(false);
+  const onDrawingInteractionOwnershipChange = useCallback((owned: boolean) => {
+    drawingOwnsInteractionRef.current = owned;
+  }, []);
   // Restore saved annotations on navigation; otherwise download the drawing
   // engine only after the user first opens its tools. Keep it mounted thereafter.
   const [drawToolsRequested, setDrawToolsRequested] = useState(() => {
@@ -716,7 +720,7 @@ export default function NewsMap({
           eventsWired = true;
 
           map.on('click', (e) => {
-            if (!activityHeatmapRef.current.enabled) return;
+            if (!activityHeatmapRef.current.enabled || drawingOwnsInteractionRef.current) return;
             const id = activityHitId(map, e.point);
             if (id) onSelectItemRef.current(id);
           });
@@ -734,6 +738,7 @@ export default function NewsMap({
               );
           });
           map.on("click", "selected-point-active", (e) => {
+            if (activityHeatmapRef.current.enabled && drawingOwnsInteractionRef.current) return;
             if (e.features?.[0])
               onSelectItemRef.current(
                 e.features[0].properties.canonicalId || e.features[0].properties.id,
@@ -1266,6 +1271,7 @@ export default function NewsMap({
             mapRef={mapRef}
             mapReady={mapReady}
             isOpen={drawToolsOpen}
+            onInteractionOwnershipChange={onDrawingInteractionOwnershipChange}
             userTier={userTier}
             onClose={() => setDrawToolsOpen(false)}
           />}

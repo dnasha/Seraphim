@@ -6,6 +6,7 @@ import { DEFAULT_SYNCED_PREFERENCES } from '@/hooks/useSyncedPreferences';
 import { activityPreferenceKey } from '@/components/map/activityHeatmap/useActivityHeatmapPreference';
 import { ACTIVITY_HIT_LAYER, ACTIVITY_SOURCE } from '@/components/map/activityHeatmap/layers';
 import { mapActivityFixture } from './fixtures/mapActivity';
+import { DRAW_STORAGE_KEY } from '@/components/map/draw/drawPersistence';
 
 type Harness = {
     emit: (event: string, payload?: unknown) => void;
@@ -14,9 +15,12 @@ type Harness = {
     setStyle: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>;
     queryRenderedFeatures: ReturnType<typeof vi.fn>;
 };
-const mocks = vi.hoisted(() => ({ maps: [] as Harness[], pulseStart: vi.fn(), pulseStop: vi.fn(), pulseDispose: vi.fn() }));
+const mocks = vi.hoisted(() => ({ maps: [] as Harness[], pulseStart: vi.fn(), pulseStop: vi.fn(), pulseDispose: vi.fn(), drawingOwnership: undefined as ((owned: boolean) => void) | undefined }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('next/dynamic', () => ({ default: () => () => null }));
+vi.mock('next/dynamic', () => ({ default: () => (props: { onInteractionOwnershipChange: (owned: boolean) => void }) => {
+    mocks.drawingOwnership = props.onInteractionOwnershipChange;
+    return null;
+} }));
 vi.mock('@/components/map/MapActionTools', () => ({ default: () => null }));
 vi.mock('@/components/map/MapPopup', () => ({ default: () => <div>Selected detail</div> }));
 vi.mock('@/components/map/MapConstants', () => ({
@@ -55,6 +59,7 @@ vi.mock('maplibre-gl', () => ({
         getCenter() { return { lat: 30, lng: 10 }; } getZoom() { return 4; }
         getCanvas() { return { style: { cursor: '' } }; }
         getBearing() { return 0; }
+        project([x, y]: [number, number]) { return { x, y }; }
     },
     setWorkerUrl() {}, getVersion: () => 'test', GPUInitializationError: class extends Error {},
     NavigationControl: class {}, ScaleControl: class {}, AttributionControl: class {},
@@ -75,6 +80,7 @@ const toggle = () => fireEvent.click(screen.getByRole('switch', { name: 'Activit
 describe('heatmap integrated with NewsMap and Settings', () => {
     beforeEach(() => {
         vi.useFakeTimers(); localStorage.clear(); mocks.maps.length = 0;
+        mocks.drawingOwnership = undefined;
         vi.clearAllMocks(); vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     });
     afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -109,7 +115,7 @@ describe('heatmap integrated with NewsMap and Settings', () => {
         const { rerender } = render(<NewsMap {...defaults} selectedItemId="fixture-2" />);
         await advance(); await load();
         expect(latest().sources.get('selected-news-event')?.data.features[0].properties).toMatchObject({ canonicalId: 'fixture-2' });
-        latest().queryRenderedFeatures.mockReturnValue([{ layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId: 'fixture-3' } }]);
+        latest().queryRenderedFeatures.mockReturnValue([dot('fixture-3')]);
         act(() => latest().emit('click', { point: { x: 30, y: 30 } }));
         expect(defaults.onSelectItem).toHaveBeenCalledWith('fixture-3');
         rerender(<NewsMap {...defaults} selectedItemId="fixture-2" isDarkMode />);
@@ -121,9 +127,29 @@ describe('heatmap integrated with NewsMap and Settings', () => {
         await advance(3_000); await load();
         expect(latest()).not.toBe(original); expect(original.remove).toHaveBeenCalled();
         expect(latest().layers.has(ACTIVITY_HIT_LAYER)).toBe(true);
-        latest().queryRenderedFeatures.mockReturnValue([{ layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId: 'fixture-4' } }]);
+        latest().queryRenderedFeatures.mockReturnValue([dot('fixture-4')]);
         act(() => latest().emit('click', { point: { x: 30, y: 30 } }));
         expect(defaults.onSelectItem).toHaveBeenLastCalledWith('fixture-4');
+    });
+    it('blocks heatmap and selected-marker picking while drawing owns the map, including after a style reload', async () => {
+        localStorage.setItem(activityPreferenceKey('account-a'), '{"version":1,"enabled":true}');
+        localStorage.setItem(DRAW_STORAGE_KEY, '{"version":1,"drawFeatures":[],"textAnnotations":[]}');
+        const { rerender } = render(<NewsMap {...defaults} />);
+        await advance(); await load();
+        expect(mocks.drawingOwnership).toBeTypeOf('function');
+        act(() => mocks.drawingOwnership!(true));
+        const payload = { point: { x: 30, y: 30 }, features: [dot('fixture-3')] };
+        latest().queryRenderedFeatures.mockReturnValue([dot('fixture-3')]);
+        act(() => { latest().emit('click', payload); latest().emit('click:selected-point-active', payload); });
+        expect(latest().queryRenderedFeatures).not.toHaveBeenCalled();
+        expect(defaults.onSelectItem).not.toHaveBeenCalled();
+        rerender(<NewsMap {...defaults} isDarkMode />);
+        await advance(20); await load();
+        act(() => latest().emit('click', payload));
+        expect(defaults.onSelectItem).not.toHaveBeenCalled();
+        act(() => mocks.drawingOwnership!(false));
+        act(() => latest().emit('click', payload));
+        expect(defaults.onSelectItem).toHaveBeenCalledExactlyOnceWith('fixture-3');
     });
     it('follows changed displayed data including empty/capped results and clears on account switch', async () => {
         localStorage.setItem(activityPreferenceKey('account-a'), '{"version":1,"enabled":true}');
@@ -140,3 +166,7 @@ describe('heatmap integrated with NewsMap and Settings', () => {
         expect(screen.queryByLabelText('Activity density legend')).toBeNull();
     });
 });
+
+function dot(canonicalId: string) {
+    return { layer: { id: ACTIVITY_HIT_LAYER }, properties: { canonicalId }, geometry: { type: 'Point', coordinates: [30, 30] } };
+}

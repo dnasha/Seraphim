@@ -44,7 +44,7 @@ export default function HeatmapQaPage() {
             <button onClick={() => setOwner(owner === 'fixture-a' ? 'fixture-b' : 'fixture-a')}>Switch account</button>
             <button onClick={() => setIndividual(!individual)}>Fixture individual pins</button>
             <button onClick={() => { select('fixture-0'); setVersion(version + 1); }}>Sidebar story</button>
-            <output aria-label="Selected event">{selected ?? 'none'}</output>
+            <output aria-label="Selected event" data-selection-version={version}>{selected ?? 'none'}</output>
         </div>
         <NewsMap items={items} selectedItemId={selected} selectionVersion={version} onSelectItem={id => { select(id); setVersion(v => v + 1); }}
             isDarkMode={resolvedTheme === 'dark'} animatedEffects onAnimatedEffectsChange={() => {}}
