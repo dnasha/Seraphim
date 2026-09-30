@@ -7,18 +7,22 @@ import AnalystWorkspace, { EvidenceSelectionControl } from '@/components/analyst
 import { saveStore, storageKey, emptyStore } from '@/lib/analyst/storage';
 import { analystEvent, analystId, analystScope, detailBody, fixturePacket } from './fixtures/analyst';
 import type { UserTier } from '@/lib/entitlements';
+import { IDBFactory } from 'fake-indexeddb';
+import { CHANGE_KEY, DATABASE_NAME, mutateStore, readStore, resetStore } from '@/lib/analyst/database';
 
 let account = 'owner';
 let status = 200;
 let fakeFetch: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   localStorage.clear(); account = 'owner'; status = 200;
+  vi.stubGlobal('indexedDB', new IDBFactory());
   fakeFetch = vi.fn(async (input: string) => input.includes('/access') ? Response.json({ userId: account, tier: 'analyst' }, { status }) : Response.json(detailBody()));
   vi.stubGlobal('fetch', fakeFetch);
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+const stored = (owner = 'owner') => readStore(indexedDB, owner);
 const boot = async () => {
   const hook = renderHook(({ owner, tier, ready }) => useAnalystWorkspace(owner, tier, ready), { initialProps: { owner: 'owner' as string | null, tier: 'analyst' as UserTier, ready: true } });
   await waitFor(() => expect(hook.result.current.allowed).toBe(true));
@@ -28,18 +32,18 @@ const boot = async () => {
 it('keeps selection independent, persists notes locally, and never changes immutable captured data', async () => {
   const hook = await boot();
   act(() => hook.result.current.toggle(analystEvent()));
-  act(() => hook.result.current.setNote(analystId(), 'private original note'));
+  await act(async () => { await hook.result.current.setNote(analystId(), 'private original note'); });
   await act(async () => { await hook.result.current.capture(analystScope); });
   const packet = hook.result.current.packets[0];
   expect(packet.entries[0].event?.title).toBe('Fixture event 1');
-  act(() => hook.result.current.setNote(analystId(), 'changed note'));
+  await act(async () => { await hook.result.current.setNote(analystId(), 'changed note'); });
   let exported: string | null = null;
   await act(async () => { exported = await hook.result.current.exportPacket(packet, 'json', false); });
   expect(exported).not.toContain('changed note');
   await act(async () => { exported = await hook.result.current.exportPacket(packet, 'json', true); });
   expect(exported).toContain('changed note');
   expect(packet).not.toHaveProperty('privateNotes');
-  expect(JSON.parse(localStorage.getItem(storageKey('owner'))!).notes[analystId()]).toBe('changed note');
+  expect((await stored()).notes[analystId()]).toBe('changed note');
   expect(fakeFetch.mock.calls.filter(([url]) => url.includes('/api/news'))).toHaveLength(1);
 });
 it('clears private UI and cancels capture on account change even when an old request resolves later', async () => {
@@ -62,8 +66,8 @@ it('clears private UI and cancels capture on account change even when an old req
   expect(capturedSignal!.aborted).toBe(true);
   await act(async () => { resolveDetail(Response.json(detailBody())); await capture; });
   await waitFor(() => expect(hook.result.current.allowed).toBe(true));
-  expect(hook.result.current.packets).toEqual([]); expect(localStorage.getItem(storageKey('other'))).toBeNull();
-  expect(localStorage.getItem(storageKey('owner'))).toContain('owner-only secret');
+  expect(hook.result.current.packets).toEqual([]); expect((await stored('other')).packets).toEqual([]);
+  expect((await stored()).notes[analystId()]).toBe('owner-only secret');
 });
 it.each(['guest', 'free', 'pro'] as UserTier[])('blocks private packet reads and exports on transition to %s', async tier => {
   saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket()] });
@@ -87,16 +91,16 @@ it('rechecks on window focus and clears UI when access cannot be verified', asyn
   await act(async () => { window.dispatchEvent(new Event('focus')); });
   expect(hook.result.current.allowed).toBe(false); expect(hook.result.current.selections).toEqual([]);
 });
-it('responds to cross-tab deletion and supports deleting local data after a downgrade', async () => {
+it('responds to cross-tab reset and supports deleting local data after a downgrade', async () => {
   saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket()], notes: { [analystId()]: 'private' } });
   const hook = await boot();
-  localStorage.removeItem(storageKey('owner'));
-  act(() => window.dispatchEvent(new StorageEvent('storage', { key: storageKey('owner'), newValue: null })));
+  await act(async () => { await resetStore(localStorage, indexedDB, 'owner', new AbortController().signal); });
+  await waitFor(() => expect(hook.result.current.packets).toEqual([]));
   expect(hook.result.current.packets).toEqual([]); expect(hook.result.current.notes).toEqual({});
-  saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket()] });
+  await mutateStore(indexedDB, 'owner', (await stored()).resetId, { type: 'add-packet', packet: fixturePacket() }, new AbortController().signal);
   hook.rerender({ owner: 'owner', tier: 'free', ready: true });
-  act(() => hook.result.current.deleteLocalData());
-  expect(localStorage.getItem(storageKey('owner'))).toBeNull();
+  await act(async () => { await hook.result.current.deleteLocalData(); });
+  expect((await stored()).packets).toEqual([]);
 });
 it('retains a completed capture for export after a storage failure and prevents overwriting corrupt data', async () => {
   localStorage.setItem(storageKey('owner'), '{corrupt');
@@ -105,12 +109,12 @@ it('retains a completed capture for export after a storage failure and prevents 
   act(() => hook.result.current.toggle(analystEvent()));
   await act(async () => { await hook.result.current.capture(analystScope); });
   expect(hook.result.current.unsaved?.entries[0].status).toBe('captured');
-  expect(hook.result.current.error).toContain('Delete invalid');
+  expect(hook.result.current.error).toContain('Safe saving');
   expect(localStorage.getItem(storageKey('owner'))).toBe('{corrupt');
   let text: string | null = null;
   await act(async () => { text = await hook.result.current.exportPacket(hook.result.current.unsaved!, 'json', false); });
   expect(text).toContain('Fixture event 1');
-  act(() => hook.result.current.deleteLocalData());
+  await act(async () => { await hook.result.current.deleteLocalData(); });
   expect(hook.result.current.unsaved).toBeNull();
 });
 it('cancels export during an account transition without returning private content', async () => {
@@ -139,8 +143,9 @@ it('requires explicit note inclusion preview and exposes partial errors and pack
   fireEvent.click(screen.getByRole('checkbox', { name: 'Include private notes in this export' }));
   expect(screen.getByText('Private-note inclusion preview')).toBeTruthy(); expect(screen.getByText('private inclusion text')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Delete this packet' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Download JSON' })).toBeNull());
   expect(screen.queryByRole('button', { name: 'Download JSON' })).toBeNull();
-  expect(JSON.parse(localStorage.getItem(storageKey('owner'))!).notes[analystId()]).toBe('private inclusion text');
+  expect((await stored()).notes[analystId()]).toBe('private inclusion text');
 });
 it('makes the evidence toggle keyboard accessible with an explicit aggregate representative label', () => {
   const click = vi.fn();
@@ -171,8 +176,8 @@ it('keeps an unsaved capture at the packet quota until explicitly saved or disca
   expect(unsaved).not.toBeNull(); expect(hook.result.current.error).toContain('not saved');
   await act(async () => { await hook.result.current.capture(analystScope); });
   expect(hook.result.current.unsaved).toBe(unsaved);
-  act(() => hook.result.current.deletePacket(analystId(100)));
-  act(() => hook.result.current.saveUnsaved());
+  await act(async () => { await hook.result.current.deletePacket(analystId(100)); });
+  await act(async () => { await hook.result.current.saveUnsaved(); });
   expect(hook.result.current.unsaved).toBeNull(); expect(hook.result.current.packets).toHaveLength(8);
   expect(hook.result.current.packets[0].id).toBe(unsaved!.id);
 });
@@ -189,4 +194,145 @@ it('allows a new capture after cancellation while a stale transport is still unr
   expect(hook.result.current.packets).toHaveLength(1);
   await act(async () => { resolveOld(Response.json(detailBody())); await oldCapture; });
   expect(hook.result.current.packets).toHaveLength(1); expect(hook.result.current.busy).toBe(false);
+});
+
+it('reconciles ordinary cross-tab changes without losing selection or a completed unsaved packet', async () => {
+  const packets = Array.from({ length: 8 }, (_, i) => ({ ...fixturePacket(), id: analystId(100 + i) }));
+  saveStore(localStorage, { ...emptyStore('owner'), packets });
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  const unsaved = hook.result.current.unsaved;
+  await act(async () => { await mutateStore(indexedDB, 'owner', (await stored()).resetId, { type: 'set-note', id: analystId(2), note: 'other tab note', previous: '' }, new AbortController().signal); });
+  await waitFor(() => expect(hook.result.current.notes[analystId(2)]).toBe('other tab note'));
+  expect(hook.result.current.unsaved).toBe(unsaved);
+  expect(hook.result.current.selections).toHaveLength(1);
+  expect(hook.result.current.notes[analystId(2)]).toBe('other tab note');
+  expect(hook.result.current.error).toContain('not saved');
+});
+it('preserves pending capture during an ordinary storage update but cancels it on an explicit reset', async () => {
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  let detailSignal: AbortSignal | undefined;
+  let resolveDetail: (response: Response) => void = () => {};
+  fakeFetch.mockImplementation(async (url: string, options: RequestInit) => {
+    if (url.includes('access')) return Response.json({ userId: 'owner', tier: 'analyst' });
+    detailSignal = options.signal as AbortSignal;
+    return new Promise<Response>(resolve => { resolveDetail = resolve; });
+  });
+  let pending: Promise<void> = Promise.resolve();
+  act(() => { pending = hook.result.current.capture(analystScope); });
+  await waitFor(() => expect(detailSignal).toBeDefined());
+  await act(async () => { await mutateStore(indexedDB, 'owner', (await stored()).resetId, { type: 'set-note', id: analystId(2), note: 'cross-tab write', previous: '' }, new AbortController().signal); });
+  await waitFor(() => expect(hook.result.current.notes[analystId(2)]).toBe('cross-tab write'));
+  expect(detailSignal!.aborted).toBe(false); expect(hook.result.current.busy).toBe(true);
+  await act(async () => { resolveDetail(Response.json(detailBody())); await pending; });
+  expect(hook.result.current.packets).toHaveLength(1); expect(hook.result.current.notes[analystId(2)]).toBe('cross-tab write');
+  act(() => { pending = hook.result.current.capture(analystScope); });
+  await waitFor(() => expect(hook.result.current.busy).toBe(true));
+  await act(async () => { await hook.result.current.deleteLocalData(); resolveDetail(Response.json(detailBody())); await pending; });
+  expect(detailSignal!.aborted).toBe(true); expect(hook.result.current.packets).toEqual([]);
+  expect(hook.result.current.selections).toEqual([]); expect(hook.result.current.unsaved).toBeNull();
+});
+it('keeps rapid note edits and rejects a conflicting same-note write from a stale tab', async () => {
+  const a = await boot(); const b = await boot();
+  await act(async () => {
+    await Promise.all([a.result.current.setNote(analystId(), 'first'), b.result.current.setNote(analystId(), 'conflicting')]);
+  });
+  expect((await stored()).notes[analystId()]).toBe('first');
+  expect(b.result.current.error).toContain('not saved'); expect(b.result.current.notes[analystId()]).toBe('first');
+  await act(async () => {
+    await Promise.all([a.result.current.setNote(analystId(), 'f'), a.result.current.setNote(analystId(), 'fi'), a.result.current.setNote(analystId(), 'final')]);
+  });
+  expect(a.result.current.notes[analystId()]).toBe('final');
+  expect((await stored()).notes[analystId()]).toBe('final');
+});
+it('keeps capture/export usable without IndexedDB, with an explicit save error and no unsafe write fallback', async () => {
+  vi.stubGlobal('indexedDB', undefined);
+  const hook = await boot();
+  expect(hook.result.current.error).toContain('IndexedDB');
+  act(() => hook.result.current.toggle(analystEvent()));
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  expect(hook.result.current.unsaved).not.toBeNull(); expect(localStorage.getItem(storageKey('owner'))).toBeNull();
+  let output: string | null = null;
+  await act(async () => { output = await hook.result.current.exportPacket(hook.result.current.unsaved!, 'csv', false); });
+  expect(output).toContain('Fixture event 1');
+});
+it('contains dashboard key events on buttons and packet selection while keeping textarea input editable', async () => {
+  saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket()] });
+  function Harness() { const w = useAnalystWorkspace('owner', 'analyst', true); return <><button onClick={() => w.setOpen(true)}>Open</button><AnalystWorkspace workspace={w} scope={analystScope} signedIn currentItem={analystEvent()} /></>; }
+  const background = vi.fn(); window.addEventListener('keydown', background);
+  render(<Harness />); fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Download JSON' })).toBeTruthy());
+  for (const target of [screen.getByRole('button', { name: 'Close evidence workspace' }), screen.getByRole('combobox')]) {
+    for (const key of ['t', 'c', 'm', '/', 'Escape']) fireEvent.keyDown(target, { key });
+  }
+  expect(background).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle active event in evidence selection' }));
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'tcm typed normally' } });
+  await waitFor(async () => expect((await stored()).notes[analystId()]).toBe('tcm typed normally'));
+  window.removeEventListener('keydown', background);
+});
+
+it('downloads all formats, resets note opt-in on packet switch and removes print resources on downgrade', async () => {
+  saveStore(localStorage, { ...emptyStore('owner'), packets: [fixturePacket(), { ...fixturePacket(), id: analystId(101) }], notes: { [analystId()]: 'private preview' } });
+  const blobs: Blob[] = [];
+  const revoke = vi.fn();
+  const OriginalURL = URL;
+  vi.stubGlobal('URL', class extends OriginalURL {
+    static createObjectURL(blob: Blob) { blobs.push(blob); return `blob:fixture-${blobs.length}`; }
+    static revokeObjectURL = revoke;
+  });
+  const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  function Harness({ tier }: { tier: UserTier }) { const w = useAnalystWorkspace('owner', tier, true); return <><button onClick={() => w.setOpen(true)}>Open</button><AnalystWorkspace workspace={w} scope={analystScope} signedIn /></>; }
+  const view = render(<Harness tier="analyst" />); fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Download JSON' })).toBeTruthy());
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.getByText('private preview')).toBeTruthy();
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: analystId(101) } });
+  expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  for (const name of ['Download JSON', 'Download CSV', 'Download printable brief']) {
+    fireEvent.click(screen.getByRole('button', { name }));
+    await waitFor(() => expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(false));
+  }
+  expect(blobs.map(blob => blob.type)).toEqual(['application/json', 'text/csv;charset=utf-8', 'text/html;charset=utf-8']);
+  expect(blobs.every(blob => blob.size > 0)).toBe(true); expect(clicked).toHaveBeenCalledTimes(3);
+  let printCalls = 0;
+  const originalAppend = document.body.appendChild.bind(document.body);
+  const append = vi.spyOn(document.body, 'appendChild').mockImplementation(node => {
+    const appended = originalAppend(node);
+    if (node instanceof HTMLIFrameElement) {
+      vi.spyOn(node.contentWindow!, 'focus').mockImplementation(() => {});
+      vi.spyOn(node.contentWindow!, 'print').mockImplementation(() => { printCalls++; });
+    }
+    return appended;
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Print / save PDF' }));
+  await waitFor(() => expect(document.querySelector('iframe')).toBeTruthy());
+  const frame = document.querySelector('iframe')!;
+  expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-modals');
+  expect(frame.srcdoc).not.toContain('private preview');
+  fireEvent.load(frame); expect(printCalls).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Delete all local evidence data…' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete local workspace' }));
+  await waitFor(() => expect(document.querySelector('iframe')).toBeNull());
+  view.rerender(<Harness tier="pro" />);
+  expect(document.querySelector('iframe')).toBeNull();
+  expect(revoke).toHaveBeenCalledTimes(3);
+  clicked.mockRestore(); append.mockRestore();
+});
+it('reports malformed cross-tab data without discarding an unsaved packet or selection', async () => {
+  const hook = await boot(); act(() => hook.result.current.toggle(analystEvent()));
+  // Force a save quota failure with eight existing packets, retaining the ninth.
+  const current = await stored();
+  for (let i = 100; i < 108; i++) await mutateStore(indexedDB, 'owner', current.resetId, { type: 'add-packet', packet: { ...fixturePacket(), id: analystId(i) } }, new AbortController().signal);
+  await act(async () => { await hook.result.current.capture(analystScope); });
+  const unsaved = hook.result.current.unsaved;
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DATABASE_NAME, 1);
+    request.onsuccess = () => { const tx = request.result.transaction('workspaces', 'readwrite'); tx.objectStore('workspaces').put({ invalid: true }, storageKey('owner')); tx.oncomplete = () => { request.result.close(); resolve(); }; };
+    request.onerror = () => reject(request.error);
+  });
+  act(() => window.dispatchEvent(new CustomEvent(CHANGE_KEY, { detail: storageKey('owner') })));
+  await waitFor(() => expect(hook.result.current.error).toContain('Invalid'));
+  expect(hook.result.current.unsaved).toBe(unsaved); expect(hook.result.current.selections).toHaveLength(1);
+  expect(hook.result.current.error).toContain('Invalid');
 });

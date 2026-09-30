@@ -42,8 +42,8 @@ export default function AnalystWorkspace({ workspace: w, scope, currentItem, sig
   }, [w.open]);
   useEffect(() => () => { resources.current.forEach(cleanup => cleanup()); resources.current.clear(); }, []);
   useEffect(() => {
-    if (!w.allowed) { resources.current.forEach(cleanup => cleanup()); resources.current.clear(); }
-  }, [w.allowed]);
+    resources.current.forEach(cleanup => cleanup()); resources.current.clear();
+  }, [w.allowed, w.resetId]);
   const packets = w.unsaved ? [w.unsaved, ...w.packets] : w.packets;
   const packet = packets.find(p => p.id === packetId) ?? packets[0];
   const includeNotes = Boolean(packet && notesPacketId === packet.id);
@@ -59,9 +59,9 @@ export default function AnalystWorkspace({ workspace: w, scope, currentItem, sig
     link.href = url;
     link.download = `seraphim-evidence-${selected.id}.${format}`;
     document.body.appendChild(link); link.click(); link.remove();
-    const cleanup = () => { URL.revokeObjectURL(url); resources.current.delete(cleanup); };
+    const cleanup = () => { clearTimeout(timer); URL.revokeObjectURL(url); resources.current.delete(cleanup); };
     resources.current.add(cleanup);
-    setTimeout(cleanup, 1000);
+    const timer = setTimeout(cleanup, 1000);
   }
   async function print(selected: EvidencePacket) {
     const content = await w.exportPacket(selected, 'html', includeNotes);
@@ -71,18 +71,18 @@ export default function AnalystWorkspace({ workspace: w, scope, currentItem, sig
     frame.title = 'Printable evidence brief';
     frame.style.cssText = 'position:fixed;width:1px;height:1px;left:-10000px;border:0';
     frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
-    const cleanup = () => { frame.remove(); resources.current.delete(cleanup); if (printCleanup.current === cleanup) printCleanup.current = null; };
+    const cleanup = () => { clearTimeout(timer); frame.remove(); resources.current.delete(cleanup); if (printCleanup.current === cleanup) printCleanup.current = null; };
     printCleanup.current = cleanup;
     resources.current.add(cleanup);
     frame.onload = () => { frame.contentWindow?.focus(); frame.contentWindow?.print(); };
     frame.srcdoc = content;
     document.body.appendChild(frame);
-    setTimeout(cleanup, 60_000);
+    const timer = setTimeout(cleanup, 60_000);
   }
 
   return <dialog ref={dialog} className={styles.dialog} aria-labelledby="analyst-workspace-title"
     onCancel={event => { event.preventDefault(); w.setOpen(false); }}
-    onKeyDown={event => { if (event.key === 'Escape') event.stopPropagation(); }}>
+    onKeyDown={event => { event.stopPropagation(); }}>
     <header className={styles.header}><div><p className={styles.eyebrow}>Analyst experiment · local to this browser</p><h1 id="analyst-workspace-title">Evidence workspace</h1></div>
       <button type="button" title="Close the evidence workspace" onClick={() => w.setOpen(false)} autoFocus aria-label="Close evidence workspace">Close</button></header>
     <div className={styles.content}>

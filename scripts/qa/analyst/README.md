@@ -16,7 +16,11 @@ Capture does not query historical listings or enumerate cluster members. The exi
 
 The additive `evidenceExport` entitlement is available only to Analyst and Angel. `/api/analyst/access` verifies the current server session and effective tier, returning only user ID and tier with private/no-store headers. The workspace verifies identity on initialization and focus, before capture, after capture, and before every export. `/api/news/[id]?evidence=true` enforces the same entitlement in addition to the existing detail behavior. Ordinary detail requests retain their current gates. A transient authorization failure fails closed. Account/tier/loading transitions synchronously hide private UI, abort outstanding work, and remove temporary print frames.
 
-Packets and notes use `seraphim:experiment:analyst-evidence:v1:<encoded-account-id>` in local storage. The versioned envelope validates the account owner, canonical IDs, fields, source counts, and packet structure on every read/write. Limits: 8 saved packets, 2 MB estimated UTF-16 storage per account, 100 notes, 2,000 characters per note. Quotas never silently evict packets. A completed capture remains available for download if saving fails. Invalid stored data cannot be overwritten until explicitly deleted. Cross-tab deletion clears private UI and cancels pending work. Deletion is available to the signed-in owner after a downgrade, too.
+Packets and notes use the `seraphim-experiment-analyst-evidence-v1` IndexedDB database, in the `workspaces` object store under `seraphim:experiment:analyst-evidence:v1:<encoded-account-id>`. Each write is an intent applied to a fresh, validated envelope in a native read/write transaction. Concurrent saves cannot overwrite unrelated packets or notes; conflicting edits of the same note are rejected visibly. Valid legacy localStorage data is copied in a transaction on first open, then the legacy key is removed. Invalid legacy data remains untouched until explicitly deleted.
+
+The envelope validates the owner, version, canonical IDs, fields, source counts, and packet structure on every read/write. Limits: 8 saved packets, 2 MB estimated UTF-16 serialized data per account, 100 notes, 2,000 characters per note. Quotas never silently evict packets. A completed capture remains available for download if saving fails. Without IndexedDB, saving is disabled with a visible error; capture/export and validated legacy packet downloads remain available.
+
+Ordinary cross-tab updates reconcile saved data while retaining selections, completed unsaved captures, and pending capture/export work. BroadcastChannel and metadata-only storage notifications signal a change; packet and note contents never enter those messages. Focus also reconciles the database after checking access. Explicit reset atomically removes packets and notes, retains only an empty generation marker, cancels pending work, and removes temporary print/download resources. Writes from an older generation cannot restore deleted content. Deletion is available to the signed-in owner after a downgrade, too.
 
 Private notes are excluded by default from JSON, CSV, HTML, and printing. Explicit inclusion shows a preview and copies only the current notes associated with the selected packet, separately from the immutable packet. Inclusion resets when switching packets. No notes, packet contents, or private workspace identifiers are sent to analytics or cloud preferences. This browser storage is unencrypted; downloaded/printed copies are outside application control.
 
@@ -42,7 +46,7 @@ The printable HTML brief escapes all text and attributes, validates outbound HTT
 
 ## Verification and integration
 
-Focused tests: `scripts/tests/analyst-evidence.test.ts`, `analyst-workspace.test.tsx`, `analyst-access-route.test.ts`, plus the evidence-gate cases in `news-detail-route.test.ts`. Existing mobile selection tests remain intact.
+Focused tests: `scripts/tests/analyst-storage-concurrency.test.ts`, `scripts/tests/analyst-evidence.test.ts`, `analyst-workspace.test.tsx`, `analyst-access-route.test.ts`, plus the evidence-gate cases in `news-detail-route.test.ts`. Existing mobile selection tests remain intact.
 
 Offline browser fixture:
 
@@ -80,4 +84,31 @@ Final implementation validation on 2026-09-30:
 - `bun run build`: passed (Next.js 16.3.5, optimized Turbopack build).
 - Chromium desktop/mobile QA: independent selections, explicit representative resolution, partial 503 capture, default note exclusion and explicit inclusion, downloaded JSON/CSV/HTML validation, live-update immutability, account isolation, Pro downgrade, keyboard focus containment, no mobile horizontal overflow, sandboxed print frame cleanup, and PDF text verification.
 
-The fixture's synthetic PDF contained both selected events and the partial capture error, without private notes. Real Supabase/customer data and native OS print-dialog/device behavior were not exercised. The existing Vitest/Vite CommonJS-config future-compatibility warning remains; it did not affect tests or coverage. No deployment, migrations, notifications, billing mutations, or production scraping were performed. Implementation assistance: Codex; separate Astra verification is still pending.
+The fixture's synthetic PDF contained both selected events and the partial capture error, without private notes. Real Supabase/customer data and native OS print-dialog/device behavior were not exercised. The existing Vitest/Vite CommonJS-config future-compatibility warning remains; it did not affect tests or coverage. No deployment, migrations, notifications, billing mutations, or production scraping were performed. Implementation assistance: Codex; Astra identified three storage/keyboard defects, repaired in a follow-up commit for re-review.
+
+
+## Repair regressions
+
+The hook and analyst components are explicitly included in Vitest coverage. `fake-indexeddb` is a test-only dependency for transaction, migration, reset, conflict, quota, cancellation, and account-transition cases. Native browser transactions are verified separately.
+
+With the synthetic Vite fixture running, run the committed browser regression using `playwright-core` installed outside the application workspace:
+
+```sh
+bun add --cwd /tmp/analyst-browser-tests playwright-core
+ANALYST_PLAYWRIGHT_MODULE=/tmp/analyst-browser-tests/node_modules/playwright-core/index.mjs \
+  node scripts/qa/analyst/regression.mjs
+```
+
+Set `CHROMIUM_PATH` if Chromium is not `/usr/bin/chromium`; set `ANALYST_QA_OUTPUT` to choose an artifact directory (default `/tmp/analyst-repair-qa`). The script blocks all non-fixture network requests. At 1280×720 and 390×844 it exercises two real tabs with native IndexedDB transactions, concurrent packet/note writes, quota-preserved unsaved captures, ordinary writes during capture/export, reset cancellation and stale-generation rejection. It presses `t`, `c`, `m`, `/`, and `f` while Close and the packet select are focused, checks that dashboard scope/URL/preferences do not change, verifies native Escape retains the active map pin, types a note with real keyboard events, checks focus containment, exports with/without notes, verifies immutable packets after a live update, and captures printable PDFs and screenshots. Dashboard shortcuts are contained by the analyst dialog without preventing native input/select behavior.
+
+Dependency parity was repaired with a clean `bun install --frozen-lockfile`. The initial incremental install left an incompatible nested MIME dependency; the clean install restored the locked tree. Next.js now matches the manifest/lock at 16.3.7. The application manifest/lock have only the additive test dependency change.
+
+Repair validation on 2026-09-30:
+
+- `bun install --frozen-lockfile`: passed after a clean install; all 42 direct dependencies/dev dependencies match their locked versions, including manifest/lock/installed Next.js 16.3.7.
+- `bun run typecheck`, `bun run lint`, and `bun run build`: passed.
+- `bun run test:coverage`: 114 files passed, 1,066 tests passed, 1 existing TODO. Global statement/branch/function/line coverage: 84.28/75.66/87.94/87.56 percent; thresholds met. The analyst hook and components are measured, rather than excluded.
+- Hook statement/branch/function/line coverage: 86.59/73.29/82.53/93.86 percent. Workspace component: 90.29/81.72/82.05/93.93 percent. Coverage is supported by native browser regressions for cross-tab transactions and exact keyboard events, plus mocked download/print resource checks.
+- Committed native Chromium regression passed at desktop 1280×720 and mobile 390×844, with zero page errors, default note exclusion, explicit inclusion, immutable exports, reset cancellation, and no horizontal overflow. PDFs were generated with Chromium; native OS printing and real Supabase remain unverified.
+
+Current screenshots: [repaired desktop](screenshots/repaired-desktop-workspace.png), [repaired mobile](screenshots/repaired-mobile-workspace.png). These show the completed unsaved capture retained after ordinary cross-tab writes.

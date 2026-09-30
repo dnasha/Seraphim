@@ -74,6 +74,8 @@ export interface EvidencePacket {
 export interface AnalystStore {
   version: 1;
   ownerId: string;
+  /** Local reset generation only; never included in an evidence export. */
+  resetId?: string;
   packets: EvidencePacket[];
   notes: Record<string, string>;
 }

@@ -40,6 +40,8 @@ export default defineConfig({
                 'src/hooks/useResizable.ts',
                 'src/hooks/useViewState.ts',
                 'src/hooks/useNewsData.ts',
+                'src/hooks/useAnalystWorkspace.ts',
+                'src/components/analyst/**/*.tsx',
                 'src/lib/**/*.ts',
                 'src/proxy.ts',
                 'src/scraper/utils/**/*.ts',

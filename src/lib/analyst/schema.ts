@@ -123,5 +123,5 @@ export function copyStore(value: unknown, ownerId: string): AnalystStore {
   if (raw.version !== 1 || raw.ownerId !== ownerId) throw new Error('Invalid account-scoped local workspace.');
   const packets = array(raw.packets, MAX_PACKETS, copyPacket);
   if (new Set(packets.map(p => p.id)).size !== packets.length) throw new Error('Duplicate local packet.');
-  return { version: 1, ownerId, packets, notes: copyNotes(raw.notes) };
+  return { version: 1, ownerId, ...(raw.resetId !== undefined ? { resetId: id(raw.resetId) } : {}), packets, notes: copyNotes(raw.notes) };
 }
