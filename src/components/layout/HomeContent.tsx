@@ -13,6 +13,7 @@ import EventSidebar from '@/components/ui/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter, useNewsFilterState } from '@/hooks/useNewsFilter';
 import { useViewState } from '@/hooks/useViewState';
+import { useCompactLayout } from '@/hooks/useCompactLayout';
 import { useAuth } from '@/hooks/useAuth';
 import { BBox, NewsItem } from '@/lib/core/types';
 import { matchesNewsId, SortMode } from '@/lib/utils/ranking';
@@ -25,6 +26,7 @@ import StateNotice from '@/components/ui/StateNotice';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
 import StartupGate, { type MapLoadState } from './StartupGate';
+import { LuMap, LuNewspaper } from 'react-icons/lu';
 
 /** Dynamically import NewsMap to prevent SSR issues with MapLibre's WebGL requirements */
 const NewsMap = dynamic(() => import('@/components/map/NewsMap'), { ssr: false });
@@ -147,6 +149,9 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     const [selectedItemId, setSelectedItemId] = useState<string | null>(initialState.eventId || null);
     const [selectionVersion, setSelectionVersion] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    // Mobile navigation is independent of the saved desktop sidebar preference.
+    const [mobileView, setMobileView] = useState<'stories' | 'map'>('stories');
+    const isCompactLayout = useCompactLayout();
     const [mapLoadState, setMapLoadState] = useState<MapLoadState>('loading');
 
     useEffect(() => {
@@ -433,19 +438,24 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
 
             // 'f' or '/': Focus the sidebar search box
             if (key === 'f' || key === '/') {
+                if (isCompactLayout) setMobileView('stories');
+                else if (!isSidebarOpen) handleSidebarOpenChange(true);
                 const searchInput = document.getElementById('sidebar-search-input');
                 if (searchInput) {
                     e.preventDefault();
-                    (searchInput as HTMLInputElement).focus();
-                    (searchInput as HTMLInputElement).select();
+                    requestAnimationFrame(() => {
+                        (searchInput as HTMLInputElement).focus();
+                        (searchInput as HTMLInputElement).select();
+                    });
                 }
                 return;
             }
 
-            // 'm': Toggle sidebar panel collapse/expand
+            // 'm': Switch mobile views or toggle the desktop sidebar.
             if (key === 'm') {
                 e.preventDefault();
-                handleSidebarOpenChange(!isSidebarOpen);
+                if (isCompactLayout) setMobileView(view => view === 'stories' ? 'map' : 'stories');
+                else handleSidebarOpenChange(!isSidebarOpen);
                 return;
             }
 
@@ -466,7 +476,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedItemId, sortMode, isGuestUser, isSidebarOpen, handleSelectItem, handleSortModeChange, handleSearchChange, handleSidebarOpenChange]);
+    }, [selectedItemId, sortMode, isGuestUser, isSidebarOpen, isCompactLayout, handleSelectItem, handleSortModeChange, handleSearchChange, handleSidebarOpenChange]);
 
     /** Gate guests and free users while preserving the active selection. */
     const visibleMapNews = useMemo(() => {
@@ -541,71 +551,105 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
             hasError={Boolean(error)}
         >
         <div className={`${styles.appLayout} ${fontClassName}`}>
-            {!isSidebarOpen && (
-                <div className={styles.floatingActions}>
-                    <button
-                        className={styles.sidebarExpandBtn}
-                        onClick={() => handleSidebarOpenChange(true)}
-                        aria-label="Open sidebar"
-                        title="Open the story sidebar"
-                    >
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
-                        </svg>
-                    </button>
-                    <UserButton variant="floating" />
-                </div>
-            )}
+            <div className={styles.workspace}>
+                {!isSidebarOpen && !isCompactLayout && (
+                    <div className={styles.floatingActions}>
+                        <button
+                            className={styles.sidebarExpandBtn}
+                            onClick={() => handleSidebarOpenChange(true)}
+                            aria-label="Open sidebar"
+                            title="Open the story sidebar"
+                        >
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+                            </svg>
+                        </button>
+                        <UserButton variant="floating" />
+                    </div>
+                )}
 
-            <EventSidebar
-                items={visibleSidebarNews}
-                selectedItemId={selectedItemId}
-                selectionVersion={selectionVersion}
-                onSelectItem={handleSelectItem}
-                isLoading={isLoading}
-                onFetchDetails={fetchEventDetails}
-                isOpen={isSidebarOpen}
-                onToggleSidebar={() => handleSidebarOpenChange(!isSidebarOpen)}
-                filterBar={filterBarSlot}
-                filterCount={activeFilterCount}
-                mounted={mounted}
-                searchQuery={searchQuery}
-                onSearchChange={handleSearchChange}
-                sortMode={effectiveSortMode}
-                onSortModeChange={handleSortModeChange}
-                filterVersion={filterVersion}
-                animatedEffects={animatedEffects}
-                isCapped={isCapped}
-                appliedLimit={appliedLimit}
-                disabled={isGuestUser}
-                userTier={effectiveUserTier}
-                tierLoading={tierLoading}
-            />
-
-            <main className={`${styles.mainContent} ${!isSidebarOpen ? styles.mainContentCollapsed : ''}`}>
-                <NewsMap
-                    dataReady={!isLoading}
-                    onLoadStateChange={setMapLoadState}
-                    items={visibleMapNews}
+                <EventSidebar
+                    id="stories-view"
+                    mobileActive={mobileView === 'stories'}
+                    inert={isCompactLayout ? mobileView !== 'stories' : !isSidebarOpen}
+                    items={visibleSidebarNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
-                    isDarkMode={isDarkMode}
+                    isLoading={isLoading}
+                    onFetchDetails={fetchEventDetails}
+                    isOpen={isSidebarOpen}
+                    onToggleSidebar={() => handleSidebarOpenChange(!isSidebarOpen)}
+                    filterBar={filterBarSlot}
+                    filterCount={activeFilterCount}
+                    mounted={mounted}
+                    searchQuery={searchQuery}
+                    onSearchChange={handleSearchChange}
+                    sortMode={effectiveSortMode}
+                    onSortModeChange={handleSortModeChange}
+                    filterVersion={filterVersion}
                     animatedEffects={animatedEffects}
-                    onAnimatedEffectsChange={handleAnimatedEffectsChange}
-                    onBoundsChange={handleBoundsChange}
-                    initialCenter={initialCenter}
-                    initialZoom={validInitialZoom}
-                    sortMode={appliedSortMode as SortMode}
+                    isCapped={isCapped}
+                    appliedLimit={appliedLimit}
                     disabled={isGuestUser}
-                    isSidebarOpen={isSidebarOpen}
                     userTier={effectiveUserTier}
                     tierLoading={tierLoading}
-                    preferenceOwnerId={user?.id}
-                    syncedPreferences={tierLoading ? null : preferences}
-                    onSyncedPreferencesChange={updatePreferences}
                 />
-            </main>
+
+                <main
+                    id="map-view"
+                    aria-label="Map"
+                    className={styles.mainContent}
+                    data-mobile-active={mobileView === 'map'}
+                    inert={isCompactLayout && mobileView !== 'map'}
+                >
+                    <NewsMap
+                        dataReady={!isLoading}
+                        onLoadStateChange={setMapLoadState}
+                        items={visibleMapNews}
+                        selectedItemId={selectedItemId}
+                        selectionVersion={selectionVersion}
+                        onSelectItem={handleSelectItem}
+                        isDarkMode={isDarkMode}
+                        animatedEffects={animatedEffects}
+                        onAnimatedEffectsChange={handleAnimatedEffectsChange}
+                        onBoundsChange={handleBoundsChange}
+                        initialCenter={initialCenter}
+                        initialZoom={validInitialZoom}
+                        sortMode={appliedSortMode as SortMode}
+                        disabled={isGuestUser}
+                        isSidebarOpen={isCompactLayout || isSidebarOpen}
+                        userTier={effectiveUserTier}
+                        tierLoading={tierLoading}
+                        preferenceOwnerId={user?.id}
+                        syncedPreferences={tierLoading ? null : preferences}
+                        onSyncedPreferencesChange={updatePreferences}
+                    />
+                </main>
+            </div>
+
+            <nav className={styles.mobileNavigation} aria-label="Mobile views">
+                <button
+                    type="button"
+                    aria-pressed={mobileView === 'stories'}
+                    aria-controls="stories-view"
+                    onClick={() => setMobileView('stories')}
+                    title="Show stories"
+                >
+                    <LuNewspaper aria-hidden="true" />
+                    <span>Stories</span>
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={mobileView === 'map'}
+                    aria-controls="map-view"
+                    onClick={() => setMobileView('map')}
+                    title="Show map"
+                >
+                    <LuMap aria-hidden="true" />
+                    <span>Map</span>
+                </button>
+            </nav>
 
             {showAuthModal && <AuthModal />}
 

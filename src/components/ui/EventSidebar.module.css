@@ -286,14 +286,11 @@ Includes card expansion details and responsive mobile layouts.
   margin-right: 8px;
 }
 
-.mobileCloseBtn {
-  display: none;
-}
-
 
 /* Event list */
 .eventList {
   flex: 1;
+  min-height: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -331,13 +328,6 @@ Includes card expansion details and responsive mobile layouts.
 .isResizing .resizeHandle::after {
   width: 2px;
   opacity: 0.8;
-}
-
-/* Hide handle on mobile */
-@media (max-width: 860px) {
-  .resizeHandle {
-    display: none;
-  }
 }
 
 
@@ -725,27 +715,36 @@ Includes card expansion details and responsive mobile layouts.
 
 
 
-/* Responsive */
-@media (max-width: 860px) {
+/* Leave room for the map on tablets, even with a wider saved desktop sidebar. */
+@media (min-width: 768px) and (max-width: 1100px) {
   .eventSidebar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: min(360px, 92vw);
-    min-width: unset;
+    width: min(var(--sidebar-width, 360px), 45vw);
+    min-width: min(var(--sidebar-width, 360px), 45vw);
+  }
+}
+
+/* Keep in sync with COMPACT_LAYOUT_QUERY in useCompactLayout. */
+@media (width < 768px), (width < 1024px) and (max-height: 500px) {
+  .eventSidebar {
+    grid-area: 1 / 1;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
     height: 100%;
-    border-right: none;
-    border-bottom: none;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.18);
-    transform: translateX(-100%);
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    border: none;
+    transform: none;
+    transition: none;
+    will-change: auto;
     overflow: hidden;
   }
 
-  .eventSidebarMobileOpen {
-    transform: translateX(0);
+  .eventSidebar[data-mobile-active='false'] {
+    /* Hide descendants immediately even if they transition visibility. */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .eventSidebarHeader {
@@ -769,8 +768,8 @@ Includes card expansion details and responsive mobile layouts.
   }
 
   .statsSearchInput {
-    height: 34px; /* Larger tap target on mobile */
-    font-size: 0.875rem;
+    height: 44px;
+    font-size: 1rem; /* Avoid iOS zooming the page when search receives focus. */
   }
 
   .lastUpdated {
@@ -789,12 +788,9 @@ Includes card expansion details and responsive mobile layouts.
     font-size: 0.65rem;
   }
 
-  .sidebarCollapseBtn {
+  .sidebarCollapseBtn,
+  .resizeHandle {
     display: none;
-  }
-
-  .mobileCloseBtn {
-    display: flex;
   }
 
   .eventList {
@@ -1230,7 +1226,7 @@ Includes card expansion details and responsive mobile layouts.
   }
 }
 
-@media (max-width: 860px) {
+@container sidebar (max-width: 400px) {
   .sortToggleRow {
     flex-wrap: nowrap;
   }
@@ -1249,7 +1245,7 @@ Includes card expansion details and responsive mobile layouts.
   }
 }
 
-@media (max-width: 340px) {
+@container sidebar (max-width: 340px) {
   .sortToggleRow {
     gap: 4px;
     padding-inline: 8px;
