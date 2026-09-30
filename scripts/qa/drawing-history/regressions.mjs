@@ -64,6 +64,30 @@ export async function verifyRegressions(scenario, expect) {
     for (let i = 0; i < 20; i++) { await button('Undo').click(); assert.deepEqual(await state(), initial); await button('Redo').click(); assert.deepEqual(await state(), moved); }
   });
 
+  await scenario('rapid-selection-drag-recovery', desktop, async ({ page, button, state }) => {
+    for (let trial = 0; trial < 8; trial++) {
+      if (trial > 0) await button('Clear').click();
+      await button('Pin').click(); await page.mouse.click(300, 300);
+      await expect.poll(async () => (await state()).drawFeatures.length).toBe(1);
+      const initial = await state();
+      await button('Select').click(); await page.mouse.click(300, 300);
+      // No state read/wait here: the selection release can still be pending when this drag begins.
+      await drag(page, [300, 300], [450, 400]);
+      await page.getByRole('button', { name: 'Reload style', exact: true }).evaluate(el => el.click());
+      await page.mouse.up();
+      await expect.poll(() => rendersPoint(page, initial.drawFeatures[0].geometry.coordinates)).toBe(true);
+      await page.waitForTimeout(5000);
+      assert.deepEqual(await state(), initial, `trial ${trial}: persisted document after five seconds`);
+      assert.equal(await rendersPoint(page, initial.drawFeatures[0].geometry.coordinates), true, `trial ${trial}: displayed document after five seconds`);
+      await button('Undo').click(); assert.equal((await state()).drawFeatures.length, 0);
+      await button('Redo').click(); assert.deepEqual(await state(), initial);
+      await page.reload(); await page.waitForSelector('canvas');
+      await expect.poll(() => rendersPoint(page, initial.drawFeatures[0].geometry.coordinates)).toBe(true);
+      assert.deepEqual(await state(), initial, `trial ${trial}: document after navigation`);
+      await expect(button('Undo')).toBeDisabled(); // History is intentionally limited to this session.
+    }
+  });
+
   await scenario('text-creation-transaction', desktop, async ({ page, button, state }) => {
     await button('Pin').click(); await page.mouse.click(300, 300); const initial = await state();
     await button('Text').click(); await page.mouse.click(500, 500);

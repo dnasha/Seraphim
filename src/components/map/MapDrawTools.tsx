@@ -831,28 +831,44 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
 
     const canvas = map.getCanvas();
     let gesturePointerId: number | undefined | null = null;
+    let gestureGeneration = 0;
+    let gestureMode = 'static';
+    let disposed = false;
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+    const finishGesture = (generation: number) => {
+      if (disposed || generation !== gestureGeneration || !pointerGestureRef.current) return;
+      releaseTimer = null;
+      pointerGestureRef.current = false;
+      gesturePointerId = null;
+      gestureBeforeRef.current = null;
+      // Text placement remains pending until its initial edit finishes or is abandoned.
+      if (gestureMode !== 'text' && !draw.getSnapshot().some(feature => feature.properties.currentlyDrawing)) commitOperation('Draw or edit');
+    };
     const pointerDown = (event: PointerEvent) => {
-      if (!isOpenRef.current || event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      if (disposed || !isOpenRef.current || event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      // The adapter has finished the released gesture before the next pointer-down.
+      // Settle it now; its deferred callback must never close this new transaction.
+      if (releaseTimer !== null) {
+        clearTimeout(releaseTimer);
+        releaseTimer = null;
+        finishGesture(gestureGeneration);
+      }
+      if (pointerGestureRef.current) return;
       flushPending();
+      gestureGeneration += 1;
+      gestureMode = activeModeRef.current;
       gestureBeforeRef.current = captureDocument();
       gesturePointerId = event.pointerId;
       pointerGestureRef.current = true;
       publishOwnership(toolOwnershipRef.current);
       canvas.focus();
     };
-    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
     const pointerUp = (event?: PointerEvent) => {
-      if (!pointerGestureRef.current || (event && event.pointerId !== gesturePointerId)) return;
+      if (disposed || !pointerGestureRef.current || (event && event.pointerId !== gesturePointerId)) return;
       // Adapter drag-end runs after capture listeners; capture the completed document afterward.
       if (releaseTimer !== null) clearTimeout(releaseTimer);
-      releaseTimer = setTimeout(() => {
-        releaseTimer = null;
-        pointerGestureRef.current = false;
-        gesturePointerId = null;
-        gestureBeforeRef.current = null;
-        // Text placement remains pending until its initial edit finishes or is abandoned.
-        if (activeModeRef.current !== 'text' && !draw.getSnapshot().some(feature => feature.properties.currentlyDrawing)) commitOperation('Draw or edit');
-      }, 0);
+      const releasedGeneration = gestureGeneration;
+      releaseTimer = setTimeout(() => finishGesture(releasedGeneration), 0);
     };
     const interruptGesture = (event: Event) => {
       if ('pointerId' in event && event.pointerId !== gesturePointerId) return;
@@ -868,6 +884,7 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
         draw.setMode(mode === 'text' ? 'static' : mode);
         clearSelection();
       } finally {
+        gestureGeneration += 1;
         suppressHistoryRef.current = false;
         gestureBeforeRef.current = null;
         gesturePointerId = null;
@@ -911,6 +928,8 @@ function DrawingEditor({ mapRef, mapReady, isOpen, userTier = 'guest', ownerId, 
     draw.on('deselect', handleDeselect);
 
     return () => {
+      disposed = true;
+      gestureGeneration += 1;
       const instance = map;
       if (!instance) return;
 

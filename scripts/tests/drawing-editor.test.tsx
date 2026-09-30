@@ -115,6 +115,49 @@ describe('real TerraDraw editor lifecycle', () => {
     expect(documentState().drawFeatures).toHaveLength(1); click('Undo'); expect(documentState().drawFeatures).toHaveLength(2);
     click('Clear'); expect(documentState().drawFeatures).toHaveLength(0); click('Undo'); expect(documentState().drawFeatures).toHaveLength(2);
   });
+  it.each(['complete', 'recover'] as const)('keeps a newer drag owned when an older release callback runs (%s)', async ending => {
+    const map = makeMap();
+    const props = { mapRef: map.mapRef, mapReady: true, isOpen: true, userTier: 'analyst' as const, ownerId: 'a' };
+    const view = render(<MapDrawTools {...props} />);
+    click('Pin'); act(() => currentAdapter().callbacks.onClick(mouse(10, 20)));
+    const initial = documentState(); const saved = localStorage.getItem(drawingStorageKey('a'));
+    click('Select'); act(() => currentDraw().selectFeature(initial.drawFeatures[0].id!));
+    const pointer = (type: string) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerdown' ? 1 : 0 });
+      fireEvent(map.canvas, event);
+    };
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    pointer('pointerdown'); pointer('pointerup');
+    const [releasedCallback, delay] = timers.mock.calls.at(-1)!;
+    expect(delay).toBe(0);
+    // Start the next gesture before the selection's deferred release runs.
+    pointer('pointerdown');
+    act(() => currentAdapter().callbacks.onDragStart(mouse(10, 20), () => {}));
+    act(() => currentAdapter().callbacks.onDrag(mouse(20, 20), () => {}));
+    const moved = documentState(); expect(moved).not.toEqual(initial);
+    const replayRelease = () => act(() => {
+      if (typeof releasedCallback !== 'function') throw new Error('Expected a deferred release callback');
+      releasedCallback(); // Also model an already queued callback that cancellation cannot remove.
+    });
+    replayRelease();
+    expect(localStorage.getItem(drawingStorageKey('a'))).toBe(saved);
+    if (ending === 'recover') {
+      view.rerender(<MapDrawTools {...props} mapReady={false} />);
+      replayRelease(); // The disposed engine must not mutate the recovering document.
+      view.rerender(<MapDrawTools {...props} />); await advance();
+      expect(documentState()).toEqual(initial);
+      expect(localStorage.getItem(drawingStorageKey('a'))).toBe(saved);
+    } else {
+      act(() => currentAdapter().callbacks.onDragEnd(mouse(20, 20), () => {}));
+      pointer('pointerup'); replayRelease(); await advance();
+      expect(documentState()).toEqual(moved);
+      click('Undo'); expect(documentState()).toEqual(initial);
+    }
+    click('Undo'); expect(documentState().drawFeatures).toHaveLength(0);
+    click('Redo'); expect(documentState()).toEqual(initial);
+    timers.mockRestore();
+  });
   it('creates and edits text as one blur operation, leaves native undo alone, and synchronizes restored textarea content', async () => {
     const map = makeMap(); render(<MapDrawTools mapRef={map.mapRef} mapReady isOpen userTier="analyst" ownerId="a" />);
     await advance(); click('Text'); act(() => map.events.get('click')?.({ lngLat: { lng: 10, lat: 20 } })); await advance(40);
