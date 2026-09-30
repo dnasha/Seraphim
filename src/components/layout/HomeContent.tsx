@@ -25,6 +25,9 @@ import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 import StateNotice from '@/components/ui/StateNotice';
 import { trackOptionalMetric } from '@/lib/privacyConsent';
 import styles from './Layout.module.css';
+import { useAnalystWorkspace } from '@/hooks/useAnalystWorkspace';
+import AnalystWorkspace, { AnalystWorkspaceButton } from '@/components/analyst/AnalystWorkspace';
+import type { EvidenceScope } from '@/lib/analyst/types';
 import StartupGate, { type MapLoadState } from './StartupGate';
 import { LuMap, LuNewspaper } from 'react-icons/lu';
 
@@ -502,6 +505,20 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         }
     }, [isAuthResolving, selectedItemId, fetchEventDetails, news]);
 
+    const analyst = useAnalystWorkspace(user?.id ?? null, effectiveUserTier, !authLoading && !tierLoading && !isGuestUser);
+    const evidenceSelectedIds = useMemo(() => new Set(analyst.selections.map(s => s.id)), [analyst.selections]);
+    const evidenceScope: EvidenceScope = {
+        timeRange: effectiveTimeRange, from: effectiveCustomStartDate, to: effectiveCustomEndDate,
+        query: effectiveSearchQuery, sort: effectiveSortMode,
+        sources: isGuestUser ? [] : sources, categories: isGuestUser ? [] : categories,
+        minVolume: hasFeature(effectiveUserTier, 'advancedFilters') ? minVolume : 1,
+        credibilityTiers: hasFeature(effectiveUserTier, 'advancedFilters') ? credibilityTiers : [],
+        viewport: currentBBox ? { minLat: currentBBox.minLat, maxLat: currentBBox.maxLat, minLng: currentBBox.minLng, maxLng: currentBBox.maxLng, ...(currentBBox.zoom !== undefined ? { zoom: currentBBox.zoom } : {}) } : null,
+        isCapped: Boolean(isCapped), appliedLimit: appliedLimit ?? null,
+        feedStatus: isLoading ? 'loading' : error ? 'previous-data-after-error' : 'freshness-not-reported',
+        displayedCount: visibleSidebarNews.length, selectionScope: 'explicit-selection', detailScope: 'exact-id-outside-list-window-allowed',
+    };
+
     const activeFilterCount = useMemo(() => {
         let count = 0;
         if (categories && !categories.includes('all')) {
@@ -569,6 +586,10 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 )}
 
                 <EventSidebar
+                    evidenceControl={<AnalystWorkspaceButton workspace={analyst} />}
+                    evidenceSelectedIds={evidenceSelectedIds}
+                    evidenceBusy={analyst.busy}
+                    onToggleEvidence={analyst.allowed ? analyst.toggle : undefined}
                     id="stories-view"
                     mobileActive={mobileView === 'stories'}
                     inert={isCompactLayout ? mobileView !== 'stories' : !isSidebarOpen}
@@ -650,6 +671,9 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     <span>Map</span>
                 </button>
             </nav>
+
+            <AnalystWorkspace key={`${newsResetKey}:${!authLoading && !tierLoading}`} workspace={analyst} scope={evidenceScope}
+                signedIn={Boolean(user)} currentItem={news.find(item => matchesNewsId(item, selectedItemId))} />
 
             {showAuthModal && <AuthModal />}
 

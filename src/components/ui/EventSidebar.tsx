@@ -63,6 +63,10 @@ function randomIndex(length: number): number {
 }
 
 interface EventSidebarProps {
+  evidenceControl?: ReactNode;
+  evidenceSelectedIds?: ReadonlySet<string>;
+  evidenceBusy?: boolean;
+  onToggleEvidence?: (item: NewsItem) => void;
   id?: string;
   mobileActive?: boolean;
   inert?: boolean;
@@ -95,6 +99,10 @@ interface EventSidebarProps {
 }
 
 export default function EventSidebar({
+  evidenceControl,
+  evidenceSelectedIds,
+  evidenceBusy,
+  onToggleEvidence,
   id,
   mobileActive = true,
   inert = false,
@@ -308,10 +316,13 @@ export default function EventSidebar({
           isExpanded={isSelected}
           onCardClick={handleCardClick}
           userTier={userTier as EntitlementTier}
+          evidenceSelected={evidenceSelectedIds?.has(canonicalNewsId(item).toLowerCase())}
+          evidenceBusy={evidenceBusy}
+          onToggleEvidence={onToggleEvidence}
         />
       );
     },
-    [selectedItemId, handleCardClick, userTier],
+    [selectedItemId, handleCardClick, userTier, evidenceSelectedIds, evidenceBusy, onToggleEvidence],
   );
 
   return (
@@ -430,6 +441,8 @@ export default function EventSidebar({
           />
         </div>
       </div>
+
+      {evidenceControl}
 
       {/* Hot / New sort toggle */}
       <div className={styles.sortToggleRow}>
