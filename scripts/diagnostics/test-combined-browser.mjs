@@ -21,14 +21,15 @@ try {
             Notification.requestPermission = () => { throw new Error('Native permission prompt forbidden in this fixture.'); };
             ServiceWorkerRegistration.prototype.showNotification = () => { throw new Error('Native notification forbidden in this fixture.'); };
         });
-        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [], regionRequests = [], watchRequests = [];
+        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [], regionRequests = [], watchRequests = [], evidenceRequests = [];
         let regionStage = 0, watching = false, feedTime = '2026-09-30T12:00:00Z';
+        let evidenceRevision = 0, releaseEvidence, evidenceGate = null;
         const regionRow = index => ({ id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, title: `Synthetic live region event ${index}`,
             source: 'Fixture', sourceType: 'rss', url: `https://example.invalid/region-${index}`, publishedAt: '2026-09-29T18:00:00Z',
             latitude: 32, longitude: 14, sourcesCount: 1, storyCount: 1 });
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-        await context.route('**/*', route => {
+        await context.route('**/*', async route => {
             const url = new URL(route.request().url());
             // NewsMap constructs this optional provider logo even when hidden.
             // Respond locally with an original synthetic SVG; never contact the provider.
@@ -48,6 +49,19 @@ try {
                 const row = regionRow(Number(url.pathname.slice(-12)));
                 return route.fulfill({ json: { event: row, sources: [{ url: row.url }], totalSources: 1, timelineRestricted: false } });
             }
+            if (url.origin === 'http://127.0.0.1:4176' && url.pathname === '/api/analyst/access') {
+                const account = await page.evaluate(() => ({ userId: window.__combinedCalls.owner, tier: window.__combinedCalls.tier }));
+                return route.fulfill({ status: ['analyst', 'angel'].includes(account.tier) ? 200 : 403, json: account });
+            }
+            if (url.origin === 'http://127.0.0.1:4176' && url.pathname.startsWith('/api/news/10000000-0000-4000-8000-')) {
+                assert.equal(url.searchParams.get('evidence'), 'true');
+                const id = url.pathname.split('/').at(-1), revision = evidenceRevision;
+                evidenceRequests.push({ id, revision });
+                if (evidenceGate) await evidenceGate;
+                return route.fulfill({ json: { event: { id, title: `Current exact detail revision ${revision}`, description: 'Synthetic current observation.',
+                    source: 'Fixture publisher', sourceType: 'rss', url: `https://example.invalid/${id}`, publishedAt: '2026-09-29T18:00:00Z', latitude: 32, longitude: 14 },
+                    sources: [{ name: 'Fixture source', url: 'https://example.invalid/source', source_type: 'rss', discovered_at: '2026-09-29T18:30:00Z' }], totalSources: 1, timelineRestricted: false } });
+            }
             if (url.origin === 'http://127.0.0.1:4176' && !url.pathname.startsWith('/api/')) return route.continue();
             forbidden.push(url.href); return route.abort();
         });
@@ -56,6 +70,11 @@ try {
         await page.waitForSelector('[data-revealed="true"]');
         await page.waitForFunction(() => window.__combinedMap?.loaded());
         if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
+        const launcherRects = await Promise.all(['Draw & Measure', 'Region checkpoints', 'Watch alerts'].map(label => page.getByRole('button', { name: label, exact: true }).boundingBox()));
+        for (let i = 0; i < launcherRects.length; i++) for (let j = i + 1; j < launcherRects.length; j++) {
+            const a = launcherRects[i], b = launcherRects[j];
+            assert(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y, 'Map experiment launchers must not overlap');
+        }
         const camera = () => page.evaluate(() => { const map = window.__combinedMap; return { center: map.getCenter().toArray(), zoom: map.getZoom(), bearing: map.getBearing() }; });
         const data = () => page.evaluate(id => window.__combinedMap.getSource(id).serialize().data, sourceId);
         const visibleHit = layers => page.evaluate(layers => {
@@ -204,10 +223,75 @@ try {
         // it contributes neither a normal marker nor any heatmap density.
         assert.equal(await page.evaluate(() => window.__combinedMap.getSource('selected-news-event').serialize().data.features.length), 0);
         if (mobile) await page.getByRole('button', { name: 'Stories', exact: true }).click();
-        await page.getByText(`Synthetic event ${hit.id.replace('fixture-', '')}`, { exact: true }).waitFor({ state: 'visible' });
+        await page.getByText(`Synthetic event ${Number(hit.id.slice(-12)) - 1}`, { exact: true }).waitFor({ state: 'visible' });
         if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
         await scrub('End');
         assert.deepEqual(await camera(), pickCamera);
+        // Capture begins while replay is playing and the live hook is loading.
+        // Both continue changing while the exact-ID response is held in flight.
+        await page.getByRole('button', { name: 'Play', exact: true }).click();
+        if (mobile) await page.getByRole('button', { name: 'Stories', exact: true }).click();
+        await page.getByRole('button', { name: /^Evidence workspace/ }).click();
+        const workspace = page.getByRole('dialog', { name: 'Evidence workspace', exact: true });
+        await workspace.getByRole('button', { name: 'Toggle active event in evidence selection', exact: true }).click();
+        const privateNote = `Private synthetic ${name} note`;
+        await workspace.getByRole('textbox', { name: /^Private note for/ }).fill(privateNote);
+        await workspace.getByRole('button', { name: 'Close evidence workspace', exact: true }).focus();
+        const isolatedUrl = page.url(), isolatedCamera = await camera();
+        const preferenceWrites = await page.evaluate(() => window.__combinedCalls.preferences.length);
+        for (const key of ['t', 'c', 'm', '/', 'f']) await page.keyboard.press(key);
+        assert.equal(page.url(), isolatedUrl); assert.deepEqual(await camera(), isolatedCamera);
+        assert.equal(await page.evaluate(() => window.__combinedCalls.preferences.length), preferenceWrites);
+        // Stories hides replay controls in compact layouts while keeping its
+        // presentation clock mounted. Only read that clock through the DOM;
+        // native scrubbing above still targets the visible accessible slider.
+        const replayClock = page.locator('[aria-label="Reporting replay"] input[type="range"]');
+        if (mobile) { assert.equal(await slider.count(), 0); assert.equal(await replayClock.isVisible(), false); }
+        const cursorBefore = await replayClock.inputValue();
+        evidenceGate = new Promise(resolve => { releaseEvidence = resolve; });
+        const captureRequest = page.waitForRequest(request => new URL(request.url()).pathname === `/api/news/${hit.id}`);
+        await workspace.getByRole('button', { name: 'Capture selected events', exact: true }).click();
+        await captureRequest;
+        const captureDeadline = Date.now() + 10_000;
+        while (evidenceRequests.length === 0 && Date.now() < captureDeadline) await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(evidenceRequests.length, 1);
+        const capturesBefore = Number(await replayClock.inputValue());
+        evidenceRevision = 1;
+        await page.evaluate(() => window.__combinedChangeFixture({ error: 'Synthetic change during capture', loading: true }));
+        await page.waitForFunction(value => Number(document.querySelector('[aria-label="Reporting replay"] input[type="range"]').value) > value, capturesBefore);
+        releaseEvidence(); evidenceGate = null;
+        await workspace.getByRole('button', { name: 'Download JSON', exact: true }).waitFor();
+        const jsonCopy = async () => {
+            const download = page.waitForEvent('download');
+            await workspace.getByRole('button', { name: 'Download JSON', exact: true }).click();
+            const content = await (await download).createReadStream(), chunks = [];
+            for await (const chunk of content) chunks.push(chunk);
+            return JSON.parse(Buffer.concat(chunks).toString());
+        };
+        const captured = await jsonCopy();
+        assert.equal(captured.packet.entries[0].event.title, 'Current exact detail revision 0');
+        assert.equal(captured.packet.entries[0].selection.id, hit.id);
+        assert(captured.packet.scope.reportingReplay);
+        assert.equal(captured.packet.scope.isCapped, true);
+        assert.equal(captured.packet.scope.feedStatus, 'freshness-not-reported');
+        assert.equal(captured.packet.scope.reportingReplay.liveFeedStatus, 'loading');
+        assert.match(captured.packet.disclaimer, /not event state at the replay cursor/);
+        assert.equal(captured.notesIncluded, false); assert(!JSON.stringify(captured).includes(privateNote));
+        await page.screenshot({ path: `${output}/${name}-evidence-during-replay.png` });
+        assert.notEqual(await replayClock.inputValue(), cursorBefore);
+        await workspace.getByRole('button', { name: 'Close evidence workspace', exact: true }).click();
+        if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
+        await scrub('End');
+        if (mobile) await page.getByRole('button', { name: 'Stories', exact: true }).click();
+        await page.getByRole('button', { name: /^Evidence workspace/ }).click();
+        assert.deepEqual((await jsonCopy()).packet, captured.packet);
+        await workspace.getByRole('checkbox', { name: 'Include private notes in this export', exact: true }).check();
+        assert.equal((await jsonCopy()).privateNotes[hit.id], privateNote);
+        await page.keyboard.press('Escape');
+        await workspace.waitFor({ state: 'hidden' });
+        assert.equal(new URL(page.url()).searchParams.get('eventId'), hit.id);
+        if (mobile) await page.getByRole('button', { name: 'Map', exact: true }).click();
+        await page.locator('.maplibregl-popup-close-button').waitFor({ state: 'visible' });
         await page.locator('.maplibregl-popup-close-button').click();
         // A real drawing vertex over news must not pick a story or expand a cluster.
         for (const heatmap of [true, false]) {
@@ -220,7 +304,7 @@ try {
             // Mobile collapses on first mount; reopening keeps the user's last state.
             if (mobile && heatmap) await page.getByRole('button', { name: 'Expand panel', exact: true }).waitFor();
             if (await page.getByRole('button', { name: 'Expand panel', exact: true }).isVisible()) await page.getByRole('button', { name: 'Expand panel', exact: true }).click();
-            await page.getByRole('button', { name: 'Area', exact: true }).click();
+            await page.getByRole('button', { name: 'Pin', exact: true }).click();
             await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
             const layers = heatmap ? [hitId] : ['clusters-circle', 'unclustered-point'];
             await page.waitForFunction(layers => window.__combinedMap.queryRenderedFeatures({ layers }).length > 0, layers);
@@ -228,11 +312,20 @@ try {
             await page.evaluate(() => { window.__combinedCanvasClicks = 0; window.__combinedMap.once('click', () => window.__combinedCanvasClicks++); });
             const drawCamera = await camera(), drawUrl = page.url();
             if (mobile) await page.touchscreen.tap(vertex.x, vertex.y); else await page.mouse.click(vertex.x, vertex.y);
-            await page.waitForFunction(() => Object.keys(window.__combinedMap.getStyle().sources).some(id => id.startsWith('td-') && window.__combinedMap.getSource(id).serialize().data?.features?.length > 0));
+            await page.waitForFunction(() => Object.keys(window.__combinedMap.getStyle().sources).some(id => id.startsWith('experiment-drawing-history-') && window.__combinedMap.getSource(id).serialize().data?.features?.length > 0));
             assert.equal(await page.evaluate(() => window.__combinedCanvasClicks), 1);
             assert.deepEqual(await camera(), drawCamera); assert.equal(page.url(), drawUrl);
             await page.getByRole('button', { name: 'Expand panel', exact: true }).click();
+            const drawKey = 'seraphim-experiment-drawing-history-v2:fixture-account';
+            await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.drawFeatures.length === 1, drawKey);
+            const completedPin = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), drawKey);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            await page.waitForFunction(key => !localStorage.getItem(key), drawKey);
+            await page.getByRole('button', { name: 'Redo', exact: true }).click();
+            await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.drawFeatures.length === 1, drawKey);
+            assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), drawKey), completedPin);
             await page.getByRole('button', { name: 'Clear', exact: true }).click();
+            await page.waitForFunction(key => !localStorage.getItem(key), drawKey);
             await page.getByRole('button', { name: 'Close drawing tools', exact: true }).click();
         }
         await page.getByRole('button', { name: 'Map settings', exact: true }).click(); await toggle.click();
@@ -266,6 +359,9 @@ try {
         await page.getByRole('button', { name: 'Return live', exact: true }).click();
         await page.waitForFunction(id => window.__combinedMap.getSource(id).serialize().data.features.every(row => row.geometry.coordinates[0] === 80), sourceId);
         assert.match(await page.getByLabel('Activity density legend').textContent(), /Updating displayed stories/);
+        // The real dismiss action clears the injected live error after leaving
+        // replay, so its floating notice cannot cover the fixture switch menu.
+        await page.getByRole('button', { name: 'Dismiss stories error', exact: true }).click();
         await fixtureControl('Restore Analyst fixture');
         await page.getByRole('button', { name: 'Freeze loaded view', exact: true }).click();
         await fixtureControl('Switch to free account');
@@ -286,7 +382,7 @@ try {
         assert.deepEqual(forbidden, []);
         assert.deepEqual(errors, []);
         results.push({ name, viewport, timezoneId, realMapLibre: true, syntheticRows: 1000, frozenFramePoints: 667,
-            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/drawing ownership with heatmap on and off/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
+            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/immutable analyst capture during changing replay and live/private note opt-in/modal shortcut isolation/hidden compact replay clock/drawing ownership with heatmap on and off/native undo redo persistence/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
             mockedRegionReads: regionRequests.length, mockedWatchReads: watchRequests.length, mockedPermissionClicks: 1, mockedDeliveries: 1,
             forbiddenRequests: forbidden.length, mockedResources: mockedResources.length, browserErrors: errors.length });
         await context.close();

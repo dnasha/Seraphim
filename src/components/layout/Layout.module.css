@@ -82,6 +82,11 @@ Styles for the main application shell, content area, and top-level action button
   display: none;
 }
 
+.replayContainer {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
 /* Keep in sync with COMPACT_LAYOUT_QUERY in useCompactLayout. */
 @media (width < 768px), (width < 1024px) and (max-height: 500px) {
   .appLayout {

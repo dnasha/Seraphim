@@ -8,7 +8,8 @@ export { sanitizeSyncedPreferences, DEFAULT_SYNCED_PREFERENCES } from '../../../
 const capturedAt = Date.now();
 export const fixtureRows: NewsItem[] = mapActivityFixture.map((item, index) => ({
     ...item,
-    ...(index % 20 === 0 ? { id: `cluster-z-${item.id}`, originalId: item.id, storyCount: 15 } : {}),
+    id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    ...(index % 20 === 0 ? { id: `cluster-z-${index}`, originalId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, storyCount: 15 } : {}),
     publishedAt: new Date(capturedAt - [20, 12, 1][index % 3] * 3_600_000).toISOString(),
 }));
 let fixture = { tier: 'analyst' as UserTier, owner: 'fixture-account', rows: fixtureRows, loading: false, capped: true, error: null as string | null, theme: 'light' };
@@ -17,7 +18,8 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export const useFixture = () => useSyncExternalStore(subscribe, () => fixture);
 export const changeFixture = (patch: Partial<typeof fixture>) => { fixture = { ...fixture, ...patch }; listeners.forEach(listener => listener()); };
 export const calls = { feedScopes: [] as unknown[], bounds: [] as unknown[], fetches: [] as unknown[], preferences: [] as unknown[],
-    prompts: 0, permission: 'default' as NotificationPermission, deliveries: [] as string[][] };
+    prompts: 0, permission: 'default' as NotificationPermission, deliveries: [] as string[][],
+    get owner() { return fixture.owner; }, get tier() { return fixture.tier; } };
 export const useAuth = () => { const value = useFixture(); return { user: value.tier === 'guest' ? null : { id: value.owner }, isGuest: value.tier === 'guest', isLoading: false, showAuthModal: false, setShowAuthModal: () => {} }; };
 export const useUserTier = () => ({ tier: useFixture().tier, isLoading: false });
 export const useSyncedPreferences = () => ({ preferences: null, isLoaded: true, updatePreferences: (patch: unknown) => { calls.preferences.push(patch); } });

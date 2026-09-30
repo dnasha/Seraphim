@@ -422,6 +422,9 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
     /** Global keyboard shortcuts listener (1.2) */
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Downloads can temporarily return focus to body. An open dialog
+            // still owns keyboard interaction and its native Escape behavior.
+            if (e.defaultPrevented || document.querySelector('dialog[open]')) return;
             const activeEl = document.activeElement;
             if (activeEl) {
                 const tagName = activeEl.tagName.toLowerCase();
@@ -549,6 +552,11 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         isCapped: replay.state?.snapshot.isCapped ?? Boolean(isCapped), appliedLimit: replay.state ? replay.state.snapshot.appliedLimit ?? null : appliedLimit ?? null,
         feedStatus: replay.state ? 'freshness-not-reported' : isLoading ? 'loading' : error ? 'previous-data-after-error' : 'freshness-not-reported',
         displayedCount: displayedSidebarNews.length, selectionScope: 'explicit-selection', detailScope: 'exact-id-outside-list-window-allowed',
+        ...(replay.state && replay.window ? { reportingReplay: {
+            snapshotCapturedAt: new Date(replay.state.snapshot.capturedAt).toISOString(),
+            windowStart: new Date(replay.window.start).toISOString(), windowEnd: new Date(replay.window.end).toISOString(),
+            liveFeedStatus: isLoading ? 'loading' as const : error ? 'previous-data-after-error' as const : 'freshness-not-reported' as const,
+        } } : {}),
     };
 
     const activeFilterCount = useMemo(() => {
@@ -710,8 +718,10 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                 </main>
             </div>
 
-            <ReplayTimeline replay={replay} tier={effectiveUserTier} resolving={authLoading || tierLoading}
-                liveError={error} liveLoading={isLoading} onRetryLive={() => fetchNews(true)} onDismissLiveError={dismissError} />
+            <div className={styles.replayContainer} hidden={isCompactLayout && mobileView !== 'map'}>
+                <ReplayTimeline replay={replay} tier={effectiveUserTier} resolving={authLoading || tierLoading}
+                    liveError={error} liveLoading={isLoading} onRetryLive={() => fetchNews(true)} onDismissLiveError={dismissError} />
+            </div>
 
             <nav className={styles.mobileNavigation} aria-label="Mobile views">
                 <button

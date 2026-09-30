@@ -1,0 +1,341 @@
+{
+  "date": "2026-09-30",
+  "status": "Implementation verified; separate final Astra combo review pending",
+  "baseline": "4c693ccd78e7d0c26842488db77be3ae0ede0fd5",
+  "approvedHeads": {
+    "replay": "333413dd12e5aa1a9ba65897231d602070338874",
+    "heatmap": "b11ee39e4c9ca506eb064448253aa968fa8a46d2",
+    "regions": "decba13b5ea89753dc5c67d17cf24044fc5fc758",
+    "notifications": "ec3eb1bbe33bff03c02ad36c26949bb737ea7c6f",
+    "analyst": "9b6b899c5562c6cc972266e404511ec8154b12e6",
+    "drawing": "0c55327ff8fe9adea5764fcef2159a3f8c95cf64"
+  },
+  "gates": {
+    "frozenInstall": "passed",
+    "parity": {
+      "locked": 823,
+      "installed": 746,
+      "direct": 42,
+      "directMatched": 42,
+      "mismatches": [],
+      "critical": [
+        {
+          "key": "next",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "eslint-config-next",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "@next/swc-linux-x64-gnu",
+          "expected": "16.3.7",
+          "actual": "16.3.7",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "maplibre-gl",
+          "expected": "6.11.2",
+          "actual": "6.11.2",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "terra-draw",
+          "expected": "1.35.0",
+          "actual": "1.35.0",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "fake-indexeddb",
+          "expected": "6.2.5",
+          "actual": "6.2.5",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "isomorphic-dompurify/jsdom",
+          "expected": "30.1.1",
+          "actual": "30.1.1",
+          "installed": true,
+          "match": true
+        },
+        {
+          "key": "isomorphic-dompurify/jsdom/whatwg-mimetype",
+          "expected": "5.0.0",
+          "actual": "5.0.0",
+          "installed": true,
+          "match": true
+        }
+      ]
+    },
+    "typecheck": "passed",
+    "lint": "passed",
+    "tests": {
+      "files": 135,
+      "passed": 1275,
+      "todo": 1
+    },
+    "coverage": {
+      "lines": {
+        "total": 8231,
+        "covered": 7142,
+        "skipped": 0,
+        "pct": 86.76
+      },
+      "statements": {
+        "total": 9876,
+        "covered": 8256,
+        "skipped": 0,
+        "pct": 83.59
+      },
+      "functions": {
+        "total": 1655,
+        "covered": 1427,
+        "skipped": 0,
+        "pct": 86.22
+      },
+      "branches": {
+        "total": 8340,
+        "covered": 6348,
+        "skipped": 0,
+        "pct": 76.11
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    },
+    "coverageThresholds": {
+      "statements": 70,
+      "branches": 65,
+      "functions": 75,
+      "lines": 70
+    },
+    "build": "Next.js 16.3.7 webpack passed; real Serwist worker compiled"
+  },
+  "browser": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "timezoneId": "UTC",
+      "realMapLibre": true,
+      "syntheticRows": 1000,
+      "frozenFramePoints": 667,
+      "tests": "density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/immutable analyst capture during changing replay and live/private note opt-in/modal shortcut isolation/hidden compact replay clock/drawing ownership with heatmap on and off/native undo redo persistence/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation",
+      "mockedRegionReads": 2,
+      "mockedWatchReads": 2,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "forbiddenRequests": 0,
+      "mockedResources": 0,
+      "browserErrors": 0
+    },
+    {
+      "name": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "timezoneId": "America/New_York",
+      "realMapLibre": true,
+      "syntheticRows": 1000,
+      "frozenFramePoints": 667,
+      "tests": "density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/immutable analyst capture during changing replay and live/private note opt-in/modal shortcut isolation/hidden compact replay clock/drawing ownership with heatmap on and off/native undo redo persistence/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation",
+      "mockedRegionReads": 2,
+      "mockedWatchReads": 2,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "forbiddenRequests": 0,
+      "mockedResources": 0,
+      "browserErrors": 0
+    },
+    {
+      "name": "narrow",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "timezoneId": "Asia/Kolkata",
+      "realMapLibre": true,
+      "syntheticRows": 1000,
+      "frozenFramePoints": 667,
+      "tests": "density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/immutable analyst capture during changing replay and live/private note opt-in/modal shortcut isolation/hidden compact replay clock/drawing ownership with heatmap on and off/native undo redo persistence/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation",
+      "mockedRegionReads": 2,
+      "mockedWatchReads": 2,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "forbiddenRequests": 0,
+      "mockedResources": 0,
+      "browserErrors": 0
+    },
+    {
+      "name": "landscape",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "timezoneId": "America/New_York",
+      "realMapLibre": true,
+      "syntheticRows": 1000,
+      "frozenFramePoints": 667,
+      "tests": "density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/immutable analyst capture during changing replay and live/private note opt-in/modal shortcut isolation/hidden compact replay clock/drawing ownership with heatmap on and off/native undo redo persistence/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation",
+      "mockedRegionReads": 2,
+      "mockedWatchReads": 2,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "forbiddenRequests": 0,
+      "mockedResources": 0,
+      "browserErrors": 0
+    }
+  ],
+  "nativeStorage": [
+    {
+      "name": "desktop",
+      "nativeIndexedDbReadRecovery": true,
+      "retainedPacket": true,
+      "protectedMalformedDrawing": true,
+      "explicitLegacyCopy": true,
+      "legacyUntouched": true,
+      "undoRedoImport": true,
+      "atomicMalformedFileRejection": true,
+      "quotaNoticeWhileClosed": true,
+      "frozenDensityAndIndependentStoresUnchanged": true,
+      "realNotifications": 0,
+      "forbiddenRequests": 0,
+      "browserErrors": 0
+    },
+    {
+      "name": "mobile",
+      "nativeIndexedDbReadRecovery": true,
+      "retainedPacket": true,
+      "protectedMalformedDrawing": true,
+      "explicitLegacyCopy": true,
+      "legacyUntouched": true,
+      "undoRedoImport": true,
+      "atomicMalformedFileRejection": true,
+      "quotaNoticeWhileClosed": true,
+      "frozenDensityAndIndependentStoresUnchanged": true,
+      "realNotifications": 0,
+      "forbiddenRequests": 0,
+      "browserErrors": 0
+    }
+  ],
+  "compiledDashboard": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:39301/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    },
+    {
+      "name": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "compiledDashboard": true,
+      "nativeWorker": {
+        "active": "http://127.0.0.1:45045/sw.js",
+        "controlled": true
+      },
+      "replayHeatmap": true,
+      "regionLiveDuringEmptyReplay": true,
+      "explicitReviewedBoundary": true,
+      "alertsLiveDuringEmptyReplay": true,
+      "separateReviewAndDelivery": true,
+      "mockedPermissionClicks": 1,
+      "mockedDeliveries": 1,
+      "canonicalDotSelection": "22222222-2222-4222-8222-000000000001",
+      "drawingOwnership": true,
+      "undoRedoPersistence": true,
+      "frozenReplayEvidence": true,
+      "notesOptIn": true,
+      "nativeModalEscape": true,
+      "tierRevalidationCleanup": true,
+      "noOverflow": true,
+      "forbiddenRequests": 0,
+      "pageErrors": 0,
+      "independentRawReads": 4
+    }
+  ],
+  "unmodifiedWorkerAndDeliveryUi": {
+    "worker": {
+      "scope": "http://127.0.0.1:4175/",
+      "active": "http://127.0.0.1:4175/sw.js",
+      "state": "activated",
+      "compiledClicks": 1,
+      "unsafeClicksRejected": 2,
+      "privateRscChunksNetworkOnly": true,
+      "navigationsNetworkOnly": true,
+      "publicThumbnailRetained": true,
+      "legacyCachesPurged": true
+    },
+    "ui1440": {
+      "prompts": 1,
+      "baselineDeliveries": 0,
+      "mockedDeliveries": 2,
+      "overlapDedup": true,
+      "oldReentryQuiet": true,
+      "unseenArrivalDelivered": true,
+      "noOverflow": true,
+      "pageErrors": 0,
+      "watchReads": 10
+    },
+    "ui390": {
+      "prompts": 1,
+      "baselineDeliveries": 0,
+      "mockedDeliveries": 2,
+      "overlapDedup": true,
+      "oldReentryQuiet": true,
+      "unseenArrivalDelivered": true,
+      "noOverflow": true,
+      "pageErrors": 0,
+      "watchReads": 10
+    }
+  },
+  "realNotifications": 0,
+  "limits": [
+    "Chromium SwiftShader/emulated touch; no physical device or hardware GPU performance claim",
+    "Live providers, Supabase policies and actual OS notification/print receipt not exercised",
+    "Safari/Firefox remain unverified",
+    "One inherited Vitest TODO; existing Vite/PostCSS fixture warnings"
+  ]
+}

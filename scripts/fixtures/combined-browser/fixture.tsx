@@ -7,7 +7,7 @@ import { calls, changeFixture, fixtureRows, useFixture } from './services';
 import '@/app/globals.css';
 import './fixture.css';
 
-declare global { interface Window { __combinedMap: maplibregl.Map; __combinedCalls: typeof calls; __combinedMoves: number; } }
+declare global { interface Window { __combinedMap: maplibregl.Map; __combinedCalls: typeof calls; __combinedMoves: number; __combinedChangeFixture: typeof changeFixture; } }
 for (const style of ['standard', 'dark']) Object.assign(MAP_STYLES[style], { isPmtiles: false, isMapTiler: true, url: `/fixture-style/${style}.json` });
 const originalOn = maplibregl.Map.prototype.on;
 Object.defineProperty(maplibregl.Map.prototype, 'on', { value: function(this: maplibregl.Map, ...args: unknown[]) {
@@ -18,6 +18,7 @@ Object.defineProperty(maplibregl.Map.prototype, 'on', { value: function(this: ma
     return Reflect.apply(originalOn, this, args);
 } });
 window.__combinedCalls = calls;
+window.__combinedChangeFixture = changeFixture;
 window.__combinedMoves = 0;
 
 function FixtureControls() {

@@ -1,10 +1,10 @@
-.container { position: absolute; right: 76px; bottom: 46px; z-index: 2300; font-size: var(--text-sm); color: var(--text-primary); }
+.container { position: absolute; right: 128px; bottom: 46px; z-index: 2300; font-size: var(--text-sm); color: var(--text-primary); }
 .launcher { display: flex; align-items: center; gap: var(--space-sm); background: var(--surface); box-shadow: 0 3px 18px #0002; }
 .container button { padding: var(--space-sm) var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; min-height: 36px; }
 .container button:hover { background: var(--surface-alt); }
 .container button:disabled { opacity: .5; cursor: default; }
 .container button:focus-visible, .container input:focus-visible, .container summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.panel { position: absolute; right: -60px; bottom: 46px; width: min(430px, calc(100vw - 32px)); max-height: min(680px, calc(100dvh - 155px), calc(var(--map-available-height, 100dvh) - 100px)); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-lg); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--modal-shadow); }
+.panel { position: absolute; right: -112px; bottom: 46px; width: min(430px, calc(100vw - 32px)); max-height: min(680px, calc(100dvh - 155px), calc(var(--map-available-height, 100dvh) - 100px)); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-lg); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--modal-shadow); }
 .heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); }
 .heading h2 { font-size: var(--text-md); }
 .panel p { margin: var(--space-md) 0; }
@@ -19,4 +19,8 @@
 .watch details p { padding-top: var(--space-sm); overflow-wrap: anywhere; }
 .watch summary { cursor: pointer; }
 @media (max-width: 860px) { .panel { width: calc(100vw - 24px); max-height: min(calc(100dvh - 165px - env(safe-area-inset-bottom)), calc(var(--map-available-height, 100dvh) - 100px)); } }
-@media (width < 360px) { .launcher > span:first-of-type { display: none; } }
+@media (width <= 430px) { .launcher > span:first-of-type { display: none; } }
+@media (width < 1024px) and (max-height: 500px) {
+  .container { top: 12px; bottom: auto; }
+  .panel { top: 48px; bottom: auto; max-height: calc(var(--map-available-height, 100dvh) - 72px); }
+}

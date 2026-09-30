@@ -1,5 +1,5 @@
 import type { EvidenceEvent, EvidencePacket, EvidenceScope, EvidenceEntry, AnalystSelection, AnalystStore } from './types';
-import { UUID, MAX_SELECTION, MAX_SOURCES, MAX_PACKETS, MAX_NOTES, MAX_NOTE_LENGTH, PACKET_DISCLAIMER } from './types';
+import { UUID, MAX_SELECTION, MAX_SOURCES, MAX_PACKETS, MAX_NOTES, MAX_NOTE_LENGTH, PACKET_DISCLAIMER, REPLAY_PACKET_CAVEAT } from './types';
 
 export function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid evidence data.');
@@ -68,6 +68,14 @@ export function copyScope(value: unknown): EvidenceScope {
   const raw = record(value);
   if (!['loading', 'previous-data-after-error', 'freshness-not-reported'].includes(String(raw.feedStatus)) || raw.selectionScope !== 'explicit-selection' || raw.detailScope !== 'exact-id-outside-list-window-allowed') throw new Error('Invalid evidence scope.');
   const viewport = raw.viewport === null ? null : record(raw.viewport);
+  let reportingReplay: EvidenceScope['reportingReplay'];
+  if (raw.reportingReplay !== undefined) {
+    const replay = record(raw.reportingReplay);
+    const snapshotCapturedAt = date(replay.snapshotCapturedAt), windowStart = date(replay.windowStart), windowEnd = date(replay.windowEnd);
+    if (Date.parse(windowStart) > Date.parse(windowEnd) || Date.parse(windowEnd) > Date.parse(snapshotCapturedAt) ||
+        !['loading', 'previous-data-after-error', 'freshness-not-reported'].includes(String(replay.liveFeedStatus))) throw new Error('Invalid reporting replay provenance.');
+    reportingReplay = { snapshotCapturedAt, windowStart, windowEnd, liveFeedStatus: replay.liveFeedStatus as EvidenceScope['feedStatus'] };
+  }
   return {
     timeRange: string(raw.timeRange, 20), from: string(raw.from, 64), to: string(raw.to, 64), query: string(raw.query, 1000), sort: string(raw.sort, 20),
     sources: array(raw.sources, 30, v => string(v, 100)), categories: array(raw.categories, 30, v => string(v, 100)),
@@ -76,6 +84,7 @@ export function copyScope(value: unknown): EvidenceScope {
     isCapped: bool(raw.isCapped), appliedLimit: raw.appliedLimit === null ? null : number(raw.appliedLimit, 1),
     feedStatus: raw.feedStatus as EvidenceScope['feedStatus'], displayedCount: number(raw.displayedCount, 0, 100000),
     selectionScope: 'explicit-selection', detailScope: 'exact-id-outside-list-window-allowed',
+    ...(reportingReplay ? { reportingReplay } : {}),
   };
 }
 function copyEntry(value: unknown): EvidenceEntry {
@@ -105,10 +114,12 @@ export function copyPacket(value: unknown): EvidencePacket {
   const raw = record(value);
   if (raw.version !== 1 || !['analyst', 'angel'].includes(String(raw.accessTierAtCapture))) throw new Error('Unsupported evidence packet.');
   const entries = array(raw.entries, MAX_SELECTION, copyEntry);
+  const scope = copyScope(raw.scope);
   if (!entries.length || new Set(entries.map(e => e.selection.id)).size !== entries.length) throw new Error('Invalid packet selection.');
   return freezeCopy({
     version: 1, id: id(raw.id), captureStartedAt: date(raw.captureStartedAt), captureEndedAt: date(raw.captureEndedAt), checkedAt: date(raw.checkedAt),
-    accessTierAtCapture: raw.accessTierAtCapture as EvidencePacket['accessTierAtCapture'], scope: copyScope(raw.scope), entries, disclaimer: PACKET_DISCLAIMER,
+    accessTierAtCapture: raw.accessTierAtCapture as EvidencePacket['accessTierAtCapture'], scope, entries,
+    disclaimer: scope.reportingReplay ? `${PACKET_DISCLAIMER} ${REPLAY_PACKET_CAVEAT}` : PACKET_DISCLAIMER,
   });
 }
 export function copyNotes(value: unknown): Record<string, string> {

@@ -35,6 +35,13 @@ const server = await createServer({
             const json = body => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(body)); };
             if (url.pathname === '/fixture-provider-logo.svg') { response.setHeader('Content-Type', 'image/svg+xml'); response.end('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'); return; }
             if (url.pathname === '/fixture-region-advance' && request.method === 'POST') { regionStage = Math.min(2, regionStage + 1); json({ regionStage }); return; }
+            if (url.pathname === '/api/analyst/access') { json({ userId: 'fixture-account', tier: 'analyst' }); return; }
+            if (url.pathname.startsWith('/api/news/10000000-0000-4000-8000-')) {
+                const id = url.pathname.split('/').at(-1), index = Number(id.slice(-12)) - 1;
+                const event = { id, title: `Current fixture detail ${index}`, description: 'Synthetic current exact event observation.',
+                    source: 'Fixture', sourceType: 'rss', url: `https://example.invalid/event-${index}`, publishedAt: new Date(Date.now() - 3_600_000).toISOString(), latitude: 32, longitude: 14 };
+                json({ event, sources: [], totalSources: 0, timelineRestricted: false }); return;
+            }
             if (url.pathname === '/api/news' && url.searchParams.get('force_raw') === 'true') {
                 json({ items: Array.from({ length: regionStage + 1 }, (_, index) => regionRow(index + 1)), lastUpdated: '2026-09-30T12:00:00Z',
                     meta: { clustered: false, scope: 'viewport', view: 'sidebar', sort: url.searchParams.get('sort'), isCapped: false, stale: false, appliedLimit: Number(url.searchParams.get('limit')) } }); return;

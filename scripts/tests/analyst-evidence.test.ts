@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { captureEvidence, checkEvidenceAccess, EvidenceAccessError } from '@/lib/analyst/capture';
 import { selectionFor, toggleSelection } from '@/lib/analyst/selection';
-import { copyPacket, copyStore } from '@/lib/analyst/schema';
+import { copyPacket, copyStore, copyScope } from '@/lib/analyst/schema';
 import { csvCell, escapeHtml, exportCopy, serializeBrief, serializeCsv, serializeJson } from '@/lib/analyst/serializers';
 import { emptyStore, loadStore, saveStore, storageKey } from '@/lib/analyst/storage';
 import { MAX_SELECTION, MAX_SOURCES, MAX_STORAGE_BYTES } from '@/lib/analyst/types';
@@ -13,6 +13,31 @@ const fetcher = (fn: (url: string, options?: RequestInit) => Promise<Response> |
 const select = (index = 1) => selectionFor(analystEvent(index), observedAt)!;
 
 describe('analyst captures', () => {
+  it('freezes reporting replay provenance while exact details remain current and exports retain the temporal caveat', async () => {
+    const reportingReplay = { snapshotCapturedAt: observedAt, windowStart: '2026-09-29T08:00:00Z', windowEnd: '2026-09-29T20:00:00Z', liveFeedStatus: 'loading' as const };
+    const scope = { ...analystScope, reportingReplay };
+    const fetch = fetcher(url => url.includes('/access') ? okAccess() : Response.json(detailBody(analystEvent())));
+    const packet = await captureEvidence({ ownerId: 'owner', selections: [select()], scope, signal: signal(), fetcher: fetch });
+    reportingReplay.windowEnd = observedAt; scope.displayedCount = 0;
+    expect(packet.scope.reportingReplay?.windowEnd).toBe('2026-09-29T20:00:00Z');
+    expect(packet.scope.displayedCount).toBe(3);
+    expect(packet.entries[0].event?.publishedAt).toBe('2026-09-29T12:00:00Z');
+    const exported = exportCopy(packet, { [analystId()]: 'Local secret' });
+    for (const output of [serializeJson(exported), serializeCsv(exported), serializeBrief(exported)]) {
+      expect(output).toContain('Selected during reporting replay');
+      expect(output).toContain('not event state at the replay cursor');
+      expect(output).toContain('2026-09-29T20:00:00Z');
+      expect(output).not.toContain('Local secret');
+    }
+    expect(copyPacket(packet)).toEqual(packet);
+    expect(copyScope(analystScope)).not.toHaveProperty('reportingReplay');
+    for (const bad of [
+      { ...reportingReplay, windowStart: observedAt, windowEnd: '2026-09-29T20:00:00Z' },
+      { ...reportingReplay, windowEnd: '2026-10-01T00:00:00Z' },
+      { ...reportingReplay, liveFeedStatus: 'complete-history' },
+      { ...reportingReplay, snapshotCapturedAt: 'invalid' },
+    ]) expect(() => copyScope({ ...scope, reportingReplay: bad })).toThrow();
+  });
   it('deduplicates raw and aggregate identities and rejects unresolved clusters without changing the pin', () => {
     const event = analystEvent();
     const aggregate = { ...event, id: 'cluster-z4-9', originalId: event.id, storyCount: 6 };

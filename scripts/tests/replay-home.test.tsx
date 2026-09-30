@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     scope: vi.fn(),
     dismiss: vi.fn(),
     alertScopes: vi.fn(),
+    evidenceScopes: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => mocks.params, usePathname: () => '/' }));
 vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: 'light', setTheme: vi.fn() }) }));
@@ -37,6 +38,7 @@ vi.mock('@/hooks/useNewsData', () => ({ useNewsData: (scope: unknown) => {
 vi.mock('@/components/layout/StartupGate', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/components/auth/UserButton', () => ({ default: () => null }));
 vi.mock('@/components/ui/PWAInstallPrompt', () => ({ default: () => null }));
+vi.mock('@/components/analyst/AnalystWorkspace', () => ({ default: (props: unknown) => { mocks.evidenceScopes(props); return null; }, AnalystWorkspaceButton: () => null }));
 vi.mock('@/components/ui/FilterBar', () => ({ default: () => null }));
 vi.mock('@/components/ui/EventSidebar', () => ({ default: ({ items }: { items: NewsItem[] }) => <div data-testid="sidebar-frame">{items.map(item => item.title).join(',')}</div> }));
 
@@ -50,6 +52,25 @@ beforeEach(() => {
     mocks.rows = [36, 1].map((hours, index) => ({ id: index === 0 ? 'early' : 'late', title: index === 0 ? 'Earlier metadata' : 'Later metadata', description: 'Fixture details', source: 'Fixture', sourceType: 'rss', url: 'https://example.com', publishedAt: new Date(Date.now() - hours * 3_600_000).toISOString(), latitude: 42, longitude: 10 }));
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it('keeps dashboard shortcuts and selection isolated when a dialog download returns focus to body', () => {
+    render(<HomeContent />);
+    const dialog = document.createElement('dialog');
+    dialog.open = true; document.body.append(dialog);
+    const before = window.location.search;
+    try {
+        for (const key of ['Escape', 't', 'c', 'm', '/', 'f']) {
+            const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+            document.body.dispatchEvent(event);
+            expect(event.defaultPrevented).toBe(false);
+        }
+        expect(window.location.search).toBe(before);
+        expect(screen.getByTestId('selected-id').textContent).toBe('late');
+        expect(mocks.preferences).not.toHaveBeenCalled();
+    } finally { dialog.remove(); }
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.getByTestId('selected-id').textContent).toBe('');
+});
 
 it('uses real filter and URL hooks without changing query scope, saved preferences or selected id during replay', () => {
     const { rerender } = render(<HomeContent />);
@@ -110,6 +131,10 @@ it('feeds heatmap only the frozen frame and keeps snapshot coverage independent 
     expect(JSON.parse(screen.getByTestId('map-status').textContent!)).toMatchObject({ dataReady: true, isCapped: true, activityDataUnavailable: false, presentationOnly: true });
     expect(mocks.scope.mock.lastCall![0]).toEqual(liveScope);
     expect(mocks.alertScopes.mock.lastCall![0]).toEqual(watchScope);
+    expect(mocks.evidenceScopes.mock.lastCall![0].scope).toMatchObject({
+        isCapped: true, appliedLimit: 1000, displayedCount: 2, feedStatus: 'freshness-not-reported',
+        reportingReplay: { snapshotCapturedAt: '2026-09-30T12:00:00.001Z', windowStart: '2026-09-27T12:00:00.001Z', windowEnd: '2026-09-29T12:00:00.001Z', liveFeedStatus: 'loading' },
+    });
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(screen.queryByText('Couldn’t refresh stories')).toBeNull();
     expect(screen.getByText(/Live update unavailable: Live update failed/)).toBeTruthy();

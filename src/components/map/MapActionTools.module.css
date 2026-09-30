@@ -9,7 +9,12 @@
   align-items: flex-end;
   gap: 8px;
   z-index: 1000;
+  pointer-events: none;
 }
+
+.mapActionArea > button,
+.bottomRow > button,
+.overlayMenu { pointer-events: auto; }
 
 .actionBtn {
   position: relative;
@@ -264,3 +269,10 @@
   }
 }
 
+/* Replay leaves a shallow map in compact landscape layouts. Use one action
+   row beside the zoom controls rather than stacking into the settings gear. */
+@media (width < 1024px) and (max-height: 500px) {
+  .mapActionArea { flex-direction: row; align-items: center; right: 66px; bottom: 24px; }
+  .actionBtn { width: 44px; height: 44px; }
+  .overlayMenu { right: 0; bottom: 54px; max-height: calc(var(--map-available-height, 100dvh) - 80px); overflow-y: auto; }
+}

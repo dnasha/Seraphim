@@ -87,6 +87,7 @@ export default function AnalystWorkspace({ workspace: w, scope, currentItem, sig
       <button type="button" title="Close the evidence workspace" onClick={() => w.setOpen(false)} autoFocus aria-label="Close evidence workspace">Close</button></header>
     <div className={styles.content}>
       <p>Select events separately from the active map pin. Capture copies the server-authorized details at response time. It is an observation packet, not an authenticated archive.</p>
+      {scope.reportingReplay && <p>Reporting replay is active. Capture copies current exact event details, not historical state at the cursor. The displayed replay window is recorded with the packet; later playback cannot change that copy.</p>}
       {w.error && <p role="alert" className={styles.error}>{w.error}</p>}
       {w.storageUnavailable && <p>Local saving is unavailable. Your selection and completed capture stay here while you retry. <button type="button" disabled={w.busy} title="Recheck access and retry local storage without clearing your work" onClick={w.retryStorage}>Retry local saving</button></p>}
       {!w.allowed ? <section className={styles.section}><h2>Analyst or Angel access required</h2><p>Sign in with an eligible account to select, capture, and export evidence. Access is checked again for each capture and export.</p>

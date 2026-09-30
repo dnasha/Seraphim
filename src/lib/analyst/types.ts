@@ -35,6 +35,13 @@ export interface EvidenceScope {
   displayedCount: number;
   selectionScope: 'explicit-selection';
   detailScope: 'exact-id-outside-list-window-allowed';
+  /** Optional combined-experiment provenance; older packets remain valid. */
+  reportingReplay?: {
+    snapshotCapturedAt: string;
+    windowStart: string;
+    windowEnd: string;
+    liveFeedStatus: EvidenceScope['feedStatus'];
+  };
 }
 
 // Deliberate allowlist: no image fetches, internal ingestion fields, or map clusters.
@@ -87,3 +94,4 @@ export interface EvidenceExport {
   privateNotes?: Record<string, string>;
 }
 export const PACKET_DISCLAIMER = 'Copied observations from server-authorized event details, not an authenticated archive or a complete historical dataset. Publication times may change after story merges. Capture and response times record this observation, not publication. Links lead to original reporting; source availability and accuracy are not guaranteed.';
+export const REPLAY_PACKET_CAVEAT = 'Selected during reporting replay. The recorded window reconstructs reporting timestamps from a frozen loaded view; captured exact event details are current server observations, not event state at the replay cursor. Earlier selections and the retained active event may be outside that window.';
