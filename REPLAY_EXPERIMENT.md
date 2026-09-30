@@ -40,10 +40,19 @@ To repeat browser QA without external services:
 node scripts/diagnostics/replay-browser-server.mjs
 # In another terminal, with Playwright available:
 node scripts/diagnostics/test-replay-browser.mjs
+node scripts/diagnostics/test-replay-browser-controls.mjs
 ```
 
 The fixture server binds only `127.0.0.1:4175`. It uses the actual HomeContent, sidebar, filters, URL hook and replay UI, with synthetic rows and mocked auth/feed/map services. It is never an application route or production bundle. The browser script blocks external requests and asserts none occurred. Set `PLAYWRIGHT_MODULE_PATH` to an installed Playwright ESM module if not locally installed, and `CHROMIUM_PATH` if Chromium is elsewhere.
 
-Final implementation verification: typecheck/lint/build passed; 115 test files and 1,041 tests passed (one existing todo). Global coverage: 84% statements, 76% branches, 88.65% functions, 87.01% lines; reconstruction lib: 100% lines/functions, 99.03% statements, 94.56% branches. The first full run caught missing control tooltips; those were fixed and the final full run passed. Existing Vite config-loader/PostCSS warnings did not prevent verification. No remaining environment blocker.
+Final repair verification: typecheck/lint/build passed; 115 test files and 1,045 tests passed (one existing todo). Global coverage: 84.14% statements, 76.23% branches, 88.68% functions, 87.18% lines. The coverage allowlist now includes the replay hook and controls in addition to the reconstruction library. Existing Vite config-loader warnings did not prevent verification. No remaining environment blocker.
 
 Browser QA covers 1440×900 desktop (UTC) and 390×844 mobile (America/New_York): freeze, scrub, play/pause, late responses, comparisons, snapshot refresh, live restore, shared selection, account switch, free/Analyst permissions, reduced motion, overflow and zero replay persistence. Screenshots/results are saved in ignored `artifacts/replay/`. WebGL rendering, live authentication and real database/tile services are mocked; camera behavior is covered by the real camera hook's unit/regression tests. Astra review and combination testing remain the next stage.
+
+## Review repairs
+
+- The native range uses integer positions mapped onto captured timestamps. Home/End and pointer drags reach both exact endpoints even for arbitrary millisecond bounds; windows shorter than 1,440 milliseconds use one position per millisecond so arrow keys still advance. Step forward shares the playback increment.
+- The heading stays above a separately scrolling body, with focus scroll spacing. The reporting cursor leads both visual and tab order. Native keyboard QA at 320×568 and 844×390 verifies unobscured slider, buttons, select, summaries, and all Analyst comparison editors.
+- Freeze/Refresh share capture validation and provide a visible, accessible disabled reason for invalid calendar dates, reversed/empty bounds, future starts, loading, and unavailable entitlements. A future start is rechecked when it becomes usable; the clock cancels on scope/account changes and cleanup. Invalid live bounds cannot replace an existing snapshot.
+- `test-replay-browser-controls.mjs` covers the exact endpoint repro, a one-millisecond window, native Home/End/arrows and pointer drags, mobile tab traversal, and future/reversed/invalid-calendar capture gates. It blocks external requests and uses only synthetic fixture services. The original browser script now scrubs with native pointer input too.
+- Dependency parity was checked before final gates. The saved environment initially had Next/ESLint config 16.3.5 and MapLibre 6.10.0. `bun install --frozen-lockfile`, followed by `--force` to repair a missing nested MIME-parser dependency, restored the committed installation without manifest or lockfile edits. All 41 direct packages and the affected nested jsdom/MIME parser match the lockfile: Next/ESLint config 16.3.7, MapLibre 6.11.2, nested jsdom 30.1.1, and MIME parser 5.0.0. Final gates and browser runs passed after that repair; parity evidence is in ignored `artifacts/replay/dependency-parity.json`.

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useId, useState, useSyncExternalStore } from 'react';
 import { canUseTimeRange, hasFeature, type UserTier } from '@/lib/entitlements';
-import { compareReplayWindows, replayTime, replayLocalInput, replayInputTimestamp, validReplayWindow, type ReplayWindow } from '@/lib/experiments/replay';
+import { advanceReplay, compareReplayWindows, replaySliderSteps, replaySliderPosition, replaySliderTimestamp, replayTime, replayLocalInput, replayInputTimestamp, validReplayWindow, type ReplayWindow } from '@/lib/experiments/replay';
 import type { useReplay } from './useReplay';
 import styles from './ReplayTimeline.module.css';
 
@@ -40,11 +40,11 @@ function ReplayControls({ replay, tier }: { replay: Replay; tier: UserTier }) {
     const comparison = compareReplayWindows(snapshot, a, b);
     return <>
         <div className={styles.controls}>
-            <button type="button" onClick={replay.togglePlayback} disabled={reducedMotion} title={reducedMotion ? 'Automatic playback is off for reduced motion; use the slider or Step forward.' : 'Advance the frozen dataset locally'}>{playing ? 'Pause' : 'Play'}</button>
-            <button type="button" title="Advance the reporting cursor one frame" onClick={() => replay.scrub(Math.min(snapshot.bounds.end, cursor + (snapshot.bounds.end - snapshot.bounds.start) / 60))}>Step forward</button>
             <label className={styles.slider}>Reporting cursor
-                <input title="Scrub available reporting timestamps in the frozen view" type="range" min={snapshot.bounds.start} max={snapshot.bounds.end} step={Math.max(1, Math.floor((snapshot.bounds.end - snapshot.bounds.start) / 1440))} value={cursor} onChange={event => replay.scrub(Number(event.target.value))} aria-valuetext={replayTime(cursor)} />
+                <input title="Scrub available reporting timestamps in the frozen view" type="range" min={0} max={replaySliderSteps(snapshot.bounds)} step={1} value={replaySliderPosition(cursor, snapshot.bounds)} onChange={event => replay.scrub(replaySliderTimestamp(Number(event.target.value), snapshot.bounds))} aria-valuetext={replayTime(cursor)} />
             </label>
+            <button type="button" onClick={replay.togglePlayback} disabled={reducedMotion} title={reducedMotion ? 'Automatic playback is off for reduced motion; use the slider or Step forward.' : 'Advance the frozen dataset locally'}>{playing ? 'Pause' : 'Play'}</button>
+            <button type="button" title="Advance the reporting cursor one frame" onClick={() => replay.scrub(advanceReplay(cursor, snapshot.bounds))}>Step forward</button>
             <label className={styles.duration}>Display window
                 <select title="Choose a local display window inside captured coverage" value={state.duration ?? 'all'} onChange={event => replay.setDuration(event.target.value === 'all' ? null : Number(event.target.value))}>
                     <option value="all">All through cursor</option>
@@ -87,14 +87,17 @@ function ReplayControls({ replay, tier }: { replay: Replay; tier: UserTier }) {
 
 export default function ReplayTimeline({ replay, tier, resolving }: { replay: Replay; tier: UserTier; resolving: boolean }) {
     const permitted = !resolving && hasFeature(tier, 'fullTimeline');
+    const reasonId = useId();
+    const captureReason = resolving ? 'Wait for account access to finish loading.' : replay.captureDisabledReason;
     return <section className={styles.panel} aria-label="Reporting replay" data-active={Boolean(replay.state)}>
         <div className={styles.heading}>
             <div><strong>{replay.state ? 'Reconstructed reporting timeline' : 'Reporting replay'}</strong><span>{replay.state ? 'Frozen loaded view · current metadata' : 'Experiment · reconstruct the loaded view'}</span></div>
             {replay.state ? <div className={styles.actions}>
-                <button type="button" disabled={!replay.canCapture} onClick={replay.capture} title="Replace the snapshot with the currently loaded view">Refresh snapshot</button>
+                <button type="button" disabled={Boolean(captureReason)} aria-describedby={captureReason ? reasonId : undefined} onClick={replay.capture} title={captureReason ?? 'Replace the snapshot with the currently loaded view'}>Refresh snapshot</button>
                 <button type="button" title="Discard the snapshot and show the current live view" onClick={replay.returnLive}>Return live</button>
-            </div> : <button type="button" disabled={!permitted || !replay.canCapture} onClick={replay.capture} title={permitted ? 'Freeze the currently loaded view without changing your live filters' : 'Reporting replay requires Pro or higher'}>{permitted ? 'Freeze loaded view' : 'Replay · Pro'}</button>}
+            </div> : <button type="button" disabled={Boolean(captureReason)} aria-describedby={captureReason ? reasonId : undefined} onClick={replay.capture} title={captureReason ?? 'Freeze the currently loaded view without changing your live filters'}>{permitted ? 'Freeze loaded view' : 'Replay · Pro'}</button>}
         </div>
+        {captureReason && <p id={reasonId} role="status" className={styles.captureReason}>{captureReason}</p>}
         {replay.state && <div className={styles.body}>
             {replay.state.snapshot.isCapped && <p className={styles.warning}>Capped coverage{replay.state.snapshot.appliedLimit ? ` (limit ${replay.state.snapshot.appliedLimit})` : ''}: replay and comparisons may omit represented events and reporting activity.</p>}
             {replay.state.snapshot.clustered && <p className={styles.warning}>Spatial cluster representatives are shown; hidden cluster members have no individual replay history here.</p>}

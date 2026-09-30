@@ -43,7 +43,7 @@ it('uses real filter and URL hooks without changing query scope, saved preferenc
     act(() => { vi.advanceTimersByTime(1); });
     fireEvent.click(screen.getByRole('button', { name: 'Freeze loaded view' }));
     const slider = screen.getByRole('slider', { name: 'Reporting cursor' });
-    fireEvent.change(slider, { target: { value: String(Date.now() - 24 * 3_600_000) } });
+    fireEvent.change(slider, { target: { value: '960' } });
     expect(screen.getByTestId('map-frame').textContent).toBe('Earlier metadata');
     expect(screen.getByTestId('sidebar-frame').textContent).toBe('Later metadata,Earlier metadata');
     expect(screen.getByTestId('selected-id').textContent).toBe('late');
@@ -55,9 +55,9 @@ it('uses real filter and URL hooks without changing query scope, saved preferenc
     // Deliberate selected-story detail hydration remains usable and is current metadata.
     mocks.rows = mocks.rows.map(row => ({ ...row, description: 'Current hydrated details' }));
     rerender(<HomeContent />);
-    fireEvent.change(slider, { target: { value: String(Date.now()) } });
+    fireEvent.change(slider, { target: { value: '1440' } });
     expect(screen.getByTestId('map-details').textContent).toContain('Current hydrated details');
-    fireEvent.change(slider, { target: { value: String(Date.now() - 24 * 3_600_000) } });
+    fireEvent.change(slider, { target: { value: '960' } });
     // A late background update cannot replace captured titles or temporal evidence.
     mocks.rows = mocks.rows.map(row => ({ ...row, title: 'Live replacement', publishedAt: new Date().toISOString() }));
     rerender(<HomeContent />);

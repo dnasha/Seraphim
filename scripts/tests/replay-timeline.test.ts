@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NewsItem } from '@/lib/core/types';
-import { advanceReplay, captureReplay, compareReplayWindows, inReplayWindow, replayBounds, replayFrame, replayTime, reportTimestamp, selectionOutsideReplay, validReplayWindow } from '@/lib/experiments/replay';
+import { advanceReplay, captureReplay, checkReplayCapture, compareReplayWindows, inReplayWindow, replayBounds, replayFrame, replaySliderPosition, replaySliderSteps, replaySliderTimestamp, replayTime, reportTimestamp, selectionOutsideReplay, validReplayWindow } from '@/lib/experiments/replay';
 
 const start = Date.parse('2026-09-29T00:00:00Z');
 const hour = 3_600_000;
@@ -47,6 +47,15 @@ describe('reporting reconstruction dates and coverage', () => {
         expect(snapshot.entries[0].item.tags).toEqual(['initial']);
         expect(snapshot.entries[0].activity).toEqual([start + hour, start + 2 * hour]);
         expect(snapshot.isCapped).toBe(true);
+    });
+    it('explains unavailable custom coverage and rejects normalized invalid calendar dates', () => {
+        const check = (from: string, to: string) => checkReplayCapture('analyst', 'custom', from, to, end);
+        expect(check('bad', iso(end)).reason).toMatch(/valid custom/);
+        expect(check('2026-02-30T00:00:00Z', iso(end)).bounds).toBeNull();
+        expect(check(iso(start), iso(start)).reason).toMatch(/after the start/);
+        expect(check(iso(end + hour), iso(end + 2 * hour)).reason).toMatch(/future reporting/);
+        expect(check('2026-09-29T00:00Z', '2026-09-30T00:00Z')).toEqual({ bounds: { start, end }, reason: null });
+        expect(check('2026-09-29', '2026-09-30')).toEqual({ bounds: { start, end }, reason: null });
     });
     it('deduplicates canonical representatives and never counts spatial cluster ids as events', () => {
         const representative = { ...item('cluster-z1-spatial', start), originalId: 'event', clusterSize: 9 };
@@ -99,5 +108,17 @@ describe('deterministic frames and window comparisons', () => {
         expect(advanceReplay(start, { start, end })).toBe(start + 24 * hour / 60);
         expect(advanceReplay(end - 1, { start, end })).toBe(end);
         expect(advanceReplay(end, { start, end })).toBe(end);
+    });
+    it('maps both slider endpoints exactly for millisecond bounds and very short coverage', () => {
+        for (const bounds of [{ start: start + 1, end: end - 1 }, { start: end - 1, end }, { start, end: start + 7 }]) {
+            const steps = replaySliderSteps(bounds);
+            expect(replaySliderPosition(bounds.start, bounds)).toBe(0);
+            expect(replaySliderPosition(bounds.end, bounds)).toBe(steps);
+            expect(replaySliderTimestamp(0, bounds)).toBe(bounds.start);
+            expect(replaySliderTimestamp(steps, bounds)).toBe(bounds.end);
+            expect(replaySliderTimestamp(-1, bounds)).toBe(bounds.start);
+            expect(replaySliderTimestamp(steps + 1, bounds)).toBe(bounds.end);
+            expect(replaySliderTimestamp(1, bounds)).toBeGreaterThan(bounds.start);
+        }
     });
 });

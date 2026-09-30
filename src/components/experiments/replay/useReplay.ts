@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NewsItem } from '@/lib/core/types';
-import { canUseTimeRange, hasFeature, type UserTier } from '@/lib/entitlements';
+import type { UserTier } from '@/lib/entitlements';
 import { matchesNewsId } from '@/lib/utils/ranking';
-import { advanceReplay, captureReplay, replayBounds, replayFrame, selectionOutsideReplay, validReplayWindow, type ReplaySnapshot, type ReplayWindow } from '@/lib/experiments/replay';
+import { advanceReplay, captureReplay, checkReplayCapture, replayFrame, selectionOutsideReplay, validReplayWindow, type ReplaySnapshot, type ReplayWindow } from '@/lib/experiments/replay';
 
 interface ReplayState {
     snapshot: ReplaySnapshot;
@@ -46,12 +46,31 @@ function currentDetails(captured: NewsItem, live: NewsItem | undefined): NewsIte
 export function useReplay(input: ReplayInput) {
     const [ownerKey, setOwnerKey] = useState(input.ownerKey);
     const [state, setState] = useState<ReplayState | null>(null);
+    const [checkedAt, setCheckedAt] = useState(() => Date.now());
     // Discard private captured details in the same render as an account/tier change.
     if (ownerKey !== input.ownerKey) {
         setOwnerKey(input.ownerKey);
         setState(null);
     }
     const current = ownerKey === input.ownerKey ? state : null;
+
+    useEffect(() => {
+        if (input.timeRange !== 'custom') return;
+        // Recheck edits and wake when a future start becomes reconstructable.
+        // This clock never fetches data or alters an existing snapshot.
+        const start = Date.parse(input.customStart);
+        let timer: ReturnType<typeof setTimeout>;
+        const check = () => {
+            const now = Date.now();
+            setCheckedAt(now);
+            if (Number.isFinite(start) && start >= now) timer = setTimeout(check, Math.min(start - now + 1, 2_147_483_647));
+        };
+        timer = setTimeout(check, 0);
+        return () => clearTimeout(timer);
+    }, [input.timeRange, input.customStart, input.customEnd, input.ownerKey]);
+
+    const captureCheck = checkReplayCapture(input.tier, input.timeRange, input.customStart, input.customEnd, checkedAt);
+    const captureDisabledReason = !input.ready ? 'Wait for the current live view to finish loading.' : captureCheck.reason;
 
     useEffect(() => {
         if (!current?.playing) return;
@@ -78,7 +97,7 @@ export function useReplay(input: ReplayInput) {
     const capture = useCallback(() => {
         if (!input.ready) return;
         const capturedAt = Date.now();
-        const bounds = replayBounds(input.tier, input.timeRange, input.customStart, input.customEnd, capturedAt);
+        const { bounds } = checkReplayCapture(input.tier, input.timeRange, input.customStart, input.customEnd, capturedAt);
         if (!bounds) return;
         const snapshot = captureReplay({ ...input, bounds, capturedAt });
         const midpoint = bounds.start + Math.floor((bounds.end - bounds.start) / 2);
@@ -112,7 +131,8 @@ export function useReplay(input: ReplayInput) {
         mapItems,
         sidebarItems,
         capture,
-        canCapture: input.ready && hasFeature(input.tier, 'fullTimeline') && canUseTimeRange(input.tier, input.timeRange),
+        canCapture: captureDisabledReason === null,
+        captureDisabledReason,
         returnLive: () => setState(null),
         scrub: (cursor: number) => setState(previous => previous ? { ...previous, cursor: Math.max(previous.snapshot.bounds.start, Math.min(previous.snapshot.bounds.end, cursor)), playing: false } : null),
         setDuration: (duration: number | null) => setState(previous => previous ? { ...previous, duration, playing: false } : null),

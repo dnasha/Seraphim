@@ -39,15 +39,31 @@ export function reportTimestamp(value: string | undefined): number | null {
     return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-export function replayBounds(tier: UserTier, timeRange: string, start: string, end: string, capturedAt: number): ReplayWindow | null {
-    if (!hasFeature(tier, 'fullTimeline') || !canUseTimeRange(tier, timeRange) || !Number.isFinite(capturedAt)) return null;
+/** The capture action and its disabled explanation share the same validation. */
+export function checkReplayCapture(tier: UserTier, timeRange: string, start: string, end: string, capturedAt: number): { bounds: ReplayWindow | null; reason: string | null } {
+    const unavailable = (reason: string) => ({ bounds: null, reason });
+    if (!hasFeature(tier, 'fullTimeline')) return unavailable('Reporting replay requires Pro or higher.');
+    if (!canUseTimeRange(tier, timeRange)) return unavailable('This reporting range is unavailable on your plan.');
+    if (!Number.isFinite(capturedAt)) return unavailable('The current reporting time is unavailable.');
     if (timeRange === 'custom') {
-        const from = start ? Date.parse(start) : NaN;
-        const to = end ? Math.min(Date.parse(end), capturedAt) : NaN;
-        return Number.isFinite(from) && Number.isFinite(to) && from < to ? { start: from, end: to } : null;
+        const parseBound = (value: string) => {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return reportTimestamp(`${value}T00:00:00Z`);
+            if (/(Z|[+-]\d{2}:\d{2})$/i.test(value)) return reportTimestamp(value.replace(/T(\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/i, 'T$1:00$2'));
+            return replayInputTimestamp(value);
+        };
+        const from = parseBound(start);
+        const until = parseBound(end);
+        if (from === null || until === null) return unavailable('Choose valid custom start and end dates.');
+        if (from >= until) return unavailable('Choose a custom end date after the start date.');
+        if (from >= capturedAt) return unavailable('Choose a custom start date before now; future reporting cannot be reconstructed.');
+        return { bounds: { start: from, end: Math.min(until, capturedAt) }, reason: null };
     }
     const duration = PRESET_MS[timeRange];
-    return duration ? { start: capturedAt - duration, end: capturedAt } : null;
+    return duration ? { bounds: { start: capturedAt - duration, end: capturedAt }, reason: null } : unavailable('Choose a supported reporting range.');
+}
+
+export function replayBounds(tier: UserTier, timeRange: string, start: string, end: string, capturedAt: number): ReplayWindow | null {
+    return checkReplayCapture(tier, timeRange, start, end, capturedAt).bounds;
 }
 
 export function captureReplay(input: {
@@ -141,6 +157,20 @@ export function advanceReplay(cursor: number, bounds: ReplayWindow): number {
     return Math.min(bounds.end, cursor + Math.max(1, Math.ceil((bounds.end - bounds.start) / 60)));
 }
 
+// Native ranges sanitize values onto their step grid. Use an integer grid whose
+// endpoints always map to the exact coverage instants, including millisecond bounds.
+export const REPLAY_SLIDER_STEPS = 1440;
+export function replaySliderSteps(bounds: ReplayWindow): number {
+    return Math.min(REPLAY_SLIDER_STEPS, bounds.end - bounds.start);
+}
+export function replaySliderPosition(cursor: number, bounds: ReplayWindow): number {
+    return Math.round(Math.max(0, Math.min(1, (cursor - bounds.start) / (bounds.end - bounds.start))) * replaySliderSteps(bounds));
+}
+export function replaySliderTimestamp(position: number, bounds: ReplayWindow): number {
+    const steps = replaySliderSteps(bounds);
+    return bounds.start + Math.round((bounds.end - bounds.start) * Math.max(0, Math.min(steps, position)) / steps);
+}
+
 /** UTC is explicit and deterministic; local datetime inputs convert instants separately. */
 export function replayTime(timestamp: number): string {
     return new Date(timestamp).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
@@ -152,8 +182,8 @@ export function replayLocalInput(timestamp: number): string {
     return dateTimeInputValue(iso) + iso.slice(16, 23);
 }
 
-export function replayInputTimestamp(value: string, original: number): number | null {
-    if (value === replayLocalInput(original)) return original;
+export function replayInputTimestamp(value: string, original?: number): number | null {
+    if (original !== undefined && value === replayLocalInput(original)) return original;
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp)) return null;
     const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(value);

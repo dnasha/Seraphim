@@ -25,19 +25,15 @@ try {
         await page.screenshot({ path: `${artifactDir}/${name}-live.png` });
         await page.getByRole('button', { name: 'Freeze loaded view', exact: true }).click();
         const slider = page.getByRole('slider', { name: 'Reporting cursor' });
-        await slider.evaluate(element => {
-            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-            set.call(element, String(Date.parse('2026-09-30T00:00:00Z')));
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
-        });
+        const sliderBox = await slider.boundingBox();
+        await slider.click({ position: { x: sliderBox.width / 2, y: sliderBox.height / 2 } });
         await page.waitForFunction(() => document.querySelector('[data-testid="map-rows"]').querySelectorAll('button').length === 2).catch(async error => { await page.screenshot({ path: `${artifactDir}/${name}-failure.png` }); console.log(name, await page.getByRole('region', { name: 'Reporting replay' }).textContent()); throw error; });
         assert.equal(await page.getByTestId('map-rows').getByRole('button', { includeHidden: true }).count(), 2);
         assert.match(await page.getByRole('region', { name: 'Reporting replay' }).textContent(), /Selected event is outside/);
         assert.equal(await page.getByTestId('selected-id').textContent(), 'fixture-3');
         assert.equal(new URL(page.url()).searchParams.get('eventId'), 'fixture-3');
         await page.getByRole('button', { name: 'Play', exact: true }).click();
-        await page.waitForFunction(() => Number(document.querySelector('input[type="range"]').value) > Date.parse('2026-09-30T00:00:00Z'));
+        await page.waitForFunction(() => Number(document.querySelector('input[type="range"]').value) > 720);
         await page.getByRole('button', { name: 'Pause', exact: true }).click();
         await page.getByRole('button', { name: 'Inject late response', exact: true }).click();
         assert.equal(await page.getByTestId('map-rows').getByRole('button', { includeHidden: true }).count(), 2);
