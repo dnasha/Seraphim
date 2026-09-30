@@ -15,9 +15,14 @@ try {
     for (const [name, viewport, timezoneId] of viewports) {
         const mobile = name !== 'desktop';
         const context = await browser.newContext({ viewport, timezoneId, isMobile: mobile, hasTouch: mobile });
-        await context.addInitScript(() => { localStorage.setItem('seraphim_cookie_consent', 'essential'); localStorage.setItem('seraphim_seen_overlays', 'true'); });
-        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [], regionRequests = [];
-        let regionStage = 0;
+        await context.addInitScript(() => {
+            localStorage.setItem('seraphim_cookie_consent', 'essential'); localStorage.setItem('seraphim_seen_overlays', 'true');
+            // A fixture boundary regression must fail before any native prompt or display.
+            Notification.requestPermission = () => { throw new Error('Native permission prompt forbidden in this fixture.'); };
+            ServiceWorkerRegistration.prototype.showNotification = () => { throw new Error('Native notification forbidden in this fixture.'); };
+        });
+        const page = await context.newPage(), errors = [], forbidden = [], mockedResources = [], regionRequests = [], watchRequests = [];
+        let regionStage = 0, watching = false, feedTime = '2026-09-30T12:00:00Z';
         const regionRow = index => ({ id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, title: `Synthetic live region event ${index}`,
             source: 'Fixture', sourceType: 'rss', url: `https://example.invalid/region-${index}`, publishedAt: '2026-09-29T18:00:00Z',
             latitude: 32, longitude: 14, sourcesCount: 1, storyCount: 1 });
@@ -33,10 +38,10 @@ try {
             }
             if (url.origin === 'http://127.0.0.1:4176' && url.pathname === '/api/news') {
                 const scope = Object.fromEntries(url.searchParams);
-                regionRequests.push(scope);
+                (watching ? watchRequests : regionRequests).push(scope);
                 assert.equal(scope.force_raw, 'true'); assert.equal(scope.view, 'sidebar'); assert.equal(scope.scope, 'viewport');
                 return route.fulfill({ json: { items: Array.from({ length: regionStage + 1 }, (_, index) => regionRow(index + 1)),
-                    lastUpdated: '2026-09-30T12:00:00Z', meta: { clustered: false, scope: 'viewport', view: 'sidebar', sort: scope.sort, isCapped: false, stale: false, appliedLimit: 1000 } } });
+                    lastUpdated: feedTime, meta: { clustered: false, scope: 'viewport', view: 'sidebar', sort: scope.sort, isCapped: false, stale: false, appliedLimit: 1000 } } });
             }
             if (url.origin === 'http://127.0.0.1:4176' && url.pathname.startsWith('/api/news/00000000-0000-4000-8000-')) {
                 assert.equal(url.searchParams.get('refresh'), 'true');
@@ -112,6 +117,53 @@ try {
         assert.equal((await saved()).baseline.events.length, 2); assert.equal(regionRequests.length, 2);
         assert(!page.url().includes(regionName));
         await regions.getByRole('button', { name: 'Close region checkpoints', exact: true }).click();
+        await page.evaluate(view => window.__combinedMap.jumpTo(view), beforePan);
+        // Real alert sessions read and deduplicate live identities independently
+        // of both an empty replay frame and an explicitly reviewed region result.
+        watching = true;
+        const alertLauncher = page.getByRole('button', { name: 'Watch alerts', exact: true });
+        await alertLauncher.click();
+        const alerts = page.getByRole('region', { name: 'Watch alerts', exact: true });
+        const alertBox = await alerts.boundingBox(), mapBox = await page.locator('main').boundingBox();
+        assert(alertBox.x >= 0 && alertBox.x + alertBox.width <= viewport.width);
+        assert(alertBox.y >= mapBox.y && alertBox.y + alertBox.height <= mapBox.y + mapBox.height);
+        assert.equal(await page.evaluate(() => window.__combinedCalls.prompts), 0);
+        const watchName = `Synthetic ${name} alerts`;
+        await alerts.getByLabel('New watch name', { exact: true }).fill(watchName);
+        await alerts.getByRole('button', { name: 'Save current viewport + filters', exact: true }).click();
+        const alertKey = 'seraphim:experiment:browser-geofence:v1:fixture-account';
+        await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.watches.length === 1, alertKey);
+        assert.equal(await page.evaluate(() => window.__combinedCalls.prompts), 0);
+        await alerts.getByRole('button', { name: 'Enable browser notifications', exact: true }).click();
+        assert.equal(await page.evaluate(() => window.__combinedCalls.prompts), 1);
+        await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.watches[0].checkpoint?.seen.length === 3, alertKey);
+        assert.equal(await page.evaluate(() => window.__combinedCalls.prompts), 1);
+        assert.deepEqual(await page.evaluate(() => window.__combinedCalls.deliveries), []);
+        assert.equal((await data()).features.length, 0);
+        assert.equal((await saved()).baseline.events.length, 2);
+        const watchBaseline = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).watches[0], alertKey);
+        await alerts.getByText('Review saved scope', { exact: true }).click();
+        assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).watches[0].checkpoint, alertKey), watchBaseline.checkpoint);
+        await page.screenshot({ path: `${output}/${name}-alerts-during-empty-replay.png` });
+        await alerts.getByRole('button', { name: 'Close watch alerts', exact: true }).click();
+        await page.evaluate(() => window.__combinedMap.jumpTo({ center: [16, 33], zoom: 5 }));
+        regionStage = 3;
+        const nextWatchCheck = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).nextCheckAt, alertKey);
+        feedTime = new Date(nextWatchCheck).toISOString();
+        assert.equal(new Date(nextWatchCheck).getUTCMinutes(), 2);
+        await page.clock.setFixedTime(new Date(nextWatchCheck));
+        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.watches[0].checkpoint?.seen.length === 4, alertKey);
+        assert.deepEqual(watchRequests[1], watchRequests[0]);
+        assert.equal(watchRequests[0].time_range, '1d');
+        assert.deepEqual(await page.evaluate(() => window.__combinedCalls.deliveries), [[regionRow(4).id]]);
+        assert.equal((await saved()).baseline.events.length, 2);
+        assert.equal((await data()).features.length, 0);
+        assert(!page.url().includes(watchName));
+        await alertLauncher.click();
+        await alerts.getByRole('button', { name: 'Pause all checks', exact: true }).click();
+        await page.waitForFunction(key => !JSON.parse(localStorage.getItem(key)).enabled, alertKey);
+        await alerts.getByRole('button', { name: 'Close watch alerts', exact: true }).click();
         await page.evaluate(view => window.__combinedMap.jumpTo(view), beforePan);
         await scrub('End');
         // Actual native pointer scrub to halfway excludes all 1-hour rows.
@@ -220,15 +272,23 @@ try {
         assert.equal(await page.getByRole('slider').count(), 0);
         assert.equal(await page.getByRole('button', { name: 'Replay · Pro', exact: true }).isDisabled(), true);
         assert.equal(await page.getByLabel('Activity density legend').count(), 0);
+        await alertLauncher.click();
+        assert.equal(await alerts.getByRole('button', { name: 'Enable browser notifications', exact: true }).isDisabled(), true);
+        assert.equal(await alerts.getByLabel(`Rename ${watchName}`).count(), 0);
+        await alerts.getByRole('button', { name: 'Close watch alerts', exact: true }).click();
         await fixtureControl('Use guest fixture');
         assert.equal(await page.getByRole('button', { name: 'Replay · Pro', exact: true }).isDisabled(), true);
+        await alertLauncher.click();
+        assert.equal(await alerts.getByRole('button', { name: 'Save current viewport + filters', exact: true }).count(), 0);
+        assert.equal(await page.evaluate(() => window.__combinedCalls.prompts), 1);
         assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('replay'))), []);
         assert.deepEqual(await page.evaluate(() => window.__combinedCalls.fetches), []);
         assert.deepEqual(forbidden, []);
         assert.deepEqual(errors, []);
         results.push({ name, viewport, timezoneId, realMapLibre: true, syntheticRows: 1000, frozenFramePoints: 667,
-            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region checks while replay empty/fixed saved scope after pan/explicit displayed review boundary/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/drawing ownership with heatmap on and off/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
-            mockedRegionReads: regionRequests.length, forbiddenRequests: forbidden.length, mockedResources: mockedResources.length, browserErrors: errors.length });
+            tests: 'density weights/canonical ids/native scrub/exact endpoints/frozen cap and readiness/live independent raw region and alert checks while replay empty/fixed saved scopes after pan/explicit displayed region review boundary/quiet alert baseline/explicit mocked permission/UTC-aligned unseen alert arrival/independent checkpoints/late live updates/comparison/style recovery/dot selection/selected outside frame/no replay camera flights/drawing ownership with heatmap on and off/WebGL loss and restore/reduced motion/keyboard focus/live restore/account and guest isolation',
+            mockedRegionReads: regionRequests.length, mockedWatchReads: watchRequests.length, mockedPermissionClicks: 1, mockedDeliveries: 1,
+            forbiddenRequests: forbidden.length, mockedResources: mockedResources.length, browserErrors: errors.length });
         await context.close();
     }
 } catch (error) {

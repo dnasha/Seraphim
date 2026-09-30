@@ -18,12 +18,15 @@ const mocks = vi.hoisted(() => ({
     error: null as string | null,
     scope: vi.fn(),
     dismiss: vi.fn(),
+    alertScopes: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => mocks.params, usePathname: () => '/' }));
 vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: 'light', setTheme: vi.fn() }) }));
-vi.mock('next/dynamic', () => ({ default: () => function Map({ items, selectedItemId, ...status }: { items: NewsItem[]; selectedItemId: string | null; dataReady: boolean; isCapped: boolean; activityDataUnavailable: boolean; presentationOnly: boolean }) {
+vi.mock('next/dynamic', () => ({ default: (loader: () => unknown) => {
+    if (!String(loader).includes('NewsMap')) return function Alerts(props: unknown) { mocks.alertScopes(props); return null; };
+    return function Map({ items, selectedItemId, ...status }: { items: NewsItem[]; selectedItemId: string | null; dataReady: boolean; isCapped: boolean; activityDataUnavailable: boolean; presentationOnly: boolean }) {
     return <div><output data-testid="map-frame">{items.map(item => item.title).join(',')}</output><output data-testid="map-details">{items.map(item => item.description).join(",")}</output><span data-testid="selected-id">{selectedItemId}</span><output data-testid="density">{JSON.stringify(buildActivityHeatmapData(items))}</output><output data-testid="map-status">{JSON.stringify(status)}</output></div>;
-} }));
+}; } }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: mocks.owner }, isGuest: false, isLoading: false, showAuthModal: false }) }));
 vi.mock('@/hooks/useUserTier', () => ({ useUserTier: () => ({ tier: mocks.tier, isLoading: false }) }));
 vi.mock('@/hooks/useSyncedPreferences', () => ({ useSyncedPreferences: () => ({ preferences: null, isLoaded: true, updatePreferences: mocks.preferences }) }));
@@ -93,6 +96,7 @@ it('feeds heatmap only the frozen frame and keeps snapshot coverage independent 
     const { rerender } = render(<HomeContent />);
     act(() => { vi.advanceTimersByTime(1); });
     const liveScope = mocks.scope.mock.lastCall![0];
+    const watchScope = mocks.alertScopes.mock.lastCall![0];
     fireEvent.click(screen.getByRole('button', { name: 'Freeze loaded view' }));
     fireEvent.change(screen.getByRole('slider', { name: 'Reporting cursor' }), { target: { value: '960' } });
     const density = () => JSON.parse(screen.getByTestId('density').textContent!);
@@ -105,6 +109,7 @@ it('feeds heatmap only the frozen frame and keeps snapshot coverage independent 
     expect(density().features[0].properties.weight).toBe(15);
     expect(JSON.parse(screen.getByTestId('map-status').textContent!)).toMatchObject({ dataReady: true, isCapped: true, activityDataUnavailable: false, presentationOnly: true });
     expect(mocks.scope.mock.lastCall![0]).toEqual(liveScope);
+    expect(mocks.alertScopes.mock.lastCall![0]).toEqual(watchScope);
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(screen.queryByText('Couldn’t refresh stories')).toBeNull();
     expect(screen.getByText(/Live update unavailable: Live update failed/)).toBeTruthy();

@@ -22,6 +22,11 @@ const server = await createServer({
         { find: '@', replacement: resolve('src') },
     ] },
     plugins: [{ name: 'local-fixture-map-resources', transform(code, id) {
+        if (id.split('?')[0] === resolve('src/features/browser-geofence/useBrowserAlerts.ts')) {
+            const replacement = code.replace(/from\s*(['"])\.\/delivery\1/, `from ${JSON.stringify(resolve(root, 'delivery.ts'))}`);
+            if (replacement === code) throw new Error('Could not install the synthetic notification adapter.');
+            return replacement;
+        }
         if (id.split('?')[0] === resolve('src/components/map/NewsMap.tsx')) return code.replace('https://api.maptiler.com/resources/logo.svg', '/fixture-provider-logo.svg');
         return undefined;
     }, configureServer(server) {

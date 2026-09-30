@@ -16,7 +16,8 @@ const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export const useFixture = () => useSyncExternalStore(subscribe, () => fixture);
 export const changeFixture = (patch: Partial<typeof fixture>) => { fixture = { ...fixture, ...patch }; listeners.forEach(listener => listener()); };
-export const calls = { feedScopes: [] as unknown[], bounds: [] as unknown[], fetches: [] as unknown[], preferences: [] as unknown[] };
+export const calls = { feedScopes: [] as unknown[], bounds: [] as unknown[], fetches: [] as unknown[], preferences: [] as unknown[],
+    prompts: 0, permission: 'default' as NotificationPermission, deliveries: [] as string[][] };
 export const useAuth = () => { const value = useFixture(); return { user: value.tier === 'guest' ? null : { id: value.owner }, isGuest: value.tier === 'guest', isLoading: false, showAuthModal: false, setShowAuthModal: () => {} }; };
 export const useUserTier = () => ({ tier: useFixture().tier, isLoading: false });
 export const useSyncedPreferences = () => ({ preferences: null, isLoaded: true, updatePreferences: (patch: unknown) => { calls.preferences.push(patch); } });

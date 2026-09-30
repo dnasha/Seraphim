@@ -140,6 +140,7 @@ try {
     await p.goto(`${base.origin}/?lat=48&lng=12&zoom=5`);
     await p.waitForFunction(() => !!navigator.serviceWorker.controller);
     await p.getByRole('button', { name: 'Essential Only', exact: true }).click();
+    if (viewport.width <= 860) await p.getByRole('button', { name: 'Map', exact: true }).click();
     await p.getByRole('button', { name: 'Watch alerts', exact: true }).click();
     const save = p.getByRole('button', { name: 'Save current viewport + filters', exact: true });
     await save.waitFor();await p.waitForFunction(() => ![...document.querySelectorAll('button')].find(b => b.textContent === 'Save current viewport + filters')?.disabled);
@@ -165,7 +166,7 @@ try {
     // Profile refresh can legitimately remount the keyed panel after focus.
     const launcher = p.getByRole('button', { name: /^Watch alerts/ });
     if (await launcher.getAttribute('aria-expanded') === 'false') await launcher.click();
-    await p.locator('[aria-label="Watch alerts"]').evaluate(panel => { panel.scrollTop = 0; });
+    await p.getByRole('region', { name: 'Watch alerts', exact: true }).evaluate(panel => { panel.scrollTop = 0; });
     await p.screenshot({ path: `${screenshots}/production-${viewport.width}.png` });
     assert.deepEqual(errors, []);
     report[`ui${viewport.width}`] = { prompts: 1, baselineDeliveries: 0, mockedDeliveries: 2, overlapDedup: true, oldReentryQuiet: true, unseenArrivalDelivered: true, noOverflow: true, pageErrors: errors.length, watchReads: queries.filter(q => q.includes('force_raw=true')).length };
