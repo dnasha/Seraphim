@@ -9,6 +9,8 @@ import React, { useState, useCallback, useEffect, useMemo, useSyncExternalStore 
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 import FilterBar from '@/components/ui/FilterBar';
+import ReplayTimeline from '@/components/experiments/replay/ReplayTimeline';
+import { useReplay } from '@/components/experiments/replay/useReplay';
 import EventSidebar from '@/components/ui/EventSidebar';
 import { useNewsData } from '@/hooks/useNewsData';
 import { useNewsFilter, useNewsFilterState } from '@/hooks/useNewsFilter';
@@ -169,7 +171,7 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         return () => clearTimeout(timer);
     }, [isAuthResolving, isGuestUser, searchQuery, debouncedSearch, timeRange, sortMode, updateURL]);
 
-    const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, dismissError, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({
+    const { news, appliedSortMode, isLoading: dataLoading, isCapped, appliedLimit, error, dismissError, lastUpdated, fetchNews, onBoundsChange, fetchEventDetails } = useNewsData({
         filters: isGuestUser ? undefined : {
             sources: filterState.sources, categories: filterState.categories,
             ...(hasFeature(effectiveUserTier, 'advancedFilters') ? {
@@ -491,6 +493,26 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         return filteredNews;
     }, [filteredNews, isGuestUser, selectedItemId, userTier]);
 
+    // Replay transforms presentation only. Keep `news` and the live filter hook
+    // available for independent experiments such as regions and notifications.
+    const replay = useReplay({
+        ownerKey: `${newsResetKey}:${authLoading || tierLoading ? 'resolving' : 'ready'}`,
+        tier: effectiveUserTier,
+        ready: !isLoading && !tierLoading,
+        mapItems: visibleMapNews,
+        sidebarItems: visibleSidebarNews,
+        selectedItemId,
+        timeRange: effectiveTimeRange,
+        customStart: effectiveCustomStartDate,
+        customEnd: effectiveCustomEndDate,
+        isCapped: Boolean(isCapped),
+        appliedLimit,
+        feedUpdatedAt: lastUpdated,
+    });
+    // These are the displayed datasets; a combined heatmap should consume these.
+    const displayedMapNews = replay.mapItems;
+    const displayedSidebarNews = replay.sidebarItems;
+
     // Exact shared links may reference an event outside the current time range
     // or viewport, so fetch the event shell even when it was not in the feed.
     useEffect(() => {
@@ -572,11 +594,11 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     id="stories-view"
                     mobileActive={mobileView === 'stories'}
                     inert={isCompactLayout ? mobileView !== 'stories' : !isSidebarOpen}
-                    items={visibleSidebarNews}
+                    items={displayedSidebarNews}
                     selectedItemId={selectedItemId}
                     selectionVersion={selectionVersion}
                     onSelectItem={handleSelectItem}
-                    isLoading={isLoading}
+                    isLoading={replay.state ? false : isLoading}
                     onFetchDetails={fetchEventDetails}
                     isOpen={isSidebarOpen}
                     onToggleSidebar={() => handleSidebarOpenChange(!isSidebarOpen)}
@@ -588,9 +610,9 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     sortMode={effectiveSortMode}
                     onSortModeChange={handleSortModeChange}
                     filterVersion={filterVersion}
-                    animatedEffects={animatedEffects}
-                    isCapped={isCapped}
-                    appliedLimit={appliedLimit}
+                    animatedEffects={replay.state ? false : animatedEffects}
+                    isCapped={replay.state?.snapshot.isCapped ?? isCapped}
+                    appliedLimit={replay.state?.snapshot.appliedLimit ?? appliedLimit}
                     disabled={isGuestUser}
                     userTier={effectiveUserTier}
                     tierLoading={tierLoading}
@@ -606,12 +628,13 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     <NewsMap
                         dataReady={!isLoading}
                         onLoadStateChange={setMapLoadState}
-                        items={visibleMapNews}
+                        items={displayedMapNews}
                         selectedItemId={selectedItemId}
                         selectionVersion={selectionVersion}
+                        presentationOnly={Boolean(replay.state)}
                         onSelectItem={handleSelectItem}
                         isDarkMode={isDarkMode}
-                        animatedEffects={animatedEffects}
+                        animatedEffects={replay.state ? false : animatedEffects}
                         onAnimatedEffectsChange={handleAnimatedEffectsChange}
                         onBoundsChange={handleBoundsChange}
                         initialCenter={initialCenter}
@@ -627,6 +650,8 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
                     />
                 </main>
             </div>
+
+            <ReplayTimeline replay={replay} tier={effectiveUserTier} resolving={authLoading || tierLoading} />
 
             <nav className={styles.mobileNavigation} aria-label="Mobile views">
                 <button

@@ -17,6 +17,7 @@ interface UseMapCameraProps {
   popupContainer: HTMLDivElement | null;
   selectedItemId: string | null;
   selectionVersion: number;
+  presentationOnly?: boolean;
   geoItems: (NewsItem & { isTopHot?: boolean })[];
   latestGeoItemsRef: React.MutableRefObject<(NewsItem & { isTopHot?: boolean })[]>;
   animatedEffects: boolean;
@@ -94,6 +95,7 @@ export function useMapCamera({
   popupContainer,
   selectedItemId,
   selectionVersion,
+  presentationOnly = false,
   geoItems,
   latestGeoItemsRef,
   animatedEffects,
@@ -266,6 +268,11 @@ export function useMapCamera({
     if (hadSelectionCameraMotion) mapRef.current?.stop();
   }, [mapRef]);
 
+  // A reporting reconstruction changes displayed rows, not the camera scope.
+  useEffect(() => {
+    if (presentationOnly) cancelCameraFlight();
+  }, [presentationOnly, cancelCameraFlight]);
+
   // A pointer or wheel gesture belongs to the user. Cancel any pending
   // programmatic arrival correction before it can pull the map back.
   useEffect(() => {
@@ -351,10 +358,10 @@ export function useMapCamera({
       const shouldOpenPopup = !popupRef.current.isOpen();
 
       if (isNewSelection) {
-        cameraFollowSuppressedRef.current = false;
+        cameraFollowSuppressedRef.current = presentationOnly;
         reserveLoadingPopupSpaceRef.current = item.description === undefined;
-        isFlyingRef.current = true;
-        selectionCameraActiveRef.current = true;
+        isFlyingRef.current = !presentationOnly;
+        selectionCameraActiveRef.current = !presentationOnly;
       }
 
       if (popupContainer && (isNewSelection || shouldOpenPopup)) {
@@ -374,6 +381,7 @@ export function useMapCamera({
         lastFlownSelectionRef.current = selectedItemId;
         lastFlownVersionRef.current = selectionVersion;
         lastFlownCoordsRef.current = [item.longitude!, item.latitude!];
+        if (presentationOnly) return;
 
         const currentZoom = map.getZoom();
         const targetZoom = Math.max(currentZoom, 8.5);
@@ -437,6 +445,7 @@ export function useMapCamera({
   }, [
     selectedItemId,
     selectionVersion,
+    presentationOnly,
     geoItems,
     mapReady,
     animatedEffects,

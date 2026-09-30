@@ -52,6 +52,8 @@ interface NewsMapProps {
   items: NewsItem[];
   selectedItemId: string | null;
   selectionVersion: number;
+  /** Presentation replay must not turn returning rows into camera flights. */
+  presentationOnly?: boolean;
   onSelectItem: (id: string | null) => void;
   isDarkMode: boolean;
   animatedEffects: boolean;
@@ -118,6 +120,7 @@ export default function NewsMap({
   items,
   selectedItemId,
   selectionVersion,
+  presentationOnly = false,
   onSelectItem,
   isDarkMode,
   animatedEffects,
@@ -399,6 +402,7 @@ export default function NewsMap({
     popupContainer,
     selectedItemId,
     selectionVersion,
+    presentationOnly,
     geoItems,
     latestGeoItemsRef,
     animatedEffects,

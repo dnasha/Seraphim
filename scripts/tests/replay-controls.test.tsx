@@ -1,0 +1,145 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useReplay } from '@/components/experiments/replay/useReplay';
+import ReplayTimeline from '@/components/experiments/replay/ReplayTimeline';
+import type { NewsItem } from '@/lib/core/types';
+import type { UserTier } from '@/lib/entitlements';
+
+const now = Date.parse('2026-09-30T12:00:00Z');
+const story = (id: string, hoursAgo: number): NewsItem => ({ id, title: `Fixture ${id}`, source: 'Fixture', sourceType: 'rss', url: 'https://example.com', publishedAt: new Date(now - hoursAgo * 3_600_000).toISOString(), latitude: 1, longitude: 2 });
+let motion: MediaQueryList;
+let reduced = false;
+const rows = [story('early', 20), story('late', 1)];
+function Harness({ owner = 'account-a:pro', items = rows, tier = 'pro', selected = 'late', ready = true, timeRange = '1d', customStart = '', customEnd = '' }: { owner?: string; items?: NewsItem[]; tier?: UserTier; selected?: string; ready?: boolean; timeRange?: string; customStart?: string; customEnd?: string }) {
+    const replay = useReplay({ ownerKey: owner, tier, ready, mapItems: items, sidebarItems: items, selectedItemId: selected, timeRange, customStart, customEnd, isCapped: true, appliedLimit: 1000 });
+    return <><ReplayTimeline replay={replay} tier={tier} resolving={false} /><output data-testid="map-items">{replay.mapItems.map(item => item.id).join(',')}</output><output data-testid="sidebar-items">{replay.sidebarItems.map(item => item.title).join(',')}</output></>;
+}
+beforeEach(() => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    reduced = false;
+    motion = new EventTarget() as MediaQueryList;
+    Object.defineProperty(motion, 'matches', { get: () => reduced });
+    vi.stubGlobal('matchMedia', () => motion);
+});
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+const button = (name: string) => screen.getByRole('button', { name });
+const freeze = () => fireEvent.click(button('Freeze loaded view'));
+const cursor = () => screen.getByRole('slider', { name: 'Reporting cursor' }) as HTMLInputElement;
+
+it('freezes a loaded snapshot, ignores late data, refreshes explicitly and restores live', () => {
+    const { rerender } = render(<Harness />); freeze();
+    const frozenCursor = cursor().value;
+    rerender(<Harness items={[story('replacement', 2)]} />);
+    expect(screen.getByTestId('map-items').textContent).toBe('early,late');
+    expect(cursor().value).toBe(frozenCursor);
+    expect(screen.getByText(/Capped coverage/)).toBeTruthy();
+    fireEvent.click(button('Refresh snapshot'));
+    expect(screen.getByTestId('map-items').textContent).toBe('replacement');
+    fireEvent.click(button('Return live'));
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.getByTestId('map-items').textContent).toBe('replacement');
+});
+it('scrubs with a preserved selected event, plays locally, pauses and restarts at the beginning', () => {
+    render(<Harness />); freeze();
+    fireEvent.change(cursor(), { target: { value: '720' } });
+    expect(screen.getByTestId('map-items').textContent).toBe('early');
+    expect(screen.getByTestId('sidebar-items').textContent).toBe('Fixture late,Fixture early');
+    expect(screen.getByText(/Selected event is outside/).textContent).toMatch(/Selected event is outside/);
+    fireEvent.click(button('Play'));
+    act(() => { vi.advanceTimersByTime(500); });
+    const advanced = cursor().value;
+    fireEvent.click(button('Pause'));
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(cursor().value).toBe(advanced);
+    fireEvent.change(cursor(), { target: { value: '1440' } });
+    fireEvent.click(button('Play'));
+    expect(Number(cursor().value)).toBe(0);
+    act(() => { vi.advanceTimersByTime(30_000); });
+    expect(Number(cursor().value)).toBe(1440);
+    expect(button('Play')).toBeTruthy();
+});
+it('clears captured private data on account/tier changes, and cancels playback on return/unmount', () => {
+    const { rerender, unmount } = render(<Harness />); freeze();
+    fireEvent.click(button('Play'));
+    rerender(<Harness owner="account-b:free" tier="free" items={[]} />);
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.getByTestId('sidebar-items').textContent).toBe('');
+    expect((button('Replay · Pro') as HTMLButtonElement).disabled).toBe(true);
+    act(() => { vi.advanceTimersByTime(1000); });
+    rerender(<Harness owner="account-b:pro" />); freeze();
+    fireEvent.click(button('Play'));
+    fireEvent.click(button('Return live'));
+    expect(vi.getTimerCount()).toBe(0);
+    freeze(); fireEvent.click(button('Play')); unmount();
+    expect(vi.getTimerCount()).toBe(0);
+});
+it('provides manual stepping under reduced motion and pauses when the preference or visibility changes', () => {
+    reduced = true; render(<Harness />); freeze();
+    expect((button('Play') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(cursor(), { target: { value: '720' } });
+    fireEvent.click(button('Step forward'));
+    expect(Number(cursor().value)).toBeGreaterThan(720);
+    act(() => { reduced = false; motion.dispatchEvent(new Event('change')); });
+    fireEvent.click(button('Play'));
+    act(() => { reduced = true; motion.dispatchEvent(new Event('change')); });
+    expect(button('Play')).toBeTruthy();
+    act(() => { reduced = false; motion.dispatchEvent(new Event('change')); });
+    fireEvent.click(button('Play'));
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(button('Play')).toBeTruthy();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+});
+it('gates capture until data is ready and allows custom comparison bounds only for Analyst/Angel', () => {
+    const { rerender } = render(<Harness ready={false} />);
+    expect((button('Freeze loaded view') as HTMLButtonElement).disabled).toBe(true);
+    rerender(<Harness />); freeze();
+    expect(screen.queryByText('Edit comparison bounds (local time)')).toBeNull();
+    fireEvent.change(cursor(), { target: { value: '720' } });
+    fireEvent.click(button('Use displayed window as A'));
+    expect(screen.getByText(/new represented event dates in B relative/).textContent).toMatch(/^1 new/);
+    rerender(<Harness tier="analyst" owner="account-a:analyst" />); freeze();
+    expect(screen.getByText('Edit comparison bounds (local time)')).toBeTruthy();
+    const startInput = screen.getByLabelText('Window A start (local time)');
+    fireEvent.change(startInput, { target: { value: '2026-01-01T00:00' } });
+    fireEvent.submit(startInput.closest('form')!);
+    expect(screen.getByRole('alert').textContent).toMatch(/inside the captured coverage/);
+    fireEvent.click(button('Return live')); freeze();
+    fireEvent.submit(screen.getByLabelText('Window A start (local time)').closest('form')!);
+    expect(screen.queryByRole('alert')).toBeNull();
+});
+it('disables freeze and refresh with an accessible reason when custom bounds cannot be reconstructed', () => {
+    const { rerender } = render(<Harness tier="analyst" timeRange="custom" customStart="bad" customEnd="2026-09-30T12:00:00Z" />);
+    act(() => { vi.advanceTimersByTime(1); });
+    const action = button('Freeze loaded view') as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    expect(document.getElementById(action.getAttribute('aria-describedby')!)?.textContent).toMatch(/valid custom/);
+    rerender(<Harness tier="analyst" timeRange="custom" customStart="2026-10-01T00:00:00Z" customEnd="2026-10-02T00:00:00Z" />);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(action.disabled).toBe(true);
+    expect(within(screen.getByRole('region', { name: 'Reporting replay' })).getByRole('status').textContent).toMatch(/future reporting/);
+    rerender(<Harness tier="analyst" timeRange="custom" customStart="2026-09-29T12:00:00Z" customEnd="2026-09-30T12:00:00Z" />);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(action.disabled).toBe(false);
+    freeze();
+    const capturedItems = screen.getByTestId('map-items').textContent;
+    rerender(<Harness tier="analyst" timeRange="custom" customStart="2026-10-01T00:00:00Z" customEnd="2026-10-02T00:00:00Z" items={[]} />);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect((button('Refresh snapshot') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('map-items').textContent).toBe(capturedItems);
+    fireEvent.click(button('Return live'));
+    expect(screen.getByTestId('map-items').textContent).toBe('');
+});
+it('enables a future custom start when it passes and cancels that clock on account changes', () => {
+    const { rerender, unmount } = render(<Harness tier="analyst" timeRange="custom" customStart={new Date(now + 100).toISOString()} customEnd={new Date(now + 1000).toISOString()} />);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect((button('Freeze loaded view') as HTMLButtonElement).disabled).toBe(true);
+    act(() => { vi.advanceTimersByTime(101); });
+    expect((button('Freeze loaded view') as HTMLButtonElement).disabled).toBe(false);
+    rerender(<Harness owner="account-b:free" tier="free" items={[]} />);
+    expect((button('Replay · Pro') as HTMLButtonElement).disabled).toBe(true);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+});
