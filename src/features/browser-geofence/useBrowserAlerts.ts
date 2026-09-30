@@ -10,6 +10,7 @@ export function useBrowserAlerts(account: string | null) {
   const [store, setStore] = useState<AlertStore>(emptyStore);
   const [message, setMessage] = useState('Browser notifications are off.');
   const [busy, setBusy] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
   const adapter = useMemo(() => browserDelivery(), []);
   const sessionRef = useRef<ReturnType<typeof createAlertSession> | null>(null);
   const generation = useRef(0);
@@ -18,15 +19,25 @@ export function useBrowserAlerts(account: string | null) {
     const token = ++generation.current;
     let session: ReturnType<typeof createAlertSession> | null = null;
     let permissionStatus: PermissionStatus | undefined;
+    let storage: Storage | null = null;
     const active = () => generation.current === token && navigator.onLine && document.visibilityState === 'visible';
     const update = (next: AlertStore, text: string) => {
       if (generation.current !== token) return;
       setStore(next); setMessage(text);
     };
     const reload = () => {
-      if (!account) { update(emptyStore(), 'Sign in to save account-scoped watches on this device.'); return; }
-      try { setStore(readStore(localStorage, account)); }
-      catch { setStore(emptyStore()); setMessage('Local alert data cannot be read. Delete local watches to recover.'); }
+      if (!account) { setStorageReady(false); update(emptyStore(), 'Sign in to save account-scoped watches on this device.'); return false; }
+      try {
+        // The getter itself can throw SecurityError when site storage is blocked.
+        storage = null;
+        storage = window.localStorage;
+        setStorageReady(true); setStore(readStore(storage, account));
+        return true;
+      } catch {
+        setStorageReady(storage !== null); setStore(emptyStore());
+        setMessage(storage ? 'Local alert data cannot be read. Delete local watches to recover.' : 'Local alert storage is unavailable. Allow site storage in browser settings, then reload.');
+        return false;
+      }
     };
     const onState = () => {
       if (!active()) {
@@ -39,12 +50,12 @@ export function useBrowserAlerts(account: string | null) {
         session?.cancel(); reload(); void session?.tick();
       }
     };
-    reload();
-    void adapter.inspect().then(state => {
+    const readable = reload();
+    if (readable) void adapter.inspect().then(state => {
       if (generation.current === token && account) setMessage(permissionMessage(state));
     });
-    if (account && navigator.locks) {
-      session = createAlertSession(account, { storage: localStorage, locks: navigator.locks, adapter, active, now: Date.now, update });
+    if (account && storage && navigator.locks) {
+      session = createAlertSession(account, { storage, locks: navigator.locks, adapter, active, now: Date.now, update });
       sessionRef.current = session;
       void session.tick();
     }
@@ -94,6 +105,7 @@ export function useBrowserAlerts(account: string | null) {
   }, [account]);
 
   const enable = async () => {
+    if (!storageReady) { setMessage('Local alert storage is unavailable. Allow site storage in browser settings, then reload.'); return; }
     const token = generation.current;
     setBusy(true);
     const state = await adapter.requestPermission();
@@ -102,7 +114,7 @@ export function useBrowserAlerts(account: string | null) {
     if (state === 'granted') await mutate(s => {
       if (!s.watches.length) throw new Error('Save a viewport watch before enabling.');
       s.enabled = true; s.failures = 0;
-      s.watches = s.watches.map(w => w.enabled ? { ...w, checkpoint: null, state: 'baseline' } : w);
+      s.watches = s.watches.map(w => w.enabled ? { ...w, checkpoint: null, state: 'baseline', failures: 0, nextCheckAt: 0 } : w);
     }, 'Enabled. The first complete check establishes a baseline; existing events will not alert.');
   };
   const save = (bbox: BBox | null, name: string, scope: WatchScope) => mutate(s => {
@@ -110,7 +122,7 @@ export function useBrowserAlerts(account: string | null) {
     if (!bbox) throw new Error('Open the map and wait for its viewport before saving.');
     if (!validScope(scope)) throw new Error('Invalid saved filters.');
     s.watches.push({ region: viewportRegion(bbox, name, crypto.randomUUID(), Date.now()), scope,
-      enabled: true, checkpoint: null, state: 'baseline' });
+      enabled: true, checkpoint: null, state: 'baseline', failures: 0, nextCheckAt: 0 });
     // Keep the shared nextCheckAt: adding a watch cannot increase scrape polling frequency.
   }, 'Watch saved on this device. The first complete check will establish its baseline.');
   const rename = (id: string, name: string) => mutate(s => {
@@ -122,7 +134,7 @@ export function useBrowserAlerts(account: string | null) {
     if (!s.watches.length) s.enabled = false;
   }, 'Watch deleted from this device.');
   const toggle = (id: string) => mutate(s => {
-    s.watches = s.watches.map(w => w.region.id !== id ? w : { ...w, enabled: !w.enabled, checkpoint: null, state: w.enabled ? 'paused' : 'baseline' });
+    s.watches = s.watches.map(w => w.region.id !== id ? w : { ...w, enabled: !w.enabled, checkpoint: null, state: w.enabled ? 'paused' : 'baseline', failures: 0, nextCheckAt: 0 });
   }, 'Watch changed. Resuming establishes a new baseline.');
   const pause = () => mutate(s => { s.enabled = false; }, 'Checks paused. Enable again to establish a fresh baseline.');
   const clear = async () => {
@@ -138,5 +150,5 @@ export function useBrowserAlerts(account: string | null) {
       if (generation.current === token) await adapter.clear();
     } catch { if (generation.current === token) setMessage('Deletion failed. Clear Seraphim site data in browser settings.'); }
   };
-  return { store, message, busy, enable, save, rename, remove, toggle, pause, clear };
+  return { store, message, busy, storageReady, enable, save, rename, remove, toggle, pause, clear };
 }

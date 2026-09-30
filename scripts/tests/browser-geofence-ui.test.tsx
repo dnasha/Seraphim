@@ -74,3 +74,18 @@ it('keeps the shared scrape cadence when the user pauses and explicitly enables 
   expect(readStore(localStorage,'A').watches[0].checkpoint).toBeNull();
   expect(prompts).toHaveBeenCalledOnce();expect(fetch).toHaveBeenCalledOnce();
 });
+
+it('keeps the panel usable when acquiring localStorage throws SecurityError, without prompts or requests',async()=>{
+  vi.spyOn(window,'localStorage','get').mockImplementation(()=>{throw new DOMException('Access denied','SecurityError');});
+  const {rerender}=render(<BrowserAlerts key="A" account="A" bbox={bbox} scope={scope}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Watch alerts'}));
+  expect(screen.getByRole('status').textContent).toMatch(/storage is unavailable/);
+  expect((screen.getByRole('button',{name:'Save current viewport + filters'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(prompts).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
+  await act(async()=>{window.dispatchEvent(new Event('focus'));});
+  expect(screen.getByRole('status').textContent).toMatch(/storage is unavailable/);
+  rerender(<BrowserAlerts key="B" account="B" bbox={bbox} scope={scope}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Watch alerts'}));
+  expect(screen.getByRole('status').textContent).toMatch(/storage is unavailable/);
+  expect(prompts).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
+});

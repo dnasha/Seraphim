@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 const worker=vi.hoisted(()=>({ listeners: new Map<string,(event:{notification?:unknown;waitUntil(p:Promise<unknown>):void})=>void>(), options:null as unknown,
-  clients:{matchAll:vi.fn(async()=>[]),openWindow:vi.fn(async()=>null)}, caches:{delete:vi.fn(async()=>true)} }));
+  clients:{matchAll:vi.fn(async()=>[]),openWindow:vi.fn(async()=>null)}, caches:{delete:vi.fn(async()=>true),keys:vi.fn(async()=>['pages-rsc','next-static-js-assets','public-news-images','serwist-old','serwist-current-precache'])} }));
 vi.mock('@serwist/next/worker',()=>({defaultCache:[]}));
 vi.mock('serwist',()=>({
+  cacheNames:{precache:'serwist-current-precache'},
   NetworkOnly:class NetworkOnly {},CacheFirst:class CacheFirst {},ExpirationPlugin:class ExpirationPlugin {},
   Serwist:class {constructor(options:unknown){worker.options=options;} addEventListeners(){}},
 }));
@@ -14,10 +15,15 @@ import { id } from './fixtures/browserGeofence';
 describe('service worker notification integration',()=>{
   it('retains network-only navigations/private APIs and legacy cache cleanup',async()=>{
     const options=worker.options as {runtimeCaching:{handler:{constructor:{name:string}}}[]};
-    expect(options.runtimeCaching.map(rule=>rule.handler.constructor.name)).toEqual(['NetworkOnly','CacheFirst','NetworkOnly']);
+    expect(options.runtimeCaching.map(rule=>rule.handler.constructor.name)).toEqual(['NetworkOnly','CacheFirst','NetworkOnly','NetworkOnly']);
     let pending:Promise<unknown>|undefined;
     worker.listeners.get('activate')!({waitUntil:p=>{pending=p;}});await pending;
     expect(worker.caches.delete).toHaveBeenCalledWith('apis');
+    expect(worker.caches.delete).toHaveBeenCalledWith('pages-rsc');
+    expect(worker.caches.delete).toHaveBeenCalledWith('next-static-js-assets');
+    expect(worker.caches.delete).not.toHaveBeenCalledWith('public-news-images');
+    expect(worker.caches.delete).not.toHaveBeenCalledWith('serwist-current-precache');
+    expect(worker.caches.delete).toHaveBeenCalledWith('serwist-old');
     expect(worker.listeners.has('push')).toBe(false);
   });
   it('closes notifications and validates the click before opening a same-origin window',async()=>{

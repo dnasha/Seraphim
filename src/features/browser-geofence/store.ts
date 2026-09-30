@@ -2,15 +2,17 @@ import { NEWS_CATEGORIES, NEWS_SOURCES, type NewsFilters } from '@/lib/utils/new
 import { UUID, validateRegion, type RegionSpec } from './region';
 
 export const MAX_WATCHES = 3;
-export const POLL_MS = 5 * 60_000;
-export const MAX_BYTES = 512_000;
+export const MAX_BYTES = 768_000;
+export const MAX_OBSERVED_IDS = 3000;
 export interface WatchScope extends Required<NewsFilters> { query: string }
 export interface Watch {
   region: RegionSpec;
   scope: WatchScope;
   enabled: boolean;
-  checkpoint: null | { seen: string[]; checkedAt: number };
-  state: 'baseline' | 'live' | 'incomplete' | 'error' | 'paused';
+  checkpoint: null | { seen: string[]; observed: string[]; checkedAt: number };
+  failures: number;
+  nextCheckAt: number;
+  state: 'baseline' | 'live' | 'incomplete' | 'error' | 'paused' | 'history-full';
 }
 export interface AlertStore {
   version: 1;
@@ -48,13 +50,18 @@ export function parseStore(raw: string | null): AlertStore {
         !timestamp(s.lastDeliveryAt) || !timestamp(s.nextCheckAt) || !Number.isInteger(s.failures) || s.failures < 0 || s.failures > 6 ||
         new Set(s.watches.map(w => w?.region?.id)).size !== s.watches.length ||
         !s.watches.every(w => w && validateRegion(w.region) && validScope(w.scope) && typeof w.enabled === 'boolean' &&
-          ['baseline', 'live', 'incomplete', 'error', 'paused'].includes(w.state) &&
-          (w.checkpoint === null || (w.checkpoint && ids(w.checkpoint.seen, 1000) && timestamp(w.checkpoint.checkedAt))))) throw new Error();
+          ['baseline', 'live', 'incomplete', 'error', 'paused', 'history-full'].includes(w.state) &&
+          (w.failures === undefined || (Number.isInteger(w.failures) && w.failures >= 0 && w.failures <= 6)) &&
+          (w.nextCheckAt === undefined || timestamp(w.nextCheckAt)) &&
+          (w.checkpoint === null || (w.checkpoint && ids(w.checkpoint.seen, 1000) && timestamp(w.checkpoint.checkedAt) &&
+            (w.checkpoint.observed === undefined || ids(w.checkpoint.observed, MAX_OBSERVED_IDS)))))) throw new Error();
     // Copy only owned fields; unknown imported fields never become private notification data.
     return { version: 1, enabled: s.enabled, watches: s.watches.map(w => ({
       region: { version: 1, id: w.region.id, name: w.region.name, geometry: w.region.geometry, createdAt: w.region.createdAt },
       scope: { sources: w.scope.sources, categories: w.scope.categories, credibilityTiers: w.scope.credibilityTiers, minVolume: w.scope.minVolume, query: w.scope.query },
-      enabled: w.enabled, checkpoint: w.checkpoint, state: w.state,
+      enabled: w.enabled, state: w.state, failures: w.failures ?? 0, nextCheckAt: w.nextCheckAt ?? 0,
+      // Upgrade this experiment's earlier v1 records, retaining known baseline identities.
+      checkpoint: w.checkpoint ? { seen: w.checkpoint.seen, observed: w.checkpoint.observed ?? w.checkpoint.seen, checkedAt: w.checkpoint.checkedAt } : null,
     })), delivered: s.delivered, lastDeliveryAt: s.lastDeliveryAt, nextCheckAt: s.nextCheckAt, failures: s.failures };
   } catch { throw new Error('Local alert data is invalid. Delete local watches to recover.'); }
 }

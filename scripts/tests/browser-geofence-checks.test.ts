@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { advanceWatch, fetchWatch, IncompleteCheck, reserveBatch } from '@/features/browser-geofence/checks';
 import { containsEvent, validateRegion, viewportRegion } from '@/features/browser-geofence/region';
-import { emptyStore, parseStore, POLL_MS } from '@/features/browser-geofence/store';
+import { emptyStore, MAX_BYTES, MAX_OBSERVED_IDS, parseStore } from '@/features/browser-geofence/store';
+import { DELIVERY_INTERVAL_MS } from '@/features/browser-geofence/schedule';
 
 import { id, scope, now, watch, news, json } from './fixtures/browserGeofence';
 
@@ -46,7 +47,7 @@ describe('account storage validation', () => {
     expect(() => parseStore(JSON.stringify({...store,version:2}))).toThrow(/invalid/);
     expect(() => parseStore(JSON.stringify({...store,watches:[watch(1),watch(2),watch(3),watch(4)]}))).toThrow();
     expect(() => parseStore(JSON.stringify({...store,watches:[{...watch(),checkpoint:{seen:['cluster-z2-foo'],checkedAt:now}}]}))).toThrow();
-    expect(() => parseStore(' '.repeat(512001))).toThrow(/quota/);
+    expect(() => parseStore(' '.repeat(MAX_BYTES + 1))).toThrow(/quota/);
     expect(() => parseStore(JSON.stringify({...store,watches:[{...watch(),scope:{...scope,query:'x'.repeat(161)}}]}))).toThrow();
   });
 });
@@ -88,21 +89,49 @@ describe('observation checkpoints and delivery budgets', () => {
   it('never alerts on first check, updated publications or gaps beyond the horizon', () => {
     const baseline = advanceWatch(watch(),[id(1)],now);
     expect(baseline.candidates).toEqual([]);
-    expect(advanceWatch(baseline.watch,[id(1),id(2)],now+POLL_MS).candidates).toEqual([id(2)]);
+    expect(advanceWatch(baseline.watch,[id(1),id(2)],now+DELIVERY_INTERVAL_MS).candidates).toEqual([id(2)]);
     expect(advanceWatch(baseline.watch,[id(1),id(2)],now+24*60*60_000).candidates).toEqual([]);
   });
   it('deduplicates overlap/reloads and consumes suppressed bursts without later backlog', () => {
     const store = emptyStore();
     const many=Array.from({length:30},(_,i)=>id(i+1));
     expect(reserveBatch(store,[...many,...many],now)).toHaveLength(20);
-    expect(reserveBatch(parseStore(JSON.stringify(store)),many,now+POLL_MS)).toEqual([]);
+    expect(reserveBatch(parseStore(JSON.stringify(store)),many,now+DELIVERY_INTERVAL_MS)).toEqual([]);
     expect(reserveBatch(store,[id(99)],now+1000)).toEqual([]);
-    expect(reserveBatch(store,[id(99)],now+POLL_MS)).toEqual([]);
-    expect(reserveBatch(store,[id(100)],now+POLL_MS)).toEqual([id(100)]);
+    expect(reserveBatch(store,[id(99)],now+DELIVERY_INTERVAL_MS)).toEqual([]);
+    expect(reserveBatch(store,[id(100)],now+DELIVERY_INTERVAL_MS)).toEqual([id(100)]);
   });
   it('never evicts recent dedup entries to make room for a burst', () => {
     const store=emptyStore();store.delivered=Array.from({length:3000},(_,i)=>({id:id(i),at:now}));
     expect(reserveBatch(store,[id(5000)],now)).toEqual([]);
     expect(store.delivered).toHaveLength(3000);
   });
+});
+
+it('retains quiet baseline identities across disappearance, reload and mutable publication changes',()=>{
+  const baseline=advanceWatch(watch(),[id(1)],now);
+  const absent=advanceWatch(baseline.watch,[],now+15*60_000);
+  expect(absent.watch.checkpoint?.seen).toEqual([]);
+  expect(absent.watch.checkpoint?.observed).toEqual([id(1)]);
+  const store=emptyStore();store.watches=[absent.watch];
+  const returned=advanceWatch(parseStore(JSON.stringify(store)).watches[0],[id(1),id(2)],now+30*60_000);
+  expect(returned.candidates).toEqual([id(2)]);
+  expect(returned.watch.checkpoint?.observed).toEqual([id(1),id(2)]);
+});
+it('allows an unseen old-publication arrival after baseline',async()=>{
+  const baseline=advanceWatch(watch(),[id(1)],now);
+  const ids=await fetchWatch(baseline.watch,new AbortController().signal,async()=>json(news([1,2])));
+  expect(advanceWatch(baseline.watch,ids,now+15*60_000).candidates).toEqual([id(2)]);
+});
+it('pauses at the observed identity quota without evicting history or emitting backlog',()=>{
+  const full=watch();full.checkpoint={seen:[],checkedAt:now,observed:Array.from({length:MAX_OBSERVED_IDS},(_,i)=>id(i))};
+  const result=advanceWatch(full,[id(9999)],now+15*60_000);
+  expect(result.watch).toMatchObject({enabled:false,state:'history-full',checkpoint:full.checkpoint});
+  expect(result.candidates).toEqual([]);
+});
+it('upgrades earlier v1 membership into identity history and rejects oversized histories',()=>{
+  const store=emptyStore();const legacy={...watch(),checkpoint:{seen:[id(1)],checkedAt:now}};
+  const raw=JSON.stringify({...store,watches:[legacy]});
+  expect(parseStore(raw).watches[0].checkpoint?.observed).toEqual([id(1)]);
+  expect(()=>parseStore(JSON.stringify({...store,watches:[{...watch(),checkpoint:{...legacy.checkpoint,observed:Array(MAX_OBSERVED_IDS+1).fill(id(1))}}]}))).toThrow(/invalid/);
 });

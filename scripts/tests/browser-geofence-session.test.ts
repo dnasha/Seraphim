@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAlertSession, type SessionEnvironment } from '@/features/browser-geofence/session';
-import { emptyStore, POLL_MS, readStore, storageKey, writeStore } from '@/features/browser-geofence/store';
+import { emptyStore, readStore, storageKey, writeStore } from '@/features/browser-geofence/store';
+import { SCRAPE_INTERVAL_MS, nextScrapeCheck } from '@/features/browser-geofence/schedule';
 import type { BrowserDeliveryAdapter, DeliveryState } from '@/features/browser-geofence/delivery';
 import { id, json, news, now, watch } from './fixtures/browserGeofence';
 
@@ -25,10 +26,11 @@ function setup() {
   const storage=new MemoryStorage();const store=emptyStore();store.enabled=true;store.watches=[watch(1),watch(2)];writeStore(storage,'A',store);
   const adapter: BrowserDeliveryAdapter = { inspect: vi.fn(async()=>permission), requestPermission:vi.fn(async()=>permission),
     deliver:vi.fn(async()=>{}), clear:vi.fn(async()=>{}) };
-  const fetcher=vi.fn(async()=>json(news(rows)));
+  const fetcher=vi.fn<typeof fetch>(async()=>json(news(rows)));
   const env: SessionEnvironment={storage,locks:locks(),adapter,fetcher,active:()=>active,now:()=>time,update:vi.fn()};
-  return {env,storage,adapter,fetcher,advance:(ms=POLL_MS)=>{time+=ms;},rows:(r:number[])=>{rows=r;},active:(v:boolean)=>{active=v;},permission:(p:DeliveryState)=>{permission=p;},read:()=>readStore(storage,'A')};
+  return {env,storage,adapter,fetcher,advance:(ms=SCRAPE_INTERVAL_MS)=>{time+=ms;},rows:(r:number[])=>{rows=r;},active:(v:boolean)=>{active=v;},permission:(p:DeliveryState)=>{permission=p;},read:()=>readStore(storage,'A')};
 }
+afterEach(()=>vi.useRealTimers());
 
 describe('browser alert sessions', () => {
   it('baselines each region independently and deduplicates overlap, simultaneous tabs and reloads', async()=>{
@@ -55,9 +57,9 @@ describe('browser alert sessions', () => {
     const s=setup();const session=createAlertSession('A',s.env);await session.tick();const checkpoint=s.read().watches[0].checkpoint;
     s.advance();s.fetcher.mockImplementation(async()=>json(news([1,2],{isCapped:true})));await session.tick();
     expect(s.read().watches[0].checkpoint).toEqual(checkpoint);expect(s.read().watches[0].state).toBe('incomplete');
-    expect(s.read().nextCheckAt).toBe(now+3*POLL_MS);expect(s.adapter.deliver).not.toHaveBeenCalled();
+    expect(s.read().nextCheckAt).toBe(now+2*SCRAPE_INTERVAL_MS);expect(s.adapter.deliver).not.toHaveBeenCalled();
     s.advance(30*60_000);s.fetcher.mockImplementation(async()=>json({},403));await session.tick();expect(s.read().watches[0].state).toBe('error');
-    expect(s.read().nextCheckAt).toBeLessThanOrEqual(now+34*60_000+30*60_000);
+    expect(s.read().watches[0].nextCheckAt).toBe(now+5*SCRAPE_INTERVAL_MS);
   });
   it('skips offline/hidden checks and cancels pending account work without committing results',async()=>{
     const s=setup();const session=createAlertSession('A',s.env);s.active(false);await session.tick();expect(s.fetcher).not.toHaveBeenCalled();
@@ -86,4 +88,41 @@ describe('browser alert sessions', () => {
     const session=createAlertSession('A',s.env);await session.tick();await session.tick();
     expect(s.fetcher).not.toHaveBeenCalled();expect(s.env.update).toHaveBeenCalledWith(expect.objectContaining({enabled:false}),expect.stringContaining('storage'));
   });
+});
+
+it.each([0,1])('preserves healthy watch results when watch %s times out, with independent retry backoff',async slow=>{
+  vi.useFakeTimers();const s=setup();const session=createAlertSession('A',s.env);
+  const healthy=1-slow;
+  // Give the watches distinct search scopes so the fake service can identify them.
+  const stored=s.read();stored.watches[slow].scope={...stored.watches[slow].scope,query:'slow'};writeStore(s.storage,'A',stored);
+  s.fetcher.mockImplementation(input=>String(input).includes('query=slow')?new Promise<Response>(()=>{}):Promise.resolve(json(news([1]))));
+  let pending=session.tick();await vi.advanceTimersByTimeAsync(45_000);await pending;
+  expect(s.read().watches[healthy].checkpoint?.seen).toEqual([id(1)]);
+  expect(s.read().watches[slow]).toMatchObject({state:'error',failures:1,checkpoint:null,nextCheckAt:nextScrapeCheck(now)});
+  expect(s.adapter.deliver).not.toHaveBeenCalled();
+  s.advance();
+  s.fetcher.mockImplementation(input=>String(input).includes('query=slow')?new Promise<Response>(()=>{}):Promise.resolve(json(news([1,2]))));
+  pending=session.tick();await vi.advanceTimersByTimeAsync(45_000);await pending;
+  expect(s.read().watches[slow]).toMatchObject({state:'error',failures:2,nextCheckAt:now+3*SCRAPE_INTERVAL_MS});
+  expect(s.adapter.deliver).toHaveBeenCalledOnce();
+  expect(s.read().watches[healthy].checkpoint?.seen).toEqual([id(1),id(2)]);
+  s.advance();s.fetcher.mockClear();s.rows([1,2,3]);
+  s.fetcher.mockImplementation(async()=>json(news([1,2,3])));await session.tick();
+  expect(s.fetcher).toHaveBeenCalledOnce();expect(s.adapter.deliver).toHaveBeenCalledTimes(2);
+  expect(s.read().watches[healthy].failures).toBe(0);
+});
+it('cancels lifecycle work without converting cancellation into check failures or publishing completed snapshots',async()=>{
+  vi.useFakeTimers();const s=setup();const session=createAlertSession('A',s.env);
+  s.fetcher.mockImplementationOnce(async()=>json(news())).mockImplementationOnce(()=>new Promise<Response>(()=>{}));
+  const pending=session.tick();await vi.advanceTimersByTimeAsync(1);session.cancel();await pending;
+  expect(s.read().watches.every(w=>!w.checkpoint&&w.failures===0)).toBe(true);
+  expect(s.adapter.deliver).not.toHaveBeenCalled();
+});
+it('does not restore externally deleted data when delivery rejects after its durable reservation',async()=>{
+  const s=setup();const session=createAlertSession('A',s.env);await session.tick();s.rows([1,2]);s.advance();
+  let reject!:(error:Error)=>void;
+  vi.mocked(s.adapter.deliver).mockImplementation(()=>new Promise((_resolve,r)=>{reject=r;}));
+  const pending=session.tick();await vi.waitFor(()=>expect(s.adapter.deliver).toHaveBeenCalled());
+  s.storage.removeItem(storageKey('A'));reject(new Error('registration removed'));await pending;
+  expect(s.storage.getItem(storageKey('A'))).toBeNull();
 });

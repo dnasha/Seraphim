@@ -2,7 +2,8 @@ import type { NewsItem, NewsResponse } from '@/lib/core/types';
 import { appendNewsFilters, newsFilterKey } from '@/lib/utils/newsFilterParams';
 import { canonicalNewsId } from '@/lib/utils/ranking';
 import { containsEvent, regionBounds, UUID } from './region';
-import { POLL_MS, type AlertStore, type Watch } from './store';
+import { MAX_OBSERVED_IDS, type AlertStore, type Watch } from './store';
+import { DELIVERY_INTERVAL_MS } from './schedule';
 
 export class IncompleteCheck extends Error {}
 export async function fetchWatch(watch: Watch, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<string[]> {
@@ -44,9 +45,14 @@ export function advanceWatch(watch: Watch, ids: string[], now: number): { watch:
   const checkpoint = watch.checkpoint;
   // A first check or a gap beyond the query horizon establishes a new baseline.
   const baseline = !checkpoint || now - checkpoint.checkedAt >= 24 * 60 * 60_000;
-  const seen = new Set(checkpoint?.seen ?? []);
+  const seen = new Set(checkpoint?.observed ?? checkpoint?.seen ?? []);
+  const observed = [...new Set([...seen, ...ids])];
+  // Fail closed rather than evicting identities and later announcing old baseline events.
+  if (observed.length > MAX_OBSERVED_IDS) return {
+    watch: { ...watch, enabled: false, state: 'history-full' }, candidates: [],
+  };
   return {
-    watch: { ...watch, checkpoint: { checkedAt: now, seen: ids }, state: 'live' },
+    watch: { ...watch, checkpoint: { checkedAt: now, seen: ids, observed }, state: 'live' },
     candidates: baseline ? [] : ids.filter(id => !seen.has(id)),
   };
 }
@@ -58,7 +64,7 @@ export function reserveBatch(store: AlertStore, candidates: string[], now: numbe
   const room = 3000 - store.delivered.length;
   const accepted = fresh.slice(0, room);
   store.delivered.push(...accepted.map(id => ({ id, at: now })));
-  if (now - store.lastDeliveryAt < POLL_MS || !accepted.length) return [];
+  if (now - store.lastDeliveryAt < DELIVERY_INTERVAL_MS || !accepted.length) return [];
   store.lastDeliveryAt = now;
   return accepted.slice(0, 20);
 }
