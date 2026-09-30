@@ -32,6 +32,31 @@ function setup() {
 }
 afterEach(()=>vi.useRealTimers());
 
+it.each([
+  ['2026-11-01T06:02:00Z', '2026-11-01T06:17:00Z'],
+  ['2026-11-01T05:47:00Z', '2026-11-01T06:02:00Z'],
+])('does not repoll between scraper slots during New York fallback after %s', async (from, to) => {
+  const previous = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const s = setup();
+    let time = Date.parse(from);
+    s.env.now = () => time;
+    const session = createAlertSession('A', s.env);
+    await session.tick();
+    expect(s.read().nextCheckAt).toBe(Date.parse(to));
+    for (let i = 0; i < 3; i++) { time += 30_000; await session.tick(); }
+    expect(s.fetcher).toHaveBeenCalledTimes(2); // One baseline per watch only.
+    expect(s.adapter.deliver).not.toHaveBeenCalled();
+    time = Date.parse(to); s.rows([1, 2]); await session.tick();
+    expect(s.fetcher).toHaveBeenCalledTimes(4);
+    expect(s.adapter.deliver).toHaveBeenCalledOnce();
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
 describe('browser alert sessions', () => {
   it('baselines each region independently and deduplicates overlap, simultaneous tabs and reloads', async()=>{
     const s=setup();const tab1=createAlertSession('A',s.env),tab2=createAlertSession('A',s.env);
