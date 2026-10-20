@@ -62,6 +62,12 @@ function randomIndex(length: number): number {
   return Math.floor(Math.random() * length);
 }
 
+function SidebarListHeader({ context }: { context?: { header: ReactNode } }) {
+  return context?.header ?? null;
+}
+
+const SIDEBAR_COMPONENTS = { Header: SidebarListHeader };
+
 interface EventSidebarProps {
   id?: string;
   mobileActive?: boolean;
@@ -134,7 +140,7 @@ export default function EventSidebar({
     !disabled && hasFeature(userTier as EntitlementTier, "randomEvent");
 
   /* Resizable Sidebar Logic */
-  const { sidebarWidth, isResizing, startResizing } = useResizable({
+  const { sidebarWidth, renderedWidth, isResizing, startResizing, resizeWithKeyboard, minWidth, maxWidth } = useResizable({
     sidebarRef,
   });
 
@@ -335,8 +341,16 @@ export default function EventSidebar({
       {/* Resize Handle */}
       <div
         className={styles.resizeHandle}
-        onMouseDown={startResizing}
-        title="Drag to resize"
+        role="separator"
+        tabIndex={isOpen ? 0 : -1}
+        aria-label="Resize stories sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={Math.min(minWidth, renderedWidth)}
+        aria-valuemax={maxWidth}
+        aria-valuenow={renderedWidth}
+        onPointerDown={startResizing}
+        onKeyDown={resizeWithKeyboard}
+        title="Drag or use arrow keys to resize"
       />
 
       <div className={styles.eventSidebarHeader}>
@@ -587,9 +601,8 @@ export default function EventSidebar({
             style={{ height: "100%", width: "100%" }}
             itemContent={(index, item) => renderItem(index, item)}
             overscan={200}
-            components={{
-              Header: () =>
-                disabled ? (
+            components={SIDEBAR_COMPONENTS}
+            context={{ header: disabled ? (
                   <div className={styles.guestCtaCard}>
                     <div className={styles.guestCtaContent}>
                       <h2>
@@ -641,8 +654,7 @@ export default function EventSidebar({
                       .
                     </div>
                   </div>
-                ) : null,
-            }}
+                ) : null }}
           />
         )}
       </div>

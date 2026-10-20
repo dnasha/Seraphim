@@ -14,7 +14,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createMaintenanceResponse, isMaintenanceMode, MAINTENANCE_LOGO_PATH } from '@/lib/maintenance';
 
 export async function proxy(request: NextRequest) {
-    if (await isMaintenanceMode() && request.nextUrl.pathname !== MAINTENANCE_LOGO_PATH) {
+    const pathname = request.nextUrl.pathname;
+    // Stripe verifies signatures and durably queues events in the handler.
+    // Maintenance or an unavailable flag service must not stop receipt.
+    const isBillingWebhook = request.method === 'POST' && pathname === '/api/stripe/webhook';
+    if (!isBillingWebhook && await isMaintenanceMode() && pathname !== MAINTENANCE_LOGO_PATH) {
         return createMaintenanceResponse(request);
     }
 
@@ -26,7 +30,6 @@ export async function proxy(request: NextRequest) {
     // the session proxy for those requests would validate the same Supabase
     // session once here and again in the handler (for example, every map pan
     // through /api/news). Keep cookie refreshes on page/RSC navigation only.
-    const pathname = request.nextUrl.pathname;
     const isRouteHandler = pathname === '/api' || pathname.startsWith('/api/');
     const isStaticAsset = pathname.startsWith('/_next/') || /\/[^/]+\.[^/]+$/.test(pathname);
 
@@ -107,7 +110,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-    // Every inbound route must see the kill switch, including APIs, auth
-    // callbacks, service-worker traffic, and static/public assets.
+    // Keep the kill switch on all surfaces; signed billing receipt has an
+    // explicit exception above so events can still be durably queued.
     matcher: '/:path*',
 };

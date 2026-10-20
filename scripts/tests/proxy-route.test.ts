@@ -110,3 +110,11 @@ describe("GET /api/proxy/[...path]", () => {
     expect(response.status).toBe(400);
   });
 });
+
+it('applies the shared network limiter before authentication or entitlements', async () => {
+  mocks.resolveEntitlements.mockClear();
+  mocks.rateLimit.mockResolvedValueOnce({ success: false, reset: Date.now() + 60_000 });
+  const response = await call(['flights'], '?lat=10&lng=20', { 'x-vercel-forwarded-for': '198.51.100.241' });
+  expect(response.status).toBe(429);
+  expect(mocks.resolveEntitlements).not.toHaveBeenCalled();
+});

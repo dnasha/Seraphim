@@ -29,10 +29,20 @@ export async function ingestSequentially(
   let vtUnavailable = vectorTypeUnavailable;
 
   for (const merge of mChunk) {
-    const { error: mErr } = await db
+    const { id, ...changes } = merge;
+    const withoutVector = () => {
+      const { embedding: _embedding, ...rest } = changes;
+      void _embedding;
+      return rest;
+    };
+    let { error: mErr } = await db
       .from("events")
-      .update(merge as Partial<DbEvent>)
-      .eq("id", merge.id);
+      .update((omitEmbedding || vtUnavailable ? withoutVector() : changes) as Partial<DbEvent>)
+      .eq("id", id);
+    if (mErr && !omitEmbedding && !vtUnavailable && isVectorTypeMissingError(mErr.message)) {
+      vtUnavailable = true;
+      ({ error: mErr } = await db.from("events").update(withoutVector()).eq("id", id));
+    }
     if (!mErr) {
       merged_count++;
     } else {
@@ -41,7 +51,7 @@ export async function ingestSequentially(
   }
 
   for (const event of eChunk) {
-    let payload: Partial<DbEvent> = omitEmbedding
+    let payload: Partial<DbEvent> = omitEmbedding || vtUnavailable
       ? stripEmbedding(event)
       : event;
     let { error: iErr } = await db.from("events").insert(payload);

@@ -114,17 +114,6 @@ export default function EventCard({
             "--card-accent": catColor,
           } as React.CSSProperties
         }
-        role="button"
-        tabIndex={0}
-        title={isExpanded ? 'Collapse story details' : 'Expand story details'}
-        aria-expanded={isExpanded}
-        aria-pressed={isSelected}
-        onKeyDown={(e) => {
-          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-            e.preventDefault();
-            onCardClick(item);
-          }
-        }}
       >
         {/** Main layout: thumbnail and textual content */}
         <div className={styles.eventCardRow}>
@@ -144,7 +133,18 @@ export default function EventCard({
             </div>
           )}
           <div className={styles.eventCardBody}>
-            <h3 className={styles.eventCardTitle}>{item.title}</h3>
+            <h3 className={styles.eventCardTitle}>
+              <button
+                type="button"
+                className={styles.eventCardActivate}
+                aria-expanded={isExpanded}
+                aria-pressed={isSelected}
+                title={isExpanded ? 'Collapse story details' : 'Expand story details'}
+                onClick={(event) => { event.stopPropagation(); onCardClick(item); }}
+              >
+                {item.title}
+              </button>
+            </h3>
             <div className={styles.eventCardMeta}>
               <span
                 className={styles.eventCardSource}

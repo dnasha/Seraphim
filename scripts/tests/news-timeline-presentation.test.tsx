@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NewsItem } from '@/lib/core/types';
 
@@ -51,4 +51,18 @@ describe.each([
     render(renderItem(baseItem));
     expect(screen.getByText('3h ago')).toBeTruthy();
   });
+});
+
+it('keeps card activation separate from its article links', () => {
+  const onCardClick = vi.fn();
+  render(<EventCard item={baseItem} index={0} isSelected isExpanded onCardClick={onCardClick} userTier="pro" />);
+  const trigger = screen.getByRole('button', { name: 'Story' });
+  expect(trigger.tagName).toBe('BUTTON');
+  fireEvent.click(trigger);
+  expect(onCardClick).toHaveBeenCalledTimes(1);
+  const link = screen.getAllByRole('link')[0];
+  expect(link.closest('[role="button"], button')).toBeNull();
+  fireEvent.click(link);
+  expect(onCardClick).toHaveBeenCalledTimes(1);
+  cleanup();
 });

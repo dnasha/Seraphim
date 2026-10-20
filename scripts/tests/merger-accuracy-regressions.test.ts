@@ -136,6 +136,25 @@ describe('incident identity regression checks', () => {
     expect([...result.merges.keys()]).toEqual(['local']);
   });
 
+  it.each([false, true])('embeds a late rejected exact match and resumes semantic matching (runner-up=%s)', async runnerUp => {
+    const title = 'Factory explosion kills twelve workers';
+    const candidates = [row('generic', { title, description: '', published_at: '2026-09-19T09:00:00Z' })];
+    if (runnerUp) candidates.push(row('tuesday', { title: 'A dozen killed in Bristol plant explosion',
+      description: 'The factory explosion occurred on Tuesday in Bristol.', published_at: '2026-09-22T10:00:00Z' }));
+    const result = await resolveStoryMerges([
+      event({ title, description: 'The factory explosion occurred on Monday in Bristol. Witnesses described extensive damage.', published_at: '2026-09-21T10:00:00Z', url: 'https://monday.example/fire' }),
+      event({ title, description: 'The factory explosion occurred on Tuesday in Bristol.', published_at: '2026-09-22T11:00:00Z', url: 'https://tuesday.example/fire' }),
+    ], database(candidates).db as never);
+    expect(result.merges.has('generic')).toBe(true);
+    if (runnerUp) {
+      expect(result.newEvents).toHaveLength(0);
+      expect(result.merges.has('tuesday')).toBe(true);
+    } else {
+      expect(result.newEvents).toHaveLength(1);
+      expect(JSON.parse(result.newEvents[0].embedding as string)).toHaveLength(384);
+    }
+  });
+
   it('checks every exact-title row instead of choosing the first location', async () => {
     const generic = { title: 'Factory explosion kills twelve workers', description: 'An explosion at a factory in Bristol.' };
     const candidates = [row('far-away', { ...generic, description: 'An explosion at a factory in Singapore.', latitude: 1.3521, longitude: 103.8198, location_name: 'Singapore' }), row('local', generic)];

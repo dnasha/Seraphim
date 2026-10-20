@@ -117,3 +117,21 @@ describe.each(feeds)('$service provider cache', ({ service, payload, properties,
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+it('caches radiation bytes after authorization and records recovery on a successful provider read', async () => {
+  vi.clearAllMocks(); clearOverlayCacheForTests();
+  mocks.resolveEntitlements.mockResolvedValue({ tier: 'analyst', entitlements: {} });
+  const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  const callTile = () => GET(new Request('https://seraphim.example/api/proxy/safecast/3/1/2.png', { headers: { 'x-vercel-forwarded-for': '198.51.100.240' } }) as never, { params: Promise.resolve({ path: ['safecast', '3', '1', '2.png'] }) });
+  try {
+    const first = await callTile(); const second = await callTile();
+    expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect([...new Uint8Array(await second.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mocks.resolveEntitlements).toHaveBeenCalledTimes(2);
+    expect(mocks.markHealthy).toHaveBeenCalledWith('safecast');
+    expect(second.headers.get('cache-control')).toBe('private, max-age=300');
+    expect(second.headers.get('vary')).toBe('Cookie');
+  } finally { vi.unstubAllGlobals(); }
+});

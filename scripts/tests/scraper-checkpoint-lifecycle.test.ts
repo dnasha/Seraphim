@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
-  writes: [] as string[], failIngest: false, capped: false, openCircuit: false,
+  telemetryFailure: '' as string, writes: [] as string[], failIngest: false, capped: false, openCircuit: false,
   persist: vi.fn(), metric: vi.fn(), incident: vi.fn(), recover: vi.fn(),
 }));
 vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: {
@@ -9,8 +9,8 @@ vi.mock('@/lib/core/supabase-admin', () => ({ supabaseAdmin: {
       insert: () => { state.writes.push(table + ':insert'); return query; },
       update: () => { state.writes.push(table + ':update'); return query; },
       select: () => query, eq: () => query,
-      single: async () => ({ data: { id: 'run' }, error: null }),
-      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve),
+      single: async () => ({ data: { id: 'run' }, error: state.telemetryFailure === 'start' ? { message: 'telemetry failed' } : null }),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: (table === 'ingestion_source_attempts' && state.telemetryFailure === 'sources') || (table === 'ingestion_runs' && state.telemetryFailure === 'finalize') ? { message: 'telemetry failed' } : null }).then(resolve),
     };
     return query;
   },
@@ -40,7 +40,7 @@ vi.mock('@/scraper/imageEnrichment', () => ({ enrichResolvedStoryImages: async (
 vi.mock('@/lib/security/ogImage', () => ({ closePublicFetchAgents: vi.fn() }));
 
 beforeEach(() => {
-  vi.resetModules(); vi.clearAllMocks(); state.writes = []; state.failIngest = false; state.capped = false; state.openCircuit = false;
+  vi.resetModules(); vi.clearAllMocks(); state.telemetryFailure = ''; state.writes = []; state.failIngest = false; state.capped = false; state.openCircuit = false;
   vi.stubEnv('DRY_RUN', 'false');
   state.persist.mockImplementation(async () => { state.writes.push('checkpoint'); });
 });
@@ -67,4 +67,12 @@ it('does not recover provider health while a source circuit is still open', asyn
   state.openCircuit = true; await run();
   expect(state.recover).not.toHaveBeenCalled();
   expect(state.incident).toHaveBeenCalledWith(expect.objectContaining({ type: 'source_cohort_degraded', safeContext: { source_failures: 1 } }));
+});
+
+it.each(['start', 'sources', 'finalize'])('continues ingestion and commits checkpoints when %s telemetry fails', async stage => {
+  state.telemetryFailure = stage;
+  await run();
+  expect(state.writes).toContain('bulk_ingest_events');
+  expect(state.persist).toHaveBeenCalled();
+  expect(process.exitCode ?? 0).toBe(0);
 });

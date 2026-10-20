@@ -64,8 +64,8 @@ export const MAP_STYLES: Record<
     requiresEntitlement: true,
   },
   satellite: {
-    // Premium styles resolve through the entitlement-aware server route. Keep
-    // browser bundles free of any MapTiler credential.
+    // Premium styles resolve through the entitlement-aware server route.
+    // MapTiler style responses contain browser keys; restrict their origins.
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     label: "Satellite",

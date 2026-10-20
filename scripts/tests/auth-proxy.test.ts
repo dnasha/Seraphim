@@ -58,7 +58,6 @@ describe("auth session proxy", () => {
   it.each([
     ["page navigation", "GET", "https://seraphim.example/"],
     ["API read", "GET", "https://seraphim.example/api/news?zoom=4"],
-    ["webhook mutation", "POST", "https://seraphim.example/api/stripe/webhook"],
     ["Next.js asset", "GET", "https://seraphim.example/_next/static/chunks/app.js"],
     ["service worker", "GET", "https://seraphim.example/sw.js"],
   ])("blocks %s while maintenance mode is on", async (_name, method, url) => {
@@ -140,4 +139,15 @@ describe("auth session proxy", () => {
     // Should also delete it from the request object so downstream route handlers don't see it
     expect(request.cookies.get("sb-project-auth-token")).toBeUndefined();
   });
+});
+
+it('lets billing receipt reach its signature-verifying handler during maintenance without depending on Edge Config', async () => {
+  const { proxy } = await import('@/proxy');
+  const { NextRequest } = await import('next/server');
+  mocks.getEdgeConfig.mockClear().mockRejectedValue(new Error('unavailable'));
+  vi.stubEnv('EDGE_CONFIG', 'https://edge-config.example/test');
+  const response = await proxy(new NextRequest('https://seraphim.example/api/stripe/webhook', { method: 'POST' }));
+  expect(response.headers.get('x-maintenance-mode')).toBeNull();
+  expect(mocks.getEdgeConfig).not.toHaveBeenCalled();
+  vi.unstubAllEnvs();
 });

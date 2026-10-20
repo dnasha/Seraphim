@@ -8,8 +8,6 @@
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/core/supabase-admin";
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { NewsItem, NewsResponse } from "@/lib/core/types";
 import { DbEvent, dbEventToNewsItem } from "@/types";
 import { sortNewsItems } from "@/lib/utils/ranking";
@@ -17,31 +15,11 @@ import { validateNewsSearchParams, NEWS_DEFAULT_LIMIT } from "@/lib/security/new
 import { canUseTimeRange, hasFeature } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
-import { createLocalFixedWindowLimiter, createThrottledDiagnostic } from '@/lib/security/localRateLimit';
+import { createRequestRateLimiter } from '@/lib/security/requestRateLimit';
 import { createSingleFlight } from '@/lib/server/singleFlight';
 
-/**
- * Global L2 rate limiter using Upstash Redis for cross-instance state.
- */
-const distributedRateLimitConfigured = process.env.NODE_ENV === 'test' || Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-);
-const ratelimit = distributedRateLimitConfigured
-  ? new Ratelimit({
-      redis: Redis.fromEnv(),
-      limiter: Ratelimit.slidingWindow(120, "1 m"),
-      analytics: true,
-      prefix: "@upstash/ratelimit/seraphim",
-    })
-  : null;
-
-/**
- * Local L1 rate limiter (Memory) to minimize network overhead for high-frequency 
- * clients. Short-circuits requests before hitting the L2 Redis limiter.
- */
-const localRateLimit = createLocalFixedWindowLimiter({ limit: 30, windowMs: 10_000 });
-const reportRateLimitUnavailable = createThrottledDiagnostic(() => {
-  console.error('[api/news] Distributed rate limiter unavailable; local hard ceiling remains active.');
+const requestRateLimit = createRequestRateLimiter({
+  prefix: '@upstash/ratelimit/seraphim', limit: 120, localLimit: 30,
 });
 
 /**
@@ -82,6 +60,11 @@ export async function GET(request: Request) {
     );
   }
 
+  const networkLimit = await requestRateLimit.check(getRateLimitKeys(clientIp), now);
+  if (!networkLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+    status: 429, headers: { 'Retry-After': String(networkLimit.retryAfterSeconds) },
+  });
+
   let forceRefresh = validated.params.forceRefresh;
   const {
     viewMode,
@@ -103,6 +86,12 @@ export async function GET(request: Request) {
   } = validated.params;
 
   const access = await resolveRequestEntitlements();
+  if (access.userId) {
+    const accountLimit = await requestRateLimit.check([`user:${access.userId}`], now);
+    if (!accountLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+      status: 429, headers: { 'Retry-After': String(accountLimit.retryAfterSeconds) },
+    });
+  }
   const sort = access.tier === 'guest' ? 'hot' : requestedSort;
   const basicFiltered = sources.length !== 5 || (categories.length > 0 && !categories.includes('all'));
   const advancedFiltered = minVolume > 1 || (credibilityTiers.length > 0 && credibilityTiers.length !== 3);
@@ -111,7 +100,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'These filters require an upgraded account', code: 'feature_required',
       requiredTier: advancedFiltered ? 'pro' : 'free' }, { status: 403 });
   }
-  const rateLimitKeys = getRateLimitKeys(clientIp, access.userId);
   if (searchQuery && !hasFeature(access.tier, 'search')) {
     return NextResponse.json(
       {
@@ -225,34 +213,6 @@ export async function GET(request: Request) {
   }
 
   try {
-    const localResult = localRateLimit.check(rateLimitKeys, now);
-    if (!localResult.success) {
-      return NextResponse.json(
-        { error: 'Too many requests' },
-        { status: 429, headers: { 'Retry-After': String(localResult.retryAfterSeconds) } },
-      );
-    }
-    const checkDistributed = localResult.counts.some((count) => count > 15 || count % 5 === 0);
-    if (checkDistributed) {
-      if (!ratelimit) {
-        reportRateLimitUnavailable(now);
-      } else {
-        try {
-          const results = await Promise.all(rateLimitKeys.map((key) => ratelimit.limit(key)));
-          const denied = results.filter(({ success }) => !success);
-          if (denied.length > 0) {
-            const retryAfter = Math.max(1, ...denied.map((result) => Math.ceil((result.reset - now) / 1_000)));
-            return NextResponse.json(
-              { error: "Too many requests" },
-              { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-            );
-          }
-        } catch {
-          reportRateLimitUnavailable(now);
-        }
-      }
-    }
-
     let result: { data: NewsItem[]; isCapped: boolean; timestamp: number; stale?: boolean };
     const cached = sourceCache.get(cacheKey);
 

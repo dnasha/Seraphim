@@ -109,14 +109,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ code: 'invalid_origin', error: 'Request rejected.' }, { status: 403 });
   }
 
-  let body: { priceKey?: string; returnTo?: string };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ code: 'invalid_request', error: 'Invalid request.' }, { status: 400 });
   }
 
-  if (!body.priceKey || !(body.priceKey in STRIPE_PRICES)) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) ||
+      !('priceKey' in body) || typeof body.priceKey !== 'string' ||
+      !Object.prototype.hasOwnProperty.call(STRIPE_PRICES, body.priceKey) ||
+      ('returnTo' in body && typeof body.returnTo !== 'string')) {
     return NextResponse.json({ code: 'invalid_price', error: 'Invalid price.' }, { status: 400 });
   }
 
@@ -161,7 +164,7 @@ export async function POST(request: NextRequest) {
     return checkoutError('checkout_conflict');
   }
 
-  const returnTo = safeRelativePath(body.returnTo);
+  const returnTo = safeRelativePath('returnTo' in body ? body.returnTo as string : undefined);
   const maxAngel = isAngel ? await getAngelMaxQuantity(priceId) : ANGEL_MAX_QUANTITY;
   const mode = isAngel ? 'payment' : 'subscription';
 

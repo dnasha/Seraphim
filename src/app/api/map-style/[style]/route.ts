@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
+import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { createRequestRateLimiter } from '@/lib/security/requestRateLimit';
 import { canUseMapStyle } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getMapLibreStyleForServer, MAP_STYLES } from '@/components/map/MapConstants';
 
+const requestRateLimit = createRequestRateLimiter({
+  prefix: '@upstash/ratelimit/seraphim-map-style', limit: 60, localLimit: 20,
+});
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ style: string }> },
 ) {
   const { style } = await params;
@@ -12,7 +18,19 @@ export async function GET(
     return NextResponse.json({ error: 'Unknown map style' }, { status: 404 });
   }
 
+  const clientIp = getTrustedClientIp(request.headers);
+  if (!clientIp) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const networkLimit = await requestRateLimit.check(getRateLimitKeys(clientIp));
+  if (!networkLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+    status: 429, headers: { 'Retry-After': String(networkLimit.retryAfterSeconds) },
+  });
   const access = await resolveRequestEntitlements();
+  if (access.userId) {
+    const accountLimit = await requestRateLimit.check([`user:${access.userId}`]);
+    if (!accountLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+      status: 429, headers: { 'Retry-After': String(accountLimit.retryAfterSeconds) },
+    });
+  }
   if (!canUseMapStyle(access.tier, style)) {
     return NextResponse.json(
       { error: 'This map style requires Pro', code: 'feature_required', requiredTier: 'pro' },

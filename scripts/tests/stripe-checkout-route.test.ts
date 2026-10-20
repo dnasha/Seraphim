@@ -90,6 +90,15 @@ describe('POST /api/stripe/checkout', () => {
     delete process.env.STRIPE_PROMOTION_CODES_ENABLED;
   });
 
+  it.each([null, [], 1, { priceKey: 'constructor' }, { priceKey: 'toString' }, { priceKey: {} }, { priceKey: 'angel', returnTo: 1 }])('rejects malformed checkout bodies before authentication: %j', async body => {
+    const response = await POST(new Request('https://seraphim.example/api/stripe/checkout', {
+      method: 'POST', headers: { origin: 'https://seraphim.example', 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }) as never);
+    expect(response.status).toBe(400);
+    expect(mocks.getUser).not.toHaveBeenCalled();
+    expect(mocks.sessionCreate).not.toHaveBeenCalled();
+  });
+
   it('omits the trial for a returning customer', async () => {
     mocks.trialEligible.mockResolvedValue(false);
     expect((await POST(request('pro_monthly'))).status).toBe(200);

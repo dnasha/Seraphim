@@ -200,3 +200,11 @@ describe("GET /api/news/[id]", () => {
     expect(blocked.status).toBe(429);
   });
 });
+
+it('applies the shared network limiter before authentication or entitlements', async () => {
+  mocks.resolveEntitlements.mockClear();
+  mocks.rateLimit.mockResolvedValueOnce({ success: false, reset: Date.now() + 60_000 });
+  const response = await GET(request('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '198.51.100.241'), params('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
+  expect(response.status).toBe(429);
+  expect(mocks.resolveEntitlements).not.toHaveBeenCalled();
+});

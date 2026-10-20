@@ -57,7 +57,7 @@ export function canOptimizeNewsImage(url: string): boolean {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROXY_WIDTHS = [176, 640, 960] as const;
 
-function imageVersion(url: string) {
+export function newsImageVersion(url: string) {
   let hash = 2_166_136_261;
   for (let index = 0; index < url.length; index++) {
     hash ^= url.charCodeAt(index);
@@ -96,7 +96,7 @@ export function getNewsImagePresentation(
   }
 
   const width = selectNewsImageWidth(requestedWidth);
-  const version = imageVersion(item.imageUrl);
+  const version = newsImageVersion(item.imageUrl);
   return {
     src: `/api/news-image/${encodeURIComponent(eventId)}?w=${width}&v=${version}`,
     unoptimized: true,

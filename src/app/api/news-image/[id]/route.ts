@@ -4,7 +4,7 @@ import { getTrustedClientIp } from "@/lib/security/clientIdentity";
 import { createLocalFixedWindowLimiter } from "@/lib/security/localRateLimit";
 import { fetchPublicImage } from "@/lib/security/ogImage";
 import { createSingleFlight } from "@/lib/server/singleFlight";
-import { selectNewsImageWidth } from "@/lib/utils/newsImages";
+import { newsImageVersion, selectNewsImageWidth } from "@/lib/utils/newsImages";
 
 export const runtime = "nodejs";
 
@@ -14,15 +14,8 @@ const perIpLimit = createLocalFixedWindowLimiter({ limit: 180, windowMs: 60_000 
 const instanceLimit = createLocalFixedWindowLimiter({ limit: 360, windowMs: 60_000, maxEntries: 1 });
 const transforms = createSingleFlight(32);
 
-async function loadThumbnail(eventId: string, width: number) {
-  const { data, error } = await supabaseAdmin
-    .from("events")
-    .select("image_url")
-    .eq("id", eventId)
-    .maybeSingle();
-  if (error || !data?.image_url) return null;
-
-  const source = await fetchPublicImage(data.image_url, {
+async function loadThumbnail(imageUrl: string, width: number) {
+  const source = await fetchPublicImage(imageUrl, {
     timeoutMs: 2_500,
     maxRedirects: 3,
   });
@@ -71,9 +64,20 @@ export async function GET(
   const { id } = await params;
   if (!UUID_PATTERN.test(id)) return new Response(null, { status: 404 });
 
-  const requestedWidth = Number(new URL(request.url).searchParams.get("w"));
+  const url = new URL(request.url);
+  const requestedWidth = Number(url.searchParams.get("w"));
   const width = selectNewsImageWidth(requestedWidth);
-  const thumbnail = await transforms.run(`${id}:${width}`, () => loadThumbnail(id, width));
+  const { data, error } = await supabaseAdmin.from('events').select('image_url')
+    .eq('id', id).maybeSingle();
+  if (error || !data?.image_url) return new Response(null, {
+    status: 404, headers: { 'Cache-Control': 'private, no-store' },
+  });
+  const version = newsImageVersion(data.image_url);
+  const canonicalPath = `/api/news-image/${id.toLowerCase()}?w=${width}&v=${version}`;
+  if (`${url.pathname}${url.search}` !== canonicalPath) return new Response(null, {
+    status: 307, headers: { Location: canonicalPath, 'Cache-Control': 'private, no-store' },
+  });
+  const thumbnail = await transforms.run(`${id}:${width}:${version}`, () => loadThumbnail(data.image_url, width));
   if (!thumbnail) {
     return new Response(null, {
       status: 404,

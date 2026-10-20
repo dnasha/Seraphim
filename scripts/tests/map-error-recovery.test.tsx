@@ -135,6 +135,10 @@ describe('map error recovery', () => {
         map.isSourceLoaded.mockReturnValue(true);
         act(() => map.emit('render'));
         expect(onLoadStateChange).toHaveBeenLastCalledWith('ready');
+        onLoadStateChange.mockClear();
+        rerender(<NewsMap {...props} dataReady items={[{ id: 'new-story', title: 'New story', source: 'Example', sourceType: 'rss', url: 'https://example.com/new', publishedAt: '2026-09-22', latitude: 10, longitude: 20 }]} onLoadStateChange={onLoadStateChange} />);
+        act(() => map.emit('render'));
+        expect(onLoadStateChange).not.toHaveBeenCalled();
     });
 
     it('does not drop story data that arrives while the sidebar is resizing', async () => {

@@ -6,7 +6,7 @@
  * 
  * Design:
  * 1. Singleton pipeline: The model is loaded once and reused across the
- *    entire scraper run (approximately 22MB quantized weights).
+ *    entire scraper run (approximately 90 MB fp32 weights on Node CPU).
  * 2. Batch embedding: All texts are embedded in a single pipeline call
  *    to maximize throughput and minimize WASM overhead.
  * 3. In-memory similarity: Cosine similarity is computed locally using
