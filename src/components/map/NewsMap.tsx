@@ -184,6 +184,8 @@ export default function NewsMap({
   const currentStyleRef = useRef(currentStyle);
   const appliedStyleRef = useRef<{ style: string; individualPins: boolean } | null>(null);
   const mapReadyRef = useRef(mapReady);
+  const initialMapReadyRef = useRef(false);
+  const reportedLoadStateRef = useRef<MapLoadState | null>(null);
 
   useEffect(() => {
     isGlobeRef.current = isGlobe;
@@ -893,11 +895,20 @@ export default function NewsMap({
 
   useEffect(() => {
     if (!onLoadStateChange) return;
+    const report = (state: MapLoadState) => {
+      if (reportedLoadStateRef.current === state) return;
+      reportedLoadStateRef.current = state;
+      onLoadStateChange(state);
+    };
     if (mapError) {
-      onLoadStateChange('error');
+      report('error');
       return;
     }
-    onLoadStateChange('loading');
+    if (initialMapReadyRef.current) {
+      report('ready');
+      return;
+    }
+    report('loading');
     const map = mapRef.current;
     if (!mapReady || !dataReady || !map) return;
 
@@ -905,7 +916,8 @@ export default function NewsMap({
     // containing the tiles, labels, and the worker's current news source.
     const onRender = () => {
       if (!map.loaded() || !map.isSourceLoaded('news-events')) return;
-      onLoadStateChange('ready');
+      initialMapReadyRef.current = true;
+      report('ready');
       map.off('render', onRender);
     };
     map.on('render', onRender);

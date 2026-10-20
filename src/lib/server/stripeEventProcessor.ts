@@ -276,7 +276,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     await recordMetric({ kind: 'operational', service: 'billing', name: 'obsolete_subscription_event_ignored' });
     return;
   }
-  await downgradeSubscription(userId);
+  await downgradeSubscription(userId, profile?.stripe_subscription_id ?? null);
 }
 
 async function handleInvoiceSubscription(invoice: Stripe.Invoice, outcome: 'succeeded' | 'failed') {
@@ -333,8 +333,8 @@ async function getAngelMaxQuantity() {
   return ANGEL_MAX_QUANTITY;
 }
 
-async function downgradeSubscription(userId: string) {
-  const { error } = await supabaseAdmin
+async function downgradeSubscription(userId: string, expectedSubscriptionId: string | null) {
+  const update = supabaseAdmin
     .from('user_profiles')
     .update({
       tier: 'free',
@@ -344,7 +344,11 @@ async function downgradeSubscription(userId: string) {
       current_period_end: null,
       cancel_at_period_end: false,
     })
-    .eq('id', userId);
+    .eq('id', userId)
+    .neq('tier', 'angel');
+  const { error } = await (expectedSubscriptionId === null
+    ? update.is('stripe_subscription_id', null)
+    : update.eq('stripe_subscription_id', expectedSubscriptionId));
   if (error) throw error;
 }
 
@@ -371,7 +375,7 @@ async function syncSubscription(userId: string, subscription: Stripe.Subscriptio
     return;
   }
 
-  const { error } = await supabaseAdmin
+  const update = supabaseAdmin
     .from('user_profiles')
     .update({
       tier: isEntitled ? tier : 'free',
@@ -390,6 +394,12 @@ async function syncSubscription(userId: string, subscription: Stripe.Subscriptio
         ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
         : null,
     })
-    .eq('id', userId);
+    .eq('id', userId)
+    .neq('tier', 'angel');
+  // Recheck the observed state atomically: another webhook can fulfill Angel
+  // or replace this subscription between the read above and this write.
+  const { error } = await (current?.stripe_subscription_id
+    ? update.eq('stripe_subscription_id', current.stripe_subscription_id)
+    : update.is('stripe_subscription_id', null));
   if (error) throw error;
 }

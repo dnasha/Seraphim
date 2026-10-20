@@ -292,7 +292,7 @@ body.is-resizing-sidebar * {
   border-radius: var(--radius-md) !important;
   box-shadow: var(--shadow-button) !important;
   transition: background 0.15s, transform 0.15s !important;
-  outline: none !important;
+
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -319,7 +319,7 @@ body.is-resizing-sidebar * {
 
 .maplibregl-ctrl-group button:focus,
 .maplibregl-ctrl-group button:focus-visible {
-  outline: none !important;
+
   box-shadow: none !important;
 }
 
@@ -339,3 +339,9 @@ body.is-resizing-sidebar * {
   user-select: none;
 }
 
+
+/* Keep keyboard position visible even when individual controls reset styles. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+}

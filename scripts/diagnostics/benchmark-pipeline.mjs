@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 // Dynamically resolve project root to ensure file path reliability across different execution environments.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const ROOT = join(__dirname, '..');
+const ROOT = join(__dirname, '../..');
 
 // Terminal output formatting
 const c = {
@@ -77,7 +77,7 @@ async function benchmarkGeodataLoad(timer) {
 
   timer.start('geodata_total');
   // Use the production geocoding index which handles dictionary initialization
-  const { KNOWN_LOCATIONS, ensureInitialized } = await import('../src/lib/geocoding/index.ts');
+  const { KNOWN_LOCATIONS, ensureInitialized } = await import('../../src/lib/geocoding/dictionary.ts');
   ensureInitialized();
   timer.stop('geodata_total');
 
@@ -101,7 +101,7 @@ async function benchmarkGeodataLoad(timer) {
 async function benchmarkSourcing(timer) {
   sectionHeader('Stage 2 Sourcing (RSS & Reddit)');
 
-  const { fetchAllRSSFeeds, fetchAllRedditFeeds } = await import('../src/scraper/fetchers/rss.ts');
+  const { fetchAllRSSFeeds, fetchAllRedditFeeds } = await import('../../src/lib/api/rss.ts');
 
   timer.start('sourcing_total');
 
@@ -134,7 +134,7 @@ async function benchmarkGNews(timer) {
     return [];
   }
 
-  const { fetchGNews, fetchOSINTGNews } = await import('../src/scraper/fetchers/gnews.ts');
+  const { fetchGNews, fetchOSINTGNews } = await import('../../src/lib/api/gnews.ts');
   
   timer.start('gnews_total');
 
@@ -167,7 +167,7 @@ async function benchmarkSocial(timer) {
     return [];
   }
 
-  const { fetchSocialFeeds } = await import('../src/scraper/fetchers/social-feeds.ts');
+  const { fetchSocialFeeds } = await import('../../src/lib/api/social.ts');
 
   timer.start('social_total');
   const items = await fetchSocialFeeds();
@@ -186,7 +186,7 @@ async function benchmarkSocial(timer) {
 async function benchmarkExtraction(timer, items) {
   sectionHeader('Stage 5 Location Extraction');
 
-  const { enrichItemsWithLocation } = await import('../src/scraper/fetchers/geocoding.ts');
+  const { enrichItemsWithLocation } = await import('../../src/lib/geocoding/enricher.ts');
 
   timer.start('extraction_total');
   const enriched = await enrichItemsWithLocation(items);
@@ -275,7 +275,12 @@ async function main() {
   printSummary(timer);
 }
 
-main().catch(err => {
+export const benchmarkCompletion = main().finally(async () => {
+  const { closePublicFetchAgents } = await import('../../src/lib/security/ogImage.ts');
+  await closePublicFetchAgents();
+});
+
+benchmarkCompletion.catch(err => {
   console.error(`${c.red}Fatal error:${c.reset}`, err);
-  process.exit(1);
+  process.exitCode = 1;
 });

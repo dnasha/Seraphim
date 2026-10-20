@@ -1,4 +1,4 @@
-/* 
+/*
 FilterBar.module.css
 Styles for the filter bar, including source, category, and time range toggles,
 along with the custom date picker interface.
@@ -84,7 +84,7 @@ along with the custom date picker interface.
 }
 
 .searchInput:focus {
-  outline: none;
+
   border-color: var(--accent);
 }
 
@@ -164,7 +164,7 @@ along with the custom date picker interface.
 .sourceToggle:focus,
 .categoryToggle:focus,
 .timeToggle:focus {
-  outline: none;
+
 }
 
 .sourceToggle:active,
@@ -325,7 +325,7 @@ along with the custom date picker interface.
   color: var(--text-primary);
   font-size: var(--text-base);
   font-family: inherit;
-  outline: none;
+
   cursor: pointer;
   padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-md);
@@ -372,7 +372,7 @@ along with the custom date picker interface.
   cursor: pointer;
   color: var(--text-secondary);
   transition: all 0.15s;
-  outline: none;
+
 }
 
 @media (hover: hover) {
@@ -431,7 +431,7 @@ along with the custom date picker interface.
   width: 44px;
   height: 22px;
   border-radius: var(--radius-sm);
-  outline: none;
+
   text-align: center;
   transition: all 0.15s;
 }

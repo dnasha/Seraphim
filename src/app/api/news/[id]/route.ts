@@ -8,12 +8,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
 import { supabaseAdmin } from '@/lib/core/supabase-admin';
 import { dbEventToNewsItem, type DbEvent } from '@/types';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
+import { createRequestRateLimiter } from '@/lib/security/requestRateLimit';
 
 type CachedDetail = {
     row: DbEvent;
@@ -29,14 +28,9 @@ const PRIVATE_HEADERS = {
     'X-Robots-Tag': 'noindex, nofollow, noarchive',
 };
 
-const redis = Redis.fromEnv();
-const distributedRateLimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(60, '1 m'),
-    analytics: true,
-    prefix: '@upstash/ratelimit/seraphim-exact-event',
+const requestRateLimit = createRequestRateLimiter({
+    prefix: '@upstash/ratelimit/seraphim-exact-event', limit: 60, localLimit: 60, localWindowMs: 60_000,
 });
-const localRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function pruneCaches(now: number) {
     for (const [id, cached] of detailCache) {
@@ -46,30 +40,6 @@ function pruneCaches(now: number) {
         const oldest = detailCache.keys().next().value as string | undefined;
         if (!oldest) break;
         detailCache.delete(oldest);
-    }
-    for (const [key, state] of localRateLimit) {
-        if (state.resetAt <= now) localRateLimit.delete(key);
-    }
-}
-
-async function allowExactEventRequest(keys: string[], now: number) {
-    for (const key of keys) {
-        const state = localRateLimit.get(key);
-        if (!state || state.resetAt <= now) {
-            localRateLimit.set(key, { count: 1, resetAt: now + 60_000 });
-        } else {
-            state.count += 1;
-            if (state.count > 60) return false;
-        }
-    }
-
-    try {
-        const results = await Promise.all(keys.map((key) => distributedRateLimit.limit(key)));
-        return results.every((result) => result.success);
-    } catch (error) {
-        // The local hard limit still protects this instance during a Redis outage.
-        console.error('[api/news/[id]] Distributed rate limiter unavailable.', error);
-        return true;
     }
 }
 
@@ -125,23 +95,23 @@ export async function GET(
         return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400, headers: PRIVATE_HEADERS });
     }
 
-    const access = await resolveRequestEntitlements();
     const clientIp = getTrustedClientIp(request.headers);
-    if (!clientIp) {
-        return NextResponse.json(
-            { error: 'Too many requests' },
-            { status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': '60' } },
-        );
-    }
+    if (!clientIp) return NextResponse.json({ error: 'Too many requests' }, {
+        status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': '60' },
+    });
     const now = Date.now();
-    pruneCaches(now);
-    const allowed = await allowExactEventRequest(getRateLimitKeys(clientIp, access.userId), now);
-    if (!allowed) {
-        return NextResponse.json(
-            { error: 'Too many requests' },
-            { status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': '60' } },
-        );
+    const networkLimit = await requestRateLimit.check(getRateLimitKeys(clientIp), now);
+    if (!networkLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+        status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': String(networkLimit.retryAfterSeconds) },
+    });
+    const access = await resolveRequestEntitlements();
+    if (access.userId) {
+        const accountLimit = await requestRateLimit.check([`user:${access.userId}`], now);
+        if (!accountLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+            status: 429, headers: { ...PRIVATE_HEADERS, 'Retry-After': String(accountLimit.retryAfterSeconds) },
+        });
     }
+    pruneCaches(now);
 
     const cached = detailCache.get(id);
     const forceRefresh = new URL(request.url).searchParams.get('refresh') === 'true';

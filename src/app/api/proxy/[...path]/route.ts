@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import {
   fetchWithTimeout,
@@ -9,27 +8,18 @@ import {
 import { canUseOverlay } from '@/lib/entitlements';
 import { resolveRequestEntitlements } from '@/lib/server/entitlements';
 import { getRateLimitKeys, getTrustedClientIp } from '@/lib/security/clientIdentity';
-import { createLocalFixedWindowLimiter, createThrottledDiagnostic } from '@/lib/security/localRateLimit';
+import { createRequestRateLimiter } from '@/lib/security/requestRateLimit';
 import { recordIncident, recordMetric, recoverIncident, serverDiagnostic } from '@/lib/server/operations';
 import { getCachedOverlayData, type OverlayCacheStore } from '@/lib/server/overlayCache';
 import { createOverlayHealthRecorder, type OverlayHealthStore } from '@/lib/server/overlayHealth';
 
-const redis = Redis.fromEnv();
-const overlayStore = redis as unknown as OverlayCacheStore & OverlayHealthStore;
-const distributedRateLimitConfigured = process.env.NODE_ENV === 'test' || Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-);
-const proxyRatelimit = distributedRateLimitConfigured
-  ? new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(180, "1 m"),
-      analytics: true,
-      prefix: "@upstash/ratelimit/seraphim-proxy",
-    })
-  : null;
-const localRateLimit = createLocalFixedWindowLimiter({ limit: 45, windowMs: 10_000 });
-const reportRateLimitUnavailable = createThrottledDiagnostic(() => {
-  serverDiagnostic('proxy_rate_limit_unavailable');
+const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+const overlayStore = redis as unknown as (OverlayCacheStore & OverlayHealthStore) | null;
+const proxyRateLimit = createRequestRateLimiter({
+  prefix: '@upstash/ratelimit/seraphim-proxy', limit: 180, localLimit: 45,
+});
+const tileRateLimit = createRequestRateLimiter({
+  prefix: '@upstash/ratelimit/seraphim-radiation', limit: 1200, localLimit: 180,
 });
 const overlayHealth = createOverlayHealthRecorder({
   store: overlayStore,
@@ -80,33 +70,6 @@ class OverlayProviderHttpError extends Error {
   }
 }
 
-async function checkProxyRateLimit(clientIp: string, userId?: string | null) {
-  const now = Date.now();
-  const rateLimitKeys = getRateLimitKeys(clientIp, userId);
-  const localResult = localRateLimit.check(rateLimitKeys, now);
-  if (!localResult.success) return { allowed: false, retryAfterSeconds: localResult.retryAfterSeconds };
-  const checkDistributed = localResult.counts.some((count) => count > 20 || count % 8 === 0);
-  if (!checkDistributed) return { allowed: true, retryAfterSeconds: 0 };
-  if (!proxyRatelimit) {
-    reportRateLimitUnavailable(now);
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-
-  try {
-    const results = await Promise.all(rateLimitKeys.map((key) => proxyRatelimit.limit(key)));
-    const denied = results.filter(({ success }) => !success);
-    return denied.length === 0
-      ? { allowed: true, retryAfterSeconds: 0 }
-      : {
-          allowed: false,
-          retryAfterSeconds: Math.max(1, ...denied.map((result) => Math.ceil((result.reset - now) / 1_000))),
-        };
-  } catch {
-    reportRateLimitUnavailable(now);
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-}
-
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ path: string[] }> }
@@ -128,11 +91,20 @@ export async function GET(
     );
   }
 
+  const limiter = service === 'safecast' ? tileRateLimit : proxyRateLimit;
+  const networkLimit = await limiter.check(getRateLimitKeys(clientIp));
+  if (!networkLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+    status: 429, headers: { 'Retry-After': String(networkLimit.retryAfterSeconds) },
+  });
   const requiredOverlay = PREMIUM_PROXY_SERVICES[service];
-  let userId: string | null | undefined;
   if (requiredOverlay) {
     const access = await resolveRequestEntitlements();
-    userId = access.userId;
+    if (access.userId) {
+      const accountLimit = await limiter.check([`user:${access.userId}`]);
+      if (!accountLimit.allowed) return NextResponse.json({ error: 'Too many requests' }, {
+        status: 429, headers: { 'Retry-After': String(accountLimit.retryAfterSeconds) },
+      });
+    }
     if (!canUseOverlay(access.tier, requiredOverlay)) {
       return NextResponse.json(
         {
@@ -145,13 +117,6 @@ export async function GET(
     }
   }
 
-  const rateLimit = await checkProxyRateLimit(clientIp, userId);
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
-    );
-  }
 
   if (service === "flights") {
     const { searchParams } = new URL(request.url);
@@ -222,20 +187,26 @@ export async function GET(
     }
 
     try {
-      const res = await fetchWithTimeout(`https://s3.amazonaws.com/te512.safecast.org/${tile.z}/${tile.x}/${tile.y}.png`, {}, 5000);
-      if (!res.ok) {
-        // Return 204 No Content for missing/forbidden tiles (S3 returns 403/404 for non-existent keys)
-        // to prevent MapLibre from logging AJAX errors in the browser console.
-        return new NextResponse(null, { status: 204 });
-      }
-
-      const arrayBuffer = await res.arrayBuffer();
-      return new NextResponse(arrayBuffer, {
-        headers: {
-          "Content-Type": "image/png",
-          ...PRIVATE_CACHE_HEADERS
-        }
+      const tileData = await getCachedOverlayData<{ bytes: string | null }>({
+        key: `seraphim:radiation:v1:${tile.z}:${tile.x}:${tile.y}`,
+        freshForMs: 60 * 60_000, staleForMs: 2 * 60 * 60_000,
+        store: overlayStore, maxSharedBytes: 256 * 1024,
+        load: async () => {
+          const res = await fetchWithTimeout(`https://s3.amazonaws.com/te512.safecast.org/${tile.z}/${tile.x}/${tile.y}.png`, {}, 5000);
+          // S3 uses 403 as well as 404 for keys without coverage.
+          if (res.status === 403 || res.status === 404) return { bytes: null };
+          if (!res.ok) throw new OverlayProviderHttpError(res.status, 'Radiation tiles unavailable');
+          const bytes = Buffer.from(await res.arrayBuffer()).toString('base64');
+          await markOverlayHealthy('safecast');
+          return { bytes };
+        },
       });
+      const headers = { 'Cache-Control': 'private, max-age=300', 'Vary': 'Cookie' };
+      return tileData.bytes === null
+        ? new NextResponse(null, { status: 204, headers })
+        : new NextResponse(new Uint8Array(Buffer.from(tileData.bytes, 'base64')), {
+            headers: { ...headers, 'Content-Type': 'image/png' },
+          });
     } catch {
       await markOverlayFailure('safecast', 'request_failed');
       serverDiagnostic('overlay_safecast_failed');

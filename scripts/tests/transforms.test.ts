@@ -37,6 +37,16 @@ function makeNewsItem(overrides: Partial<NewsItem> = {}): NewsItem {
   Validates sanitization, specifically removal of orphaned UTF-16 surrogates.
 */
 describe('cleanString', () => {
+    it.each([
+        ['A & B', 'A & B'], ['A &amp; B', 'A & B'],
+        ['<b>Breaking</b> news', 'Breaking news'],
+        ['<p>First</p><p>Second &amp; third</p>', 'First Second & third'],
+        ['Safe<script>alert(1)</script><style>body{display:none}</style> story', 'Safe story'],
+        ['&lt;script&gt;literal&lt;/script&gt;', '<script>literal</script>'],
+    ])('extracts plain text from %s', (input, output) => {
+        expect(cleanString(input)).toBe(output);
+    });
+
     it('returns empty string for null/undefined', () => {
         expect(cleanString(null)).toBe('');
         expect(cleanString(undefined)).toBe('');

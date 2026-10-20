@@ -399,11 +399,41 @@ export async function resolveStoryMerges(
     const event = dbEvents[index];
     // Validate each candidate before selecting it, including changes accumulated
     // earlier in this batch. A rejected top hit must not hide an eligible runner-up.
-    const bestMatchId = candidateOptions[index].find(option => {
+    const findEligibleMatch = () => candidateOptions[index].find(option => {
       const candidate = candidateDetails.get(option.id);
       const state = candidate && { ...candidate, ...merges.get(option.id) };
       return state && !hasConflictingStoryEvidence(event, state);
     })?.id;
+    let bestMatchId = findEligibleMatch();
+    if (!bestMatchId && candidateOptions[index].length > 0 && !embeddings[index]) {
+      // An earlier report in this batch may have changed an exact candidate's
+      // incident evidence. Resume semantic matching before inserting this item.
+      await embedIndices([index]);
+      const vector = embeddings[index];
+      if (vector) {
+        try {
+          const candidates = await fetchIndexedVectorCandidates(db,
+            embeddings.map((value, offset) => offset === index ? value : null),
+            since, EXPANDED_VECTOR_CANDIDATE_LIMIT);
+          const rows = (candidates.get(index) ?? []).filter(candidate =>
+            passesSemanticThreshold(event, candidate, candidate.similarity));
+          const missing = rows.map(candidate => candidate.event_id).filter(id => !candidateDetails.has(id));
+          for (const [id, detail] of await fetchCandidateDetails(db, missing)) candidateDetails.set(id, detail);
+          candidateOptions[index].push(...rows.map(candidate => ({ id: candidate.event_id, score: candidate.similarity })));
+        } catch {
+          fallbackCandidates ??= await fetchRecentEmbeddings(db);
+          for (const candidate of fallbackCandidates) {
+            candidateDetails.set(candidate.id, candidate);
+            const similarity = cosineSimilarity(vector, candidate.embedding);
+            if (passesSemanticThreshold(event, candidate, similarity)) {
+              candidateOptions[index].push({ id: candidate.id, score: similarity });
+            }
+          }
+        }
+        candidateOptions[index].sort((a, b) => b.score - a.score);
+        bestMatchId = findEligibleMatch();
+      }
+    }
     const matchedCandidate = bestMatchId ? candidateDetails.get(bestMatchId) : undefined;
 
     if (bestMatchId && matchedCandidate) {

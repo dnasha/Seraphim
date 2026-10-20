@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { newsImageVersion } from "@/lib/utils/newsImages";
 
 const mocks = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
@@ -69,7 +70,7 @@ describe("GET /api/news-image/[id]", () => {
     });
 
     const response = await GET(
-      new Request(`https://www.seraphi.me/api/news-image/${UUID}?w=176&v=test`),
+      new Request(`https://www.seraphi.me/api/news-image/${UUID}?w=176&v=${newsImageVersion("https://publisher.example/large.png")}`),
       { params: Promise.resolve({ id: UUID }) },
     );
     const output = Buffer.from(await response.arrayBuffer());
@@ -93,10 +94,19 @@ describe("GET /api/news-image/[id]", () => {
     });
 
     const response = await GET(
-      new Request(`https://www.seraphi.me/api/news-image/${UUID}?w=176`),
+      new Request(`https://www.seraphi.me/api/news-image/${UUID}?w=176&v=${newsImageVersion("https://publisher.example/vector.svg")}`),
       { params: Promise.resolve({ id: UUID }) },
     );
 
     expect(response.status).toBe(404);
   });
+});
+
+it.each(['w=177&v=anything', 'w=176&v=arbitrary&extra=1', 'w=176'])('redirects variants to the stored-image version before fetching or transforming: %s', async search => {
+  mocks.fetchPublicImage.mockClear();
+  mocks.maybeSingle.mockResolvedValue({ data: { image_url: 'https://publisher.example/image.png' }, error: null });
+  const response = await GET(new Request(`https://www.seraphi.me/api/news-image/${UUID}?${search}`), { params: Promise.resolve({ id: UUID }) });
+  expect(response.status).toBe(307);
+  expect(response.headers.get('location')).toBe(`/api/news-image/${UUID}?w=${search.startsWith('w=177') ? 640 : 176}&v=${newsImageVersion('https://publisher.example/image.png')}`);
+  expect(mocks.fetchPublicImage).not.toHaveBeenCalled();
 });

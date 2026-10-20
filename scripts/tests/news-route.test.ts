@@ -317,3 +317,11 @@ describe("GET /api/news", () => {
     await expect(historical.json()).resolves.toMatchObject({ code: 'feature_required', requiredTier: 'pro' });
   });
 });
+
+it('applies the shared network limiter before authentication or entitlements', async () => {
+  mocks.resolveEntitlements.mockClear();
+  mocks.rateLimit.mockResolvedValueOnce({ success: false, reset: Date.now() + 60_000 });
+  const response = await GET(request('force_raw=true'));
+  expect(response.status).toBe(429);
+  expect(mocks.resolveEntitlements).not.toHaveBeenCalled();
+});

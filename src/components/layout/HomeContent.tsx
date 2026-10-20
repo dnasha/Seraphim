@@ -285,20 +285,6 @@ export function HomeContent({ fontClassName = '' }: { fontClassName?: string }) 
         handleSelectItem(null);
     }, [handleSelectItem]);
 
-    /**
-     * Handles BBox changes by resetting sidebar scroll only when the selected item is
-     * no longer present in the filtered result set for non-viewport reasons.
-     */
-    useEffect(() => {
-        const isVisible = selectedItemId && filteredNews.some(i => matchesNewsId(i, selectedItemId));
-        
-        if (!isVisible) {
-            requestAnimationFrame(() => {
-                setFilterVersion(v => v + 1);
-            });
-        }
-    }, [currentBBox, filteredNews, selectedItemId]);
-
     // Sync map center/zoom changes to URL
     const handleBoundsChange = useCallback((bbox: BBox) => {
         onBoundsChange(bbox);

@@ -44,6 +44,7 @@ import { EMERGENCY_COUNT_MULTIPLIER } from '@/lib/api/sourcePolling';
 import { loadOpenSourceCircuits } from './sourceCircuits';
 import { isSourceCircuitOpen } from '@/lib/api/sourceCircuit';
 import { scheduleOutboundSource } from '@/lib/api/outboundScheduler';
+import { attemptIngestionTelemetry } from './telemetry';
 
 const DRY_RUN = process.env.DRY_RUN === "true";
 const EMERGENCY_MODE = process.argv.slice(2).includes("--emergency");
@@ -98,6 +99,10 @@ async function startIngestionRun() {
 }
 
 async function finalizeIngestionRun(status: 'healthy' | 'degraded' | 'failed', errorCode?: string) {
+  await attemptIngestionTelemetry('finalize', () => writeFinalIngestionRun(status, errorCode));
+}
+
+async function writeFinalIngestionRun(status: 'healthy' | 'degraded' | 'failed', errorCode?: string) {
   if (!activeRunId) return;
   const runId = activeRunId;
   activeRunId = null;
@@ -137,7 +142,7 @@ Main execution pipeline:
 */
 async function run(): Promise<void> {
   const startMs = Date.now();
-  await startIngestionRun();
+  await attemptIngestionTelemetry('start', startIngestionRun);
   beginSourceHealthCollection();
   console.log(
     `[scraper] Starting ingestion run at ${new Date().toISOString()} commit=${process.env.GITHUB_SHA ?? "local"} ` +
@@ -194,10 +199,12 @@ async function run(): Promise<void> {
   // Cooling-down sources are still unavailable, even when this run skips them.
   activeSourceFailures += openCircuits.size;
   if (activeRunId && sourceAttempts.length > 0) {
-    const { error } = await db.from('ingestion_source_attempts').insert(
-      sourceAttempts.map((attempt) => ({ ...attempt, run_id: activeRunId })),
-    );
-    if (error) throw new Error('Unable to persist source health attempts');
+    await attemptIngestionTelemetry('sources', async () => {
+      const { error } = await db.from('ingestion_source_attempts').insert(
+        sourceAttempts.map((attempt) => ({ ...attempt, run_id: activeRunId })),
+      );
+      if (error) throw new Error('Unable to persist source health attempts');
+    });
   }
 
   console.log(

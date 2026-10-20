@@ -3,7 +3,7 @@ Seraphim Scraper Utilities - Data Transformers
 Handles sanitization, normalization, and conversion of raw items to database schemas.
 */
 
-import DOMPurify from 'isomorphic-dompurify';
+import { load } from 'cheerio';
 import type { NewsItem } from '@/lib/core/types';
 import type { DbEvent } from '@/types';
 import { ensureIsoDate } from '@/lib/utils/date';
@@ -26,7 +26,7 @@ Performs multi-stage string sanitization:
 2. Removes standalone surrogate pairs (U+D800 to U+DFFF). These are often caused by 
    improperly truncated multibyte characters (like emojis) and will cause PostgreSQL 
    insertion failures with "invalid byte sequence for encoding UTF8".
-3. Sanitize HTML content to prevent XSS.
+3. Extract plain text and decode entities for text fields, never HTML markup.
 */
 export function cleanString(str: unknown): string {
     let s = '';
@@ -36,7 +36,11 @@ export function cleanString(str: unknown): string {
         try { s = String(str); } catch { s = ''; }
     }
     const cleaned = s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
-    return DOMPurify.sanitize(cleaned);
+    const $ = load(cleaned, {}, false);
+    $('script, style, noscript, template').remove();
+    $('br').replaceWith(' ');
+    $('p, div, li, h1, h2, h3, section, article').append(' ');
+    return $.root().text().replace(/\s+/g, ' ').trim();
 }
 
 /**

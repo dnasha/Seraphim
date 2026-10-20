@@ -49,7 +49,7 @@
   line-height: 1.2 !important;
   color: var(--text-muted) !important;
   opacity: 0.70;
-  text-shadow: 
+  text-shadow:
     -1px -1px 0 var(--surface),
      1px -1px 0 var(--surface),
     -1px  1px 0 var(--surface),
@@ -146,7 +146,7 @@
 .mapWrapper :global(.maplibregl-ctrl button:focus),
 .mapWrapper :global(.maplibregl-ctrl button:active),
 .mapWrapper :global(.maplibregl-ctrl-attrib button:focus) {
-  outline: none !important;
+
   box-shadow: none !important;
 }
 
@@ -190,7 +190,7 @@
   z-index: 2000;
   cursor: pointer;
   padding: 0 !important;
-  outline: none !important;
+
 }
 
 @media (hover: hover) {
@@ -327,7 +327,7 @@
   text-align: right;
   margin-top: 0;
   transition: opacity 0.15s, color 0.15s;
-  outline: none !important;
+
 }
 
 @media (hover: hover) {
@@ -368,7 +368,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   line-height: 1;
-  outline: none !important;
+
 }
 
 @media (hover: hover) {
@@ -535,7 +535,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   line-height: 1;
-  outline: none !important;
+
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -613,7 +613,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 180px;
-  outline: none !important;
+
 }
 
 @media (hover: hover) {

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   profile: { tier: 'free', stripe_subscription_id: null as string | null }, claimError: null as null | { code: string }, released: vi.fn(),
   recordMetric: vi.fn(), recordIncident: vi.fn(), recoverIncident: vi.fn(),
   intentStatus: 'open', appliedIntentStatuses: [] as string[],
+  beforeProfileWrite: null as (() => void) | null, appliedProfileUpdates: [] as Record<string, unknown>[],
 }));
 
 vi.mock('@/lib/server/recoveryJobs', () => ({
@@ -44,10 +45,22 @@ function tableQuery(table: string) {
   const query: Record<string, unknown> = {};
   let payload: Record<string, unknown> | undefined;
   let allowedStatuses: string[] | undefined;
+  const profileChecks: Array<() => boolean> = [];
   query.insert = vi.fn(async () => ({ error: table === 'stripe_processed_events' ? mocks.claimError : null }));
   query.delete = vi.fn(() => { mocks.released(); return query; });
   query.select = vi.fn(() => query);
-  query.eq = vi.fn(() => query);
+  query.eq = vi.fn((column: string, value: unknown) => {
+    if (payload && column === 'stripe_subscription_id') profileChecks.push(() => mocks.profile.stripe_subscription_id === value);
+    return query;
+  });
+  query.is = vi.fn((column: string, value: unknown) => {
+    if (payload && column === 'stripe_subscription_id') profileChecks.push(() => mocks.profile.stripe_subscription_id === value);
+    return query;
+  });
+  query.neq = vi.fn((column: string, value: unknown) => {
+    if (payload && column === 'tier') profileChecks.push(() => mocks.profile.tier !== value);
+    return query;
+  });
   query.in = vi.fn((_column: string, statuses: string[]) => { allowedStatuses = statuses; return query; });
   query.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
   query.single = vi.fn(async () => ({ data: table === 'user_profiles' ? mocks.profile : table === 'angel_purchases' ? { replaced_subscription_id: mocks.profile.stripe_subscription_id } : null, error: null }));
@@ -56,6 +69,11 @@ function tableQuery(table: string) {
     if (table === 'billing_checkout_intents' && payload && (!allowedStatuses || allowedStatuses.includes(mocks.intentStatus))) {
       mocks.intentStatus = String(payload.status);
       mocks.appliedIntentStatuses.push(mocks.intentStatus);
+    }
+    if (table === 'user_profiles' && payload) {
+      mocks.beforeProfileWrite?.();
+      mocks.beforeProfileWrite = null;
+      if (profileChecks.every(check => check())) mocks.appliedProfileUpdates.push(payload);
     }
     return Promise.resolve({ data: null, error: null }).then(resolve);
   };
@@ -69,6 +87,7 @@ const activeSubscription = {
 
 describe('POST /api/stripe/webhook', () => {
   beforeEach(() => {
+    mocks.beforeProfileWrite = null; mocks.appliedProfileUpdates.length = 0;
     vi.clearAllMocks(); mocks.intentStatus = 'open'; mocks.appliedIntentStatuses.length = 0; mocks.updates.length = 0; mocks.claimError = null; mocks.profile = { tier: 'free', stripe_subscription_id: null };
     mocks.from.mockImplementation(tableQuery);
     mocks.rpc.mockImplementation(async (name: string) => name === 'transition_angel_purchase'
@@ -293,5 +312,27 @@ describe('POST /api/stripe/webhook', () => {
     expect(mocks.appliedIntentStatuses).toEqual(expected);
     const completed = mocks.appliedIntentStatuses.indexOf('completed');
     expect(mocks.appliedIntentStatuses.slice(completed).every(status => status === 'completed')).toBe(true);
+  });
+});
+
+
+describe('subscription webhook write races', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); mocks.updates.length = 0; mocks.appliedProfileUpdates.length = 0;
+    mocks.claimError = null; mocks.profile = { tier: 'pro', stripe_subscription_id: 'sub-1' };
+    mocks.from.mockImplementation(tableQuery);
+    mocks.retrieveSubscription.mockResolvedValue(activeSubscription);
+  });
+  it.each(['customer.subscription.updated', 'customer.subscription.deleted'])('preserves a concurrently fulfilled Angel during %s', async type => {
+    mocks.constructEvent.mockReturnValue({ id: 'evt-race', type, data: { object: activeSubscription } });
+    mocks.beforeProfileWrite = () => { mocks.profile = { tier: 'angel', stripe_subscription_id: null }; };
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.appliedProfileUpdates).toEqual([]);
+  });
+  it.each(['customer.subscription.updated', 'customer.subscription.deleted'])('preserves a concurrently replaced subscription during %s', async type => {
+    mocks.constructEvent.mockReturnValue({ id: 'evt-replaced', type, data: { object: activeSubscription } });
+    mocks.beforeProfileWrite = () => { mocks.profile.stripe_subscription_id = 'sub-new'; };
+    expect((await POST(webhookRequest('valid'))).status).toBe(200);
+    expect(mocks.appliedProfileUpdates).toEqual([]);
   });
 });
