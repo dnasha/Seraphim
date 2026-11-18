@@ -6,23 +6,14 @@ import { expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 
-it('ships the matching worker and every relative module it imports', () => {
+it('ships the matching self-contained MapLibre worker', () => {
   execFileSync(process.execPath, ['scripts/build/prepare-map-worker.mjs']);
   const { version } = require('maplibre-gl/package.json') as { version: string };
   const source = join(dirname(require.resolve('maplibre-gl/package.json')), 'dist');
   const destination = join(process.cwd(), 'public', 'maplibre', version);
-  const pending = ['maplibre-gl-worker.mjs'];
-  const checked = new Set<string>();
+  const worker = 'maplibre-gl-worker.mjs';
+  const published = readFileSync(join(destination, worker), 'utf8');
 
-  while (pending.length) {
-    const file = pending.pop()!;
-    if (checked.has(file)) continue;
-    checked.add(file);
-    const published = readFileSync(join(destination, file), 'utf8');
-    expect(published).toBe(readFileSync(join(source, file), 'utf8'));
-    for (const match of published.matchAll(/from\s*["']\.\/([^"']+)["']/g)) {
-      pending.push(match[1]);
-    }
-  }
-  expect(checked.has('maplibre-gl-shared.mjs')).toBe(true);
+  expect(published).toBe(readFileSync(join(source, worker), 'utf8'));
+  expect(published).not.toMatch(/\b(?:from|import)\s*(?:\(\s*)?["']\.\.?\//);
 });

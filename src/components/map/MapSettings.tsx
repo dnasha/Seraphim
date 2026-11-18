@@ -138,7 +138,10 @@ const MapSettings: React.FC<MapSettingsProps> = ({
                                                 className={styles.previewImg} 
                                             />
                                         </div>
-                                        <span className={styles.previewLabel}>{style.label}{!allowed && <TierBadge tier={requiredTier} locked />}</span>
+                                        <span className={styles.previewLabel}>
+                                            {style.label}
+                                            {!allowed && <> <TierBadge tier={requiredTier} locked /></>}
+                                        </span>
                                     </GatedButton>
                                 );
                             })}

@@ -282,7 +282,8 @@ function pooledPinnedAgent(url: URL, address: string, timeoutMs: number) {
     return existing;
   }
 
-  const connector = buildConnector({ timeout: timeoutMs });
+  // Preserve HTTP/1.1 negotiation for pinned requests across Undici versions.
+  const connector = buildConnector({ timeout: timeoutMs, allowH2: false });
   const dispatcher = new Agent({
     connections: 2,
     keepAliveTimeout: 5_000,

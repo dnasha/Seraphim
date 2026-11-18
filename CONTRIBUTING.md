@@ -17,6 +17,7 @@ Seraphim is both an open-source project and an operated SaaS. Contributions shou
 ### Prerequisites
 
 - Bun 1.3 or newer
+- Node.js 24.15 or newer in the 24.x release line
 - Git
 - A compatible Supabase/PostgreSQL development project for data-backed flows
 

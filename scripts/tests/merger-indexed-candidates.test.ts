@@ -49,6 +49,24 @@ describe("indexed scraper candidate matching", () => {
     vectorMocks.generateEmbeddings.mockClear();
   });
 
+  it("keeps vector lookups bounded and preserves indices across batches", async () => {
+    const titleQuery = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      range: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const events = Array.from({ length: 9 }, (_, index) =>
+      incoming({ url: `https://incoming.example/${index}` }));
+
+    await resolveStoryMerges(events, { from: () => titleQuery, rpc } as never);
+
+    expect(rpc.mock.calls.map(([, args]) =>
+      args.p_queries.map((query: { query_index: number }) => query.query_index),
+    )).toEqual([[0, 1, 2, 3, 4, 5, 6, 7], [8]]);
+  });
+
   it("uses the batch matcher and fetches full details for threshold-eligible candidates", async () => {
     const titleQuery = {
       select: vi.fn().mockReturnThis(),

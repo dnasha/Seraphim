@@ -85,6 +85,7 @@ data/                    GeoNames-derived local lookup data
 ### Prerequisites
 
 - [Bun](https://bun.sh/) 1.3 or newer
+- Node.js 24.15 or newer in the 24.x release line
 - A compatible Supabase/PostgreSQL development project for data-backed flows
 - Git
 
