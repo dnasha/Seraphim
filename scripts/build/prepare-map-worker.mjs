@@ -9,9 +9,8 @@ const { version } = require('maplibre-gl/package.json');
 const source = dirname(require.resolve('maplibre-gl/package.json'));
 const destination = join(root, 'public', 'maplibre', version);
 
-// MapLibre 6 workers are ES modules with a shared-module dependency. Serve both
-// from the same origin, versioned together to prevent stale worker/main mismatches.
+// Serve the self-contained worker from the same origin. Keep its version in
+// the URL so a cached worker cannot outlive its matching MapLibre bundle.
+const worker = 'maplibre-gl-worker.mjs';
 mkdirSync(destination, { recursive: true });
-for (const file of ['maplibre-gl-worker.mjs', 'maplibre-gl-shared.mjs']) {
-  copyFileSync(join(source, 'dist', file), join(destination, file));
-}
+copyFileSync(join(source, 'dist', worker), join(destination, worker));

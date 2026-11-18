@@ -12,7 +12,8 @@ import { hasConflictingStoryEvidence, passesSemanticThreshold } from './storyMat
 import { readRecentEventPages } from './recentEvents';
 
 const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
-const VECTOR_QUERY_CHUNK_SIZE = 100;
+// Each embedding runs a separate nearest-neighbor search within the RPC timeout.
+const VECTOR_QUERY_CHUNK_SIZE = 8;
 const VECTOR_CANDIDATE_LIMIT = 12;
 const EXPANDED_VECTOR_CANDIDATE_LIMIT = 50;
 const DETAIL_QUERY_CHUNK_SIZE = 100;
